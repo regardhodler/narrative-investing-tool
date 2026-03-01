@@ -113,7 +113,8 @@ def render():
         yaxis3=dict(title="Institutions", overlaying="y", side="right", position=0.95,
                      showgrid=False, gridcolor=COLORS["grid"]),
         barmode="relative",
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.12),
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.18),
+        margin=dict(l=40, r=40, t=90, b=40),
     )
     st.plotly_chart(fig, use_container_width=True)
 

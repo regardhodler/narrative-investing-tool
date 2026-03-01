@@ -156,16 +156,33 @@ def _render_congress(ticker: str):
 
     st.success(f"Found {len(df)} congress trades for {ticker}")
 
-    def _highlight_trade_type(val):
-        v = str(val).lower()
-        if "buy" in v or "purchase" in v:
+    # Classify each trade as Buy/Sell based on type text
+    def _classify(t):
+        v = str(t).lower()
+        if any(k in v for k in ["buy", "purchase", "acquire"]):
+            return "Buy"
+        elif any(k in v for k in ["sell", "sale", "dispose", "full_sale", "partial_sale"]):
+            return "Sell"
+        return t
+
+    df["direction"] = df["type"].apply(_classify)
+
+    buys = df[df["direction"] == "Buy"]
+    sells = df[df["direction"] == "Sell"]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Trades", len(df))
+    c2.metric("Buys", len(buys))
+    c3.metric("Sells", len(sells))
+
+    def _highlight_direction(val):
+        if val == "Buy":
             return f"color: {COLORS['green']}"
-        elif "sell" in v or "sale" in v:
+        elif val == "Sell":
             return f"color: {COLORS['red']}"
         return ""
 
     st.dataframe(
-        df.style.map(_highlight_trade_type, subset=["type"]),
+        df.style.map(_highlight_direction, subset=["direction"]),
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -173,6 +190,7 @@ def _render_congress(ticker: str):
             "party": "Party",
             "date": "Date",
             "type": "Type",
+            "direction": "Buy/Sell",
             "size": "Size",
             "price": "Price",
         },

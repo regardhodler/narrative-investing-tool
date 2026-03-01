@@ -77,9 +77,15 @@ def _render_manual():
         if st.button("Analyze", type="primary") and keyword:
             set_narrative(keyword)
             result = classify_narrative(keyword)
+            st.session_state["narrative_result"] = result
+            st.session_state["narrative_keyword"] = keyword
 
+        # Show results persistently after analysis
+        result = st.session_state.get("narrative_result")
+        kw = st.session_state.get("narrative_keyword", "")
+        if result:
             if result.get("market_relevant"):
-                st.success(f"Narrative set: **{keyword}**")
+                st.success(f"Narrative set: **{kw}**")
                 st.markdown(f"**Sector:** {result.get('sector', 'N/A')}")
                 st.markdown(f"**Thesis:** {result.get('thesis', '')}")
                 tickers = result.get("suggested_tickers", [])
