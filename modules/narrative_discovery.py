@@ -66,25 +66,38 @@ def _render_auto():
 
 
 def _render_manual():
-    keyword = st.text_input(
-        "Enter a narrative keyword",
-        placeholder="e.g. nuclear energy, weight loss drugs, AI chips",
-    )
-    if st.button("Analyze", type="primary") and keyword:
-        set_narrative(keyword)
-        result = classify_narrative(keyword)
+    tab_narrative, tab_ticker = st.tabs(["Narrative Keyword", "Ticker Symbol"])
 
-        if result.get("market_relevant"):
-            st.success(f"Narrative set: **{keyword}**")
-            st.markdown(f"**Sector:** {result.get('sector', 'N/A')}")
-            st.markdown(f"**Thesis:** {result.get('thesis', '')}")
-            tickers = result.get("suggested_tickers", [])
-            if tickers:
-                st.markdown(f"**Suggested tickers:** {', '.join(tickers)}")
-                selected = st.selectbox("Set active ticker", tickers)
-                if selected:
-                    set_ticker(selected)
-        else:
-            st.info(
-                "Topic classified as not directly market-relevant, but narrative is set."
-            )
+    with tab_narrative:
+        keyword = st.text_input(
+            "Enter a narrative keyword",
+            placeholder="e.g. nuclear energy, weight loss drugs, AI chips",
+        )
+        if st.button("Analyze", type="primary") and keyword:
+            set_narrative(keyword)
+            result = classify_narrative(keyword)
+
+            if result.get("market_relevant"):
+                st.success(f"Narrative set: **{keyword}**")
+                st.markdown(f"**Sector:** {result.get('sector', 'N/A')}")
+                st.markdown(f"**Thesis:** {result.get('thesis', '')}")
+                tickers = result.get("suggested_tickers", [])
+                if tickers:
+                    st.markdown(f"**Suggested tickers:** {', '.join(tickers)}")
+                    selected = st.selectbox("Set active ticker", tickers)
+                    if selected:
+                        set_ticker(selected)
+            else:
+                st.info(
+                    "Topic classified as not directly market-relevant, but narrative is set."
+                )
+
+    with tab_ticker:
+        ticker_input = st.text_input(
+            "Enter a ticker symbol",
+            placeholder="e.g. AAPL, TSLA, NVDA",
+        ).strip().upper()
+        if st.button("Set Ticker", type="primary", key="set_ticker_btn") and ticker_input:
+            set_ticker(ticker_input)
+            st.success(f"Active ticker set to **{ticker_input}**")
+            st.rerun()

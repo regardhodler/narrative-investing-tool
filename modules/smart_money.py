@@ -35,10 +35,18 @@ def render():
     df = pd.DataFrame(quarterly)
     df["quarter"] = pd.to_datetime(df["date"]).dt.to_period("Q").astype(str)
 
+    # Sort chronologically: oldest first (left) → newest last (right)
+    df = df.sort_values("date").reset_index(drop=True)
+
+    # Compute quarter-over-quarter buy/sell changes
+    df["share_change"] = df["total_shares"].diff().fillna(0)
+    df["buying"] = df["share_change"].clip(lower=0)
+    df["selling"] = df["share_change"].clip(upper=0).abs()
+
     # Metrics
     if len(df) >= 2:
-        latest = df.iloc[0]
-        prev = df.iloc[1]
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
         share_change = (
             (latest["total_shares"] - prev["total_shares"])
             / prev["total_shares"]
@@ -46,7 +54,7 @@ def render():
             if prev["total_shares"] > 0
             else 0
         )
-        inst_change = latest["institution_count"] - prev["institution_count"]
+        inst_change = int(latest["institution_count"] - prev["institution_count"])
 
         c1, c2, c3 = st.columns(3)
         c1.metric(
@@ -54,7 +62,7 @@ def render():
             f"{latest['total_shares']:,.0f}",
             f"{share_change:+.1f}%",
         )
-        c2.metric("Institutions", f"{latest['institution_count']}", f"{inst_change:+d}")
+        c2.metric("Institutions", f"{int(latest['institution_count'])}", f"{inst_change:+d}")
         c3.metric("Total Value", f"${latest['total_value']:,.0f}")
 
         # Accumulation flag
@@ -64,40 +72,86 @@ def render():
                 f"Shares +{share_change:.1f}%, {inst_change} new institutions"
             )
 
-    # Dual-axis chart
+    # Chart with buy/sell bars + institution line
     fig = go.Figure()
+
+    # Buying bars (green)
     fig.add_trace(
         go.Bar(
             x=df["quarter"],
-            y=df["total_shares"],
-            name="Total Shares",
-            marker_color=COLORS["accent"],
-            opacity=0.7,
+            y=df["buying"],
+            name="Buying",
+            marker_color=COLORS["green"],
+            opacity=0.8,
         )
     )
+
+    # Selling bars (red, shown as negative)
+    fig.add_trace(
+        go.Bar(
+            x=df["quarter"],
+            y=-df["selling"],
+            name="Selling",
+            marker_color=COLORS["red"],
+            opacity=0.8,
+        )
+    )
+
+    # Total shares as area
+    fig.add_trace(
+        go.Scatter(
+            x=df["quarter"],
+            y=df["total_shares"],
+            name="Total Shares",
+            mode="lines+markers",
+            line=dict(color=COLORS["accent"], width=2),
+            marker=dict(size=6),
+            fill="tozeroy",
+            fillcolor="rgba(0, 212, 170, 0.1)",
+            yaxis="y2",
+        )
+    )
+
+    # Institution count line
     fig.add_trace(
         go.Scatter(
             x=df["quarter"],
             y=df["institution_count"],
             name="Institutions",
             mode="lines+markers",
-            line=dict(color=COLORS["yellow"], width=2),
+            line=dict(color=COLORS["yellow"], width=2, dash="dot"),
             marker=dict(size=8),
-            yaxis="y2",
+            yaxis="y3",
         )
     )
 
     apply_dark_layout(
         fig,
-        title=f"13F Institutional Ownership: {ticker}",
-        yaxis_title="Shares Held",
+        title=f"Smart Money Flow: {ticker}",
+        yaxis_title="Share Change (Buy/Sell)",
+        xaxis=dict(
+            gridcolor=COLORS["grid"],
+            zerolinecolor=COLORS["grid"],
+            categoryorder="array",
+            categoryarray=df["quarter"].tolist(),
+        ),
         yaxis2=dict(
-            title="Institution Count",
+            title="Total Shares Held",
             overlaying="y",
             side="right",
             gridcolor=COLORS["grid"],
+            showgrid=False,
         ),
-        barmode="overlay",
+        yaxis3=dict(
+            title="Institutions",
+            overlaying="y",
+            side="right",
+            position=0.95,
+            showgrid=False,
+            gridcolor=COLORS["grid"],
+        ),
+        barmode="relative",
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.12),
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -170,7 +224,7 @@ def _get_quarterly_data(ticker: str) -> list[dict]:
             quarters[str(q)]["institutions"].add(str(c))
 
     result = []
-    for q in sorted(quarters.keys(), reverse=True):
+    for q in sorted(quarters.keys()):
         data = quarters[q]
         result.append(
             {
