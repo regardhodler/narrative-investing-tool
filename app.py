@@ -31,8 +31,9 @@ with st.sidebar:
             "1 · Discovery",
             "2 · Narrative Pulse",
             "3 · EDGAR Scanner",
-            "4 · Smart Money",
-            "5 · Options Activity",
+            "4 · Institutional (13F)",
+            "5 · Insider & Congress",
+            "6 · Options Activity",
         ],
     )
 
@@ -47,8 +48,11 @@ elif page.startswith("3"):
     from modules.edgar_scanner import render
     render()
 elif page.startswith("4"):
-    from modules.smart_money import render
+    from modules.institutional import render
     render()
 elif page.startswith("5"):
+    from modules.insider_congress import render
+    render()
+elif page.startswith("6"):
     from modules.options_activity import render
     render()
