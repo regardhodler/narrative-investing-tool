@@ -2,22 +2,33 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 from services.trends_client import get_interest_over_time
-from utils.session import get_narrative
+from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
+
+
+TIMEFRAME_OPTIONS = ["1M", "3M", "6M", "1Y", "2Y", "YTD"]
 
 
 def render():
     st.header("NARRATIVE PULSE")
 
-    narrative = get_narrative()
-    if not narrative:
-        st.info("Set an active narrative in Discovery to view pulse data.")
+    ticker = get_ticker()
+    if not ticker:
+        st.info("Set an active ticker in Module 1 to view pulse data.")
         return
 
-    st.caption(f'Tracking: **"{narrative}"** · 90-day Google Trends')
+    timeframe = st.radio(
+        "Timeframe",
+        TIMEFRAME_OPTIONS,
+        index=1,
+        horizontal=True,
+        key="narrative_pulse_tf",
+    )
+
+    st.caption(f'Tracking: **{ticker}** · Google Trends ({timeframe})')
 
     with st.spinner("Fetching trend data..."):
-        df = get_interest_over_time(narrative)
+        df = get_interest_over_time(ticker, timeframe)
 
     if df.empty:
         st.warning("No trend data available for this keyword.")
@@ -77,5 +88,5 @@ def render():
         annotation_text="2σ threshold",
     )
 
-    apply_dark_layout(fig, title=f'Google Trends: "{narrative}"', yaxis_title="Interest")
+    apply_dark_layout(fig, title=f"Google Trends: {ticker}", yaxis_title="Interest")
     st.plotly_chart(fig, use_container_width=True)

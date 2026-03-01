@@ -25,14 +25,42 @@ def get_trending_searches() -> list[str]:
             return []
 
 
+TIMEFRAME_MAP = {
+    "1M": "today 1-m",
+    "3M": "today 3-m",
+    "1Y": "today 12-m",
+}
+
+
+def _resolve_timeframe(label: str) -> str:
+    """Convert a user-friendly timeframe label to a pytrends timeframe string."""
+    if label in TIMEFRAME_MAP:
+        return TIMEFRAME_MAP[label]
+
+    from datetime import date, timedelta
+
+    today = date.today()
+
+    if label == "6M":
+        start = today - timedelta(days=182)
+    elif label == "2Y":
+        start = today - timedelta(days=730)
+    elif label == "YTD":
+        start = date(today.year, 1, 1)
+    else:
+        return "today 3-m"
+
+    return f"{start.strftime('%Y-%m-%d')} {today.strftime('%Y-%m-%d')}"
+
+
 @st.cache_data(ttl=900)
-def get_interest_over_time(keyword: str) -> pd.DataFrame:
-    """Fetch 90-day interest over time for a keyword.
+def get_interest_over_time(keyword: str, timeframe: str = "3M") -> pd.DataFrame:
+    """Fetch interest over time for a keyword.
 
     Returns DataFrame with 'date' and 'interest' columns.
     """
     pytrends = _get_pytrends()
-    pytrends.build_payload([keyword], timeframe="today 3-m")
+    pytrends.build_payload([keyword], timeframe=_resolve_timeframe(timeframe))
     df = pytrends.interest_over_time()
     if df.empty:
         return pd.DataFrame(columns=["date", "interest"])
