@@ -275,6 +275,9 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
     Returns DataFrame: insider_name, title, date, type, shares, price, value
     """
     import xml.etree.ElementTree as ET
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    empty = pd.DataFrame(columns=["insider_name", "title", "date", "type", "shares", "price", "value"])
 
     # Resolve ticker → CIK
     cik_map = get_cik_ticker_map()
@@ -286,13 +289,13 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
             break
 
     if cik is None:
-        return pd.DataFrame(columns=["insider_name", "title", "date", "type", "shares", "price", "value"])
+        return empty
 
     # Get Form 4 filings from submissions
     submissions = get_company_submissions(cik)
     recent = submissions.get("filings", {}).get("recent", {})
     if not recent:
-        return pd.DataFrame(columns=["insider_name", "title", "date", "type", "shares", "price", "value"])
+        return empty
 
     forms = recent.get("form", [])
     accessions = recent.get("accessionNumber", [])
@@ -310,17 +313,15 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
         if len(form4_filings) >= 20:
             break
 
-    trades = []
-    for filing in form4_filings:
+    def _fetch_filing(filing):
+        """Fetch and parse a single Form 4 filing. Returns list of trade dicts."""
+        trades = []
         try:
-            # Fetch index.json to find the XML file
-            _rate_limit()
             index_url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{filing['acc_no_dash']}/index.json"
             resp = requests.get(index_url, headers=SEC_HEADERS, timeout=10)
             resp.raise_for_status()
             index_data = resp.json()
 
-            # Find the XML file (not the primary doc which is usually HTML)
             xml_filename = None
             for item in index_data.get("directory", {}).get("item", []):
                 name = item.get("name", "")
@@ -329,21 +330,17 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
                     break
 
             if not xml_filename:
-                continue
+                return trades
 
-            # Fetch and parse the XML
-            _rate_limit()
             xml_url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{filing['acc_no_dash']}/{xml_filename}"
             resp = requests.get(xml_url, headers=SEC_HEADERS, timeout=10)
             resp.raise_for_status()
 
             root = ET.fromstring(resp.content)
-            # Handle XML namespace
             ns = ""
             if root.tag.startswith("{"):
                 ns = root.tag.split("}")[0] + "}"
 
-            # Get owner info
             owner_el = root.find(f".//{ns}reportingOwner")
             owner_name = ""
             owner_title = ""
@@ -355,7 +352,6 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
                 if title_el is not None and title_el.text:
                     owner_title = title_el.text.strip()
 
-            # Parse transactions
             for txn in root.findall(f".//{ns}nonDerivativeTransaction"):
                 date_el = txn.find(f".//{ns}transactionDate/{ns}value")
                 code_el = txn.find(f".//{ns}transactionCoding/{ns}transactionCode")
@@ -369,7 +365,6 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
                 txn_price = float(price_el.text) if price_el is not None and price_el.text else 0
                 acq_disp = acq_disp_el.text if acq_disp_el is not None and acq_disp_el.text else ""
 
-                # Map transaction codes
                 code_map = {"P": "Purchase", "S": "Sale", "M": "Exercise", "A": "Grant"}
                 txn_type = code_map.get(txn_code, txn_code)
                 if not txn_type and acq_disp:
@@ -385,12 +380,20 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
                     "value": txn_shares * txn_price,
                 })
         except Exception:
-            continue
+            pass
+        return trades
 
-    if not trades:
-        return pd.DataFrame(columns=["insider_name", "title", "date", "type", "shares", "price", "value"])
+    # Fetch all filings concurrently (5 workers stays under SEC 10 req/sec limit)
+    all_trades = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = {pool.submit(_fetch_filing, f): f for f in form4_filings}
+        for future in as_completed(futures):
+            all_trades.extend(future.result())
 
-    return pd.DataFrame(trades).sort_values("date", ascending=False).reset_index(drop=True)
+    if not all_trades:
+        return empty
+
+    return pd.DataFrame(all_trades).sort_values("date", ascending=False).reset_index(drop=True)
 
 
 def _today() -> str:
