@@ -134,7 +134,8 @@ def _render_monthly_chart(df: pd.DataFrame, ticker: str):
         xaxis_title="Month",
         yaxis_title="Shares",
         barmode="relative",
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.12),
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.15),
+        margin=dict(l=40, r=40, t=80, b=40),
     )
     st.plotly_chart(fig, use_container_width=True)
 

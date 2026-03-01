@@ -85,9 +85,10 @@ def _render_manual():
                 tickers = result.get("suggested_tickers", [])
                 if tickers:
                     st.markdown(f"**Suggested tickers:** {', '.join(tickers)}")
-                    selected = st.selectbox("Set active ticker", tickers)
-                    if selected:
+                    selected = st.selectbox("Set active ticker", tickers, key="narrative_ticker_select")
+                    if st.button("Confirm Ticker", key="confirm_narrative_ticker") and selected:
                         set_ticker(selected)
+                        st.rerun()
             else:
                 st.info(
                     "Topic classified as not directly market-relevant, but narrative is set."
