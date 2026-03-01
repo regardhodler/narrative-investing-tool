@@ -113,8 +113,8 @@ def render():
         yaxis3=dict(title="Institutions", overlaying="y", side="right", position=0.95,
                      showgrid=False, gridcolor=COLORS["grid"]),
         barmode="relative",
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=1.18),
-        margin=dict(l=40, r=40, t=90, b=40),
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -148,9 +148,9 @@ def _render_institutions_table(ciks_by_quarter: dict[str, set[str]]):
     for cik in all_ciks:
         name = _resolve_institution_name(cik)
         if cik in new_ciks:
-            rows.append({"Institution": name, "CIK": cik, "Status": "New Position"})
+            rows.append({"Institution": name, "CIK": cik, "Status": "Bought (New Position)"})
         else:
-            rows.append({"Institution": name, "CIK": cik, "Status": "Exited"})
+            rows.append({"Institution": name, "CIK": cik, "Status": "Sold (Exited)"})
 
     if not rows:
         return
@@ -158,9 +158,9 @@ def _render_institutions_table(ciks_by_quarter: dict[str, set[str]]):
     tbl = pd.DataFrame(rows)
 
     def _highlight_status(val):
-        if val == "New Position":
+        if "Bought" in str(val):
             return f"color: {COLORS['green']}"
-        elif val == "Exited":
+        elif "Sold" in str(val):
             return f"color: {COLORS['red']}"
         return ""
 

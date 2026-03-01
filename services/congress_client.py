@@ -32,14 +32,30 @@ def get_congress_trades(ticker: str) -> pd.DataFrame:
             if not table:
                 break
 
+            # Dynamically map column headers to indices
+            col_map = {}
+            header_row = table.find("tr")
+            if header_row:
+                for idx, th in enumerate(header_row.find_all(["th", "td"])):
+                    h = th.get_text(strip=True).lower()
+                    if "politician" in h or "member" in h or "name" in h:
+                        col_map["politician"] = idx
+                    elif "date" in h and "published" not in h:
+                        col_map["date"] = idx
+                    elif "type" in h or "trade" in h or "transaction" in h:
+                        col_map["type"] = idx
+                    elif "size" in h or "amount" in h:
+                        col_map["size"] = idx
+                    elif "price" in h:
+                        col_map["price"] = idx
+
             rows = table.find_all("tr")
             if len(rows) <= 1:
                 break
 
-            found_on_page = False
             for row in rows[1:]:
                 cells = row.find_all("td")
-                if len(cells) < 6:
+                if len(cells) < 4:
                     continue
 
                 # Look for ticker pattern like "AAPL:US" in the row text
@@ -48,26 +64,39 @@ def get_congress_trades(ticker: str) -> pd.DataFrame:
                 if not ticker_match or ticker_match.group(1) != ticker_upper:
                     continue
 
-                found_on_page = True
+                # Extract politician from mapped or fallback index
+                pol_idx = col_map.get("politician", 0)
+                politician = cells[pol_idx].get_text(strip=True) if len(cells) > pol_idx else ""
 
-                # Extract fields from cells
-                politician = cells[0].get_text(strip=True)
                 party = ""
-                party_el = cells[0].find(class_=re.compile(r"party|badge"))
+                party_el = cells[pol_idx].find(class_=re.compile(r"party|badge")) if len(cells) > pol_idx else None
                 if party_el:
                     party = party_el.get_text(strip=True)
                 if not party:
-                    # Try to infer from class names
                     row_classes = " ".join(row.get("class", []))
                     if "democrat" in row_classes.lower():
                         party = "D"
                     elif "republican" in row_classes.lower():
                         party = "R"
 
-                trade_date = cells[2].get_text(strip=True) if len(cells) > 2 else ""
-                trade_type = cells[3].get_text(strip=True) if len(cells) > 3 else ""
-                trade_size = cells[4].get_text(strip=True) if len(cells) > 4 else ""
-                trade_price = cells[5].get_text(strip=True) if len(cells) > 5 else ""
+                # Use mapped columns with fallbacks
+                date_idx = col_map.get("date", 2)
+                type_idx = col_map.get("type", 3)
+                size_idx = col_map.get("size", 4)
+                price_idx = col_map.get("price", 5)
+
+                trade_date = cells[date_idx].get_text(strip=True) if len(cells) > date_idx else ""
+                trade_type = cells[type_idx].get_text(strip=True) if len(cells) > type_idx else ""
+                trade_size = cells[size_idx].get_text(strip=True) if len(cells) > size_idx else ""
+                trade_price = cells[price_idx].get_text(strip=True) if len(cells) > price_idx else ""
+
+                # If type column didn't yield buy/sell, scan the full row text
+                if trade_type and not re.search(r"(?i)buy|sell|purchase|sale|exchange", trade_type):
+                    row_lower = row_text.lower()
+                    if "buy" in row_lower or "purchase" in row_lower:
+                        trade_type = "Buy"
+                    elif "sell" in row_lower or "sale" in row_lower:
+                        trade_type = "Sell"
 
                 all_trades.append({
                     "politician": politician,
