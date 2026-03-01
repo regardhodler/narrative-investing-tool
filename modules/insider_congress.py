@@ -155,8 +155,16 @@ def _render_congress(ticker: str):
 
     st.success(f"Found {len(df)} congress trades for {ticker}")
 
+    def _highlight_trade_type(val):
+        v = str(val).lower()
+        if "buy" in v or "purchase" in v:
+            return f"color: {COLORS['green']}"
+        elif "sell" in v or "sale" in v:
+            return f"color: {COLORS['red']}"
+        return ""
+
     st.dataframe(
-        df,
+        df.style.map(_highlight_trade_type, subset=["type"]),
         use_container_width=True,
         hide_index=True,
         column_config={
