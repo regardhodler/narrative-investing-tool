@@ -63,6 +63,103 @@ If not market relevant, set sector to "N/A", thesis to "", and suggested_tickers
         return _empty_result()
 
 
+@st.cache_data(ttl=3600)
+def describe_company(name: str, ticker: str, sic_description: str) -> dict:
+    """Generate a brief company description and investment narrative via Groq.
+
+    Returns dict with keys: description, narrative, sector
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return {"description": "", "narrative": "", "sector": sic_description}
+
+    prompt = f"""You are a financial analyst. Given this company info, provide a brief overview.
+
+Company: {name}
+Ticker: {ticker}
+Industry: {sic_description}
+
+Return ONLY valid JSON (no markdown fences) with these keys:
+- "description": string — 2-3 sentence description of what the company does, its market position, and key products/services
+- "narrative": string — 1-2 sentence current investment narrative or theme (e.g. AI play, dividend aristocrat, turnaround story, growth compounder)
+- "sector": string — primary sector (Technology, Healthcare, Energy, Consumer, Finance, Industrials, etc.)"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 400,
+                "temperature": 0.3,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return {"description": "", "narrative": "", "sector": sic_description}
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"description": "", "narrative": "", "sector": sic_description}
+
+
+@st.cache_data(ttl=3600)
+def summarize_filing(filing_text: str, form_type: str, company: str) -> str:
+    """Summarize a SEC filing's text content via Groq.
+
+    Returns a markdown-formatted summary string.
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate summary."
+
+    prompt = f"""You are a financial analyst. Summarize this SEC {form_type} filing from {company}.
+
+Focus on:
+- Key announcements or material events (for 8-K)
+- Financial highlights and performance (for 10-K/10-Q)
+- Risk factors or notable disclosures
+- Any forward-looking guidance
+
+Keep the summary to 4-6 bullet points. Be specific with numbers and dates where available.
+
+Filing text:
+{filing_text}"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 600,
+                "temperature": 0.2,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating summary: {e}"
+
+
 def _empty_result() -> dict:
     return {
         "market_relevant": False,

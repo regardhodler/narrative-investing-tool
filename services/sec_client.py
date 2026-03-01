@@ -150,6 +150,63 @@ def get_13f_holdings(cik: str) -> list[dict]:
 
 
 @st.cache_data(ttl=3600)
+def get_company_info(ticker: str) -> dict | None:
+    """Look up basic company info from SEC submissions for a ticker.
+
+    Returns dict with: name, cik, sic, sic_description, state, fiscal_year_end, tickers, exchanges
+    """
+    cik_map = get_cik_ticker_map()
+    ticker_upper = ticker.strip().upper()
+    cik = None
+    for c, t in cik_map.items():
+        if t == ticker_upper:
+            cik = c
+            break
+
+    if cik is None:
+        return None
+
+    submissions = get_company_submissions(cik)
+    return {
+        "name": submissions.get("name", ""),
+        "cik": cik,
+        "sic": submissions.get("sic", ""),
+        "sic_description": submissions.get("sicDescription", ""),
+        "state": submissions.get("stateOfIncorporation", ""),
+        "fiscal_year_end": submissions.get("fiscalYearEnd", ""),
+        "tickers": submissions.get("tickers", []),
+        "exchanges": submissions.get("exchanges", []),
+    }
+
+
+@st.cache_data(ttl=3600)
+def fetch_filing_text(url: str, max_chars: int = 15000) -> str:
+    """Fetch the text content of a SEC filing, truncated to max_chars.
+
+    Strips HTML tags for a rough plain-text extraction.
+    """
+    import re
+
+    _rate_limit()
+    try:
+        resp = requests.get(url, headers=SEC_HEADERS, timeout=20)
+        resp.raise_for_status()
+        text = resp.text
+    except Exception:
+        return ""
+
+    # Strip HTML tags
+    text = re.sub(r"<[^>]+>", " ", text)
+    # Collapse whitespace
+    text = re.sub(r"\s+", " ", text).strip()
+
+    if len(text) > max_chars:
+        text = text[:max_chars] + "\n\n[...truncated]"
+
+    return text
+
+
+@st.cache_data(ttl=3600)
 def get_filings_by_ticker(ticker: str) -> pd.DataFrame:
     """Look up a ticker's recent SEC filings via CIK.
 
