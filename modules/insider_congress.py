@@ -1,3 +1,4 @@
+import re
 from datetime import date, timedelta
 
 import pandas as pd
@@ -11,6 +12,19 @@ from utils.theme import COLORS, apply_dark_layout
 
 
 _TIMEFRAME_DAYS = {"3M": 90, "6M": 180, "1Y": 365, "2Y": 730}
+
+
+def _parse_size_midpoint(size_str: str) -> float:
+    """Parse a congress trade size range like '$1,001 - $15,000' into its midpoint dollar value."""
+    try:
+        amounts = [float(v.replace(",", "")) for v in re.findall(r"\$([\d,]+)", str(size_str))]
+        if len(amounts) == 2:
+            return (amounts[0] + amounts[1]) / 2
+        if len(amounts) == 1:
+            return amounts[0]
+    except (ValueError, TypeError):
+        pass
+    return 0.0
 
 
 def render():
@@ -58,6 +72,30 @@ def _render_insider(ticker: str):
     buys = df[df["type"].isin(["Purchase"])]
     sells = df[df["type"].isin(["Sale"])]
 
+    buy_value = buys["value"].sum() if not buys.empty else 0
+    sell_value = sells["value"].sum() if not sells.empty else 0
+    total_value = buy_value + sell_value
+    insider_buy_pct = (buy_value / total_value * 100) if total_value > 0 else 50
+
+    if insider_buy_pct > 55:
+        ins_bias = "BULLISH"
+        ins_color = COLORS["green"]
+    elif insider_buy_pct < 45:
+        ins_bias = "BEARISH"
+        ins_color = COLORS["red"]
+    else:
+        ins_bias = "NEUTRAL"
+        ins_color = COLORS["yellow"]
+
+    st.markdown(
+        f"<div style='text-align:center; padding:10px; border:1px solid {ins_color}; border-radius:8px; margin-bottom:10px;'>"
+        f"<span style='font-size:2em; color:{ins_color}; font-weight:bold;'>{insider_buy_pct:.1f}%</span>"
+        f"<br><span style='color:{ins_color}; font-size:1.2em;'>{ins_bias}</span>"
+        f"<br><span style='color:{COLORS['text_dim']}; font-size:0.85em;'>50% = Neutral · Above = Bullish · Below = Bearish · Weighted by $ value</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Trades", len(df))
     c2.metric("Buys", len(buys), f"${buys['value'].sum():,.0f}" if not buys.empty else "$0")
@@ -65,6 +103,9 @@ def _render_insider(ticker: str):
 
     # Monthly activity bar chart
     _render_monthly_chart(df, ticker)
+
+    # Trade value timeline
+    _render_insider_timeline(df, ticker)
 
     # Color-coded table
     def _highlight_type(val):
@@ -140,8 +181,200 @@ def _render_monthly_chart(df: pd.DataFrame, ticker: str):
     st.plotly_chart(fig, use_container_width=True)
 
 
+def _render_insider_timeline(df: pd.DataFrame, ticker: str):
+    """Scatter plot of individual insider trades by date and dollar value."""
+    chart_df = df[df["type"].isin(["Purchase", "Sale"]) & (df["value"] > 0)].copy()
+    if chart_df.empty:
+        return
+
+    fig = go.Figure()
+    for trade_type, color, symbol in [
+        ("Purchase", COLORS["green"], "triangle-up"),
+        ("Sale", COLORS["red"], "triangle-down"),
+    ]:
+        subset = chart_df[chart_df["type"] == trade_type]
+        if subset.empty:
+            continue
+        fig.add_trace(
+            go.Scatter(
+                x=subset["date"],
+                y=subset["value"],
+                mode="markers",
+                name=trade_type,
+                marker=dict(color=color, size=10, symbol=symbol),
+                text=subset["insider_name"],
+                hovertemplate="<b>%{text}</b><br>Date: %{x}<br>Value: $%{y:,.0f}<extra></extra>",
+            )
+        )
+
+    apply_dark_layout(
+        fig,
+        title=f"Insider Trade Values: {ticker}",
+        xaxis_title="Date",
+        yaxis_title="Trade Value ($)",
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_congress_charts(df: pd.DataFrame, ticker: str):
+    """Render bias line chart, monthly bar chart, and trade timeline for congress trades."""
+    chart_df = df.copy()
+    chart_df["month"] = pd.to_datetime(chart_df["date"]).dt.to_period("M").astype(str)
+
+    # --- Bias line chart: cumulative net buy % over time (dollar-weighted) ---
+    chart_df["est_value"] = chart_df["size"].apply(_parse_size_midpoint)
+    all_months = sorted(chart_df["month"].unique())
+    purchases_by_month = chart_df[chart_df["type"] == "Purchase"].groupby("month")["est_value"].sum()
+    sales_by_month = chart_df[chart_df["type"] == "Sale"].groupby("month")["est_value"].sum()
+
+    cumulative_buys = 0.0
+    cumulative_sells = 0.0
+    bias_data = []
+    for m in all_months:
+        cumulative_buys += purchases_by_month.get(m, 0)
+        cumulative_sells += sales_by_month.get(m, 0)
+        total = cumulative_buys + cumulative_sells
+        buy_pct = (cumulative_buys / total * 100) if total > 0 else 50
+        sell_pct = (cumulative_sells / total * 100) if total > 0 else 50
+        net_pct = buy_pct - sell_pct  # positive = buying bias, negative = selling bias
+        bias_data.append({"month": m, "buy_pct": buy_pct, "sell_pct": sell_pct, "net_bias": net_pct})
+
+    bias_df = pd.DataFrame(bias_data)
+
+    fig_bias = go.Figure()
+    fig_bias.add_trace(
+        go.Scatter(
+            x=bias_df["month"], y=bias_df["buy_pct"],
+            name="Buy %",
+            mode="lines+markers",
+            line=dict(color=COLORS["green"], width=3),
+            marker=dict(size=8),
+            fill="tozeroy",
+            fillcolor="rgba(0, 212, 170, 0.08)",
+            hovertemplate="%{x}<br>Buy: %{y:.1f}%<extra></extra>",
+        )
+    )
+    fig_bias.add_trace(
+        go.Scatter(
+            x=bias_df["month"], y=bias_df["sell_pct"],
+            name="Sell %",
+            mode="lines+markers",
+            line=dict(color=COLORS["red"], width=3),
+            marker=dict(size=8),
+            hovertemplate="%{x}<br>Sell: %{y:.1f}%<extra></extra>",
+        )
+    )
+
+    fig_bias.add_hline(y=50, line_dash="dash", line_color=COLORS["text_dim"], opacity=0.5)
+
+    # Determine bias — buy_pct is the bias score (50% = neutral)
+    latest_buy_pct = bias_df.iloc[-1]["buy_pct"] if not bias_df.empty else 50
+    if latest_buy_pct > 55:
+        bias_label = "BULLISH"
+        bias_color = COLORS["green"]
+    elif latest_buy_pct < 45:
+        bias_label = "BEARISH"
+        bias_color = COLORS["red"]
+    else:
+        bias_label = "NEUTRAL"
+        bias_color = COLORS["yellow"]
+
+    st.markdown(
+        f"<div style='text-align:center; padding:10px; border:1px solid {bias_color}; border-radius:8px; margin-bottom:10px;'>"
+        f"<span style='font-size:2em; color:{bias_color}; font-weight:bold;'>{latest_buy_pct:.1f}%</span>"
+        f"<br><span style='color:{bias_color}; font-size:1.2em;'>{bias_label}</span>"
+        f"<br><span style='color:{COLORS['text_dim']}; font-size:0.85em;'>50% = Neutral · Above = Bullish · Below = Bearish · Weighted by $ value</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+    apply_dark_layout(
+        fig_bias,
+        title=f"Congress Bias: {ticker} — {bias_label} ({latest_buy_pct:.1f}%)",
+        yaxis_title="Cumulative %",
+        yaxis=dict(range=[0, 100], gridcolor=COLORS["grid"]),
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
+    )
+    fig_bias.update_layout(title_font_color=bias_color)
+    st.plotly_chart(fig_bias, use_container_width=True)
+
+    # --- Monthly activity bar chart ---
+    purchases = chart_df[chart_df["type"] == "Purchase"].groupby("month").size()
+    sales = chart_df[chart_df["type"] == "Sale"].groupby("month").size()
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=all_months,
+            y=[purchases.get(m, 0) for m in all_months],
+            name="Purchase",
+            marker_color=COLORS["green"],
+            opacity=0.8,
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            x=all_months,
+            y=[-sales.get(m, 0) for m in all_months],
+            name="Sale",
+            marker_color=COLORS["red"],
+            opacity=0.8,
+        )
+    )
+
+    apply_dark_layout(
+        fig,
+        title=f"Congress Monthly Activity: {ticker}",
+        xaxis_title="Month",
+        yaxis_title="Number of Trades",
+        barmode="relative",
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # --- Trade timeline scatter ---
+    fig2 = go.Figure()
+    for trade_type, color, symbol in [
+        ("Purchase", COLORS["green"], "triangle-up"),
+        ("Sale", COLORS["red"], "triangle-down"),
+    ]:
+        subset = chart_df[chart_df["type"] == trade_type]
+        if subset.empty:
+            continue
+        fig2.add_trace(
+            go.Scatter(
+                x=subset["date"],
+                y=[trade_type] * len(subset),
+                mode="markers",
+                name=trade_type,
+                marker=dict(color=color, size=10, symbol=symbol),
+                text=subset["politician"],
+                customdata=subset["size"],
+                hovertemplate="<b>%{text}</b><br>Date: %{x}<br>Size: %{customdata}<extra></extra>",
+            )
+        )
+
+    apply_dark_layout(
+        fig2,
+        title=f"Congress Trade Timeline: {ticker}",
+        xaxis_title="Date",
+        yaxis_title="",
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+
 def _render_congress(ticker: str):
     st.caption(f"Congress Trading: **{ticker}**")
+
+    timeframe = st.radio(
+        "Timeframe", list(_TIMEFRAME_DAYS.keys()), index=2, horizontal=True, key="congress_tf"
+    )
 
     with st.spinner("Fetching congress trades..."):
         try:
@@ -154,43 +387,43 @@ def _render_congress(ticker: str):
         st.info("No recent congress trades found for this ticker.")
         return
 
-    st.success(f"Found {len(df)} congress trades for {ticker}")
+    # Filter by timeframe — dates are ISO format (YYYY-MM-DD) from Quiver Quant
+    days = _TIMEFRAME_DAYS[timeframe]
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    df["date"] = df["date"].astype(str)
+    df = df[df["date"] >= cutoff].reset_index(drop=True)
 
-    # Classify each trade as Buy/Sell based on type text
-    def _classify(t):
-        v = str(t).lower()
-        if any(k in v for k in ["buy", "purchase", "acquire"]):
-            return "Buy"
-        elif any(k in v for k in ["sell", "sale", "dispose", "full_sale", "partial_sale"]):
-            return "Sell"
-        return t
+    if df.empty:
+        st.info(f"No congress trades in the last {timeframe}.")
+        return
 
-    df["direction"] = df["type"].apply(_classify)
+    st.success(f"Found {len(df)} congress trades for {ticker} ({timeframe})")
 
-    buys = df[df["direction"] == "Buy"]
-    sells = df[df["direction"] == "Sell"]
+    buys = df[df["type"] == "Purchase"]
+    sells = df[df["type"] == "Sale"]
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Trades", len(df))
-    c2.metric("Buys", len(buys))
-    c3.metric("Sells", len(sells))
+    c2.metric("Purchases", len(buys))
+    c3.metric("Sales", len(sells))
 
-    def _highlight_direction(val):
-        if val == "Buy":
+    # Charts
+    _render_congress_charts(df, ticker)
+
+    def _highlight_type(val):
+        if val == "Purchase":
             return f"color: {COLORS['green']}"
-        elif val == "Sell":
+        elif val == "Sale":
             return f"color: {COLORS['red']}"
         return ""
 
     st.dataframe(
-        df.style.map(_highlight_direction, subset=["direction"]),
+        df.style.map(_highlight_type, subset=["type"]),
         use_container_width=True,
         hide_index=True,
         column_config={
             "politician": "Politician",
-            "party": "Party",
             "date": "Date",
-            "type": "Type",
-            "direction": "Buy/Sell",
+            "type": "Buy/Sell",
             "size": "Size",
             "price": "Price",
         },
