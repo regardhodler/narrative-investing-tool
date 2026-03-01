@@ -1,65 +1,69 @@
 import streamlit as st
-import pandas as pd
-from services.sec_client import search_filings
-from utils.session import get_narrative, set_ticker
+from services.sec_client import get_filings_by_ticker
+from utils.session import get_ticker, set_ticker
 
 
 def render():
-    st.header("EDGAR SIGNAL SCANNER")
+    st.header("EDGAR FILING SCANNER")
 
-    narrative = get_narrative()
-    if not narrative:
-        st.info("Set an active narrative in Discovery to scan EDGAR filings.")
+    # Pre-fill with active ticker if set
+    default_ticker = get_ticker() or ""
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        ticker_input = st.text_input(
+            "Ticker Symbol",
+            value=default_ticker,
+            placeholder="e.g. AAPL",
+        ).strip().upper()
+    with col2:
+        st.write("")  # spacing
+        search = st.button("Look Up Filings", type="primary")
+
+    if not search and not ticker_input:
+        st.info("Enter a ticker symbol to view its recent SEC filings.")
         return
 
-    st.caption(f'Scanning SEC filings for: **"{narrative}"** · Last 90 days')
+    if not ticker_input:
+        st.warning("Please enter a ticker symbol.")
+        return
 
-    with st.spinner("Searching EDGAR full-text index..."):
-        df = search_filings(narrative)
+    # Set active ticker button
+    if ticker_input and ticker_input != get_ticker():
+        if st.button(f"Set **{ticker_input}** as Active Ticker"):
+            set_ticker(ticker_input)
+            st.success(f"Active ticker set to **{ticker_input}**")
+            st.rerun()
+
+    with st.spinner(f"Fetching SEC filings for {ticker_input}..."):
+        df = get_filings_by_ticker(ticker_input)
 
     if df.empty:
-        st.warning("No filings found mentioning this keyword.")
+        st.warning(f"No filings found for ticker **{ticker_input}**. Check the symbol and try again.")
         return
 
-    st.success(f"Found {len(df)} filing mentions")
+    st.success(f"Found {len(df)} recent filings for **{ticker_input}**")
 
-    # Aggregate by company
-    agg = (
-        df.groupby(["company", "ticker", "cik"])
-        .agg(mentions=("form_type", "count"), forms=("form_type", lambda x: ", ".join(x.unique())), latest=("date", "max"))
-        .reset_index()
-        .sort_values("mentions", ascending=False)
+    # Form type filter
+    form_types = sorted(df["form_type"].unique())
+    selected_forms = st.multiselect(
+        "Filter by Form Type",
+        options=form_types,
+        default=None,
+        placeholder="All form types",
     )
 
-    st.subheader("Companies by Mention Frequency")
+    filtered = df[df["form_type"].isin(selected_forms)] if selected_forms else df
+
     st.dataframe(
-        agg[["company", "ticker", "mentions", "forms", "latest"]],
+        filtered,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "company": "Company",
-            "ticker": "Ticker",
-            "mentions": st.column_config.NumberColumn("Mentions", format="%d"),
-            "forms": "Form Types",
-            "latest": "Latest Filing",
+            "form_type": "Form Type",
+            "date": "Filing Date",
+            "description": "Description",
+            "accession_number": "Accession #",
+            "url": st.column_config.LinkColumn("Link", display_text="View"),
         },
     )
-
-    # Ticker selection
-    tickers_with_data = agg[agg["ticker"] != ""]["ticker"].tolist()
-    if tickers_with_data:
-        st.subheader("Select Ticker for Downstream Analysis")
-        selected = st.selectbox(
-            "Ticker",
-            tickers_with_data,
-            index=0,
-            label_visibility="collapsed",
-        )
-        if st.button("Set Active Ticker", type="primary"):
-            set_ticker(selected)
-            st.success(f"Active ticker set to **{selected}**")
-            st.rerun()
-
-    # Raw filings table (expandable)
-    with st.expander("Raw Filing Results"):
-        st.dataframe(df, use_container_width=True, hide_index=True)

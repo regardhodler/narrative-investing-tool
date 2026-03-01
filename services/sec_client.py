@@ -149,6 +149,68 @@ def get_13f_holdings(cik: str) -> list[dict]:
     return filings_13f
 
 
+@st.cache_data(ttl=3600)
+def get_filings_by_ticker(ticker: str) -> pd.DataFrame:
+    """Look up a ticker's recent SEC filings via CIK.
+
+    Returns DataFrame with columns: form_type, date, description, accession_number, url
+    """
+    # Reverse lookup: ticker → CIK
+    cik_map = get_cik_ticker_map()
+    ticker_upper = ticker.strip().upper()
+    cik = None
+    for c, t in cik_map.items():
+        if t == ticker_upper:
+            cik = c
+            break
+
+    if cik is None:
+        return pd.DataFrame(
+            columns=["form_type", "date", "description", "accession_number", "url"]
+        )
+
+    submissions = get_company_submissions(cik)
+    recent = submissions.get("filings", {}).get("recent", {})
+    if not recent:
+        return pd.DataFrame(
+            columns=["form_type", "date", "description", "accession_number", "url"]
+        )
+
+    forms = recent.get("form", [])
+    dates = recent.get("filingDate", [])
+    accessions = recent.get("accessionNumber", [])
+    primary_docs = recent.get("primaryDocument", [])
+    descriptions = recent.get("primaryDocDescription", [])
+
+    padded_cik = cik.zfill(10)
+    rows = []
+    for i in range(len(forms)):
+        acc = accessions[i] if i < len(accessions) else ""
+        doc = primary_docs[i] if i < len(primary_docs) else ""
+        acc_no_dash = acc.replace("-", "")
+        url = (
+            f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{acc_no_dash}/{doc}"
+            if acc and doc
+            else ""
+        )
+        rows.append(
+            {
+                "form_type": forms[i] if i < len(forms) else "",
+                "date": dates[i] if i < len(dates) else "",
+                "description": descriptions[i] if i < len(descriptions) else "",
+                "accession_number": acc,
+                "url": url,
+            }
+        )
+
+    if not rows:
+        return pd.DataFrame(
+            columns=["form_type", "date", "description", "accession_number", "url"]
+        )
+
+    return pd.DataFrame(rows)
+
+
 def _today() -> str:
     from datetime import date
 
