@@ -3,7 +3,8 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from services.sec_client import get_cik_ticker_map, get_13f_holdings, SEC_HEADERS, _rate_limit
+from services.sec_client import get_cik_ticker_map, get_13f_holdings, get_insider_trades, SEC_HEADERS, _rate_limit
+from services.congress_client import get_congress_trades
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
 
@@ -13,9 +14,24 @@ def render():
 
     ticker = get_ticker()
     if not ticker:
-        st.info("Select a ticker in EDGAR Scanner to view institutional ownership.")
+        st.info("Select a ticker in Discovery to view smart money data.")
         return
 
+    tab_13f, tab_insider, tab_congress = st.tabs(
+        ["Institutional (13F)", "Insider Trading", "Congress Trading"]
+    )
+
+    with tab_13f:
+        _render_institutional(ticker)
+
+    with tab_insider:
+        _render_insider(ticker)
+
+    with tab_congress:
+        _render_congress(ticker)
+
+
+def _render_institutional(ticker: str):
     st.caption(f"13F Institutional Holdings: **{ticker}**")
 
     with st.spinner("Looking up CIK..."):
@@ -75,7 +91,6 @@ def render():
     # Chart with buy/sell bars + institution line
     fig = go.Figure()
 
-    # Buying bars (green)
     fig.add_trace(
         go.Bar(
             x=df["quarter"],
@@ -86,7 +101,6 @@ def render():
         )
     )
 
-    # Selling bars (red, shown as negative)
     fig.add_trace(
         go.Bar(
             x=df["quarter"],
@@ -97,7 +111,6 @@ def render():
         )
     )
 
-    # Total shares as area
     fig.add_trace(
         go.Scatter(
             x=df["quarter"],
@@ -112,7 +125,6 @@ def render():
         )
     )
 
-    # Institution count line
     fig.add_trace(
         go.Scatter(
             x=df["quarter"],
@@ -156,9 +168,87 @@ def render():
     st.plotly_chart(fig, use_container_width=True)
 
 
+def _render_insider(ticker: str):
+    st.caption(f"Insider Trading (Form 4): **{ticker}**")
+
+    with st.spinner("Fetching insider trades..."):
+        df = get_insider_trades(ticker)
+
+    if df.empty:
+        st.info("No recent insider trades found for this ticker.")
+        return
+
+    # Metrics
+    buys = df[df["type"].isin(["Purchase"])]
+    sells = df[df["type"].isin(["Sale"])]
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Trades", len(df))
+    c2.metric("Buys", len(buys), f"${buys['value'].sum():,.0f}" if not buys.empty else "$0")
+    c3.metric("Sells", len(sells), f"${sells['value'].sum():,.0f}" if not sells.empty else "$0")
+
+    # Color-coded table
+    def _highlight_type(val):
+        if val == "Purchase":
+            return f"color: {COLORS['green']}"
+        elif val == "Sale":
+            return f"color: {COLORS['red']}"
+        return ""
+
+    display_df = df.copy()
+    display_df["value"] = display_df["value"].apply(lambda v: f"${v:,.0f}" if v else "")
+    display_df["shares"] = display_df["shares"].apply(lambda s: f"{s:,.0f}" if s else "")
+    display_df["price"] = display_df["price"].apply(lambda p: f"${p:,.2f}" if p else "")
+
+    st.dataframe(
+        display_df.style.map(_highlight_type, subset=["type"]),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "insider_name": "Insider",
+            "title": "Title",
+            "date": "Date",
+            "type": "Type",
+            "shares": "Shares",
+            "price": "Price",
+            "value": "Value",
+        },
+    )
+
+
+def _render_congress(ticker: str):
+    st.caption(f"Congress Trading: **{ticker}**")
+
+    with st.spinner("Fetching congress trades..."):
+        try:
+            df = get_congress_trades(ticker)
+        except Exception:
+            st.warning("Capitol Trades data unavailable — site format may have changed.")
+            return
+
+    if df.empty:
+        st.info("No recent congress trades found for this ticker.")
+        return
+
+    st.success(f"Found {len(df)} congress trades for {ticker}")
+
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "politician": "Politician",
+            "party": "Party",
+            "date": "Date",
+            "type": "Type",
+            "size": "Size",
+            "price": "Price",
+        },
+    )
+
+
 def _ticker_to_cik(ticker: str) -> str | None:
     cik_map = get_cik_ticker_map()
-    # Reverse lookup: ticker -> CIK
     for cik, t in cik_map.items():
         if t.upper() == ticker.upper():
             return cik
@@ -167,12 +257,8 @@ def _ticker_to_cik(ticker: str) -> str | None:
 
 @st.cache_data(ttl=3600)
 def _get_quarterly_data(ticker: str) -> list[dict]:
-    """Search for 13F filings that hold this ticker and aggregate by quarter.
-
-    This searches institutions that hold the given stock.
-    """
+    """Search for 13F filings that hold this ticker and aggregate by quarter."""
     cik_map = get_cik_ticker_map()
-    # Reverse: get CIK for ticker
     target_cik = None
     for cik, t in cik_map.items():
         if t.upper() == ticker.upper():
@@ -182,7 +268,6 @@ def _get_quarterly_data(ticker: str) -> list[dict]:
     if not target_cik:
         return []
 
-    # Use EDGAR full-text search for 13F filings mentioning this ticker
     _rate_limit()
     try:
         resp = requests.get(
@@ -208,7 +293,6 @@ def _get_quarterly_data(ticker: str) -> list[dict]:
     if not hits:
         return []
 
-    # Group by quarter
     from collections import defaultdict
 
     quarters = defaultdict(lambda: {"institutions": set(), "total_shares": 0, "total_value": 0})
@@ -230,8 +314,8 @@ def _get_quarterly_data(ticker: str) -> list[dict]:
             {
                 "date": q,
                 "institution_count": len(data["institutions"]),
-                "total_shares": len(data["institutions"]) * 10000,  # Estimate
-                "total_value": len(data["institutions"]) * 500000,  # Estimate
+                "total_shares": len(data["institutions"]) * 10000,
+                "total_value": len(data["institutions"]) * 500000,
             }
         )
 

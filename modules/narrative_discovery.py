@@ -1,7 +1,8 @@
 import streamlit as st
 from services.trends_client import get_trending_searches
-from services.claude_client import classify_narrative
-from utils.session import set_narrative, set_ticker
+from services.claude_client import classify_narrative, describe_company
+from services.sec_client import get_company_info
+from utils.session import get_ticker, set_narrative, set_ticker
 
 
 def render():
@@ -99,5 +100,38 @@ def _render_manual():
         ).strip().upper()
         if st.button("Set Ticker", type="primary", key="set_ticker_btn") and ticker_input:
             set_ticker(ticker_input)
-            st.success(f"Active ticker set to **{ticker_input}**")
             st.rerun()
+
+        # Show company overview for the active ticker
+        active = get_ticker()
+        if active:
+            st.success(f"Active ticker: **{active}**")
+
+            with st.spinner(f"Looking up {active}..."):
+                company_info = get_company_info(active)
+
+            if company_info:
+                with st.spinner("Generating company overview..."):
+                    overview = describe_company(
+                        company_info["name"],
+                        active,
+                        company_info["sic_description"],
+                    )
+
+                with st.container(border=True):
+                    st.subheader(f"{company_info['name']}  ·  {active}")
+                    col_a, col_b = st.columns([2, 1])
+                    with col_a:
+                        if overview.get("description"):
+                            st.markdown(overview["description"])
+                        else:
+                            st.caption(company_info["sic_description"])
+                    with col_b:
+                        st.markdown(f"**Sector:** {overview.get('sector', company_info['sic_description'])}")
+                        if company_info["state"]:
+                            st.markdown(f"**Incorporated:** {company_info['state']}")
+                        if company_info["exchanges"]:
+                            st.markdown(f"**Exchange:** {', '.join(company_info['exchanges'])}")
+
+                    if overview.get("narrative"):
+                        st.info(f"**Narrative:** {overview['narrative']}")

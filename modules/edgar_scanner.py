@@ -1,6 +1,6 @@
 import streamlit as st
 from services.sec_client import get_filings_by_ticker, get_company_info, fetch_filing_text
-from services.claude_client import describe_company, summarize_filing
+from services.claude_client import summarize_filing
 from utils.session import get_ticker, set_ticker
 
 
@@ -36,41 +36,13 @@ def render():
             st.success(f"Active ticker set to **{ticker_input}**")
             st.rerun()
 
-    # --- Company Overview ---
+    # Look up company info (needed for filing summary context)
     with st.spinner(f"Looking up {ticker_input}..."):
         company_info = get_company_info(ticker_input)
 
     if not company_info:
         st.warning(f"Could not find company info for **{ticker_input}**.")
         return
-
-    # AI-generated description and narrative
-    with st.spinner("Generating company overview..."):
-        overview = describe_company(
-            company_info["name"],
-            ticker_input,
-            company_info["sic_description"],
-        )
-
-    with st.container(border=True):
-        st.subheader(f"{company_info['name']}  ·  {ticker_input}")
-        col_a, col_b = st.columns([2, 1])
-        with col_a:
-            if overview.get("description"):
-                st.markdown(overview["description"])
-            else:
-                st.caption(company_info["sic_description"])
-        with col_b:
-            st.markdown(f"**Sector:** {overview.get('sector', company_info['sic_description'])}")
-            if company_info["state"]:
-                st.markdown(f"**Incorporated:** {company_info['state']}")
-            if company_info["exchanges"]:
-                st.markdown(f"**Exchange:** {', '.join(company_info['exchanges'])}")
-
-        if overview.get("narrative"):
-            st.info(f"**Narrative:** {overview['narrative']}")
-
-    st.markdown("---")
 
     # --- Filings Table ---
     with st.spinner(f"Fetching SEC filings..."):
