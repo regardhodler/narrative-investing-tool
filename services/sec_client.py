@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 SEC_HEADERS = {
-    "User-Agent": "NarrativeInvestingTool research@example.com",
+    "User-Agent": "NarrativeInvestingTool jud_rabs@yahoo.com",
     "Accept-Encoding": "gzip, deflate",
 }
 
