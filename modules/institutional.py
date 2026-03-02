@@ -1,23 +1,10 @@
-from collections import defaultdict
-from datetime import date, timedelta
-
 import pandas as pd
 import plotly.graph_objects as go
-import requests
 import streamlit as st
+import yfinance as yf
 
-from services.sec_client import (
-    SEC_HEADERS,
-    _rate_limit,
-    get_cik_ticker_map,
-    get_company_submissions,
-    get_institution_holding,
-)
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
-
-
-_TIMEFRAME_DAYS = {"3M": 90, "6M": 180, "1Y": 365, "2Y": 730}
 
 
 def render():
@@ -28,363 +15,163 @@ def render():
         st.info("Select a ticker in Discovery to view institutional data.")
         return
 
-    timeframe = st.radio(
-        "Timeframe", list(_TIMEFRAME_DAYS.keys()), index=3, horizontal=True, key="inst_tf"
-    )
-
-    with st.spinner("Looking up CIK..."):
-        cik = _ticker_to_cik(ticker)
-
-    if not cik:
-        st.warning(f"Could not find CIK for ticker {ticker}.")
-        return
-
-    with st.spinner("Fetching 13F filings..."):
-        quarterly, institution_ciks_by_quarter, error = _get_quarterly_data(ticker, timeframe)
+    with st.spinner("Fetching institutional data..."):
+        holders, major, error = _get_institutional_data(ticker)
 
     if error:
         st.error(error)
         return
 
-    if not quarterly:
-        st.warning("No 13F holding data found for this ticker.")
-        return
+    # --- Major holders summary ---
+    if major is not None and not major.empty:
+        _render_major_holders(major, ticker)
 
-    df = pd.DataFrame(quarterly)
-    df["quarter"] = pd.to_datetime(df["date"]).dt.to_period("Q").astype(str)
-    df = df.sort_values("date").reset_index(drop=True)
-
-    # Quarter-over-quarter buy/sell changes
-    df["share_change"] = df["total_shares"].diff().fillna(0)
-    df["buying"] = df["share_change"].clip(lower=0)
-    df["selling"] = df["share_change"].clip(upper=0).abs()
-
-    # Metrics
-    if len(df) >= 2:
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
-        share_change = (
-            (latest["total_shares"] - prev["total_shares"])
-            / prev["total_shares"]
-            * 100
-            if prev["total_shares"] > 0
-            else 0
-        )
-        inst_change = int(latest["institution_count"] - prev["institution_count"])
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Total Shares Held", f"{latest['total_shares']:,.0f}", f"{share_change:+.1f}%")
-        c2.metric("Institutions", f"{int(latest['institution_count'])}", f"{inst_change:+d}")
-        c3.metric("Total Value", f"${latest['total_value']:,.0f}")
-        st.caption("Aggregate values are estimated from institution count")
-
-        if share_change > 10 and inst_change > 0:
-            st.markdown(
-                f":large_green_circle: **ACCELERATING ACCUMULATION** — "
-                f"Shares +{share_change:.1f}%, {inst_change} new institutions"
-            )
-
-    # Chart with buy/sell bars + institution line
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Bar(x=df["quarter"], y=df["buying"], name="Buying", marker_color=COLORS["green"], opacity=0.8)
-    )
-    fig.add_trace(
-        go.Bar(x=df["quarter"], y=-df["selling"], name="Selling", marker_color=COLORS["red"], opacity=0.8)
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=df["quarter"], y=df["total_shares"], name="Total Shares",
-            mode="lines+markers", line=dict(color=COLORS["accent"], width=2),
-            marker=dict(size=6), fill="tozeroy", fillcolor="rgba(0, 212, 170, 0.1)", yaxis="y2",
-        )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=df["quarter"], y=df["institution_count"], name="Institutions",
-            mode="lines+markers", line=dict(color=COLORS["yellow"], width=2, dash="dot"),
-            marker=dict(size=8), yaxis="y3",
-        )
-    )
-
-    apply_dark_layout(
-        fig,
-        title=f"Smart Money Flow: {ticker}",
-        yaxis_title="Share Change (Buy/Sell)",
-        xaxis=dict(gridcolor=COLORS["grid"], zerolinecolor=COLORS["grid"],
-                    categoryorder="array", categoryarray=df["quarter"].tolist()),
-        yaxis2=dict(title="Total Shares Held", overlaying="y", side="right",
-                     gridcolor=COLORS["grid"], showgrid=False),
-        yaxis3=dict(title="Institutions", overlaying="y", side="right", position=0.95,
-                     showgrid=False, gridcolor=COLORS["grid"]),
-        barmode="relative",
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
-        margin=dict(l=40, r=40, t=50, b=80),
-    )
-    st.plotly_chart(fig, use_container_width=True)
-
-    # Institutional bias line chart — % change from start of timeframe
-    _render_bias_chart(df, ticker)
-
-    # Institutions table — compare last two quarters
-    _render_institutions_table(institution_ciks_by_quarter, ticker)
-
-
-def _render_bias_chart(df: pd.DataFrame, ticker: str):
-    """Line chart showing % change in institutional shares and institution count from start of timeframe."""
-    if len(df) < 2:
-        return
-
-    base_shares = df.iloc[0]["total_shares"]
-    base_inst = df.iloc[0]["institution_count"]
-
-    if base_shares == 0 or base_inst == 0:
-        return
-
-    df = df.copy()
-    df["shares_pct"] = ((df["total_shares"] - base_shares) / base_shares) * 100
-    df["inst_pct"] = ((df["institution_count"] - base_inst) / base_inst) * 100
-
-    fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=df["quarter"], y=df["shares_pct"],
-            name="Shares Held %",
-            mode="lines+markers",
-            line=dict(color=COLORS["accent"], width=3),
-            marker=dict(size=8),
-            fill="tozeroy",
-            fillcolor="rgba(0, 212, 170, 0.1)",
-            hovertemplate="%{x}<br>Shares: %{y:+.1f}%<extra></extra>",
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=df["quarter"], y=df["inst_pct"],
-            name="Institutions %",
-            mode="lines+markers",
-            line=dict(color=COLORS["yellow"], width=3, dash="dot"),
-            marker=dict(size=8),
-            hovertemplate="%{x}<br>Institutions: %{y:+.1f}%<extra></extra>",
-        )
-    )
-
-    # Zero line for reference
-    fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"], opacity=0.5)
-
-    # Determine bias label
-    latest_pct = df.iloc[-1]["shares_pct"]
-    if latest_pct > 5:
-        bias = "BULLISH — Accumulating"
-        bias_color = COLORS["green"]
-    elif latest_pct < -5:
-        bias = "BEARISH — Distributing"
-        bias_color = COLORS["red"]
+    # --- Top institutional holders ---
+    if holders is not None and not holders.empty:
+        _render_holders_chart(holders, ticker)
+        _render_holders_table(holders)
     else:
-        bias = "NEUTRAL"
-        bias_color = COLORS["yellow"]
+        st.info("No institutional holder details available for this ticker.")
+
+
+def _render_major_holders(major: pd.DataFrame, ticker: str):
+    """Render summary metrics from major_holders breakdown."""
+    # major_holders has rows like: insidersPercentHeld, institutionsPercentHeld, etc.
+    data = {}
+    for _, row in major.iterrows():
+        data[row.iloc[0]] = row.iloc[1]
+
+    inst_pct = data.get("institutionsPercentHeld", data.get("% Held by Institutions", 0))
+    insider_pct = data.get("insidersPercentHeld", data.get("% Held by Insiders", 0))
+    inst_count = data.get("institutionsCount", data.get("Number of Institutions Holding Shares", 0))
+    inst_float_pct = data.get("institutionsFloatPercentHeld", data.get("% of Float Held by Institutions", 0))
+
+    # Convert to percentages if they're decimals
+    if isinstance(inst_pct, (int, float)) and inst_pct <= 1:
+        inst_pct *= 100
+    if isinstance(insider_pct, (int, float)) and insider_pct <= 1:
+        insider_pct *= 100
+    if isinstance(inst_float_pct, (int, float)) and inst_float_pct <= 1:
+        inst_float_pct *= 100
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Institutional Ownership", f"{inst_pct:.1f}%")
+    c2.metric("Insider Ownership", f"{insider_pct:.1f}%")
+    c3.metric("Institutions", f"{int(inst_count):,}")
+    c4.metric("% of Float (Inst.)", f"{inst_float_pct:.1f}%")
+
+    # Bias indicator
+    if inst_pct > 60:
+        bias = "HIGH INSTITUTIONAL CONVICTION"
+        color = COLORS["green"]
+    elif inst_pct > 30:
+        bias = "MODERATE INSTITUTIONAL INTEREST"
+        color = COLORS["yellow"]
+    else:
+        bias = "LOW INSTITUTIONAL PRESENCE"
+        color = COLORS["red"]
+
+    st.markdown(
+        f"<div style='text-align:center; padding:8px; border:1px solid {color}; "
+        f"border-radius:8px; margin:10px 0;'>"
+        f"<span style='color:{color}; font-size:1.1em; font-weight:bold;'>{bias}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_holders_chart(holders: pd.DataFrame, ticker: str):
+    """Horizontal bar chart of top institutional holders by value."""
+    df = holders.head(10).copy()
+    df = df.sort_values("Value", ascending=True)
+
+    # Color bars by position change
+    colors = []
+    for _, row in df.iterrows():
+        pct_change = row.get("pctChange", 0) or 0
+        if pct_change > 0.01:
+            colors.append(COLORS["green"])
+        elif pct_change < -0.01:
+            colors.append(COLORS["red"])
+        else:
+            colors.append(COLORS["accent"])
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            y=df["Holder"],
+            x=df["Value"],
+            orientation="h",
+            marker_color=colors,
+            text=df["Value"].apply(lambda v: f"${v / 1e9:.1f}B" if v >= 1e9 else f"${v / 1e6:.0f}M"),
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Value: $%{x:,.0f}<extra></extra>",
+        )
+    )
 
     apply_dark_layout(
         fig,
-        title=f"Institutional Bias: {ticker} — {bias}",
-        yaxis_title="% Change from Start",
-        xaxis=dict(gridcolor=COLORS["grid"], categoryorder="array",
-                    categoryarray=df["quarter"].tolist()),
-        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
-        margin=dict(l=40, r=40, t=50, b=80),
+        title=f"Top Institutional Holders: {ticker}",
+        xaxis_title="Position Value ($)",
+        margin=dict(l=200, r=80, t=50, b=40),
+        xaxis=dict(showticklabels=False),
     )
-
-    # Color the title based on bias
-    fig.update_layout(title_font_color=bias_color)
-
+    fig.update_layout(height=400)
     st.plotly_chart(fig, use_container_width=True)
+    st.caption("Bar color: green = increasing position, red = decreasing, teal = stable")
 
 
-def _render_institutions_table(ciks_by_quarter: dict[str, set[str]], ticker: str):
-    """Show which institutions are buying vs selling by comparing the two most recent quarters."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+def _render_holders_table(holders: pd.DataFrame):
+    """Color-coded table of institutional holders."""
+    st.subheader("Top Institutional Holders")
 
-    sorted_quarters = sorted(ciks_by_quarter.keys())
-    if len(sorted_quarters) < 2:
-        return
+    display = holders.copy()
+    display["% Held"] = display["pctHeld"].apply(
+        lambda p: f"{p * 100:.2f}%" if pd.notna(p) else "—"
+    )
+    display["Shares"] = display["Shares"].apply(
+        lambda s: f"{int(s):,}" if pd.notna(s) else "—"
+    )
+    display["Position Value"] = display["Value"].apply(
+        lambda v: f"${v / 1e9:.2f}B" if pd.notna(v) and v >= 1e9
+        else f"${v / 1e6:.0f}M" if pd.notna(v) and v >= 1e6
+        else f"${v:,.0f}" if pd.notna(v) else "—"
+    )
+    display["Change"] = display["pctChange"].apply(
+        lambda p: f"{p * 100:+.1f}%" if pd.notna(p) else "—"
+    )
+    display["Date"] = display["Date Reported"].astype(str).str[:10]
 
-    prev_q = sorted_quarters[-2]
-    curr_q = sorted_quarters[-1]
-    prev_ciks = ciks_by_quarter[prev_q]
-    curr_ciks = ciks_by_quarter[curr_q]
+    show = display[["Holder", "Shares", "Position Value", "% Held", "Change", "Date"]]
 
-    new_ciks = curr_ciks - prev_ciks
-    exited_ciks = prev_ciks - curr_ciks
-    held_ciks = curr_ciks & prev_ciks
-
-    if not new_ciks and not exited_ciks:
-        return
-
-    st.subheader(f"Institution Changes: {prev_q} → {curr_q}")
-
-    all_ciks = list(new_ciks | exited_ciks)[:30]
-
-    # Resolve names and fetch holdings concurrently
-    names = {}
-    holdings = {}
-    with ThreadPoolExecutor(max_workers=5) as pool:
-        name_futures = {pool.submit(_resolve_institution_name, cik): cik for cik in all_ciks}
-        holding_futures = {pool.submit(get_institution_holding, cik, ticker): cik for cik in all_ciks}
-
-        for future in as_completed(name_futures):
-            cik = name_futures[future]
-            try:
-                names[cik] = future.result()
-            except Exception:
-                names[cik] = cik
-
-        for future in as_completed(holding_futures):
-            cik = holding_futures[future]
-            try:
-                holdings[cik] = future.result()
-            except Exception:
-                holdings[cik] = {}
-
-    rows = []
-    for cik in all_ciks:
-        name = names.get(cik, cik)
-        status = "Bought (New Position)" if cik in new_ciks else "Sold (Exited)"
-        holding = holdings.get(cik, {})
-        value = holding.get("value", 0)
-        filing_date = holding.get("date", "")
-
-        # Format value
-        if value >= 1_000_000:
-            value_str = f"${value / 1_000_000:.2f}M"
-        elif value >= 1_000:
-            value_str = f"${value / 1_000:.1f}K"
-        elif value > 0:
-            value_str = f"${value:,.0f}"
-        else:
-            value_str = "—"
-
-        rows.append({
-            "Institution": name,
-            "Status": status,
-            "Value": value_str,
-            "Filing Date": filing_date,
-        })
-
-    if not rows:
-        return
-
-    tbl = pd.DataFrame(rows)
-
-    def _highlight_status(val):
-        if "Bought" in str(val):
+    def _highlight_change(val):
+        if "+" in str(val) and val != "—":
             return f"color: {COLORS['green']}"
-        elif "Sold" in str(val):
+        elif "-" in str(val) and val != "—":
             return f"color: {COLORS['red']}"
         return ""
 
     st.dataframe(
-        tbl.style.map(_highlight_status, subset=["Status"]),
+        show.style.map(_highlight_change, subset=["Change"]),
         use_container_width=True,
         hide_index=True,
     )
-    st.caption(f"Held across both quarters: {len(held_ciks)} institutions")
 
 
 @st.cache_data(ttl=3600)
-def _resolve_institution_name(cik: str) -> str:
-    """Resolve a CIK to an institution name via SEC submissions."""
-    try:
-        data = get_company_submissions(cik)
-        return data.get("name", cik)
-    except Exception:
-        return cik
+def _get_institutional_data(ticker: str) -> tuple:
+    """Fetch institutional holder data via yfinance.
 
-
-def _ticker_to_cik(ticker: str) -> str | None:
-    cik_map = get_cik_ticker_map()
-    for cik, t in cik_map.items():
-        if t.upper() == ticker.upper():
-            return cik
-    return None
-
-
-@st.cache_data(ttl=3600)
-def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[str, set], str]:
-    """Search for 13F filings mentioning this ticker and aggregate by quarter.
-
-    Returns (quarterly_summary, ciks_by_quarter, error_message).
+    Returns (institutional_holders_df, major_holders_df, error_message).
     """
-    cik_map = get_cik_ticker_map()
-    target_cik = None
-    for cik, t in cik_map.items():
-        if t.upper() == ticker.upper():
-            target_cik = cik
-            break
-
-    if not target_cik:
-        return [], {}, f"Could not find CIK mapping for {ticker}."
-
-    days = _TIMEFRAME_DAYS.get(timeframe, 730)
-    start_date = (date.today() - timedelta(days=days)).isoformat()
-    end_date = date.today().isoformat()
-
-    _rate_limit()
     try:
-        resp = requests.get(
-            "https://efts.sec.gov/LATEST/search-index",
-            params={
-                "q": f'"{ticker}"',
-                "forms": "13F-HR",
-                "dateRange": "custom",
-                "startdt": start_date,
-                "enddt": end_date,
-                "from": 0,
-                "size": 100,
-            },
-            headers=SEC_HEADERS,
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except requests.exceptions.HTTPError as e:
-        return [], {}, f"SEC EDGAR returned HTTP {e.response.status_code}. Cloud IPs may be rate-limited — try again shortly."
-    except requests.exceptions.ConnectionError:
-        return [], {}, "Could not connect to SEC EDGAR (efts.sec.gov). The site may be blocking cloud IPs."
-    except requests.exceptions.Timeout:
-        return [], {}, "SEC EDGAR request timed out. Try again."
+        stock = yf.Ticker(ticker)
+        holders = stock.institutional_holders
+        major = stock.major_holders
     except Exception as e:
-        return [], {}, f"SEC request failed: {e}"
+        return None, None, f"Failed to fetch institutional data: {e}"
 
-    hits = data.get("hits", {}).get("hits", [])
-    if not hits:
-        return [], {}, ""
+    if (holders is None or holders.empty) and (major is None or major.empty):
+        return None, None, ""
 
-    quarters = defaultdict(lambda: {"institutions": set(), "total_shares": 0, "total_value": 0})
-
-    for hit in hits:
-        source = hit.get("_source", {})
-        file_date = source.get("file_date", "")
-        if not file_date:
-            continue
-        q = pd.Timestamp(file_date).to_period("Q")
-        ciks = source.get("ciks", [])
-        for c in ciks:
-            quarters[str(q)]["institutions"].add(str(c))
-
-    # Build ciks_by_quarter for the institutions table
-    ciks_by_quarter = {q: data["institutions"].copy() for q, data in quarters.items()}
-
-    result = []
-    for q in sorted(quarters.keys()):
-        qdata = quarters[q]
-        result.append({
-            "date": q,
-            "institution_count": len(qdata["institutions"]),
-            "total_shares": len(qdata["institutions"]) * 10000,
-            "total_value": len(qdata["institutions"]) * 500000,
-        })
-
-    return result, ciks_by_quarter, ""
+    return holders, major, ""
