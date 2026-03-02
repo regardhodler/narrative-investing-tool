@@ -26,6 +26,10 @@ def render():
     if major is not None and not major.empty:
         _render_major_holders(major, ticker)
 
+    # --- Net institutional flow bias chart ---
+    if holders is not None and not holders.empty:
+        _render_bias_chart(holders, ticker)
+
     # --- Top institutional holders ---
     if holders is not None and not holders.empty:
         _render_holders_chart(holders, ticker)
@@ -60,24 +64,67 @@ def _render_major_holders(major: pd.DataFrame, ticker: str):
     c3.metric("Institutions", f"{int(inst_count):,}")
     c4.metric("% of Float (Inst.)", f"{inst_float_pct:.1f}%")
 
-    # Bias indicator
-    if inst_pct > 60:
-        bias = "HIGH INSTITUTIONAL CONVICTION"
-        color = COLORS["green"]
-    elif inst_pct > 30:
-        bias = "MODERATE INSTITUTIONAL INTEREST"
-        color = COLORS["yellow"]
-    else:
-        bias = "LOW INSTITUTIONAL PRESENCE"
-        color = COLORS["red"]
 
-    st.markdown(
-        f"<div style='text-align:center; padding:8px; border:1px solid {color}; "
-        f"border-radius:8px; margin:10px 0;'>"
-        f"<span style='color:{color}; font-size:1.1em; font-weight:bold;'>{bias}</span>"
-        f"</div>",
-        unsafe_allow_html=True,
+def _render_bias_chart(holders: pd.DataFrame, ticker: str):
+    """Vertical bar chart showing net institutional flow bias (pctChange per holder)."""
+    df = holders.head(10).copy()
+    df = df.dropna(subset=["pctChange", "Value"])
+
+    if df.empty:
+        return
+
+    # Value-weighted average pctChange
+    total_value = df["Value"].sum()
+    if total_value == 0:
+        return
+    weighted_avg = (df["pctChange"] * df["Value"]).sum() / total_value
+    weighted_avg_pct = weighted_avg * 100
+
+    # Bias label
+    if weighted_avg_pct > 0.5:
+        bias_label, bias_color = "BULLISH", COLORS["green"]
+    elif weighted_avg_pct < -0.5:
+        bias_label, bias_color = "BEARISH", COLORS["red"]
+    else:
+        bias_label, bias_color = "NEUTRAL", COLORS["yellow"]
+
+    # Abbreviate holder names
+    short_names = df["Holder"].apply(lambda n: n[:15] + "…" if len(str(n)) > 15 else str(n))
+    pct_values = df["pctChange"] * 100
+
+    bar_colors = [COLORS["green"] if v > 0 else COLORS["red"] for v in pct_values]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=short_names,
+            y=pct_values,
+            marker_color=bar_colors,
+            text=pct_values.apply(lambda v: f"{v:+.1f}%"),
+            textposition="outside",
+            hovertemplate="<b>%{x}</b><br>Change: %{y:+.2f}%<extra></extra>",
+        )
     )
+
+    # Weighted average dashed line
+    fig.add_hline(
+        y=weighted_avg_pct,
+        line_dash="dash",
+        line_color=bias_color,
+        annotation_text=f"Wt. Avg: {weighted_avg_pct:+.1f}%",
+        annotation_position="top right",
+        annotation_font_color=bias_color,
+    )
+
+    title = f"Institutional Bias: {ticker} — {bias_label} ({weighted_avg_pct:+.1f}%)"
+    apply_dark_layout(
+        fig,
+        title=dict(text=title, font=dict(color=bias_color)),
+        yaxis_title="Position Change (%)",
+        margin=dict(l=60, r=40, t=60, b=100),
+    )
+    fig.update_layout(height=420, xaxis_tickangle=-40)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def _render_holders_chart(holders: pd.DataFrame, ticker: str):
