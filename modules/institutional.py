@@ -36,10 +36,10 @@ def render():
 
 def _render_major_holders(major: pd.DataFrame, ticker: str):
     """Render summary metrics from major_holders breakdown."""
-    # major_holders has rows like: insidersPercentHeld, institutionsPercentHeld, etc.
+    # major_holders: index = breakdown names, single 'Value' column
     data = {}
-    for _, row in major.iterrows():
-        data[row.iloc[0]] = row.iloc[1]
+    for idx, row in major.iterrows():
+        data[str(idx)] = row.iloc[0]
 
     inst_pct = data.get("institutionsPercentHeld", data.get("% Held by Institutions", 0))
     insider_pct = data.get("insidersPercentHeld", data.get("% Held by Insiders", 0))
