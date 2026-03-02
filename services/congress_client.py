@@ -1,120 +1,127 @@
+import json
 import re
-import requests
+
 import pandas as pd
+import requests
 import streamlit as st
-from bs4 import BeautifulSoup
 
 
 @st.cache_data(ttl=3600)
-def get_congress_trades(ticker: str) -> pd.DataFrame:
-    """Scrape Capitol Trades for congress trading activity on a given ticker.
+def get_congress_trades(ticker: str) -> tuple[pd.DataFrame, str]:
+    """Scrape Quiver Quant for congress trading activity on a given ticker.
 
-    Returns DataFrame: politician, party, date, type, size, price
+    Extracts embedded Plotly trace data which contains all historical
+    congress trades with politician names, dates, types, sizes, and prices.
+
+    Returns (DataFrame, error_message). DataFrame cols: politician, date, type, size, price
     """
     ticker_upper = ticker.strip().upper()
-    all_trades = []
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
     }
 
-    for page in range(1, 21):
-        try:
-            resp = requests.get(
-                f"https://www.capitoltrades.com/trades?page={page}",
-                headers=headers,
-                timeout=15,
-            )
-            if resp.status_code != 200:
-                break
+    try:
+        resp = requests.get(
+            f"https://www.quiverquant.com/congresstrading/stock/{ticker_upper}",
+            headers=headers,
+            timeout=20,
+        )
+        if resp.status_code == 403:
+            return _empty_df(), "Quiver Quant blocked the request (403 Forbidden). This typically happens from cloud-hosted servers."
+        if resp.status_code != 200:
+            return _empty_df(), f"Quiver Quant returned HTTP {resp.status_code}."
+    except requests.exceptions.ConnectionError:
+        return _empty_df(), "Could not connect to Quiver Quant. The site may be blocking cloud IPs."
+    except requests.exceptions.Timeout:
+        return _empty_df(), "Quiver Quant request timed out."
+    except Exception as e:
+        return _empty_df(), f"Request failed: {e}"
 
-            soup = BeautifulSoup(resp.text, "html.parser")
-            table = soup.find("table")
-            if not table:
-                break
+    html = resp.text
 
-            # Dynamically map column headers to indices
-            col_map = {}
-            header_row = table.find("tr")
-            if header_row:
-                for idx, th in enumerate(header_row.find_all(["th", "td"])):
-                    h = th.get_text(strip=True).lower()
-                    if "politician" in h or "member" in h or "name" in h:
-                        col_map["politician"] = idx
-                    elif "date" in h and "published" not in h:
-                        col_map["date"] = idx
-                    elif "type" in h or "trade" in h or "transaction" in h:
-                        col_map["type"] = idx
-                    elif "size" in h or "amount" in h:
-                        col_map["size"] = idx
-                    elif "price" in h:
-                        col_map["price"] = idx
+    # Extract Plotly traces from Plotly.newPlot() call
+    m = re.search(
+        r'Plotly\.newPlot\(\s*["\x27][\w-]+["\x27],\s*(\[.+?\])\s*,\s*\{',
+        html,
+        re.DOTALL,
+    )
+    if not m:
+        if "captcha" in html.lower() or "cloudflare" in html.lower():
+            return _empty_df(), "Quiver Quant is showing a CAPTCHA/Cloudflare challenge — site blocks automated requests from cloud servers."
+        return _empty_df(), "Could not find trade data in Quiver Quant page. Site format may have changed."
 
-            rows = table.find_all("tr")
-            if len(rows) <= 1:
-                break
+    try:
+        traces = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return _empty_df(), "Failed to parse Quiver Quant trade data."
 
-            for row in rows[1:]:
-                cells = row.find_all("td")
-                if len(cells) < 4:
-                    continue
+    trades = []
+    for trace in traces:
+        name = trace.get("name", "").lower()
+        if "sale" in name:
+            trade_type = "Sale"
+        elif "purchase" in name:
+            trade_type = "Purchase"
+        else:
+            continue
 
-                # Look for ticker pattern like "AAPL:US" in the row text
-                row_text = row.get_text()
-                ticker_match = re.search(r"([A-Z]{1,5}):US", row_text)
-                if not ticker_match or ticker_match.group(1) != ticker_upper:
-                    continue
+        dates = trace.get("x", [])
+        prices = trace.get("y", [])
+        # Politician names may be in customdata or parsed from text
+        customdata = trace.get("customdata", [])
+        text_list = trace.get("text", [])
+        hovertext = trace.get("hovertext", [])
 
-                # Extract politician from mapped or fallback index
-                pol_idx = col_map.get("politician", 0)
-                politician = cells[pol_idx].get_text(strip=True) if len(cells) > pol_idx else ""
+        for i in range(len(dates)):
+            trade_date = str(dates[i]).split("T")[0] if i < len(dates) else ""
+            price = prices[i] if i < len(prices) else ""
 
-                party = ""
-                party_el = cells[pol_idx].find(class_=re.compile(r"party|badge")) if len(cells) > pol_idx else None
-                if party_el:
-                    party = party_el.get_text(strip=True)
-                if not party:
-                    row_classes = " ".join(row.get("class", []))
-                    if "democrat" in row_classes.lower():
-                        party = "D"
-                    elif "republican" in row_classes.lower():
-                        party = "R"
+            # Get politician name — try customdata first, then parse from text
+            politician = ""
+            if customdata and i < len(customdata):
+                p = customdata[i]
+                if isinstance(p, list):
+                    p = p[0] if p else ""
+                politician = str(p).strip()
 
-                # Use mapped columns with fallbacks
-                date_idx = col_map.get("date", 2)
-                type_idx = col_map.get("type", 3)
-                size_idx = col_map.get("size", 4)
-                price_idx = col_map.get("price", 5)
+            if not politician and text_list and i < len(text_list):
+                t = text_list[i]
+                if isinstance(t, list):
+                    t = t[0] if t else ""
+                pm = re.search(r"Politician</b>:\s*(.+?)(?:<br>|<extra>)", str(t))
+                if pm:
+                    politician = pm.group(1).strip()
 
-                trade_date = cells[date_idx].get_text(strip=True) if len(cells) > date_idx else ""
-                trade_type = cells[type_idx].get_text(strip=True) if len(cells) > type_idx else ""
-                trade_size = cells[size_idx].get_text(strip=True) if len(cells) > size_idx else ""
-                trade_price = cells[price_idx].get_text(strip=True) if len(cells) > price_idx else ""
+            # Get size from hovertext or text
+            size = ""
+            if hovertext and i < len(hovertext):
+                size = str(hovertext[i]).strip()
+            if not size and text_list and i < len(text_list):
+                t = text_list[i]
+                if isinstance(t, list):
+                    t = t[0] if t else ""
+                sm = re.search(r"Transaction Size</b>:\s*(.+?)(?:<br>|<extra>)", str(t))
+                if sm:
+                    size = sm.group(1).strip()
 
-                # If type column didn't yield buy/sell, scan the full row text
-                if trade_type and not re.search(r"(?i)buy|sell|purchase|sale|exchange", trade_type):
-                    row_lower = row_text.lower()
-                    if "buy" in row_lower or "purchase" in row_lower:
-                        trade_type = "Buy"
-                    elif "sell" in row_lower or "sale" in row_lower:
-                        trade_type = "Sell"
-
-                all_trades.append({
+            if politician and trade_date:
+                trades.append({
                     "politician": politician,
-                    "party": party,
                     "date": trade_date,
                     "type": trade_type,
-                    "size": trade_size,
-                    "price": trade_price,
+                    "size": size,
+                    "price": f"${price:,.2f}" if isinstance(price, (int, float)) else str(price),
                 })
 
-            # Stop paginating if no more content
-            if not rows[1:]:
-                break
+    if not trades:
+        return _empty_df(), ""
 
-        except Exception:
-            break
+    df = pd.DataFrame(trades)
+    df = df.sort_values("date", ascending=False).reset_index(drop=True)
+    return df, ""
 
-    if not all_trades:
-        return pd.DataFrame(columns=["politician", "party", "date", "type", "size", "price"])
 
-    return pd.DataFrame(all_trades)
+def _empty_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=["politician", "date", "type", "size", "price"])

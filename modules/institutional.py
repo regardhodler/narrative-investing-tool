@@ -40,7 +40,11 @@ def render():
         return
 
     with st.spinner("Fetching 13F filings..."):
-        quarterly, institution_ciks_by_quarter = _get_quarterly_data(ticker, timeframe)
+        quarterly, institution_ciks_by_quarter, error = _get_quarterly_data(ticker, timeframe)
+
+    if error:
+        st.error(error)
+        return
 
     if not quarterly:
         st.warning("No 13F holding data found for this ticker.")
@@ -308,10 +312,10 @@ def _ticker_to_cik(ticker: str) -> str | None:
 
 
 @st.cache_data(ttl=3600)
-def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[str, set]]:
+def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[str, set], str]:
     """Search for 13F filings mentioning this ticker and aggregate by quarter.
 
-    Returns (quarterly_summary, ciks_by_quarter).
+    Returns (quarterly_summary, ciks_by_quarter, error_message).
     """
     cik_map = get_cik_ticker_map()
     target_cik = None
@@ -321,7 +325,7 @@ def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[s
             break
 
     if not target_cik:
-        return [], {}
+        return [], {}, f"Could not find CIK mapping for {ticker}."
 
     days = _TIMEFRAME_DAYS.get(timeframe, 730)
     start_date = (date.today() - timedelta(days=days)).isoformat()
@@ -345,12 +349,18 @@ def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[s
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:
-        return [], {}
+    except requests.exceptions.HTTPError as e:
+        return [], {}, f"SEC EDGAR returned HTTP {e.response.status_code}. Cloud IPs may be rate-limited — try again shortly."
+    except requests.exceptions.ConnectionError:
+        return [], {}, "Could not connect to SEC EDGAR (efts.sec.gov). The site may be blocking cloud IPs."
+    except requests.exceptions.Timeout:
+        return [], {}, "SEC EDGAR request timed out. Try again."
+    except Exception as e:
+        return [], {}, f"SEC request failed: {e}"
 
     hits = data.get("hits", {}).get("hits", [])
     if not hits:
-        return [], {}
+        return [], {}, ""
 
     quarters = defaultdict(lambda: {"institutions": set(), "total_shares": 0, "total_value": 0})
 
@@ -377,4 +387,4 @@ def _get_quarterly_data(ticker: str, timeframe: str) -> tuple[list[dict], dict[s
             "total_value": len(qdata["institutions"]) * 500000,
         })
 
-    return result, ciks_by_quarter
+    return result, ciks_by_quarter, ""

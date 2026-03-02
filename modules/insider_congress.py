@@ -378,10 +378,14 @@ def _render_congress(ticker: str):
 
     with st.spinner("Fetching congress trades..."):
         try:
-            df = get_congress_trades(ticker)
-        except Exception:
-            st.warning("Capitol Trades data unavailable — site format may have changed.")
+            df, error = get_congress_trades(ticker)
+        except Exception as e:
+            st.error(f"Congress data fetch failed: {e}")
             return
+
+    if error:
+        st.error(error)
+        return
 
     if df.empty:
         st.info("No recent congress trades found for this ticker.")
