@@ -22,7 +22,7 @@ def classify_narrative(topic: str) -> dict:
 Topic: "{topic}"
 
 Return ONLY valid JSON (no markdown fences) with these keys:
-- "market_relevant": boolean — true if this topic could meaningfully move stock prices or sectors
+- "market_relevant": boolean — true ONLY if this topic is directly about finance, economics, a public company, an industry/sector, trade policy, regulation, commodities, or monetary policy. Set false for celebrity news, sports, entertainment, social media trends, and pop culture even if a company is tangentially mentioned
 - "sector": string — primary market sector affected (e.g. "Technology", "Healthcare", "Energy", "Consumer", "Finance", "Industrials", "N/A")
 - "thesis": string — one sentence investment thesis explaining the market impact
 - "suggested_tickers": list of strings — 2-5 US stock tickers most exposed to this theme

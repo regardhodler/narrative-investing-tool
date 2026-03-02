@@ -1,10 +1,48 @@
 import pandas as pd
+import requests as _requests
 import streamlit as st
 from pytrends.request import TrendReq
 
 
 def _get_pytrends() -> TrendReq:
     return TrendReq(hl="en-US", tz=360)
+
+
+@st.cache_data(ttl=900)
+def get_yahoo_trending_tickers() -> list[dict]:
+    """Fetch trending tickers from Yahoo Finance.
+
+    Returns list of dicts with keys: symbol, name
+    """
+    url = "https://query1.finance.yahoo.com/v1/finance/trending/US"
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        resp = _requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        quotes = data["finance"]["result"][0]["quotes"]
+        results = []
+        for q in quotes:
+            symbol = q.get("symbol", "")
+            results.append({"symbol": symbol, "name": symbol})
+        # Enrich with company names via yfinance
+        try:
+            import yfinance as yf
+
+            symbols = [r["symbol"] for r in results]
+            tickers = yf.Tickers(" ".join(symbols))
+            for r in results:
+                info = tickers.tickers.get(r["symbol"])
+                if info:
+                    try:
+                        r["name"] = info.info.get("shortName", r["symbol"])
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+        return results
+    except Exception:
+        return []
 
 
 @st.cache_data(ttl=900)

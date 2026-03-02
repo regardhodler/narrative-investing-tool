@@ -1,8 +1,19 @@
 import streamlit as st
-from services.trends_client import get_trending_searches
+from services.trends_client import get_trending_searches, get_yahoo_trending_tickers
 from services.claude_client import classify_narrative, describe_company
 from services.sec_client import get_company_info
 from utils.session import get_ticker, set_narrative, set_ticker
+
+_NON_FINANCIAL_KEYWORDS = {
+    "nfl", "nba", "mlb", "nhl", "ufc", "wwe", "espn", "super bowl",
+    "playoff", "draft pick", "touchdown", "goalkeeper", "premier league",
+    "champions league", "world cup", "olympics", "quarterback",
+    "kardashian", "taylor swift", "beyonce", "drake", "kanye",
+    "bachelor", "bachelorette", "survivor", "big brother",
+    "grammys", "oscars", "emmys", "golden globes",
+    "tiktok trend", "meme", "viral video", "celebrity",
+    "wordle", "fortnite", "minecraft",
+}
 
 
 def render():
@@ -17,53 +28,82 @@ def render():
 
 
 def _render_auto():
-    with st.spinner("Fetching trending searches..."):
-        topics = get_trending_searches()
+    # --- Yahoo Finance trending tickers (primary, always financial) ---
+    with st.spinner("Fetching trending tickers from Yahoo Finance..."):
+        yf_trending = get_yahoo_trending_tickers()
 
-    if not topics:
-        st.warning("No trending topics found. Try Manual mode.")
-        return
+    if yf_trending:
+        st.subheader(f"{len(yf_trending)} Trending Tickers")
+        cols = st.columns(3)
+        for i, item in enumerate(yf_trending):
+            col = cols[i % 3]
+            with col:
+                with st.container(border=True):
+                    st.markdown(f"**{item['name']}**")
+                    st.code(item["symbol"], language=None)
+                    col_a, col_b = st.columns(2)
+                    with col_a:
+                        if st.button("Track", key=f"yf_track_{i}"):
+                            set_narrative(item["name"])
+                            set_ticker(item["symbol"])
+                            st.rerun()
+                    with col_b:
+                        if st.button("Analyze", key=f"yf_analyze_{i}"):
+                            set_narrative(item["name"])
+                            set_ticker(item["symbol"])
+                            st.rerun()
+    else:
+        st.warning("Could not fetch Yahoo Finance trending tickers.")
 
-    st.caption(f"{len(topics)} trending topics · classifying market relevance...")
+    # --- Google Trends supplement (filtered for financial topics) ---
+    with st.expander("Google Trends (filtered)", expanded=False):
+        with st.spinner("Fetching Google Trends..."):
+            topics = get_trending_searches()
 
-    # Classify all topics
-    classified = []
-    for topic in topics[:20]:  # Limit to top 20
-        result = classify_narrative(topic)
-        if result.get("market_relevant"):
-            result["topic"] = topic
-            classified.append(result)
+        if not topics:
+            st.caption("No trending topics from Google Trends.")
+        else:
+            st.caption(
+                f"{len(topics)} trending topics · filtering for financial relevance..."
+            )
+            classified = []
+            for topic in topics[:20]:
+                if any(kw in topic.lower() for kw in _NON_FINANCIAL_KEYWORDS):
+                    continue
+                result = classify_narrative(topic)
+                if result.get("market_relevant"):
+                    result["topic"] = topic
+                    classified.append(result)
 
-    if not classified:
-        st.info("No market-relevant narratives found in current trends.")
-        return
-
-    st.subheader(f"{len(classified)} Market-Relevant Narratives")
-
-    # 3-column grid of cards
-    cols = st.columns(3)
-    for i, item in enumerate(classified):
-        col = cols[i % 3]
-        with col:
-            with st.container(border=True):
-                st.markdown(f"**{item['topic']}**")
-                st.caption(item.get("sector", ""))
-                st.markdown(item.get("thesis", ""), unsafe_allow_html=False)
-
-                tickers = item.get("suggested_tickers", [])
-                if tickers:
-                    st.code(", ".join(tickers), language=None)
-
-                col_a, col_b = st.columns(2)
-                with col_a:
-                    if st.button("Track", key=f"track_{i}"):
-                        set_narrative(item["topic"])
-                        st.rerun()
-                with col_b:
-                    if tickers and st.button(tickers[0], key=f"ticker_{i}"):
-                        set_narrative(item["topic"])
-                        set_ticker(tickers[0])
-                        st.rerun()
+            if not classified:
+                st.info("No market-relevant narratives in current Google Trends.")
+            else:
+                st.subheader(f"{len(classified)} Market-Relevant Narratives")
+                cols = st.columns(3)
+                for i, item in enumerate(classified):
+                    col = cols[i % 3]
+                    with col:
+                        with st.container(border=True):
+                            st.markdown(f"**{item['topic']}**")
+                            st.caption(item.get("sector", ""))
+                            st.markdown(
+                                item.get("thesis", ""), unsafe_allow_html=False
+                            )
+                            tickers = item.get("suggested_tickers", [])
+                            if tickers:
+                                st.code(", ".join(tickers), language=None)
+                            col_a, col_b = st.columns(2)
+                            with col_a:
+                                if st.button("Track", key=f"gt_track_{i}"):
+                                    set_narrative(item["topic"])
+                                    st.rerun()
+                            with col_b:
+                                if tickers and st.button(
+                                    tickers[0], key=f"gt_ticker_{i}"
+                                ):
+                                    set_narrative(item["topic"])
+                                    set_ticker(tickers[0])
+                                    st.rerun()
 
 
 def _render_manual():
@@ -100,6 +140,11 @@ def _render_manual():
                     "Topic classified as not directly market-relevant, but narrative is set."
                 )
 
+        # Show company overview for confirmed ticker
+        active = get_ticker()
+        if active and result:
+            _render_company_overview(active)
+
     with tab_ticker:
         ticker_input = st.text_input(
             "Enter a ticker symbol",
@@ -113,32 +158,38 @@ def _render_manual():
         active = get_ticker()
         if active:
             st.success(f"Active ticker: **{active}**")
+            _render_company_overview(active)
 
-            with st.spinner(f"Looking up {active}..."):
-                company_info = get_company_info(active)
 
-            if company_info:
-                with st.spinner("Generating company overview..."):
-                    overview = describe_company(
-                        company_info["name"],
-                        active,
-                        company_info["sic_description"],
-                    )
+def _render_company_overview(ticker: str):
+    """Show company description and narrative for a ticker."""
+    with st.spinner(f"Looking up {ticker}..."):
+        company_info = get_company_info(ticker)
 
-                with st.container(border=True):
-                    st.subheader(f"{company_info['name']}  ·  {active}")
-                    col_a, col_b = st.columns([2, 1])
-                    with col_a:
-                        if overview.get("description"):
-                            st.markdown(overview["description"])
-                        else:
-                            st.caption(company_info["sic_description"])
-                    with col_b:
-                        st.markdown(f"**Sector:** {overview.get('sector', company_info['sic_description'])}")
-                        if company_info["state"]:
-                            st.markdown(f"**Incorporated:** {company_info['state']}")
-                        if company_info["exchanges"]:
-                            st.markdown(f"**Exchange:** {', '.join(company_info['exchanges'])}")
+    if not company_info:
+        return
 
-                    if overview.get("narrative"):
-                        st.info(f"**Narrative:** {overview['narrative']}")
+    with st.spinner("Generating company overview..."):
+        overview = describe_company(
+            company_info["name"],
+            ticker,
+            company_info["sic_description"],
+        )
+
+    with st.container(border=True):
+        st.subheader(f"{company_info['name']}  ·  {ticker}")
+        col_a, col_b = st.columns([2, 1])
+        with col_a:
+            if overview.get("description"):
+                st.markdown(overview["description"])
+            else:
+                st.caption(company_info["sic_description"])
+        with col_b:
+            st.markdown(f"**Sector:** {overview.get('sector', company_info['sic_description'])}")
+            if company_info["state"]:
+                st.markdown(f"**Incorporated:** {company_info['state']}")
+            if company_info["exchanges"]:
+                st.markdown(f"**Exchange:** {', '.join(company_info['exchanges'])}")
+
+        if overview.get("narrative"):
+            st.info(f"**Narrative:** {overview['narrative']}")
