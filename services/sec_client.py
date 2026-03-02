@@ -396,6 +396,107 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
     return pd.DataFrame(all_trades).sort_values("date", ascending=False).reset_index(drop=True)
 
 
+@st.cache_data(ttl=3600)
+def get_institution_holding(institution_cik: str, target_ticker: str) -> dict:
+    """Fetch the latest 13F-HR filing for an institution and find the holding for a target ticker.
+
+    Parses the 13F XML information table to find the holding matching the target company name.
+    Returns {"value": dollar_amount, "shares": share_count, "date": filing_date} or empty dict.
+    """
+    import xml.etree.ElementTree as ET
+
+    # Get the company name for fuzzy matching against 13F nameOfIssuer
+    company_info = get_company_info(target_ticker)
+    if not company_info or not company_info.get("name"):
+        return {}
+    target_name = company_info["name"].upper()
+    # Build match tokens: split company name into words for flexible matching
+    target_tokens = [w for w in target_name.replace(",", "").replace(".", "").split() if len(w) > 1]
+
+    # Find the latest 13F-HR filing
+    filings = get_13f_holdings(institution_cik)
+    if not filings:
+        return {}
+
+    filing = filings[0]  # most recent
+    padded_cik = institution_cik.zfill(10)
+
+    try:
+        # Fetch filing index to find the XML information table
+        _rate_limit()
+        index_url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{filing['accession']}/index.json"
+        resp = requests.get(index_url, headers=SEC_HEADERS, timeout=10)
+        resp.raise_for_status()
+        index_data = resp.json()
+
+        xml_filename = None
+        for item in index_data.get("directory", {}).get("item", []):
+            name = item.get("name", "").lower()
+            if name.endswith(".xml") and ("infotable" in name or "information" in name):
+                xml_filename = item.get("name", "")
+                break
+
+        # Fallback: any .xml that isn't the primary doc or R-file
+        if not xml_filename:
+            for item in index_data.get("directory", {}).get("item", []):
+                name = item.get("name", "")
+                lower = name.lower()
+                if lower.endswith(".xml") and "primary_doc" not in lower and not lower.startswith("r"):
+                    xml_filename = name
+                    break
+
+        if not xml_filename:
+            return {}
+
+        # Fetch and parse the XML
+        _rate_limit()
+        xml_url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{filing['accession']}/{xml_filename}"
+        resp = requests.get(xml_url, headers=SEC_HEADERS, timeout=15)
+        resp.raise_for_status()
+
+        root = ET.fromstring(resp.content)
+
+        # Handle namespace
+        ns = ""
+        if root.tag.startswith("{"):
+            ns = root.tag.split("}")[0] + "}"
+
+        # Search all infoTable entries for a match
+        for entry in root.iter():
+            name_el = entry.find(f"{ns}nameOfIssuer")
+            if name_el is None:
+                continue
+
+            issuer_name = (name_el.text or "").upper().strip()
+            # Match if enough target tokens appear in the issuer name or vice versa
+            if not issuer_name:
+                continue
+
+            issuer_tokens = [w for w in issuer_name.replace(",", "").replace(".", "").split() if len(w) > 1]
+            # Check overlap: at least 2 tokens match, or the shorter name is fully contained
+            common = set(target_tokens) & set(issuer_tokens)
+            match = (
+                len(common) >= 2
+                or (len(target_tokens) == 1 and target_tokens[0] in issuer_tokens)
+                or (len(issuer_tokens) == 1 and issuer_tokens[0] in target_tokens)
+                or target_ticker.upper() == issuer_name
+            )
+            if not match:
+                continue
+
+            value_el = entry.find(f"{ns}value")
+            shares_el = entry.find(f"{ns}sshPrnamt") or entry.find(f"{ns}shrsOrPrnAmt/{ns}sshPrnamt")
+            val = int(value_el.text) * 1000 if value_el is not None and value_el.text else 0  # 13F values in thousands
+            shares = int(shares_el.text) if shares_el is not None and shares_el.text else 0
+
+            return {"value": val, "shares": shares, "date": filing["date"]}
+
+    except Exception:
+        pass
+
+    return {}
+
+
 def _today() -> str:
     from datetime import date
 

@@ -11,6 +11,7 @@ from services.sec_client import (
     _rate_limit,
     get_cik_ticker_map,
     get_company_submissions,
+    get_institution_holding,
 )
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
@@ -71,6 +72,7 @@ def render():
         c1.metric("Total Shares Held", f"{latest['total_shares']:,.0f}", f"{share_change:+.1f}%")
         c2.metric("Institutions", f"{int(latest['institution_count'])}", f"{inst_change:+d}")
         c3.metric("Total Value", f"${latest['total_value']:,.0f}")
+        st.caption("Aggregate values are estimated from institution count")
 
         if share_change > 10 and inst_change > 0:
             st.markdown(
@@ -118,12 +120,89 @@ def render():
     )
     st.plotly_chart(fig, use_container_width=True)
 
+    # Institutional bias line chart — % change from start of timeframe
+    _render_bias_chart(df, ticker)
+
     # Institutions table — compare last two quarters
-    _render_institutions_table(institution_ciks_by_quarter)
+    _render_institutions_table(institution_ciks_by_quarter, ticker)
 
 
-def _render_institutions_table(ciks_by_quarter: dict[str, set[str]]):
+def _render_bias_chart(df: pd.DataFrame, ticker: str):
+    """Line chart showing % change in institutional shares and institution count from start of timeframe."""
+    if len(df) < 2:
+        return
+
+    base_shares = df.iloc[0]["total_shares"]
+    base_inst = df.iloc[0]["institution_count"]
+
+    if base_shares == 0 or base_inst == 0:
+        return
+
+    df = df.copy()
+    df["shares_pct"] = ((df["total_shares"] - base_shares) / base_shares) * 100
+    df["inst_pct"] = ((df["institution_count"] - base_inst) / base_inst) * 100
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=df["quarter"], y=df["shares_pct"],
+            name="Shares Held %",
+            mode="lines+markers",
+            line=dict(color=COLORS["accent"], width=3),
+            marker=dict(size=8),
+            fill="tozeroy",
+            fillcolor="rgba(0, 212, 170, 0.1)",
+            hovertemplate="%{x}<br>Shares: %{y:+.1f}%<extra></extra>",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=df["quarter"], y=df["inst_pct"],
+            name="Institutions %",
+            mode="lines+markers",
+            line=dict(color=COLORS["yellow"], width=3, dash="dot"),
+            marker=dict(size=8),
+            hovertemplate="%{x}<br>Institutions: %{y:+.1f}%<extra></extra>",
+        )
+    )
+
+    # Zero line for reference
+    fig.add_hline(y=0, line_dash="dash", line_color=COLORS["text_dim"], opacity=0.5)
+
+    # Determine bias label
+    latest_pct = df.iloc[-1]["shares_pct"]
+    if latest_pct > 5:
+        bias = "BULLISH — Accumulating"
+        bias_color = COLORS["green"]
+    elif latest_pct < -5:
+        bias = "BEARISH — Distributing"
+        bias_color = COLORS["red"]
+    else:
+        bias = "NEUTRAL"
+        bias_color = COLORS["yellow"]
+
+    apply_dark_layout(
+        fig,
+        title=f"Institutional Bias: {ticker} — {bias}",
+        yaxis_title="% Change from Start",
+        xaxis=dict(gridcolor=COLORS["grid"], categoryorder="array",
+                    categoryarray=df["quarter"].tolist()),
+        legend=dict(bgcolor="rgba(0,0,0,0)", orientation="h", y=-0.15, x=0.5, xanchor="center"),
+        margin=dict(l=40, r=40, t=50, b=80),
+    )
+
+    # Color the title based on bias
+    fig.update_layout(title_font_color=bias_color)
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_institutions_table(ciks_by_quarter: dict[str, set[str]], ticker: str):
     """Show which institutions are buying vs selling by comparing the two most recent quarters."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
     sorted_quarters = sorted(ciks_by_quarter.keys())
     if len(sorted_quarters) < 2:
         return
@@ -142,15 +221,53 @@ def _render_institutions_table(ciks_by_quarter: dict[str, set[str]]):
 
     st.subheader(f"Institution Changes: {prev_q} → {curr_q}")
 
-    rows = []
-    # Resolve names for a manageable number of CIKs
     all_ciks = list(new_ciks | exited_ciks)[:30]
+
+    # Resolve names and fetch holdings concurrently
+    names = {}
+    holdings = {}
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        name_futures = {pool.submit(_resolve_institution_name, cik): cik for cik in all_ciks}
+        holding_futures = {pool.submit(get_institution_holding, cik, ticker): cik for cik in all_ciks}
+
+        for future in as_completed(name_futures):
+            cik = name_futures[future]
+            try:
+                names[cik] = future.result()
+            except Exception:
+                names[cik] = cik
+
+        for future in as_completed(holding_futures):
+            cik = holding_futures[future]
+            try:
+                holdings[cik] = future.result()
+            except Exception:
+                holdings[cik] = {}
+
+    rows = []
     for cik in all_ciks:
-        name = _resolve_institution_name(cik)
-        if cik in new_ciks:
-            rows.append({"Institution": name, "CIK": cik, "Status": "Bought (New Position)"})
+        name = names.get(cik, cik)
+        status = "Bought (New Position)" if cik in new_ciks else "Sold (Exited)"
+        holding = holdings.get(cik, {})
+        value = holding.get("value", 0)
+        filing_date = holding.get("date", "")
+
+        # Format value
+        if value >= 1_000_000:
+            value_str = f"${value / 1_000_000:.2f}M"
+        elif value >= 1_000:
+            value_str = f"${value / 1_000:.1f}K"
+        elif value > 0:
+            value_str = f"${value:,.0f}"
         else:
-            rows.append({"Institution": name, "CIK": cik, "Status": "Sold (Exited)"})
+            value_str = "—"
+
+        rows.append({
+            "Institution": name,
+            "Status": status,
+            "Value": value_str,
+            "Filing Date": filing_date,
+        })
 
     if not rows:
         return
