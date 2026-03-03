@@ -29,7 +29,7 @@ with st.sidebar:
         "Module",
         [
             "1 · Discovery",
-            "2 · Narrative Pulse",
+            "2 · Price Action",
             "3 · EDGAR Scanner",
             "4 · Institutional (13F)",
             "5 · Insider & Congress",
