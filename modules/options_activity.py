@@ -357,14 +357,16 @@ def _render_unusual_chart(unusual: pd.DataFrame):
         xaxis_title="Volume (Calls → | ← Puts)",
         yaxis_title="",
         barmode="relative",
-        legend=dict(orientation="h", y=1.08),
+        legend=dict(orientation="h", y=1.15, x=0.5, xanchor="center"),
+        margin=dict(l=120, r=40, t=80, b=50),
     )
     max_vol = max(
         max((call_data.get(l, 0) for l in all_labels), default=0),
         max((put_data.get(l, 0) for l in all_labels), default=0),
     )
     fig.update_xaxes(range=[-max_vol * 1.15, max_vol * 1.15] if max_vol > 0 else None)
-    fig.update_layout(height=max(300, len(all_labels) * 35 + 100))
+    fig.update_yaxes(tickfont=dict(size=11))
+    fig.update_layout(height=max(350, len(all_labels) * 40 + 140))
     st.plotly_chart(fig, use_container_width=True)
     st.caption("Green bars (right) = unusual call volume · Red bars (left) = unusual put volume · Sorted by strike")
 

@@ -30,7 +30,7 @@ def render():
         result = generate_valuation(ticker, signals_text)
 
     if not result:
-        st.error("Failed to generate valuation. Check Groq API key.")
+        st.error("Failed to generate valuation. Ensure GROQ_API_KEY is set in your environment or Streamlit secrets.")
         return
 
     _render_rating_banner(result)
