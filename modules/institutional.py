@@ -98,7 +98,8 @@ def _render_ownership_donut(major: pd.DataFrame, ticker: str):
             hole=0.55,
             marker=dict(colors=colors, line=dict(color=COLORS["bg"], width=2)),
             textinfo="label+percent",
-            textfont=dict(size=12),
+            textfont=dict(size=14, color="white", family="Courier New, monospace"),
+            outsidetextfont=dict(size=14, color="white"),
             hovertemplate="<b>%{label}</b><br>%{value:.1f}%<extra></extra>",
         )
     )
@@ -220,7 +221,7 @@ def _render_holdings_treemap(holders: pd.DataFrame, ticker: str):
                 line=dict(color=COLORS["bg"], width=2),
             ),
             textinfo="label",
-            textfont=dict(size=13, color="white"),
+            textfont=dict(size=14, color="white", family="Courier New, monospace"),
             hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}<extra></extra>",
         )
     )
