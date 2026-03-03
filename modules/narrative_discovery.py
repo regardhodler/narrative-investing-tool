@@ -49,19 +49,17 @@ def _render_auto():
                 with st.container(border=True):
                     st.markdown(f"**{item['name']}**")
                     st.code(item["symbol"], language=None)
-                    col_a, col_b = st.columns(2)
-                    with col_a:
-                        if st.button("Track", key=f"yf_track_{i}"):
-                            set_narrative(item["name"])
-                            set_ticker(item["symbol"])
-                            st.rerun()
-                    with col_b:
-                        if st.button("Analyze", key=f"yf_analyze_{i}"):
-                            set_narrative(item["name"])
-                            set_ticker(item["symbol"])
-                            st.rerun()
+                    if st.button("Select", key=f"yf_select_{i}", type="primary"):
+                        set_narrative(item["name"])
+                        set_ticker(item["symbol"])
+                        st.rerun()
     else:
         st.warning("Could not fetch Yahoo Finance trending tickers.")
+
+    # --- Show overview for selected ticker ---
+    active = get_ticker()
+    if active:
+        _render_company_overview(active)
 
     # --- Trending search interest (auto, no click needed) ---
     if yf_trending:
