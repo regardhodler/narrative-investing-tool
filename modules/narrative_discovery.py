@@ -1,8 +1,15 @@
+import plotly.graph_objects as go
 import streamlit as st
-from services.trends_client import get_trending_searches, get_yahoo_trending_tickers
+
+from services.trends_client import (
+    get_interest_over_time,
+    get_trending_searches,
+    get_yahoo_trending_tickers,
+)
 from services.claude_client import classify_narrative, describe_company
 from services.sec_client import get_company_info
 from utils.session import get_ticker, set_narrative, set_ticker
+from utils.theme import COLORS, apply_dark_layout
 
 _NON_FINANCIAL_KEYWORDS = {
     "nfl", "nba", "mlb", "nhl", "ufc", "wwe", "espn", "super bowl",
@@ -140,10 +147,11 @@ def _render_manual():
                     "Topic classified as not directly market-relevant, but narrative is set."
                 )
 
-        # Show company overview for confirmed ticker
+        # Show company overview and interest chart for confirmed ticker
         active = get_ticker()
         if active and result:
             _render_company_overview(active)
+            _render_interest_chart(active)
 
     with tab_ticker:
         ticker_input = st.text_input(
@@ -154,11 +162,12 @@ def _render_manual():
             set_ticker(ticker_input)
             st.rerun()
 
-        # Show company overview for the active ticker
+        # Show company overview and interest chart for the active ticker
         active = get_ticker()
         if active:
             st.success(f"Active ticker: **{active}**")
             _render_company_overview(active)
+            _render_interest_chart(active)
 
 
 def _render_company_overview(ticker: str):
@@ -193,3 +202,61 @@ def _render_company_overview(ticker: str):
 
         if overview.get("narrative"):
             st.info(f"**Narrative:** {overview['narrative']}")
+
+
+def _render_interest_chart(keyword: str):
+    """Render a Google Trends interest-over-time area chart for a keyword."""
+    st.subheader("Search Interest")
+    timeframe = st.select_slider(
+        "Timeframe",
+        options=["1M", "3M", "6M", "1Y", "YTD"],
+        value="3M",
+        key="interest_tf",
+    )
+
+    with st.spinner("Fetching search interest..."):
+        df = get_interest_over_time(keyword, timeframe)
+
+    if df.empty:
+        st.caption("No interest data available for this keyword.")
+        return
+
+    peak = df["interest"].max()
+    peak_date = df.loc[df["interest"].idxmax(), "date"]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=df["date"],
+            y=df["interest"],
+            mode="lines",
+            line=dict(color=COLORS["accent"], width=2),
+            fill="tozeroy",
+            fillcolor="rgba(0, 212, 170, 0.15)",
+            hovertemplate="<b>%{x|%b %d, %Y}</b><br>Interest: %{y}<extra></extra>",
+        )
+    )
+
+    # Peak annotation
+    fig.add_annotation(
+        x=peak_date,
+        y=peak,
+        text=f"Peak: {peak}",
+        showarrow=True,
+        arrowhead=2,
+        arrowcolor=COLORS["accent"],
+        font=dict(color=COLORS["accent"], size=11),
+        ax=0,
+        ay=-30,
+    )
+
+    apply_dark_layout(
+        fig,
+        title=f"Google Trends Interest: {keyword}",
+        yaxis_title="Relative Interest (0–100)",
+        xaxis_title="",
+        margin=dict(l=50, r=30, t=50, b=40),
+    )
+    fig.update_layout(height=350)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Source: Google Trends · 100 = peak search interest in the selected period")
