@@ -22,13 +22,18 @@ def render():
         st.error(error)
         return
 
-    # --- Major holders summary ---
+    # --- Major holders summary + ownership donut ---
     if major is not None and not major.empty:
         _render_major_holders(major, ticker)
+        _render_ownership_donut(major, ticker)
 
     # --- Net institutional flow bias chart ---
     if holders is not None and not holders.empty:
         _render_bias_chart(holders, ticker)
+
+    # --- Holdings treemap ---
+    if holders is not None and not holders.empty:
+        _render_holdings_treemap(holders, ticker)
 
     # --- Top institutional holders ---
     if holders is not None and not holders.empty:
@@ -63,6 +68,58 @@ def _render_major_holders(major: pd.DataFrame, ticker: str):
     c2.metric("Insider Ownership", f"{insider_pct:.1f}%")
     c3.metric("Institutions", f"{int(inst_count):,}")
     c4.metric("% of Float (Inst.)", f"{inst_float_pct:.1f}%")
+
+
+def _render_ownership_donut(major: pd.DataFrame, ticker: str):
+    """Donut chart showing institutional vs insider vs retail ownership."""
+    data = {}
+    for idx, row in major.iterrows():
+        data[str(idx)] = row.iloc[0]
+
+    inst = data.get("institutionsPercentHeld", data.get("% Held by Institutions", 0))
+    insider = data.get("insidersPercentHeld", data.get("% Held by Insiders", 0))
+
+    if isinstance(inst, (int, float)) and inst <= 1:
+        inst *= 100
+    if isinstance(insider, (int, float)) and insider <= 1:
+        insider *= 100
+
+    retail = max(0, 100 - inst - insider)
+
+    labels = ["Institutional", "Insider", "Retail"]
+    values = [inst, insider, retail]
+    colors = [COLORS["accent"], COLORS["yellow"], COLORS["blue"]]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Pie(
+            labels=labels,
+            values=values,
+            hole=0.55,
+            marker=dict(colors=colors, line=dict(color=COLORS["bg"], width=2)),
+            textinfo="label+percent",
+            textfont=dict(size=12),
+            hovertemplate="<b>%{label}</b><br>%{value:.1f}%<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=dict(text=f"Ownership Breakdown: {ticker}", font=dict(color=COLORS["text"])),
+        paper_bgcolor=COLORS["bg"],
+        plot_bgcolor=COLORS["bg"],
+        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        height=350,
+        margin=dict(l=30, r=30, t=50, b=30),
+        showlegend=True,
+        legend=dict(
+            bgcolor="rgba(0,0,0,0)",
+            orientation="h",
+            y=-0.05,
+            x=0.5,
+            xanchor="center",
+        ),
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def _render_bias_chart(holders: pd.DataFrame, ticker: str):
@@ -125,6 +182,61 @@ def _render_bias_chart(holders: pd.DataFrame, ticker: str):
     )
     fig.update_layout(height=420, xaxis_tickangle=-40)
     st.plotly_chart(fig, use_container_width=True)
+
+
+def _render_holdings_treemap(holders: pd.DataFrame, ticker: str):
+    """Treemap: block size = position value, color = pctChange direction."""
+    df = holders.head(10).copy()
+    df = df.dropna(subset=["Value"])
+    df = df[df["Value"] > 0]
+
+    if df.empty:
+        return
+
+    # Fill missing pctChange with 0
+    df["pctChange"] = df["pctChange"].fillna(0)
+    pct_vals = df["pctChange"] * 100
+
+    # Map pctChange to a continuous color scale
+    # Clamp to [-5, 5] for color range
+    color_vals = pct_vals.clip(-5, 5)
+
+    short_names = df["Holder"].apply(lambda n: n[:20] + "…" if len(str(n)) > 20 else str(n))
+    labels = [
+        f"{name}<br>{pct:+.1f}%"
+        for name, pct in zip(short_names, pct_vals)
+    ]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Treemap(
+            labels=labels,
+            parents=[""] * len(df),
+            values=df["Value"].tolist(),
+            marker=dict(
+                colors=color_vals.tolist(),
+                colorscale=[[0, COLORS["red"]], [0.5, COLORS["yellow"]], [1, COLORS["green"]]],
+                cmid=0,
+                line=dict(color=COLORS["bg"], width=2),
+            ),
+            textinfo="label",
+            textfont=dict(size=13),
+            hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}<extra></extra>",
+        )
+    )
+
+    fig.update_layout(
+        title=dict(
+            text=f"Holdings Concentration: {ticker}",
+            font=dict(color=COLORS["text"]),
+        ),
+        paper_bgcolor=COLORS["bg"],
+        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        height=400,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Block size = position value · Color: green = buying, red = selling, yellow = flat")
 
 
 def _render_holders_chart(holders: pd.DataFrame, ticker: str):
