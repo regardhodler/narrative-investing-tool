@@ -4,14 +4,15 @@
 Streamlit-based multi-module investment intelligence dashboard. Entry point: `app.py`.
 
 ## Architecture
-- `app.py` — Streamlit app with sidebar module routing (6 modules)
+- `app.py` — Streamlit app with sidebar module routing (7 modules), password auth gate via APP_PASSWORD env var
 - `modules/` — Each module is a standalone `render()` function
-  - `narrative_discovery.py` — Module 1: Ticker/narrative discovery
+  - `narrative_discovery.py` — Module 1: Ticker/narrative discovery (AI-grouped by narrative themes)
   - `narrative_pulse.py` — Module 2: Narrative sentiment tracking
   - `edgar_scanner.py` — Module 3: SEC EDGAR filing search
   - `institutional.py` — Module 4: 13F institutional holdings analysis
   - `insider_congress.py` — Module 5: Form 4 insider trades & Congress trades
-  - `options_activity.py` — Module 6: Options flow analysis
+  - `options_activity.py` — Module 6: Options flow analysis (with unusual activity sentiment verdict + chart)
+  - `valuation.py` — Module 7: AI Valuation & Recommendation (aggregates all signals, Groq-powered rating)
 - `services/` — API clients
   - `sec_client.py` — SEC EDGAR API (filings, 13F, insider trades, CIK mapping)
   - `claude_client.py` — Claude AI integration
