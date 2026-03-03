@@ -7,7 +7,7 @@ from services.trends_client import (
     get_trending_searches,
     get_yahoo_trending_tickers,
 )
-from services.claude_client import classify_narrative, describe_company
+from services.claude_client import classify_narrative, describe_company, group_tickers_by_narrative
 from services.sec_client import get_company_info
 from utils.session import get_ticker, set_narrative, set_ticker
 from utils.theme import COLORS, apply_dark_layout
@@ -41,18 +41,70 @@ def _render_auto():
         yf_trending = get_yahoo_trending_tickers()
 
     if yf_trending:
-        st.subheader(f"{len(yf_trending)} Trending Tickers")
-        cols = st.columns(3)
-        for i, item in enumerate(yf_trending):
-            col = cols[i % 3]
-            with col:
-                with st.container(border=True):
-                    st.markdown(f"**{item['name']}**")
-                    st.code(item["symbol"], language=None)
-                    if st.button("Select", key=f"yf_select_{i}", type="primary"):
-                        set_narrative(item["name"])
-                        set_ticker(item["symbol"])
-                        st.rerun()
+        # Build a lookup from symbol → item
+        ticker_lookup = {item["symbol"]: item for item in yf_trending}
+
+        # Group tickers by narrative theme via AI
+        import json as _json
+        tickers_for_grouping = _json.dumps(
+            [{"symbol": t["symbol"], "name": t["name"]} for t in yf_trending]
+        )
+        with st.spinner("Grouping tickers by narrative..."):
+            narrative_groups = group_tickers_by_narrative(tickers_for_grouping)
+
+        if narrative_groups:
+            st.subheader(f"{len(yf_trending)} Trending Tickers · {len(narrative_groups)} Narratives")
+
+            for g_idx, group in enumerate(narrative_groups):
+                narrative_title = group.get("narrative", "Market Movers")
+                description = group.get("description", "")
+                group_tickers = group.get("tickers", [])
+
+                # Narrative header
+                st.markdown(
+                    f'<div style="background:{COLORS["surface"]}; padding:12px 16px; '
+                    f'border-radius:8px; border-left:4px solid {COLORS["accent"]}; '
+                    f'margin:16px 0 8px 0;">'
+                    f'<div style="color:{COLORS["accent"]}; font-size:18px; font-weight:700;">'
+                    f'{narrative_title}</div>'
+                    f'<div style="color:{COLORS["text_dim"]}; font-size:13px; margin-top:2px;">'
+                    f'{description}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Ticker cards in columns
+                group_items = [
+                    ticker_lookup[sym] for sym in group_tickers
+                    if sym in ticker_lookup
+                ]
+                if not group_items:
+                    continue
+
+                cols = st.columns(min(3, len(group_items)))
+                for i, item in enumerate(group_items):
+                    col = cols[i % len(cols)]
+                    with col:
+                        with st.container(border=True):
+                            st.markdown(f"**{item['name']}**")
+                            st.code(item["symbol"], language=None)
+                            if st.button("Select", key=f"yf_select_{g_idx}_{i}", type="primary"):
+                                set_narrative(narrative_title)
+                                set_ticker(item["symbol"])
+                                st.rerun()
+        else:
+            # Fallback: flat list if grouping fails
+            st.subheader(f"{len(yf_trending)} Trending Tickers")
+            cols = st.columns(3)
+            for i, item in enumerate(yf_trending):
+                col = cols[i % 3]
+                with col:
+                    with st.container(border=True):
+                        st.markdown(f"**{item['name']}**")
+                        st.code(item["symbol"], language=None)
+                        if st.button("Select", key=f"yf_select_{i}", type="primary"):
+                            set_narrative(item["name"])
+                            set_ticker(item["symbol"])
+                            st.rerun()
     else:
         st.warning("Could not fetch Yahoo Finance trending tickers.")
 

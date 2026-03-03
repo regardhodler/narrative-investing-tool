@@ -160,6 +160,129 @@ Filing text:
         return f"Error generating summary: {e}"
 
 
+@st.cache_data(ttl=3600)
+def group_tickers_by_narrative(tickers_json: str) -> list[dict]:
+    """Group a list of trending tickers into narrative themes via Groq.
+
+    Input: JSON string of [{symbol, name}, ...]
+    Returns list of dicts: [{narrative, description, tickers: [{symbol, name}]}, ...]
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return []
+
+    prompt = f"""You are a financial analyst. Given these trending tickers, group them into 3-6 investment narrative themes.
+
+Tickers:
+{tickers_json}
+
+For each narrative group, pick a short punchy title (e.g. "AI Infrastructure Boom", "Rate Cut Beneficiaries", "Energy Transition", "Momentum Leaders").
+
+Return ONLY valid JSON (no markdown fences) — a list of objects:
+[
+  {{
+    "narrative": "Theme Title",
+    "description": "One sentence explaining why these stocks are grouped together",
+    "tickers": ["SYM1", "SYM2"]
+  }}
+]
+
+Rules:
+- Every ticker must appear in exactly one group
+- If a ticker doesn't fit a clear theme, put it in a "Market Movers" catch-all group
+- Sort groups so the strongest/most actionable narrative is first"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 600,
+                "temperature": 0.3,
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return []
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return []
+
+
+@st.cache_data(ttl=3600)
+def generate_valuation(ticker: str, signals_text: str) -> dict | None:
+    """Generate an AI valuation and recommendation for a ticker via Groq.
+
+    Returns dict with keys: rating, confidence, summary, bullish_factors,
+    bearish_factors, key_levels, recommendation
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        st.error("GROQ_API_KEY environment variable not set.")
+        return None
+
+    prompt = f"""You are an expert equity research analyst. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
+
+{signals_text}
+
+Return ONLY valid JSON (no markdown fences) with these exact keys:
+- "rating": one of "Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"
+- "confidence": integer 0-100 representing your confidence level
+- "summary": 2-3 sentence overall investment thesis
+- "bullish_factors": list of 3-5 concise bullet point strings (no bullet characters, just the text)
+- "bearish_factors": list of 3-5 concise bullet point strings (no bullet characters, just the text)
+- "key_levels": object with "support" and "resistance" as numbers (price levels)
+- "recommendation": 2-3 sentence actionable guidance for an investor"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1000,
+                "temperature": 0.2,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        st.error(f"Groq API error: {e}")
+        return None
+
+    # Strip markdown fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
 def _empty_result() -> dict:
     return {
         "market_relevant": False,

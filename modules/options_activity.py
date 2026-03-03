@@ -230,14 +230,15 @@ def _render_options_treemap(df: pd.DataFrame, ticker: str):
 
 
 def _render_unusual_activity(df: pd.DataFrame):
-    """Table of contracts with unusually high volume relative to open interest."""
+    """Table of contracts with unusually high volume relative to open interest,
+    plus an overall sentiment verdict and visualization chart."""
     active = df[(df["volume"] > 0) & (df["openInterest"] > 0)].copy()
     if active.empty:
         st.info("No options with both volume and OI to detect unusual activity.")
         return
 
     active["vol_oi"] = active["volume"] / active["openInterest"]
-    unusual = active[active["vol_oi"] > 2.0].sort_values("vol_oi", ascending=False).head(10)
+    unusual = active[active["vol_oi"] > 2.0].sort_values("vol_oi", ascending=False).head(15)
 
     if unusual.empty:
         st.info("No unusual activity detected (Vol/OI > 2.0)")
@@ -245,6 +246,53 @@ def _render_unusual_activity(df: pd.DataFrame):
 
     st.subheader("Unusual Activity (Vol/OI > 2.0)")
 
+    # --- Sentiment verdict ---
+    u_calls = unusual[unusual["right"] == "Call"]
+    u_puts = unusual[unusual["right"] == "Put"]
+    call_unusual_vol = u_calls["volume"].sum()
+    put_unusual_vol = u_puts["volume"].sum()
+    total_unusual_vol = call_unusual_vol + put_unusual_vol
+
+    if total_unusual_vol > 0:
+        call_pct = call_unusual_vol / total_unusual_vol * 100
+        put_pct = put_unusual_vol / total_unusual_vol * 100
+    else:
+        call_pct = put_pct = 50
+
+    if call_pct >= 65:
+        ua_sentiment, ua_color, ua_icon = "BULLISH", COLORS["green"], "🟢"
+        ua_detail = "Heavy unusual call activity — smart money may be positioning for upside"
+    elif put_pct >= 65:
+        ua_sentiment, ua_color, ua_icon = "BEARISH", COLORS["red"], "🔴"
+        ua_detail = "Heavy unusual put activity — smart money may be hedging or betting on downside"
+    else:
+        ua_sentiment, ua_color, ua_icon = "MIXED", COLORS["yellow"], "🟡"
+        ua_detail = "Unusual activity split between calls and puts — no clear directional bias"
+
+    st.markdown(
+        f'<div style="background:rgba(0,0,0,0.3); border:2px solid {ua_color}; '
+        f'border-radius:10px; padding:16px; margin-bottom:16px;">'
+        f'<div style="display:flex; align-items:center; gap:12px;">'
+        f'<span style="font-size:28px;">{ua_icon}</span>'
+        f'<div>'
+        f'<div style="color:{ua_color}; font-size:20px; font-weight:800;">'
+        f'Unusual Activity Sentiment: {ua_sentiment}</div>'
+        f'<div style="color:#aaa; font-size:13px; margin-top:4px;">{ua_detail}</div>'
+        f'</div></div>'
+        f'<div style="display:flex; gap:24px; margin-top:12px; font-size:13px; color:#ccc;">'
+        f'<span>Unusual Call Vol: <b style="color:{COLORS["green"]}">{call_unusual_vol:,.0f}</b> '
+        f'({call_pct:.0f}%)</span>'
+        f'<span>Unusual Put Vol: <b style="color:{COLORS["red"]}">{put_unusual_vol:,.0f}</b> '
+        f'({put_pct:.0f}%)</span>'
+        f'<span>Contracts flagged: <b>{len(unusual)}</b></span>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    # --- Unusual activity chart: horizontal bars by strike ---
+    _render_unusual_chart(unusual)
+
+    # --- Table ---
     def _highlight_type(val):
         if val == "Call":
             return f"color: {COLORS['green']}"
@@ -263,6 +311,62 @@ def _render_unusual_activity(df: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
     )
+
+
+def _render_unusual_chart(unusual: pd.DataFrame):
+    """Horizontal bar chart of unusual contracts: call volume right, put volume left."""
+    chart = unusual.copy()
+    chart["label"] = chart.apply(
+        lambda r: f"${r['strike']:.0f} {r['expiration']}", axis=1
+    )
+
+    # Aggregate by label+right in case of duplicates
+    agg = chart.groupby(["label", "right"])["volume"].sum().reset_index()
+    call_data = agg[agg["right"] == "Call"].set_index("label")["volume"]
+    put_data = agg[agg["right"] == "Put"].set_index("label")["volume"]
+    all_labels = sorted(set(call_data.index) | set(put_data.index))
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            y=all_labels,
+            x=[call_data.get(l, 0) for l in all_labels],
+            name="Unusual Calls",
+            orientation="h",
+            marker_color=COLORS["green"],
+            opacity=0.85,
+            hovertemplate="%{y}<br>Call Vol: %{x:,.0f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            y=all_labels,
+            x=[-put_data.get(l, 0) for l in all_labels],
+            name="Unusual Puts",
+            orientation="h",
+            marker_color=COLORS["red"],
+            opacity=0.85,
+            hovertemplate="%{y}<br>Put Vol: %{customdata:,.0f}<extra></extra>",
+            customdata=[put_data.get(l, 0) for l in all_labels],
+        )
+    )
+
+    apply_dark_layout(
+        fig,
+        title="Unusual Activity by Strike",
+        xaxis_title="Volume (Calls → | ← Puts)",
+        yaxis_title="",
+        barmode="relative",
+        legend=dict(orientation="h", y=1.08),
+    )
+    max_vol = max(
+        max((call_data.get(l, 0) for l in all_labels), default=0),
+        max((put_data.get(l, 0) for l in all_labels), default=0),
+    )
+    fig.update_xaxes(range=[-max_vol * 1.15, max_vol * 1.15] if max_vol > 0 else None)
+    fig.update_layout(height=max(300, len(all_labels) * 35 + 100))
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Green bars (right) = unusual call volume · Red bars (left) = unusual put volume · Sorted by strike")
 
 
 @st.cache_data(ttl=300)

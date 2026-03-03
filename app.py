@@ -34,6 +34,7 @@ with st.sidebar:
             "4 · Institutional (13F)",
             "5 · Insider & Congress",
             "6 · Options Activity",
+            "7 · Valuation",
         ],
     )
 
@@ -55,4 +56,7 @@ elif page.startswith("5"):
     render()
 elif page.startswith("6"):
     from modules.options_activity import render
+    render()
+elif page.startswith("7"):
+    from modules.valuation import render
     render()
