@@ -86,6 +86,9 @@ def render():
     apply_dark_layout(fig, title="Volume by Expiration", barmode="group", xaxis_title="Expiration", yaxis_title="Volume")
     st.plotly_chart(fig, use_container_width=True)
 
+    # Options volume treemap
+    _render_options_treemap(df, ticker)
+
     # Unusual activity table
     unusual = df[df["unusual"]].sort_values("vol_oi_ratio", ascending=False).head(10)
     if not unusual.empty:
@@ -113,3 +116,55 @@ def render():
     # Full chain (expandable)
     with st.expander("Full Options Chain"):
         st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+def _render_options_treemap(df: pd.DataFrame, ticker: str):
+    """Treemap of options volume: size = volume, color = calls (green) / puts (red)."""
+    chart_df = df[df["volume"] > 0].copy()
+    if chart_df.empty:
+        return
+
+    # Aggregate by strike, expiration, and right
+    grouped = chart_df.groupby(["strike", "expiration", "right"]).agg(
+        total_vol=("volume", "sum"),
+        total_oi=("open_interest", "sum"),
+    ).reset_index()
+
+    if grouped.empty:
+        return
+
+    type_labels = {"C": "Call", "P": "Put"}
+    labels = [
+        f"${strike:.0f} {type_labels.get(right, right)}<br>{exp}<br>Vol: {vol:,.0f}"
+        for strike, exp, right, vol in zip(
+            grouped["strike"], grouped["expiration"], grouped["right"], grouped["total_vol"]
+        )
+    ]
+    colors = [COLORS["green"] if r == "C" else COLORS["red"] for r in grouped["right"]]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Treemap(
+            labels=labels,
+            parents=[""] * len(grouped),
+            values=grouped["total_vol"].tolist(),
+            marker=dict(
+                colors=colors,
+                line=dict(color=COLORS["bg"], width=2),
+            ),
+            textinfo="label",
+            textfont=dict(size=12, color="white", family="Courier New, monospace"),
+            hovertemplate="<b>%{label}</b><br>OI: %{customdata:,.0f}<extra></extra>",
+            customdata=grouped["total_oi"].tolist(),
+        )
+    )
+
+    fig.update_layout(
+        title=dict(text=f"Options Volume Map: {ticker}", font=dict(color=COLORS["text"])),
+        paper_bgcolor=COLORS["bg"],
+        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        height=450,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Block size = volume · Green = calls · Red = puts")
