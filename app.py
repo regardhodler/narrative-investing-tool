@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
 import streamlit as st
 from utils.session import get_narrative, get_ticker, is_ibkr_connected
 
@@ -10,6 +11,20 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# --- Authentication gate ---
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+
+if APP_PASSWORD and not st.session_state.get("authenticated"):
+    st.markdown("## Narrative Investing Intelligence")
+    pwd = st.text_input("Enter password to continue", type="password")
+    if st.button("Login", type="primary"):
+        if pwd == APP_PASSWORD:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password.")
+    st.stop()
 
 # Sidebar
 with st.sidebar:
