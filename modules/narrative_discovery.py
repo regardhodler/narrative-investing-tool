@@ -62,6 +62,11 @@ def _render_auto():
     else:
         st.warning("Could not fetch Yahoo Finance trending tickers.")
 
+    # --- Search interest chart for active ticker ---
+    active = get_ticker()
+    if active:
+        _render_interest_chart(active, key_suffix="auto")
+
     # --- Google Trends supplement (filtered for financial topics) ---
     with st.expander("Google Trends (filtered)", expanded=False):
         with st.spinner("Fetching Google Trends..."):
@@ -151,7 +156,7 @@ def _render_manual():
         active = get_ticker()
         if active and result:
             _render_company_overview(active)
-            _render_interest_chart(active)
+            _render_interest_chart(active, key_suffix="narrative")
 
     with tab_ticker:
         ticker_input = st.text_input(
@@ -167,7 +172,7 @@ def _render_manual():
         if active:
             st.success(f"Active ticker: **{active}**")
             _render_company_overview(active)
-            _render_interest_chart(active)
+            _render_interest_chart(active, key_suffix="ticker")
 
 
 def _render_company_overview(ticker: str):
@@ -204,14 +209,14 @@ def _render_company_overview(ticker: str):
             st.info(f"**Narrative:** {overview['narrative']}")
 
 
-def _render_interest_chart(keyword: str):
+def _render_interest_chart(keyword: str, key_suffix: str = "default"):
     """Render a Google Trends interest-over-time area chart for a keyword."""
     st.subheader("Search Interest")
     timeframe = st.select_slider(
         "Timeframe",
         options=["1M", "3M", "6M", "1Y", "YTD"],
         value="3M",
-        key="interest_tf",
+        key=f"interest_tf_{key_suffix}",
     )
 
     with st.spinner("Fetching search interest..."):
