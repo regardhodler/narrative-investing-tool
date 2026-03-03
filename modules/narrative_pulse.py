@@ -16,6 +16,17 @@ TIMEFRAME_MAP = {
     "YTD": "ytd",
 }
 
+# yfinance interval for each candle size; 4H requires resampling from 1h
+INTERVAL_MAP = {
+    "4H": "1h",
+    "Daily": "1d",
+    "Weekly": "1wk",
+    "Monthly": "1mo",
+}
+
+# yfinance limits intraday data to ~730 days; 4H needs 1h data which is capped at 730 days
+_MAX_PERIOD_FOR_4H = {"1M": "1mo", "3M": "3mo", "6M": "6mo", "1Y": "1y", "2Y": "2y", "YTD": "ytd"}
+
 
 def render():
     st.header("PRICE ACTION")
@@ -25,16 +36,34 @@ def render():
         st.info("Set an active ticker in Discovery to view price action.")
         return
 
-    timeframe = st.radio(
-        "Timeframe",
-        list(TIMEFRAME_MAP.keys()),
-        index=2,
-        horizontal=True,
-        key="price_action_tf",
-    )
+    col_tf, col_iv = st.columns(2)
+    with col_tf:
+        timeframe = st.radio(
+            "Timeframe",
+            list(TIMEFRAME_MAP.keys()),
+            index=2,
+            horizontal=True,
+            key="price_action_tf",
+        )
+    with col_iv:
+        interval = st.radio(
+            "Candle Interval",
+            list(INTERVAL_MAP.keys()),
+            index=1,
+            horizontal=True,
+            key="price_action_iv",
+        )
+
+    # 4H uses 1h data capped at 730 days by yfinance
+    yf_interval = INTERVAL_MAP[interval]
+    yf_period = TIMEFRAME_MAP[timeframe]
 
     with st.spinner("Fetching price data..."):
-        df = _get_price_data(ticker, TIMEFRAME_MAP[timeframe])
+        df = _get_price_data(ticker, yf_period, yf_interval)
+
+    # Resample 1h → 4H if needed
+    if df is not None and not df.empty and interval == "4H":
+        df = _resample_4h(df)
 
     if df is None or df.empty:
         st.warning("No price data available for this ticker.")
@@ -214,12 +243,23 @@ def _fmt_volume(vol: float) -> str:
     return f"{vol:.0f}"
 
 
+def _resample_4h(df: pd.DataFrame) -> pd.DataFrame:
+    """Resample 1-hour OHLCV data into 4-hour candles."""
+    return df.resample("4h").agg({
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": "sum",
+    }).dropna()
+
+
 @st.cache_data(ttl=900)
-def _get_price_data(ticker: str, period: str) -> pd.DataFrame | None:
+def _get_price_data(ticker: str, period: str, interval: str = "1d") -> pd.DataFrame | None:
     """Fetch OHLCV data from yfinance."""
     try:
         stock = yf.Ticker(ticker)
-        df = stock.history(period=period)
+        df = stock.history(period=period, interval=interval)
         if df.empty:
             return None
         return df
