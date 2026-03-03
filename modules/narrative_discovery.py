@@ -3,6 +3,7 @@ import streamlit as st
 
 from services.trends_client import (
     get_interest_over_time,
+    get_interest_over_time_multi,
     get_trending_searches,
     get_yahoo_trending_tickers,
 )
@@ -62,10 +63,9 @@ def _render_auto():
     else:
         st.warning("Could not fetch Yahoo Finance trending tickers.")
 
-    # --- Search interest chart for active ticker ---
-    active = get_ticker()
-    if active:
-        _render_interest_chart(active, key_suffix="auto")
+    # --- Trending search interest (auto, no click needed) ---
+    if yf_trending:
+        _render_trending_interest(yf_trending)
 
     # --- Google Trends supplement (filtered for financial topics) ---
     with st.expander("Google Trends (filtered)", expanded=False):
@@ -173,6 +173,57 @@ def _render_manual():
             st.success(f"Active ticker: **{active}**")
             _render_company_overview(active)
             _render_interest_chart(active, key_suffix="ticker")
+
+
+def _render_trending_interest(trending: list[dict]):
+    """Auto-render a multi-line interest chart for the top trending tickers."""
+    # Take first 5 (pytrends limit)
+    top = trending[:5]
+    symbols = tuple(item["symbol"] for item in top)
+
+    st.subheader("Trending Search Interest")
+    timeframe = st.select_slider(
+        "Timeframe",
+        options=["1M", "3M", "6M", "1Y", "YTD"],
+        value="3M",
+        key="interest_tf_trending",
+    )
+
+    with st.spinner("Fetching search interest for trending tickers..."):
+        df = get_interest_over_time_multi(symbols, timeframe)
+
+    if df.empty:
+        st.caption("No interest data available for trending tickers.")
+        return
+
+    line_colors = [COLORS["accent"], COLORS["blue"], COLORS["yellow"], COLORS["red"], "#AB47BC"]
+
+    fig = go.Figure()
+    for i, sym in enumerate(symbols):
+        if sym not in df.columns:
+            continue
+        color = line_colors[i % len(line_colors)]
+        fig.add_trace(
+            go.Scatter(
+                x=df["date"],
+                y=df[sym],
+                mode="lines",
+                name=sym,
+                line=dict(color=color, width=2),
+                hovertemplate=f"<b>{sym}</b><br>%{{x|%b %d}}: %{{y}}<extra></extra>",
+            )
+        )
+
+    apply_dark_layout(
+        fig,
+        title="Search Interest: Top Trending Tickers",
+        yaxis_title="Relative Interest (0–100)",
+        xaxis_title="",
+        margin=dict(l=50, r=30, t=50, b=40),
+    )
+    fig.update_layout(height=400, legend=dict(orientation="h", y=-0.15))
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Source: Google Trends · comparing relative search interest across tickers")
 
 
 def _render_company_overview(ticker: str):

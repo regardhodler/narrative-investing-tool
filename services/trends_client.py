@@ -92,6 +92,23 @@ def _resolve_timeframe(label: str) -> str:
 
 
 @st.cache_data(ttl=900)
+def get_interest_over_time_multi(keywords: tuple, timeframe: str = "3M") -> pd.DataFrame:
+    """Fetch interest over time for up to 5 keywords.
+
+    Returns DataFrame with 'date' column and one column per keyword.
+    """
+    pytrends = _get_pytrends()
+    pytrends.build_payload(list(keywords), timeframe=_resolve_timeframe(timeframe))
+    df = pytrends.interest_over_time()
+    if df.empty:
+        return pd.DataFrame()
+    df = df.reset_index()
+    if "isPartial" in df.columns:
+        df = df.drop(columns=["isPartial"])
+    return df
+
+
+@st.cache_data(ttl=900)
 def get_interest_over_time(keyword: str, timeframe: str = "3M") -> pd.DataFrame:
     """Fetch interest over time for a keyword.
 
