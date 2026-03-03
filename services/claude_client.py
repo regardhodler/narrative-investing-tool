@@ -160,15 +160,24 @@ Filing text:
         return f"Error generating summary: {e}"
 
 
-@st.cache_data(ttl=3600)
 def group_tickers_by_narrative(tickers_json: str) -> list[dict]:
     """Group a list of trending tickers into narrative themes via Groq.
 
     Input: JSON string of [{symbol, name}, ...]
     Returns list of dicts: [{narrative, description, tickers: [{symbol, name}]}, ...]
     """
+    result = _group_tickers_cached(tickers_json)
+    if not result:
+        # Clear only this function's cache so failures don't stick for 1hr
+        _group_tickers_cached.clear()
+    return result
+
+
+@st.cache_data(ttl=3600)
+def _group_tickers_cached(tickers_json: str) -> list[dict]:
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
+        st.warning("GROQ_API_KEY not set — cannot group tickers by narrative.")
         return []
 
     prompt = f"""You are a financial analyst. Given these trending tickers, group them into 3-6 investment narrative themes.
@@ -202,14 +211,15 @@ Rules:
             json={
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 600,
+                "max_tokens": 1500,
                 "temperature": 0.3,
             },
-            timeout=15,
+            timeout=20,
         )
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception:
+    except Exception as e:
+        st.warning(f"Narrative grouping failed (API error): {e}")
         return []
 
     if text.startswith("```"):
@@ -221,6 +231,7 @@ Rules:
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        st.warning("Narrative grouping failed (malformed AI response). Showing flat list.")
         return []
 
 
