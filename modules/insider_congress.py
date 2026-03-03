@@ -101,6 +101,12 @@ def _render_insider(ticker: str):
     c2.metric("Buys", len(buys), f"${buys['value'].sum():,.0f}" if not buys.empty else "$0")
     c3.metric("Sells", len(sells), f"${sells['value'].sum():,.0f}" if not sells.empty else "$0")
 
+    # Cumulative buy vs sell flow
+    _render_insider_flow(df, ticker)
+
+    # Insider treemap
+    _render_insider_treemap(df, ticker)
+
     # Monthly activity bar chart
     _render_monthly_chart(df, ticker)
 
@@ -134,6 +140,111 @@ def _render_insider(ticker: str):
             "value": "Value",
         },
     )
+
+
+def _render_insider_flow(df: pd.DataFrame, ticker: str):
+    """Cumulative net insider flow area chart — running total of buy $ minus sell $."""
+    chart_df = df[df["type"].isin(["Purchase", "Sale"]) & (df["value"] > 0)].copy()
+    if chart_df.empty:
+        return
+
+    chart_df["date_dt"] = pd.to_datetime(chart_df["date"])
+    chart_df = chart_df.sort_values("date_dt")
+
+    # Signed value: positive for buys, negative for sells
+    chart_df["signed"] = chart_df.apply(
+        lambda r: r["value"] if r["type"] == "Purchase" else -r["value"], axis=1
+    )
+
+    # Group by date, sum, then cumulate
+    daily = chart_df.groupby("date_dt")["signed"].sum().cumsum().reset_index()
+    daily.columns = ["date", "cumulative"]
+
+    last_val = daily["cumulative"].iloc[-1]
+    if last_val > 0:
+        flow_label, flow_color = "NET BUYING", COLORS["green"]
+    elif last_val < 0:
+        flow_label, flow_color = "NET SELLING", COLORS["red"]
+    else:
+        flow_label, flow_color = "NEUTRAL", COLORS["yellow"]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=daily["date"], y=daily["cumulative"],
+            mode="lines",
+            line=dict(color=flow_color, width=2.5),
+            fill="tozeroy",
+            fillcolor=f"rgba({','.join(str(int(flow_color.lstrip('#')[i:i+2], 16)) for i in (0, 2, 4))}, 0.12)",
+            hovertemplate="%{x|%b %d, %Y}<br>Net Flow: $%{y:,.0f}<extra></extra>",
+        )
+    )
+    fig.add_hline(y=0, line_dash="dot", line_color=COLORS["text_dim"], line_width=1)
+
+    apply_dark_layout(
+        fig,
+        title=dict(
+            text=f"Insider Cumulative Flow: {ticker} — {flow_label} (${last_val:,.0f})",
+            font=dict(color=flow_color),
+        ),
+        yaxis_title="Cumulative Net Flow ($)",
+        margin=dict(l=60, r=30, t=60, b=40),
+    )
+    fig.update_layout(height=350, showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Above zero = net insider buying · Below zero = net insider selling")
+
+
+def _render_insider_treemap(df: pd.DataFrame, ticker: str):
+    """Treemap of insider trades: size = trade value, color = buy/sell."""
+    chart_df = df[df["type"].isin(["Purchase", "Sale"]) & (df["value"] > 0)].copy()
+    if chart_df.empty:
+        return
+
+    # Aggregate by insider name and type
+    grouped = chart_df.groupby(["insider_name", "type"]).agg(
+        total_value=("value", "sum"),
+        trade_count=("value", "count"),
+    ).reset_index()
+
+    if grouped.empty:
+        return
+
+    short_names = grouped["insider_name"].apply(
+        lambda n: n[:18] + "…" if len(str(n)) > 18 else str(n)
+    )
+    labels = [
+        f"{name}<br>{typ}: ${val:,.0f}"
+        for name, typ, val in zip(short_names, grouped["type"], grouped["total_value"])
+    ]
+    colors = [COLORS["green"] if t == "Purchase" else COLORS["red"] for t in grouped["type"]]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Treemap(
+            labels=labels,
+            parents=[""] * len(grouped),
+            values=grouped["total_value"].tolist(),
+            marker=dict(
+                colors=colors,
+                line=dict(color=COLORS["bg"], width=2),
+            ),
+            textinfo="label",
+            textfont=dict(size=13, color="white", family="Courier New, monospace"),
+            hovertemplate="<b>%{label}</b><br>Trades: %{customdata}<extra></extra>",
+            customdata=grouped["trade_count"].tolist(),
+        )
+    )
+
+    fig.update_layout(
+        title=dict(text=f"Insider Trade Map: {ticker}", font=dict(color=COLORS["text"])),
+        paper_bgcolor=COLORS["bg"],
+        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        height=400,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Block size = total trade value · Green = purchase · Red = sale")
 
 
 def _render_monthly_chart(df: pd.DataFrame, ticker: str):
@@ -367,6 +478,61 @@ def _render_congress_charts(df: pd.DataFrame, ticker: str):
         margin=dict(l=40, r=40, t=50, b=80),
     )
     st.plotly_chart(fig2, use_container_width=True)
+
+    # --- Congress treemap ---
+    _render_congress_treemap(chart_df, ticker)
+
+
+def _render_congress_treemap(df: pd.DataFrame, ticker: str):
+    """Treemap of congress trades: size = estimated value, color = buy/sell."""
+    tree_df = df[df["type"].isin(["Purchase", "Sale"])].copy()
+    tree_df["est_value"] = tree_df["size"].apply(_parse_size_midpoint)
+    tree_df = tree_df[tree_df["est_value"] > 0]
+
+    if tree_df.empty:
+        return
+
+    # Aggregate by politician and type
+    grouped = tree_df.groupby(["politician", "type"]).agg(
+        total_value=("est_value", "sum"),
+        trade_count=("est_value", "count"),
+    ).reset_index()
+
+    short_names = grouped["politician"].apply(
+        lambda n: n[:18] + "…" if len(str(n)) > 18 else str(n)
+    )
+    labels = [
+        f"{name}<br>{typ}: ${val:,.0f}"
+        for name, typ, val in zip(short_names, grouped["type"], grouped["total_value"])
+    ]
+    colors = [COLORS["green"] if t == "Purchase" else COLORS["red"] for t in grouped["type"]]
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Treemap(
+            labels=labels,
+            parents=[""] * len(grouped),
+            values=grouped["total_value"].tolist(),
+            marker=dict(
+                colors=colors,
+                line=dict(color=COLORS["bg"], width=2),
+            ),
+            textinfo="label",
+            textfont=dict(size=13, color="white", family="Courier New, monospace"),
+            hovertemplate="<b>%{label}</b><br>Trades: %{customdata}<extra></extra>",
+            customdata=grouped["trade_count"].tolist(),
+        )
+    )
+
+    fig.update_layout(
+        title=dict(text=f"Congress Trade Map: {ticker}", font=dict(color=COLORS["text"])),
+        paper_bgcolor=COLORS["bg"],
+        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        height=400,
+        margin=dict(l=10, r=10, t=50, b=10),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Block size = estimated trade value · Green = purchase · Red = sale")
 
 
 def _render_congress(ticker: str):
