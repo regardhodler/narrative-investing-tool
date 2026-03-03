@@ -240,14 +240,16 @@ def generate_valuation(ticker: str, signals_text: str) -> dict | None:
 
 {signals_text}
 
-Return ONLY valid JSON (no markdown fences) with these exact keys:
-- "rating": one of "Strong Buy", "Buy", "Hold", "Sell", "Strong Sell"
-- "confidence": integer 0-100 representing your confidence level
-- "summary": 2-3 sentence overall investment thesis
-- "bullish_factors": list of 3-5 concise bullet point strings (no bullet characters, just the text)
-- "bearish_factors": list of 3-5 concise bullet point strings (no bullet characters, just the text)
-- "key_levels": object with "support" and "resistance" as numbers (price levels)
-- "recommendation": 2-3 sentence actionable guidance for an investor"""
+Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys:
+{{
+  "rating": "Strong Buy" or "Buy" or "Hold" or "Sell" or "Strong Sell",
+  "confidence": 0-100,
+  "summary": "2-3 sentence thesis",
+  "bullish_factors": ["factor1", "factor2", "factor3"],
+  "bearish_factors": ["factor1", "factor2", "factor3"],
+  "key_levels": {{"support": 123.45, "resistance": 234.56}},
+  "recommendation": "2-3 sentence guidance"
+}}"""
 
     try:
         resp = requests.post(
@@ -258,9 +260,12 @@ Return ONLY valid JSON (no markdown fences) with these exact keys:
             },
             json={
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."},
+                    {"role": "user", "content": prompt},
+                ],
                 "max_tokens": 1000,
-                "temperature": 0.2,
+                "temperature": 0.1,
             },
             timeout=30,
         )
@@ -271,14 +276,28 @@ Return ONLY valid JSON (no markdown fences) with these exact keys:
         return None
 
     # Strip markdown fences if present
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+    if "```" in text:
+        import re
+        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+        if match:
+            text = match.group(1).strip()
+
+    # Try to extract JSON object even if there's surrounding text
+    if not text.startswith("{"):
+        start = text.find("{")
+        if start != -1:
+            text = text[start:]
+    if not text.endswith("}"):
+        end = text.rfind("}")
+        if end != -1:
+            text = text[:end + 1]
 
     try:
-        return json.loads(text)
+        result = json.loads(text)
+        # Validate required keys exist
+        if "rating" not in result:
+            return None
+        return result
     except json.JSONDecodeError:
         return None
 

@@ -30,7 +30,14 @@ def render():
         result = generate_valuation(ticker, signals_text)
 
     if not result:
-        st.error("Failed to generate valuation. Ensure GROQ_API_KEY is set in your environment or Streamlit secrets.")
+        import os
+        has_key = bool(os.getenv("GROQ_API_KEY", ""))
+        if not has_key:
+            st.error("GROQ_API_KEY is not set. Add it to your .env file or Streamlit Cloud secrets.")
+        else:
+            st.error("AI valuation failed — the LLM returned an unparseable response. Try again.")
+            with st.expander("Debug: Signal data sent to LLM"):
+                st.code(signals_text)
         return
 
     _render_rating_banner(result)
