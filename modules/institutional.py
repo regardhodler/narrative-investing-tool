@@ -220,7 +220,7 @@ def _render_holdings_treemap(holders: pd.DataFrame, ticker: str):
                 line=dict(color=COLORS["bg"], width=2),
             ),
             textinfo="label",
-            textfont=dict(size=13),
+            textfont=dict(size=13, color="white"),
             hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}<extra></extra>",
         )
     )
