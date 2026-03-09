@@ -746,7 +746,7 @@ def _make_price_sparklines(snaps: dict[str, AssetSnapshot]) -> go.Figure | None:
                 mode="lines",
                 line=dict(color=color, width=1.5),
                 fill="tozeroy",
-                fillcolor=color + "15",
+                fillcolor=f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.08)",
                 name=label,
                 showlegend=False,
                 hovertemplate=f"<b>{label}</b><br>%{{y:.1f}}%<extra></extra>",
