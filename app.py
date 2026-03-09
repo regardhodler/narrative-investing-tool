@@ -43,6 +43,7 @@ with st.sidebar:
     page = st.radio(
         "Module",
         [
+            "0 · Risk Regime",
             "1 · Discovery",
             "2 · Price Action",
             "3 · EDGAR Scanner",
@@ -54,7 +55,10 @@ with st.sidebar:
     )
 
 # Route to module
-if page.startswith("1"):
+if page.startswith("0"):
+    from modules.risk_regime import render
+    render()
+elif page.startswith("1"):
     from modules.narrative_discovery import render
     render()
 elif page.startswith("2"):

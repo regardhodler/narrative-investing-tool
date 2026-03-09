@@ -4,8 +4,9 @@
 Streamlit-based multi-module investment intelligence dashboard. Entry point: `app.py`.
 
 ## Architecture
-- `app.py` — Streamlit app with sidebar module routing (7 modules), password auth gate via APP_PASSWORD env var
+- `app.py` — Streamlit app with sidebar module routing (8 modules), password auth gate via APP_PASSWORD env var
 - `modules/` — Each module is a standalone `render()` function
+  - `risk_regime.py` — Module 0: Cross-asset risk-on/risk-off regime indicator (z-score based, 17+ signals, daily history)
   - `narrative_discovery.py` — Module 1: Ticker/narrative discovery (AI-grouped by narrative themes)
   - `narrative_pulse.py` — Module 2: Narrative sentiment tracking
   - `edgar_scanner.py` — Module 3: SEC EDGAR filing search
@@ -19,6 +20,7 @@ Streamlit-based multi-module investment intelligence dashboard. Entry point: `ap
   - `congress_client.py` — Congress trading data
   - `ibkr_client.py` — Interactive Brokers connection
   - `trends_client.py` — Google Trends
+  - `market_data.py` — Shared market data layer (yfinance batch fetch, z-scores, AssetSnapshot dataclass)
 - `utils/` — Shared utilities
   - `session.py` — Streamlit session state helpers (ticker, narrative, IBKR status)
   - `theme.py` — Dark theme colors (`COLORS` dict) and `apply_dark_layout()` for Plotly
