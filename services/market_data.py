@@ -30,9 +30,9 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     try:
         df = yf.download(ticker, period=period, interval=interval, progress=False, auto_adjust=True)
         if df is not None and not df.empty:
-            # yfinance returns MultiIndex columns for single ticker too sometimes
+            # yfinance returns MultiIndex columns for single ticker downloads
             if isinstance(df.columns, pd.MultiIndex):
-                df.columns = df.columns.get_level_values(0)
+                df = df.droplevel("Ticker", axis=1)
             return df
     except Exception:
         pass
@@ -64,14 +64,16 @@ def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d
             df = future.result()
             snap = AssetSnapshot(ticker=ticker, label=label)
 
-            if df is not None and not df.empty:
-                close = df["Close"]
+            if df is not None and not df.empty and "Close" in df.columns:
+                close = df["Close"].squeeze()  # ensure Series, not DataFrame
+                if isinstance(close, pd.DataFrame):
+                    close = close.iloc[:, 0]
                 snap.latest_price = float(close.iloc[-1])
                 snap.series = close.copy()
 
                 # 30-day momentum (approx 22 trading days)
                 if len(close) >= 22:
-                    snap.pct_change_30d = (close.iloc[-1] / close.iloc[-22] - 1) * 100
+                    snap.pct_change_30d = float((close.iloc[-1] / close.iloc[-22] - 1) * 100)
 
                 # Staleness check: if last data point is >2 days old
                 last_date = df.index[-1]
