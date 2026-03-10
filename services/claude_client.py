@@ -331,10 +331,12 @@ Key signal summary:
 Based on this regime, suggest what to buy right now.
 
 Return ONLY valid JSON (no markdown fences) with these keys:
-- "sectors": list of 3-5 sector names to favor (e.g. "Technology", "Utilities", "Healthcare")
-- "stocks": list of 4-6 objects, each with "ticker" and "reason" (1 sentence) — concrete US-listed stocks or ETFs that fit this regime
-- "bonds": list of 2-3 objects, each with "ticker" and "reason" — bond ETFs or fixed-income plays appropriate for this regime
-- "rationale": 2-3 sentence macro rationale for these picks given the current regime"""
+- "sectors": list of 3-5 objects, each with "name" (sector name) and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
+- "stocks": list of 4-6 objects, each with "ticker", "reason" (1 sentence), and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
+- "bonds": list of 2-3 objects, each with "ticker", "reason", and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
+- "rationale": 2-3 sentence macro rationale for these picks given the current regime
+
+Be selective with 3-star (strong buy) ratings — only give them to picks that are the best fit for this exact regime. Most picks should be 1 or 2 stars."""
 
     try:
         resp = requests.post(

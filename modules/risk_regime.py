@@ -876,32 +876,67 @@ def render():
         plays = suggest_regime_plays(regime, aggregate, sig_summary)
 
     if plays and (plays.get("sectors") or plays.get("stocks") or plays.get("bonds")):
+        dim = COLORS["text_dim"]
         st.markdown("### What to Buy in This Regime")
+        # Legend
+        st.markdown(
+            '<span style="color:#FFD700;font-size:13px;">'
+            "★★★ Strong Buy &nbsp;|&nbsp; ★★☆ Moderate Buy &nbsp;|&nbsp; ★☆☆ Buy"
+            "</span>",
+            unsafe_allow_html=True,
+        )
         if plays.get("rationale"):
-            dim = COLORS["text_dim"]
             st.markdown(
                 f"<div style='color:{dim};font-size:13px;margin-bottom:12px;'>"
                 f"{plays['rationale']}</div>",
                 unsafe_allow_html=True,
             )
 
+        def _conviction_stars(item, fallback=1):
+            c = item.get("conviction", fallback) if isinstance(item, dict) else fallback
+            c = max(1, min(3, int(c)))
+            labels = {3: "Strong Buy", 2: "Moderate Buy", 1: "Buy"}
+            return (
+                f'<span style="color:#FFD700;" title="{labels[c]}">'
+                f'{"★" * c}{"☆" * (3 - c)}</span>'
+            )
+
         col_sec, col_stk, col_bnd = st.columns(3)
         with col_sec:
-            st.markdown(f"**Sectors to Favor**")
+            st.markdown("**Sectors to Favor**")
             for sec in plays.get("sectors", []):
-                st.markdown(f"- {sec}")
+                if isinstance(sec, dict):
+                    name = sec.get("name", "")
+                    stars = _conviction_stars(sec)
+                    st.markdown(f"- {stars} {name}", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"- ★☆☆ {sec}", unsafe_allow_html=True)
         with col_stk:
-            st.markdown(f"**Stocks / ETFs**")
+            st.markdown("**Stocks / ETFs**")
             for s in plays.get("stocks", []):
-                ticker = s if isinstance(s, str) else s.get("ticker", "")
-                reason = "" if isinstance(s, str) else s.get("reason", "")
-                st.markdown(f"- `{ticker}` — {reason}" if reason else f"- `{ticker}`")
+                if isinstance(s, str):
+                    st.markdown(f"- ★☆☆ `{s}`", unsafe_allow_html=True)
+                else:
+                    ticker = s.get("ticker", "")
+                    reason = s.get("reason", "")
+                    stars = _conviction_stars(s)
+                    line = f"- {stars} `{ticker}`"
+                    if reason:
+                        line += f" — {reason}"
+                    st.markdown(line, unsafe_allow_html=True)
         with col_bnd:
-            st.markdown(f"**Bonds / Fixed Income**")
+            st.markdown("**Bonds / Fixed Income**")
             for b in plays.get("bonds", []):
-                ticker = b if isinstance(b, str) else b.get("ticker", "")
-                reason = "" if isinstance(b, str) else b.get("reason", "")
-                st.markdown(f"- `{ticker}` — {reason}" if reason else f"- `{ticker}`")
+                if isinstance(b, str):
+                    st.markdown(f"- ★☆☆ `{b}`", unsafe_allow_html=True)
+                else:
+                    ticker = b.get("ticker", "")
+                    reason = b.get("reason", "")
+                    stars = _conviction_stars(b)
+                    line = f"- {stars} `{ticker}`"
+                    if reason:
+                        line += f" — {reason}"
+                    st.markdown(line, unsafe_allow_html=True)
 
         st.markdown(
             f"<p style='color:{dim};font-size:10px;margin-top:4px;'>"
