@@ -25,7 +25,7 @@ def get_yahoo_trending_tickers() -> list[dict]:
         for q in quotes:
             symbol = q.get("symbol", "")
             results.append({"symbol": symbol, "name": symbol})
-        # Enrich with company names via yfinance
+        # Enrich with company names and intraday price change via yfinance
         try:
             import yfinance as yf
 
@@ -35,11 +35,19 @@ def get_yahoo_trending_tickers() -> list[dict]:
                 info = tickers.tickers.get(r["symbol"])
                 if info:
                     try:
+                        fast = info.fast_info
                         r["name"] = info.info.get("shortName", r["symbol"])
+                        r["pct_change"] = round(
+                            ((fast.last_price / fast.previous_close) - 1) * 100, 2
+                        ) if fast.previous_close else None
                     except Exception:
-                        pass
+                        r["pct_change"] = None
         except Exception:
             pass
+        # Assign buzz rank (1 = most trending) for star rating
+        for idx, r in enumerate(results):
+            r["buzz_rank"] = idx + 1
+            r.setdefault("pct_change", None)
         return results
     except Exception:
         return []

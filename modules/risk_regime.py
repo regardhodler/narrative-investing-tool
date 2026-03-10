@@ -866,6 +866,48 @@ def render():
         unsafe_allow_html=True,
     )
 
+    # ── AI Regime Plays (sectors, stocks, bonds) ──
+    from services.claude_client import suggest_regime_plays
+
+    sig_summary = "; ".join(
+        f"{s['name']}: {s['label']} ({s['score']:+.2f})" for s in signals[:10]
+    ) if signals else ""
+    with st.spinner("Generating regime-based suggestions..."):
+        plays = suggest_regime_plays(regime, aggregate, sig_summary)
+
+    if plays and (plays.get("sectors") or plays.get("stocks") or plays.get("bonds")):
+        st.markdown("### What to Buy in This Regime")
+        if plays.get("rationale"):
+            st.markdown(
+                f"<div style='color:{COLORS[\"text_dim\"]};font-size:13px;margin-bottom:12px;'>"
+                f"{plays['rationale']}</div>",
+                unsafe_allow_html=True,
+            )
+
+        col_sec, col_stk, col_bnd = st.columns(3)
+        with col_sec:
+            st.markdown(f"**Sectors to Favor**")
+            for sec in plays.get("sectors", []):
+                st.markdown(f"- {sec}")
+        with col_stk:
+            st.markdown(f"**Stocks / ETFs**")
+            for s in plays.get("stocks", []):
+                ticker = s if isinstance(s, str) else s.get("ticker", "")
+                reason = "" if isinstance(s, str) else s.get("reason", "")
+                st.markdown(f"- `{ticker}` — {reason}" if reason else f"- `{ticker}`")
+        with col_bnd:
+            st.markdown(f"**Bonds / Fixed Income**")
+            for b in plays.get("bonds", []):
+                ticker = b if isinstance(b, str) else b.get("ticker", "")
+                reason = "" if isinstance(b, str) else b.get("reason", "")
+                st.markdown(f"- `{ticker}` — {reason}" if reason else f"- `{ticker}`")
+
+        st.markdown(
+            f"<p style='color:{COLORS['text_dim']};font-size:10px;margin-top:4px;'>"
+            "AI-generated suggestions for informational purposes only. Not financial advice.</p>",
+            unsafe_allow_html=True,
+        )
+
     # ── Signal Heatmap (compact overview) ──
     if signals:
         st.plotly_chart(_make_heatmap(signals), use_container_width=True)

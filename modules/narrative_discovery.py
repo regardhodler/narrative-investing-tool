@@ -87,6 +87,25 @@ def _render_auto():
                         with st.container(border=True):
                             st.markdown(f"**{item['name']}**")
                             st.code(item["symbol"], language=None)
+                            # Intraday % change
+                            pct = item.get("pct_change")
+                            if pct is not None:
+                                pct_color = COLORS.get("green", "#00d4aa") if pct >= 0 else COLORS.get("red", "#ff4d4d")
+                                arrow = "▲" if pct >= 0 else "▼"
+                                st.markdown(
+                                    f'<span style="color:{pct_color};font-weight:700;font-size:15px;">'
+                                    f'{arrow} {pct:+.2f}%</span>',
+                                    unsafe_allow_html=True,
+                                )
+                            # Buzz star rating (top of trending list = 5 stars)
+                            buzz_rank = item.get("buzz_rank", 99)
+                            total = len(yf_trending)
+                            stars = max(1, min(5, 5 - int((buzz_rank - 1) / max(1, total / 5))))
+                            st.markdown(
+                                f'<span style="color:#FFD700;font-size:16px;" title="Buzz: {stars}/5">'
+                                f'{"★" * stars}{"☆" * (5 - stars)}</span>',
+                                unsafe_allow_html=True,
+                            )
                             if st.button("Select", key=f"yf_select_{g_idx}_{i}", type="primary"):
                                 set_narrative(narrative_title)
                                 set_ticker(item["symbol"])
@@ -101,6 +120,23 @@ def _render_auto():
                     with st.container(border=True):
                         st.markdown(f"**{item['name']}**")
                         st.code(item["symbol"], language=None)
+                        pct = item.get("pct_change")
+                        if pct is not None:
+                            pct_color = COLORS.get("green", "#00d4aa") if pct >= 0 else COLORS.get("red", "#ff4d4d")
+                            arrow = "▲" if pct >= 0 else "▼"
+                            st.markdown(
+                                f'<span style="color:{pct_color};font-weight:700;font-size:15px;">'
+                                f'{arrow} {pct:+.2f}%</span>',
+                                unsafe_allow_html=True,
+                            )
+                        buzz_rank = item.get("buzz_rank", 99)
+                        total = len(yf_trending)
+                        stars = max(1, min(5, 5 - int((buzz_rank - 1) / max(1, total / 5))))
+                        st.markdown(
+                            f'<span style="color:#FFD700;font-size:16px;" title="Buzz: {stars}/5">'
+                            f'{"★" * stars}{"☆" * (5 - stars)}</span>',
+                            unsafe_allow_html=True,
+                        )
                         if st.button("Select", key=f"yf_select_{i}", type="primary"):
                             set_narrative(item["name"])
                             set_ticker(item["symbol"])

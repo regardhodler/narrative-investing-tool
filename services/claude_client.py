@@ -313,6 +313,61 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
         return None
 
 
+@st.cache_data(ttl=3600)
+def suggest_regime_plays(regime: str, score: float, signal_summary: str) -> dict:
+    """Suggest sectors, stocks, and bonds based on the current risk regime.
+
+    Returns dict with keys: sectors, stocks, bonds, rationale
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+
+    prompt = f"""You are a macro strategist. The market risk regime is currently **{regime}** with an aggregate score of {score:+.2f} (scale: -1 risk-off to +1 risk-on).
+
+Key signal summary:
+{signal_summary}
+
+Based on this regime, suggest what to buy right now.
+
+Return ONLY valid JSON (no markdown fences) with these keys:
+- "sectors": list of 3-5 sector names to favor (e.g. "Technology", "Utilities", "Healthcare")
+- "stocks": list of 4-6 objects, each with "ticker" and "reason" (1 sentence) — concrete US-listed stocks or ETFs that fit this regime
+- "bonds": list of 2-3 objects, each with "ticker" and "reason" — bond ETFs or fixed-income plays appropriate for this regime
+- "rationale": 2-3 sentence macro rationale for these picks given the current regime"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800,
+                "temperature": 0.3,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+
+
 def _empty_result() -> dict:
     return {
         "market_relevant": False,
