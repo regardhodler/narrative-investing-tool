@@ -878,8 +878,9 @@ def render():
     if plays and (plays.get("sectors") or plays.get("stocks") or plays.get("bonds")):
         st.markdown("### What to Buy in This Regime")
         if plays.get("rationale"):
+            dim = COLORS["text_dim"]
             st.markdown(
-                f"<div style='color:{COLORS[\"text_dim\"]};font-size:13px;margin-bottom:12px;'>"
+                f"<div style='color:{dim};font-size:13px;margin-bottom:12px;'>"
                 f"{plays['rationale']}</div>",
                 unsafe_allow_html=True,
             )
@@ -903,7 +904,7 @@ def render():
                 st.markdown(f"- `{ticker}` — {reason}" if reason else f"- `{ticker}`")
 
         st.markdown(
-            f"<p style='color:{COLORS['text_dim']};font-size:10px;margin-top:4px;'>"
+            f"<p style='color:{dim};font-size:10px;margin-top:4px;'>"
             "AI-generated suggestions for informational purposes only. Not financial advice.</p>",
             unsafe_allow_html=True,
         )
