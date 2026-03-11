@@ -70,11 +70,11 @@ FILTERED_ISSUERS = {
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def _fetch_13f_all_holdings(cik: str) -> list[dict]:
-    """Fetch ALL holdings from the two most recent 13F filings for a filer.
+def _fetch_13f_all_holdings(cik: str, num_filings: int = 2) -> list[dict]:
+    """Fetch ALL holdings from recent 13F filings for a filer.
 
     Returns list of dicts: [{filing_idx, issuer, cusip, value, shares}, ...]
-    filing_idx 0 = most recent, 1 = previous quarter.
+    filing_idx 0 = most recent, 1 = previous quarter, etc.
     """
     filings = _sec.get_13f_holdings(cik)
     if not filings:
@@ -83,8 +83,8 @@ def _fetch_13f_all_holdings(cik: str) -> list[dict]:
     padded_cik = cik.zfill(10)
     all_holdings = []
 
-    # Grab up to 2 most recent filings
-    for filing_idx, filing in enumerate(filings[:2]):
+    # Grab up to num_filings most recent filings
+    for filing_idx, filing in enumerate(filings[:num_filings]):
         try:
             _sec._rate_limit()
             index_url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{filing['accession']}/index.json"
@@ -181,9 +181,12 @@ def screen_whale_buyers(
     min_value: float = 0,
     categories: list[str] | None = None,
     progress_callback=None,
+    lookback_quarters: int = 1,
 ) -> pd.DataFrame:
-    """Screen for the biggest whale position changes between their two most recent 13F filings.
+    """Screen for the biggest whale position changes across 13F filings.
 
+    lookback_quarters: 1 = compare latest vs previous (default),
+                       2 = compare latest vs 2 quarters ago, etc.
     Returns top N positions by absolute value change, sorted descending.
     min_value is in millions.
     """
@@ -196,13 +199,16 @@ def screen_whale_buyers(
     if not filers:
         return pd.DataFrame()
 
+    num_filings = lookback_quarters + 1  # need current + the one N quarters back
+    compare_idx = lookback_quarters  # filing_idx to compare against
+
     # Fetch holdings for all whale filers concurrently (max 3 workers to respect rate limits)
     all_rows = []
     filer_items = list(filers.items())
 
     def _fetch_one(cik_meta):
         cik, meta = cik_meta
-        holdings = _fetch_13f_all_holdings(cik)
+        holdings = _fetch_13f_all_holdings(cik, num_filings=num_filings)
         return cik, meta, holdings
 
     completed = 0
@@ -220,9 +226,14 @@ def screen_whale_buyers(
             if not holdings:
                 continue
 
-            # Split into current (filing_idx=0) and previous (filing_idx=1)
+            # Split into current (filing_idx=0) and comparison (filing_idx=compare_idx)
             current = [h for h in holdings if h["filing_idx"] == 0]
-            previous = [h for h in holdings if h["filing_idx"] == 1]
+            previous = [h for h in holdings if h["filing_idx"] == compare_idx]
+            if not previous:
+                # Fall back to the oldest available filing
+                max_idx = max((h["filing_idx"] for h in holdings), default=0)
+                if max_idx > 0:
+                    previous = [h for h in holdings if h["filing_idx"] == max_idx]
 
             # Build lookup for previous quarter by CUSIP
             prev_map = {}

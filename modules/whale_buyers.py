@@ -19,9 +19,14 @@ def render():
     )
 
     # --- Filter controls ---
-    fc1, fc2, fc3 = st.columns([1, 1, 1])
+    fc1, fc2, fc3, fc4 = st.columns([1, 1, 1, 1])
 
     with fc1:
+        lookback_options = {"1 Quarter": 1, "2 Quarters": 2, "1 Year": 4}
+        lookback_label = st.selectbox("Lookback Period", list(lookback_options.keys()), index=0)
+        lookback_q = lookback_options[lookback_label]
+
+    with fc2:
         min_value = st.slider(
             "Min Position Value ($M)",
             min_value=0,
@@ -31,7 +36,7 @@ def render():
             help="Set to 0 to see all positions",
         )
 
-    with fc2:
+    with fc3:
         category_options = ["all", "fundamental", "activist", "macro", "quant"]
         selected_categories = st.multiselect(
             "Filer Category",
@@ -39,7 +44,7 @@ def render():
             default=["all"],
         )
 
-    with fc3:
+    with fc4:
         exclude_etfs = st.toggle("Exclude ETF Positions", value=True)
 
     # Normalize categories
@@ -62,6 +67,7 @@ def render():
             min_value=min_value,
             categories=categories,
             progress_callback=_update_progress,
+            lookback_quarters=lookback_q,
         )
         progress_bar.empty()
     except Exception as e:
@@ -71,8 +77,8 @@ def render():
 
     if df.empty:
         st.warning(
-            f"No 13F whale data available for Q{sel_quarter} {sel_year}. "
-            "The SEC bulk file may not be published yet for this quarter."
+            f"No 13F whale data available for the selected lookback period ({lookback_label}). "
+            "SEC filings may not be published yet."
         )
         return
 
@@ -366,49 +372,39 @@ def _render_ai_summary(df: pd.DataFrame):
 
 
 def _render_treemap(df: pd.DataFrame):
-    """Treemap: block size = position value, color = filer category."""
-    chart_df = df[df["value_curr"] > 0].copy()
+    """Treemap: block size = absolute value change, color = green (buy) / red (sell)."""
+    chart_df = df[df["value_change"] != 0].copy()
     if chart_df.empty:
         return
 
-    # Take top 50 for readability
-    chart_df = chart_df.nlargest(50, "value_curr")
+    chart_df["abs_change"] = chart_df["value_change"].abs()
+    chart_df = chart_df.nlargest(50, "abs_change")
 
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
             f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:Courier New,monospace;">'
-            "WHALE HOLDINGS TREEMAP</span></div>",
+            "POSITION CHANGES TREEMAP — BUYS vs SELLS</span></div>",
             unsafe_allow_html=True,
         )
-
-        # Category -> color mapping
-        cat_colors = {
-            "fundamental": COLORS["green"],
-            "activist": COLORS["yellow"],
-            "macro": COLORS["blue"],
-            "quant": COLORS["red"],
-            "": COLORS["text_dim"],
-        }
 
         filer_names = chart_df["filer"].fillna("Unknown").apply(lambda n: str(n)[:25])
         issuer_names = chart_df.get("issuer", pd.Series([""] * len(chart_df))).fillna("Unknown").apply(
             lambda n: str(n)[:20]
         )
 
+        change_m = chart_df["value_change"] / 1000  # to $M
         labels = [
-            f"{iss}<br>({fil})"
-            for iss, fil in zip(issuer_names, filer_names)
+            f"{iss}<br>({fil})<br>${v:+,.0f}M"
+            for iss, fil, v in zip(issuer_names, filer_names, change_m)
         ]
-        parents = filer_names.tolist()
-        values = (chart_df["value_curr"] / 1000).tolist()  # in $M
+        values = (chart_df["abs_change"] / 1000).tolist()  # absolute $M for block size
 
         colors = [
-            cat_colors.get(str(c), COLORS["text_dim"])
-            for c in chart_df["whale_category"]
+            COLORS["green"] if v > 0 else COLORS["red"]
+            for v in chart_df["value_change"]
         ]
 
-        # Flat treemap — no parent hierarchy, just colored blocks
         fig = go.Figure()
         fig.add_trace(
             go.Treemap(
@@ -419,16 +415,15 @@ def _render_treemap(df: pd.DataFrame):
                     colors=colors,
                     line=dict(color=COLORS["bg"], width=2),
                 ),
-                textinfo="label+value",
-                texttemplate="<b>%{label}</b><br>$%{value:,.0f}M",
+                textinfo="label",
                 textfont=dict(size=10, color="white", family="Courier New, monospace"),
-                hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}M<extra></extra>",
+                hovertemplate="<b>%{label}</b><br>|Change|: $%{value:,.0f}M<extra></extra>",
             )
         )
 
         fig.update_layout(
             title=dict(
-                text="Whale Holdings by Filer & Category",
+                text="Position Changes — Block size = $ change magnitude",
                 font=dict(color=COLORS["text"]),
             ),
             paper_bgcolor=COLORS["bg"],
@@ -438,11 +433,8 @@ def _render_treemap(df: pd.DataFrame):
         )
         st.plotly_chart(fig, use_container_width=True)
         st.caption(
-            f"Color: "
-            f"<span style='color:{COLORS['green']}'>fundamental</span> · "
-            f"<span style='color:{COLORS['yellow']}'>activist</span> · "
-            f"<span style='color:{COLORS['blue']}'>macro</span> · "
-            f"<span style='color:{COLORS['red']}'>quant</span> — "
-            "Block size = position value ($M)",
+            f"<span style='color:{COLORS['green']}'>Green</span> = buys/increases · "
+            f"<span style='color:{COLORS['red']}'>Red</span> = sells/decreases — "
+            "Block size = absolute dollar change",
             unsafe_allow_html=True,
         )
