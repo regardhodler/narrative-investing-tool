@@ -52,6 +52,7 @@ with st.sidebar:
             "6 · Options Activity",
             "7 · Valuation",
             "8 · Whale Buyers",
+            "9 · Stress Signals",
         ],
     )
 
@@ -82,4 +83,7 @@ elif page.startswith("7"):
     render()
 elif page.startswith("8"):
     from modules.whale_buyers import render
+    render()
+elif page.startswith("9"):
+    from modules.stress_signals import render
     render()

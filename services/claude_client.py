@@ -423,6 +423,61 @@ Whale activity data:
     return text
 
 
+@st.cache_data(ttl=3600)
+def generate_doom_briefing(stress_data: str) -> str:
+    """Generate an ominous risk intelligence briefing from stress signal data via Groq.
+
+    Returns a markdown-formatted doom briefing string.
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate doom briefing."
+
+    prompt = f"""You are a doomsday-focused financial risk analyst. Your job is to be the canary in the coal mine — flagging systemic risks that mainstream analysts ignore.
+
+Analyze the following stress signal data and write a dramatic but data-driven risk assessment briefing.
+
+Rules:
+- Be direct about risks. Do NOT sugarcoat. If something looks bad, say it looks bad.
+- Flag any systemic concerns — contagion risks, interconnected failures, cascading defaults.
+- Rate overall financial system stress from 1-10 (1 = calm seas, 10 = 2008-level crisis).
+- Use ominous, urgent language but remain factual and professional.
+- Structure as: STRESS LEVEL rating, then 4-6 bullet points on the most concerning signals, then a 2-3 sentence closing assessment.
+- If data is limited or unavailable, note what you cannot assess and why that itself is concerning.
+
+Stress Signal Data:
+{stress_data}"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1000,
+                "temperature": 0.4,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating doom briefing: {e}"
+
+    # Strip markdown fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    return text
+
+
 def _empty_result() -> dict:
     return {
         "market_relevant": False,
