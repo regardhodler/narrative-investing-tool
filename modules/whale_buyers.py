@@ -380,29 +380,20 @@ def _render_treemap(df: pd.DataFrame):
             for c in chart_df["whale_category"]
         ]
 
-        # Build hierarchical data: add parent entries for each filer
-        unique_filers = chart_df.drop_duplicates(subset=["filer"])
-        for _, row in unique_filers.iterrows():
-            filer = str(row["filer"])[:25]
-            cat = str(row.get("whale_category", ""))
-            labels.append(filer)
-            parents.append("")
-            values.append(0)
-            colors.append(cat_colors.get(cat, COLORS["text_dim"]))
-
+        # Flat treemap — no parent hierarchy, just colored blocks
         fig = go.Figure()
         fig.add_trace(
             go.Treemap(
                 labels=labels,
-                parents=parents,
+                parents=[""] * len(labels),
                 values=values,
                 marker=dict(
                     colors=colors,
                     line=dict(color=COLORS["bg"], width=2),
                 ),
-                branchvalues="total",
-                textinfo="label",
-                textfont=dict(size=11, color="white", family="Courier New, monospace"),
+                textinfo="label+value",
+                texttemplate="<b>%{label}</b><br>$%{value:,.0f}M",
+                textfont=dict(size=10, color="white", family="Courier New, monospace"),
                 hovertemplate="<b>%{label}</b><br>Value: $%{value:,.0f}M<extra></extra>",
             )
         )
