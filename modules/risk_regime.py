@@ -573,8 +573,8 @@ def _make_gauge(score: float, regime: str, color: str) -> go.Figure:
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=round(score * 100, 1),
-        title={"text": "Risk Regime Score", "font": {"size": 16, "color": COLORS["text"]}},
-        number={"suffix": "", "font": {"size": 28, "color": color}},
+        title={"text": f"Risk Regime Score ({score:+.2f})", "font": {"size": 16, "color": COLORS["text"]}},
+        number={"suffix": " / 100", "font": {"size": 28, "color": color}},
         gauge={
             "axis": {"range": [-100, 100], "tickwidth": 1, "tickcolor": COLORS["text_dim"]},
             "bar": {"color": color, "thickness": 0.3},
