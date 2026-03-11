@@ -12,7 +12,7 @@ from utils.theme import COLORS, apply_dark_layout
 
 
 def render():
-    st.header("13F WHALE BUYERS")
+    st.header("13F WHALE MOVEMENT")
     st.caption(
         "Compares each whale's two most recent 13F filings to surface new/changed positions. "
         f"Tracking **{len(WHALE_FILERS)} institutional filers** across SEC EDGAR."

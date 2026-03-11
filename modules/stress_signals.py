@@ -688,7 +688,7 @@ def render():
         # Detail table
         with st.expander("Whale Exit Details", expanded=False):
             display_cols = []
-            for col in ["filer", "issuer", "status", "value_change", "whale_category"]:
+            for col in ["filing_date", "filer", "issuer", "status", "value_change", "whale_category"]:
                 if col in exits_df.columns:
                     display_cols.append(col)
 
@@ -728,34 +728,30 @@ def render():
                 st.info("No data available.")
                 return
 
-            html = """
-            <table style="width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;">
-                <thead>
-                    <tr style="border-bottom:2px solid #661111;color:#888;">
-                        <th style="text-align:left;padding:6px;">Entity</th>
-                        <th style="text-align:right;padding:6px;">Net Notional ($B)</th>
-                        <th style="text-align:right;padding:6px;">Gross Notional ($B)</th>
-                        <th style="text-align:right;padding:6px;">QoQ Change</th>
-                        <th style="text-align:right;padding:6px;">Contracts</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
-            for e in entities:
-                qoq = e["qoq_change_pct"]
-                # Red = increasing (more protection buying = stress)
-                qoq_color = DOOM_RED if qoq > 0 else COLORS["green"]
-                html += f"""
-                <tr style="border-bottom:1px solid #222;">
-                    <td style="padding:4px 6px;color:{COLORS['text']};">{e['entity']}</td>
-                    <td style="text-align:right;padding:4px 6px;color:{COLORS['text']};">${e['net_notional_bn']:.1f}B</td>
-                    <td style="text-align:right;padding:4px 6px;color:{COLORS['text_dim']};">${e['gross_notional_bn']:.1f}B</td>
-                    <td style="text-align:right;padding:4px 6px;color:{qoq_color};">{qoq:+.1f}%</td>
-                    <td style="text-align:right;padding:4px 6px;color:{COLORS['text_dim']};">{e['contracts']:,}</td>
-                </tr>
-                """
-            html += "</tbody></table>"
-            st.markdown(_doom_container(html), unsafe_allow_html=True)
+            cds_df = pd.DataFrame(entities)
+            cds_df = cds_df.rename(columns={
+                "entity": "Entity",
+                "net_notional_bn": "Net Notional ($B)",
+                "gross_notional_bn": "Gross Notional ($B)",
+                "qoq_change_pct": "QoQ Change %",
+                "contracts": "Contracts",
+            })
+
+            def _color_qoq(val):
+                if isinstance(val, (int, float)):
+                    if val > 0:
+                        return f"color: {DOOM_RED}"
+                    elif val < 0:
+                        return f"color: {_green}"
+                return ""
+
+            styled = cds_df.style.map(_color_qoq, subset=["QoQ Change %"]).format({
+                "Net Notional ($B)": "${:.1f}B",
+                "Gross Notional ($B)": "${:.1f}B",
+                "QoQ Change %": "{:+.1f}%",
+                "Contracts": "{:,}",
+            })
+            st.dataframe(styled, use_container_width=True, hide_index=True)
 
         with tab_sov:
             _render_cds_table(DTCC_TOP_CDS.get("sovereign", []))
@@ -763,11 +759,7 @@ def render():
         with tab_corp:
             _render_cds_table(DTCC_TOP_CDS.get("corporate", []))
 
-        st.markdown(
-            f"<p style='color:{COLORS['text_dim']};font-size:10px;'>"
-            "&#9888; Sample data &mdash; update from DTCC quarterly reports at dtcc.com/repository-otc-data</p>",
-            unsafe_allow_html=True,
-        )
+        st.caption("Sample data — update from DTCC quarterly reports at dtcc.com/repository-otc-data")
 
     # ── 7. AI Doom Briefing ──
     st.markdown(f"### <span style='color:{DOOM_RED};'>AI RISK INTELLIGENCE BRIEFING</span>", unsafe_allow_html=True)

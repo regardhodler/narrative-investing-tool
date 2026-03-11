@@ -51,7 +51,7 @@ with st.sidebar:
             "5 · Insider & Congress",
             "6 · Options Activity",
             "7 · Valuation",
-            "8 · Whale Buyers",
+            "8 · Whale Movement",
             "9 · Stress Signals",
         ],
     )
