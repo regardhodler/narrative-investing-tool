@@ -318,6 +318,7 @@ def _render_company_overview(ticker: str):
         company_info = get_company_info(ticker)
 
     if not company_info:
+        st.warning(f"Could not fetch company info for {ticker} from SEC. The SEC API may be temporarily unavailable.")
         return
 
     with st.spinner("Generating company overview..."):
