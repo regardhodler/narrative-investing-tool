@@ -370,6 +370,59 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
         return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
 
 
+@st.cache_data(ttl=3600)
+def summarize_whale_activity(activity_text: str) -> str:
+    """Summarize whale 13F activity into a narrative via Groq.
+
+    Returns a markdown-formatted narrative string about big money themes this quarter.
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate whale activity summary."
+
+    prompt = f"""You are a top-tier institutional equity analyst. Analyze these quarterly 13F whale position changes and write a concise narrative summary.
+
+Focus on:
+- What themes or sectors are the biggest hedge funds and institutions converging on?
+- Which names are seeing the most conviction (multiple whales buying)?
+- Are there notable exits or position closures that signal a shift?
+- What does the overall flow pattern suggest about institutional sentiment?
+
+Keep the summary to 4-6 bullet points. Be specific about names, dollar amounts, and the whales involved.
+
+Whale activity data:
+{activity_text}"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 800,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating whale summary: {e}"
+
+    # Strip markdown fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    return text
+
+
 def _empty_result() -> dict:
     return {
         "market_relevant": False,
