@@ -13,13 +13,10 @@ from utils.theme import COLORS, apply_dark_layout
 
 def render():
     st.header("13F WHALE BUYERS")
-
-    # --- Quarter selector ---
-    quarters = get_available_quarters()
-    quarter_labels = [f"Q{q} {y}" for y, q in quarters]
-    selected_label = st.selectbox("Quarter", quarter_labels, index=0)
-    selected_idx = quarter_labels.index(selected_label)
-    sel_year, sel_quarter = quarters[selected_idx]
+    st.caption(
+        "Compares each whale's two most recent 13F filings to surface new/changed positions. "
+        f"Tracking **{len(WHALE_FILERS)} institutional filers** across SEC EDGAR."
+    )
 
     # --- Filter controls ---
     fc1, fc2, fc3 = st.columns([1, 1, 1])
@@ -27,10 +24,11 @@ def render():
     with fc1:
         min_value = st.slider(
             "Min Position Value ($M)",
-            min_value=1,
+            min_value=0,
             max_value=100,
-            value=1,
+            value=0,
             step=1,
+            help="Set to 0 to see all positions",
         )
 
     with fc2:
@@ -51,20 +49,25 @@ def render():
         categories = selected_categories
 
     # --- Fetch data ---
-    with st.spinner("Downloading 13F bulk data from SEC (this may take a moment)..."):
-        try:
-            df = screen_whale_buyers(
-                year=sel_year,
-                quarter=sel_quarter,
-                top_n=200,
-                whale_only=True,
-                exclude_etfs=exclude_etfs,
-                min_value=min_value,
-                categories=categories,
-            )
-        except Exception as e:
-            st.error(f"Failed to fetch 13F data: {e}")
-            return
+    progress_bar = st.progress(0, text="Fetching 13F filings from SEC EDGAR...")
+
+    def _update_progress(done, total):
+        progress_bar.progress(done / total, text=f"Scanning whale filers... {done}/{total}")
+
+    try:
+        df = screen_whale_buyers(
+            top_n=200,
+            whale_only=True,
+            exclude_etfs=exclude_etfs,
+            min_value=min_value,
+            categories=categories,
+            progress_callback=_update_progress,
+        )
+        progress_bar.empty()
+    except Exception as e:
+        progress_bar.empty()
+        st.error(f"Failed to fetch 13F data: {e}")
+        return
 
     if df.empty:
         st.warning(
