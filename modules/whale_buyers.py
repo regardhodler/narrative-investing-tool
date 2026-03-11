@@ -161,9 +161,10 @@ def _render_main_table(df: pd.DataFrame):
             lambda n: str(n)[:30]
         )
         display["CUSIP"] = display["cusip"].fillna("")
+        display["Filing Date"] = display["filing_date"].fillna("")
         display["Status"] = display["status"]
 
-        show_cols = ["Filer", "Issuer", "CUSIP", "Value ($M)", "Change ($M)", "Change %", "Status"]
+        show_cols = ["Filer", "Issuer", "CUSIP", "Value ($M)", "Change ($M)", "Change %", "Status", "Filing Date"]
         show = display[show_cols]
 
         def _color_status(val):
