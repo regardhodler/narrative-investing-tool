@@ -190,8 +190,11 @@ def _render_main_table(df: pd.DataFrame):
 
 
 def _render_new_positions_chart(df: pd.DataFrame):
-    """Horizontal bar chart of top 20 new/increased positions by value change."""
-    top = df[df["value_change"] > 0].nlargest(20, "value_change").copy()
+    """Horizontal bar chart of top 20 position changes — buys green, sells red."""
+    # Top 10 buys + top 10 sells
+    buys = df[df["value_change"] > 0].nlargest(10, "value_change")
+    sells = df[df["value_change"] < 0].nsmallest(10, "value_change")
+    top = pd.concat([buys, sells]).copy()
     if top.empty:
         return
 
@@ -199,7 +202,7 @@ def _render_new_positions_chart(df: pd.DataFrame):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
             f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:Courier New,monospace;">'
-            "TOP 20 POSITION INCREASES</span></div>",
+            "TOP 20 POSITION CHANGES — BUYS vs SELLS</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -212,10 +215,16 @@ def _render_new_positions_chart(df: pd.DataFrame):
         ]
         values = top["value_change"] / 1000  # to $M
 
-        bar_colors = [
-            COLORS["green"] if row["status"] == "NEW" else COLORS["accent"]
-            for _, row in top.iterrows()
-        ]
+        bar_colors = []
+        for _, row in top.iterrows():
+            if row["status"] == "CLOSED":
+                bar_colors.append("#FF2222")  # bright red
+            elif row["status"] == "DECREASED":
+                bar_colors.append("#CC4444")  # dimmer red
+            elif row["status"] == "NEW":
+                bar_colors.append(COLORS["green"])
+            else:
+                bar_colors.append(COLORS["accent"])
 
         fig = go.Figure()
         fig.add_trace(
@@ -224,32 +233,35 @@ def _render_new_positions_chart(df: pd.DataFrame):
                 x=values,
                 orientation="h",
                 marker_color=bar_colors,
-                text=values.apply(lambda v: f"${v:,.0f}M"),
+                text=[f"${v:+,.0f}M" for v in values],
                 textposition="outside",
-                hovertemplate="<b>%{y}</b><br>Change: $%{x:,.0f}M<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>Change: $%{x:+,.0f}M<extra></extra>",
             )
         )
 
+        # Add zero line
+        fig.add_vline(x=0, line_dash="dash", line_color=COLORS["text_dim"], line_width=1)
+
         apply_dark_layout(
             fig,
-            title="Top 20 Position Increases by Value",
+            title="Top Position Changes by Value (Green = Buy, Red = Sell)",
             xaxis_title="Value Change ($M)",
             margin=dict(l=250, r=80, t=50, b=40),
         )
         fig.update_layout(height=600)
         st.plotly_chart(fig, use_container_width=True)
         st.caption(
-            f"Bar color: <span style='color:{COLORS['green']}'>green</span> = brand new position, "
-            f"<span style='color:{COLORS['accent']}'>teal</span> = increased existing",
+            f"<span style='color:{COLORS['green']}'>Green</span> = new position · "
+            f"<span style='color:{COLORS['accent']}'>Teal</span> = increased · "
+            f"<span style='color:#CC4444'>Light red</span> = decreased · "
+            f"<span style='color:#FF2222'>Red</span> = fully closed",
             unsafe_allow_html=True,
         )
 
 
 def _render_convergence(df: pd.DataFrame):
-    """Whale convergence: CUSIPs where 3+ whales bought."""
-    buys = df[df["value_change"] > 0].copy()
-    if buys.empty:
-        return
+    """Whale convergence: names where multiple whales are buying or selling."""
+    dim = COLORS["text_dim"]
 
     def _agg_convergence(data):
         return data.groupby("cusip").agg(
@@ -260,46 +272,62 @@ def _render_convergence(df: pd.DataFrame):
             latest_date=("filing_date", "max"),
         ).reset_index()
 
-    convergence = _agg_convergence(buys)
-    convergence = convergence[convergence["whale_count"] >= 3].sort_values(
-        "whale_count", ascending=False
-    )
+    def _find_convergence(data, min_whales=2):
+        if data.empty:
+            return pd.DataFrame()
+        conv = _agg_convergence(data)
+        conv = conv[conv["whale_count"] >= min_whales].sort_values("whale_count", ascending=False)
+        return conv
 
-    if convergence.empty:
-        convergence = _agg_convergence(buys)
-        convergence = convergence[convergence["whale_count"] >= 2].sort_values(
-            "whale_count", ascending=False
-        )
-        if convergence.empty:
-            return
-        threshold_label = "2+"
-    else:
-        threshold_label = "3+"
-
-    with st.container(border=True):
-        st.markdown(
-            f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["yellow"]};font-weight:700;font-family:Courier New,monospace;">'
-            f"WHALE CONVERGENCE ({threshold_label} buyers on the same name)</span></div>",
-            unsafe_allow_html=True,
-        )
-
-        dim = COLORS["text_dim"]
-        for _, row in convergence.head(15).iterrows():
+    def _render_conv_list(conv_df, color, action_word):
+        for _, row in conv_df.head(10).iterrows():
             issuer = str(row["issuer"])[:30] if pd.notna(row["issuer"]) else row["cusip"]
-            val_m = row["total_change"] / 1000
+            val_m = abs(row["total_change"]) / 1000
             filed = row.get("latest_date", "")
             date_str = f" · Filed {filed}" if filed else ""
             st.markdown(
-                f'<div style="padding:6px 12px;margin:4px 0;border-left:3px solid {COLORS["yellow"]};">'
+                f'<div style="padding:6px 12px;margin:4px 0;border-left:3px solid {color};">'
                 f'<span style="color:{COLORS["text"]};font-family:Courier New,monospace;">'
-                f'<b style="color:{COLORS["yellow"]}">{issuer}</b> — '
-                f'{row["whale_count"]} whales, ${val_m:,.0f}M total buying'
+                f'<b style="color:{color}">{issuer}</b> — '
+                f'{row["whale_count"]} whales {action_word}, ${val_m:,.0f}M total'
                 f'<span style="color:{dim};font-size:0.8em;">{date_str}</span><br>'
                 f'<span style="color:{dim};font-size:0.85em;">{row["whales"]}</span>'
                 "</span></div>",
                 unsafe_allow_html=True,
             )
+
+    # Buying convergence
+    buys = df[df["value_change"] > 0].copy()
+    buy_conv = _find_convergence(buys, 2)
+
+    # Selling convergence
+    sells = df[df["value_change"] < 0].copy()
+    sell_conv = _find_convergence(sells, 2)
+
+    if buy_conv.empty and sell_conv.empty:
+        return
+
+    with st.container(border=True):
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
+            f'<span style="color:{COLORS["yellow"]};font-weight:700;font-family:Courier New,monospace;">'
+            "WHALE CONVERGENCE — Multiple whales on the same name</span></div>",
+            unsafe_allow_html=True,
+        )
+
+        tab_buy, tab_sell = st.tabs(["Buying Together", "Selling Together"])
+
+        with tab_buy:
+            if not buy_conv.empty:
+                _render_conv_list(buy_conv, COLORS["green"], "buying")
+            else:
+                st.caption("No buying convergence detected.")
+
+        with tab_sell:
+            if not sell_conv.empty:
+                _render_conv_list(sell_conv, "#FF2222", "selling")
+            else:
+                st.caption("No selling convergence detected.")
 
 
 def _render_ai_summary(df: pd.DataFrame):
