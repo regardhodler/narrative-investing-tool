@@ -273,7 +273,7 @@ def _style_canary_df(df: pd.DataFrame) -> str:
 
         rows_html += f"""
         <tr>
-            <td colspan="8" style="background:#1A0505;color:{DOOM_RED};font-weight:700;
+            <td colspan="7" style="background:#1A0505;color:{DOOM_RED};font-weight:700;
                                    padding:8px 12px;border-bottom:1px solid {DOOM_BORDER};">
                 {cat}
             </td>
@@ -533,11 +533,49 @@ def render():
         from services.stress_client import CANARY_TICKERS as _CT
         CANARY_TICKERS_ORDER = list(_CT.keys())
 
-        canary_html = _style_canary_df(canary_df)
-        st.markdown(
-            _doom_container(canary_html, border_color=DOOM_BORDER),
-            unsafe_allow_html=True,
-        )
+        # Sort by category order then display as styled dataframe
+        cat_order = {cat: i for i, cat in enumerate(CANARY_TICKERS_ORDER)}
+        display_df = canary_df.copy()
+        display_df["_sort"] = display_df["category"].map(cat_order).fillna(99)
+        display_df = display_df.sort_values("_sort").drop(columns=["_sort"])
+
+        # Format for display
+        display_df = display_df.rename(columns={
+            "ticker": "Ticker", "category": "Category", "price": "Price",
+            "1w_ret": "1W %", "1m_ret": "1M %", "3m_ret": "3M %",
+            "drawdown_52w": "52W DD %", "volume_ratio": "Vol Ratio",
+        })
+
+        def _color_returns(val):
+            if isinstance(val, (int, float)):
+                if val < -20:
+                    return f"color: {DOOM_RED}; font-weight: bold"
+                elif val < 0:
+                    return f"color: {DOOM_RED}"
+                elif val > 0:
+                    return f"color: {_green}"
+            return ""
+
+        def _color_vol(val):
+            if isinstance(val, (int, float)) and val > 2.0:
+                return f"color: {DOOM_YELLOW}; font-weight: bold"
+            return ""
+
+        ret_cols = ["1W %", "1M %", "3M %", "52W DD %"]
+        styled = display_df.style.map(
+            _color_returns, subset=ret_cols
+        ).map(
+            _color_vol, subset=["Vol Ratio"]
+        ).format({
+            "Price": "${:.2f}",
+            "1W %": "{:+.1f}%",
+            "1M %": "{:+.1f}%",
+            "3M %": "{:+.1f}%",
+            "52W DD %": "{:+.1f}%",
+            "Vol Ratio": "{:.1f}x",
+        })
+
+        st.dataframe(styled, use_container_width=True, hide_index=True, height=600)
 
         # Alert for severe drawdowns
         severe = canary_df[canary_df["drawdown_52w"] < -20]
