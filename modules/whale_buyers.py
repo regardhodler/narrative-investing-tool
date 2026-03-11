@@ -155,16 +155,15 @@ def _render_main_table(df: pd.DataFrame):
             lambda p: f"{p:+.1f}%" if abs(p) < 10000 else "NEW" if p > 0 else "CLOSED"
         )
         display["Filer"] = display["filer"].fillna("").apply(
-            lambda n: str(n)[:30]
+            lambda n: str(n)[:25]
         )
         display["Issuer"] = display.get("issuer", pd.Series([""] * len(display))).fillna("").apply(
-            lambda n: str(n)[:30]
+            lambda n: str(n)[:25]
         )
-        display["CUSIP"] = display["cusip"].fillna("")
-        display["Filing Date"] = display["filing_date"].fillna("")
+        display["Filed"] = display["filing_date"].fillna("")
         display["Status"] = display["status"]
 
-        show_cols = ["Filer", "Issuer", "CUSIP", "Value ($M)", "Change ($M)", "Change %", "Status", "Filing Date"]
+        show_cols = ["Filed", "Filer", "Issuer", "Value ($M)", "Change ($M)", "Change %", "Status"]
         show = display[show_cols]
 
         def _color_status(val):
@@ -252,25 +251,22 @@ def _render_convergence(df: pd.DataFrame):
     if buys.empty:
         return
 
-    convergence = buys.groupby("cusip").agg(
-        whale_count=("filer", "nunique"),
-        whales=("filer", lambda x: ", ".join(sorted(set(str(n)[:20] for n in x)))),
-        issuer=("issuer", "first"),
-        total_change=("value_change", "sum"),
-    ).reset_index()
+    def _agg_convergence(data):
+        return data.groupby("cusip").agg(
+            whale_count=("filer", "nunique"),
+            whales=("filer", lambda x: ", ".join(sorted(set(str(n)[:20] for n in x)))),
+            issuer=("issuer", "first"),
+            total_change=("value_change", "sum"),
+            latest_date=("filing_date", "max"),
+        ).reset_index()
 
+    convergence = _agg_convergence(buys)
     convergence = convergence[convergence["whale_count"] >= 3].sort_values(
         "whale_count", ascending=False
     )
 
     if convergence.empty:
-        # Lower threshold to 2 if no 3+ convergence
-        convergence = buys.groupby("cusip").agg(
-            whale_count=("filer", "nunique"),
-            whales=("filer", lambda x: ", ".join(sorted(set(str(n)[:20] for n in x)))),
-            issuer=("issuer", "first"),
-            total_change=("value_change", "sum"),
-        ).reset_index()
+        convergence = _agg_convergence(buys)
         convergence = convergence[convergence["whale_count"] >= 2].sort_values(
             "whale_count", ascending=False
         )
@@ -288,15 +284,19 @@ def _render_convergence(df: pd.DataFrame):
             unsafe_allow_html=True,
         )
 
+        dim = COLORS["text_dim"]
         for _, row in convergence.head(15).iterrows():
             issuer = str(row["issuer"])[:30] if pd.notna(row["issuer"]) else row["cusip"]
             val_m = row["total_change"] / 1000
+            filed = row.get("latest_date", "")
+            date_str = f" · Filed {filed}" if filed else ""
             st.markdown(
                 f'<div style="padding:6px 12px;margin:4px 0;border-left:3px solid {COLORS["yellow"]};">'
                 f'<span style="color:{COLORS["text"]};font-family:Courier New,monospace;">'
                 f'<b style="color:{COLORS["yellow"]}">{issuer}</b> — '
-                f'{row["whale_count"]} whales, ${val_m:,.0f}M total buying<br>'
-                f'<span style="color:{COLORS["text_dim"]};font-size:0.85em;">{row["whales"]}</span>'
+                f'{row["whale_count"]} whales, ${val_m:,.0f}M total buying'
+                f'<span style="color:{dim};font-size:0.8em;">{date_str}</span><br>'
+                f'<span style="color:{dim};font-size:0.85em;">{row["whales"]}</span>'
                 "</span></div>",
                 unsafe_allow_html=True,
             )
@@ -313,7 +313,9 @@ def _render_ai_summary(df: pd.DataFrame):
         )
 
         # Build text summary of top 20 changes for the AI
-        top20 = df.nlargest(20, df["value_change"].abs())
+        df_sorted = df.copy()
+        df_sorted["_abs_change"] = df_sorted["value_change"].abs()
+        top20 = df_sorted.nlargest(20, "_abs_change")
         lines = []
         for _, row in top20.iterrows():
             filer = str(row.get("filer", "Unknown"))[:30]
