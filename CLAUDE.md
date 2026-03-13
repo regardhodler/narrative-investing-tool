@@ -4,16 +4,18 @@
 Streamlit-based multi-module investment intelligence dashboard. Entry point: `app.py`.
 
 ## Architecture
-- `app.py` — Streamlit app with sidebar module routing (8 modules), password auth gate via APP_PASSWORD env var
+- `app.py` — Streamlit app with sidebar module routing (10 modules), password auth gate via APP_PASSWORD env var
 - `modules/` — Each module is a standalone `render()` function
   - `risk_regime.py` — Module 0: Cross-asset risk-on/risk-off regime indicator (z-score based, 17+ signals, daily history)
   - `narrative_discovery.py` — Module 1: Ticker/narrative discovery (AI-grouped by narrative themes)
-  - `narrative_pulse.py` — Module 2: Narrative sentiment tracking
+  - `narrative_pulse.py` — Module 2: Price action & narrative sentiment tracking
   - `edgar_scanner.py` — Module 3: SEC EDGAR filing search
   - `institutional.py` — Module 4: 13F institutional holdings analysis
   - `insider_congress.py` — Module 5: Form 4 insider trades & Congress trades
   - `options_activity.py` — Module 6: Options flow analysis (with unusual activity sentiment verdict + chart)
   - `valuation.py` — Module 7: AI Valuation & Recommendation (aggregates all signals, Groq-powered rating)
+  - `whale_buyers.py` — Module 8: 13F Whale Movement (diffs two most recent filings per filer to surface new/changed positions)
+  - `stress_signals.py` — Module 9: Stress Signals / Doomsday Monitor (credit stress, institutional exits, distress filings, systemic risk)
 - `services/` — API clients
   - `sec_client.py` — SEC EDGAR API (filings, 13F, insider trades, CIK mapping)
   - `claude_client.py` — Claude AI integration
@@ -21,6 +23,8 @@ Streamlit-based multi-module investment intelligence dashboard. Entry point: `ap
   - `ibkr_client.py` — Interactive Brokers connection
   - `trends_client.py` — Google Trends
   - `market_data.py` — Shared market data layer (yfinance batch fetch, z-scores, AssetSnapshot dataclass)
+  - `stress_client.py` — Stress signals data layer (FRED credit indicators, canary watchlist via yfinance, distress filings from SEC)
+  - `whale_screener.py` — 13F whale screener (per-filer 13F XML parsing, holdings diff across two most recent filings)
 - `utils/` — Shared utilities
   - `session.py` — Streamlit session state helpers (ticker, narrative, IBKR status)
   - `theme.py` — Dark theme colors (`COLORS` dict) and `apply_dark_layout()` for Plotly
