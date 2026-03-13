@@ -29,6 +29,7 @@ from datetime import datetime, timedelta
 
 from services.market_data import (
     fetch_batch, fetch_truflation, zscore, ratio_latest, AssetSnapshot,
+    fetch_fred_series, fetch_options_chain_snapshot,
 )
 from utils.theme import COLORS, apply_dark_layout
 
@@ -95,6 +96,7 @@ TICKERS = {
     # Equity - US
     "SPY": "S&P 500",
     "QQQ": "Nasdaq 100",
+    "^DJI": "Dow Jones Industrial Average",
     "IWM": "Russell 2000",
     "XLF": "Financials",
     "XLE": "Energy",
@@ -809,260 +811,476 @@ def _make_heatmap(signals: list) -> go.Figure:
 # RENDER
 # ─────────────────────────────────────────────
 
+def _score_to_bucket(score: float) -> tuple[str, str]:
+    if score >= 0.2:
+        return "🟢", "Risk-On"
+    if score <= -0.2:
+        return "🔴", "Risk-Off"
+    return "🟡", "Neutral"
+
+
+def _safe_latest(series: pd.Series | None) -> float | None:
+    if series is None or series.empty:
+        return None
+    return float(series.dropna().iloc[-1]) if len(series.dropna()) else None
+
+
+def _yoy_latest(series: pd.Series | None, periods: int = 12) -> float | None:
+    if series is None or len(series.dropna()) <= periods:
+        return None
+    clean = series.dropna()
+    if len(clean) <= periods:
+        return None
+    base = clean.iloc[-periods - 1]
+    if base == 0:
+        return None
+    return float((clean.iloc[-1] / base - 1) * 100)
+
+
+def _clamp_score(value: float, scale: float) -> float:
+    return _clamp(value / max(scale, 1e-6))
+
+
+def _age_days(series: pd.Series | None) -> float | None:
+    if series is None or series.empty:
+        return None
+    clean = series.dropna()
+    if clean.empty:
+        return None
+    last_idx = clean.index[-1]
+    try:
+        last_ts = pd.Timestamp(last_idx)
+        now = pd.Timestamp.utcnow().tz_localize(None)
+        if last_ts.tzinfo is not None:
+            last_ts = last_ts.tz_convert(None)
+        return max(0.0, float((now - last_ts).days))
+    except Exception:
+        return None
+
+
+def _confidence_label(score: int) -> str:
+    if score >= 75:
+        return "High"
+    if score >= 50:
+        return "Medium"
+    return "Low"
+
+
+def _confidence_from_age(series: pd.Series | None, expected_days: int, fallback: int = 35) -> int:
+    days = _age_days(series)
+    if days is None:
+        return fallback
+    ratio = min(days / max(expected_days, 1), 2.0)
+    conf = int(round(100 - (ratio * 45)))
+    return max(25, min(95, conf))
+
+
+def _confidence_from_snap(*tickers: str, snaps: dict[str, AssetSnapshot]) -> int:
+    vals = []
+    for t in tickers:
+        snap = snaps.get(t)
+        if snap is None or snap.latest_price is None:
+            vals.append(35)
+        else:
+            vals.append(60 if snap.stale else 90)
+    return int(round(np.mean(vals))) if vals else 35
+
+
+def _interpret_valuation(cape: float | None, buffett: float | None) -> str:
+    if cape is None and buffett is None:
+        return "Valuation data unavailable."
+    if cape is not None and buffett is not None:
+        if cape > 30 and buffett > 150:
+            return "Both CAPE and Buffett Indicator point to an expensive equity market."
+        if cape < 20 and buffett < 110:
+            return "Both CAPE and Buffett Indicator suggest relatively attractive long-term valuation."
+    if cape is not None:
+        if cape > 28:
+            return "CAPE is elevated versus long-run norms, implying lower forward return expectations."
+        if cape < 20:
+            return "CAPE is below long-run highs, valuation risk appears more moderate."
+    if buffett is not None:
+        if buffett > 145:
+            return "Buffett Indicator is elevated, signaling stretched market-cap-to-GDP conditions."
+        if buffett < 110:
+            return "Buffett Indicator is in a more balanced zone relative to GDP."
+    return "Valuation is mixed; neither clearly cheap nor deeply stretched."
+
+
+def _portfolio_bias(regime: str) -> dict[str, str]:
+    if regime == "Risk-On":
+        return {
+            "Equities": "Overweight cyclical and broad beta exposure",
+            "Bonds": "Underweight duration; prefer short/intermediate credit",
+            "Commodities": "Moderate overweight (energy/industrial metals)",
+            "Defensive": "Underweight cash/defensive sectors",
+        }
+    if regime == "Risk-Off":
+        return {
+            "Equities": "Underweight high beta; tilt quality and low volatility",
+            "Bonds": "Overweight high-quality duration",
+            "Commodities": "Selective exposure, prefer gold over cyclicals",
+            "Defensive": "Overweight cash, defensives, and hedges",
+        }
+    return {
+        "Equities": "Neutral with barbell (quality + selective cyclicals)",
+        "Bonds": "Neutral duration with balanced IG exposure",
+        "Commodities": "Neutral, tactical allocations only",
+        "Defensive": "Moderate buffer via cash/defensive assets",
+    }
+
+
+def _compute_spy_gamma_mode(max_expiries: int = 2) -> dict | None:
+    snap = fetch_options_chain_snapshot("SPY", max_expiries=max_expiries)
+    if not snap:
+        return None
+
+    strikes = np.array(snap.get("strikes", []), dtype=float)
+    call_oi = np.array(snap.get("call_oi", []), dtype=float)
+    put_oi = np.array(snap.get("put_oi", []), dtype=float)
+    net_gamma = np.array(snap.get("net_gamma_proxy", []), dtype=float)
+    if len(strikes) == 0:
+        return None
+
+    price = float(snap["price"])
+    nearest_idx = int(np.argmin(np.abs(strikes - price)))
+    spot_gamma = float(net_gamma[nearest_idx]) if len(net_gamma) else 0.0
+    zone = "Positive Gamma Zone (Stable / low volatility)" if spot_gamma >= 0 else "Negative Gamma Zone (Volatile / trending)"
+
+    cumulative = np.cumsum(net_gamma)
+    gamma_flip = None
+    for i in range(1, len(cumulative)):
+        if (cumulative[i - 1] <= 0 < cumulative[i]) or (cumulative[i - 1] >= 0 > cumulative[i]):
+            gamma_flip = float(strikes[i])
+            break
+
+    call_wall = float(strikes[int(np.argmax(call_oi))]) if len(call_oi) else None
+    put_wall = float(strikes[int(np.argmax(put_oi))]) if len(put_oi) else None
+
+    return {
+        "price": price,
+        "zone": zone,
+        "gamma_flip": gamma_flip,
+        "call_wall": call_wall,
+        "put_wall": put_wall,
+        "strikes": strikes,
+        "net_gamma": net_gamma,
+    }
+
+
+def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False) -> dict:
+    fred_ids = {
+        "yield_curve": "T10Y2Y",
+        "credit_spread": "BAMLH0A0HYM2",
+        "m2": "M2SL",
+        "sahm": "SAHMREALTIME",
+        "unrate": "UNRATE",
+        "core_pce": "PCEPILFE",
+        "cape": "CAPE",
+        "wilshire": "WILL5000INDFC",
+        "gdp": "GDP",
+        "capex": "NCBDBIQ027S",
+        "term_premium": "THREEFYTP10",
+        "ism": "NAPM",
+        "fci": "NFCI",
+    }
+    fred = {k: fetch_fred_series(v) for k, v in fred_ids.items()}
+
+    indicators = []
+
+    yc = _safe_latest(fred["yield_curve"])
+    yc_score = _clamp_score((yc or 0.0), 1.0)
+    indicators.append(("Yield Curve (10Y-2Y)", yc, "bps", yc_score, _confidence_from_age(fred["yield_curve"], expected_days=14)))
+
+    cs = _safe_latest(fred["credit_spread"])
+    cs_score = _clamp_score((4.0 - (cs or 4.0)), 2.0)
+    indicators.append(("Credit Spreads (HY vs Treasuries)", cs, "%", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
+
+    oil = snaps.get("USO").pct_change_30d if snaps.get("USO") else None
+    copper = snaps.get("CPER").pct_change_30d if snaps.get("CPER") else None
+    commodity_trend = np.nanmean([oil if oil is not None else np.nan, copper if copper is not None else np.nan])
+    commodity_trend = None if np.isnan(commodity_trend) else float(commodity_trend)
+    commodity_score = _clamp_score((commodity_trend or 0.0), 5.0)
+    indicators.append(("Commodity Trend (Oil + Copper)", commodity_trend, "% 30d", commodity_score, _confidence_from_snap("USO", "CPER", snaps=snaps)))
+
+    dxy = snaps.get("UUP").pct_change_30d if snaps.get("UUP") else None
+    dxy_score = _clamp_score((-(dxy or 0.0)), 3.0)
+    indicators.append(("US Dollar Index (DXY proxy)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
+
+    m2_yoy = _yoy_latest(fred["m2"], periods=12)
+    liquidity_score = _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
+    indicators.append(("Global Liquidity (M2 proxy)", m2_yoy, "% YoY", liquidity_score, _confidence_from_age(fred["m2"], expected_days=45)))
+
+    sahm = _safe_latest(fred["sahm"])
+    if sahm is None:
+        unrate = fred["unrate"].dropna() if fred["unrate"] is not None else None
+        if unrate is not None and len(unrate) >= 12:
+            sahm = float(unrate.iloc[-1] - unrate.iloc[-12:].min())
+    unemp_score = _clamp_score((0.4 - (sahm or 0.0)), 0.4)
+    indicators.append(("Unemployment Trend (Sahm context)", sahm, "delta", unemp_score, _confidence_from_age(fred["sahm"] if fred["sahm"] is not None else fred["unrate"], expected_days=45)))
+
+    core_yoy = _yoy_latest(fred["core_pce"], periods=12)
+    core_infl_score = _clamp_score((2.4 - (core_yoy or 2.4)), 1.5)
+    indicators.append(("Core Inflation (PCE)", core_yoy, "% YoY", core_infl_score, _confidence_from_age(fred["core_pce"], expected_days=45)))
+
+    eq_components = []
+    for ticker in ("SPY", "QQQ", "^DJI"):
+        s = snaps.get(ticker).series if snaps.get(ticker) else None
+        if s is not None and len(s) >= 200:
+            ma200 = s.rolling(200).mean().iloc[-1]
+            if ma200 and ma200 != 0:
+                eq_components.append(float((s.iloc[-1] / ma200 - 1) * 100))
+    eq_trend = float(np.mean(eq_components)) if eq_components else None
+    equity_score = _clamp_score((eq_trend or 0.0), 5.0)
+    indicators.append(("Equity Trend (S&P, Nasdaq, Dow)", eq_trend, "% vs 200d MA", equity_score, _confidence_from_snap("SPY", "QQQ", "^DJI", snaps=snaps)))
+
+    cape = _safe_latest(fred["cape"])
+    cape_score = _clamp_score((25.0 - (cape or 25.0)), 10.0)
+    indicators.append(("Shiller CAPE", cape, "x", cape_score, _confidence_from_age(fred["cape"], expected_days=60)))
+
+    wilshire = _safe_latest(fred["wilshire"])
+    gdp = _safe_latest(fred["gdp"])
+    buffett = (wilshire / gdp * 100) if (wilshire is not None and gdp and gdp != 0) else None
+    buffett_score = _clamp_score((120.0 - (buffett or 120.0)), 40.0)
+    indicators.append(("Buffett Indicator (Mkt Cap / GDP)", buffett, "%", buffett_score, int(round(np.mean([
+        _confidence_from_age(fred["wilshire"], expected_days=45),
+        _confidence_from_age(fred["gdp"], expected_days=120),
+    ])))))
+
+    capex_yoy = _yoy_latest(fred["capex"], periods=4)
+    capex_vs_liquidity = (capex_yoy - m2_yoy) if (capex_yoy is not None and m2_yoy is not None) else None
+    capliq_score = _clamp_score((capex_vs_liquidity or 0.0), 5.0)
+    indicators.append(("Corporate CAPEX vs Liquidity", capex_vs_liquidity, "pp", capliq_score, int(round(np.mean([
+        _confidence_from_age(fred["capex"], expected_days=120),
+        _confidence_from_age(fred["m2"], expected_days=45),
+    ])))))
+
+    gamma_data = _compute_spy_gamma_mode(max_expiries=1 if low_compute_mode else 2)
+    gamma_score = 0.0
+    if gamma_data and len(gamma_data["net_gamma"]) > 0:
+        nearest = int(np.argmin(np.abs(gamma_data["strikes"] - gamma_data["price"])))
+        gamma_score = _clamp_score(float(gamma_data["net_gamma"][nearest]), 10000.0)
+    gamma_conf = 85 if gamma_data else 35
+    indicators.append(("Gamma Exposure (Dealer Positioning)", gamma_score, "score", gamma_score, gamma_conf))
+
+    term = _safe_latest(fred["term_premium"])
+    term_score = _clamp_score((term or 0.0), 0.75)
+    indicators.append(("Term Premium", term, "%", term_score, _confidence_from_age(fred["term_premium"], expected_days=14)))
+
+    ism = _safe_latest(fred["ism"])
+    ism_score = _clamp_score(((ism or 50.0) - 50.0), 5.0)
+    indicators.append(("ISM Manufacturing", ism, "index", ism_score, _confidence_from_age(fred["ism"], expected_days=45)))
+
+    fci = _safe_latest(fred["fci"])
+    fci_score = _clamp_score((-(fci or 0.0)), 0.5)
+    indicators.append(("Financial Conditions Index", fci, "index", fci_score, _confidence_from_age(fred["fci"], expected_days=14)))
+
+    signal_rows = []
+    scores = []
+    confidence_scores = []
+    for name, value, unit, score, confidence in indicators:
+        emoji, verdict = _score_to_bucket(score)
+        scores.append(score)
+        confidence_scores.append(confidence)
+        display_value = "N/A" if value is None else f"{value:.2f} {unit}".strip()
+        signal_rows.append({
+            "Indicator": name,
+            "Signal": f"{emoji} {verdict}",
+            "Value": display_value,
+            "Score": round(float(score), 3),
+            "Confidence": f"{_confidence_label(confidence)} ({confidence}%)",
+        })
+
+    aggregate = float(np.mean(scores)) if scores else 0.0
+    macro_score = int(round((aggregate + 1.0) * 50))
+
+    if macro_score >= 60:
+        macro_regime = "Risk-On"
+    elif macro_score <= 40:
+        macro_regime = "Risk-Off"
+    else:
+        macro_regime = "Neutral"
+
+    growth_signal = np.mean([yc_score, equity_score, ism_score, unemp_score])
+    core_series = fred["core_pce"].dropna() if fred["core_pce"] is not None else None
+    core_3m_change = None
+    if core_series is not None and len(core_series) >= 4:
+        core_3m_change = float(core_series.iloc[-1] - core_series.iloc[-4])
+    inflation_direction_value = np.mean([
+        1.0 if (core_3m_change is not None and core_3m_change > 0) else -1.0,
+        1.0 if (commodity_trend is not None and commodity_trend > 0) else -1.0,
+    ])
+
+    growth_dir = "Rising" if growth_signal >= 0 else "Falling"
+    inflation_dir = "Rising" if inflation_direction_value >= 0 else "Falling"
+    if growth_dir == "Rising" and inflation_dir == "Rising":
+        quadrant = "Reflation"
+    elif growth_dir == "Rising" and inflation_dir == "Falling":
+        quadrant = "Goldilocks"
+    elif growth_dir == "Falling" and inflation_dir == "Rising":
+        quadrant = "Stagflation"
+    else:
+        quadrant = "Deflation"
+
+    if capex_vs_liquidity is None:
+        cycle_stage = "Cycle signal unavailable"
+    elif capex_vs_liquidity > 2:
+        cycle_stage = "Capex-led expansion"
+    elif capex_vs_liquidity < -2:
+        cycle_stage = "Liquidity-led / capex slowdown"
+    else:
+        cycle_stage = "Balanced mid-cycle"
+
+    valuation_text = _interpret_valuation(cape, buffett)
+
+    ranked = sorted(signal_rows, key=lambda x: abs(x["Score"]), reverse=True)
+    summary = [
+        f"Macro score is {macro_score}/100 ({macro_regime}).",
+        f"Dalio quadrant currently points to {quadrant} ({growth_dir.lower()} growth, {inflation_dir.lower()} inflation).",
+        f"Valuation read: {valuation_text}",
+    ]
+    if ranked:
+        summary.append(f"Strongest signal: {ranked[0]['Indicator']} at {ranked[0]['Signal']}.")
+    if len(ranked) > 1:
+        summary.append(f"Second strongest: {ranked[1]['Indicator']} at {ranked[1]['Signal']}.")
+
+    return {
+        "signals": signal_rows,
+        "macro_score": macro_score,
+        "avg_confidence": int(round(float(np.mean(confidence_scores)))) if confidence_scores else 0,
+        "macro_regime": macro_regime,
+        "quadrant": quadrant,
+        "growth_dir": growth_dir,
+        "inflation_dir": inflation_dir,
+        "valuation": valuation_text,
+        "cape": cape,
+        "buffett": buffett,
+        "cycle_stage": cycle_stage,
+        "capex_vs_liquidity": capex_vs_liquidity,
+        "summary": summary[:5],
+        "portfolio_bias": _portfolio_bias(macro_regime),
+        "gamma": gamma_data,
+        "low_compute_mode": low_compute_mode,
+    }
+
 def render():
-    st.markdown("## Market Risk Regime")
+    st.markdown("## Macro Dashboard")
     st.markdown(
         f"<p style='color:{COLORS['text_dim']};margin-top:-10px;'>"
-        "Real-time cross-asset risk-on / risk-off dashboard</p>",
+        "Concise global macro monitor for daily Risk-On / Risk-Off workflow</p>",
         unsafe_allow_html=True,
     )
 
-    col_refresh, _ = st.columns([1, 4])
-    with col_refresh:
-        if st.button("Refresh Data"):
-            st.cache_data.clear()
+    if st.button("Refresh Data"):
+        st.cache_data.clear()
 
-    with st.spinner("Fetching cross-asset data..."):
+    low_compute_mode = st.toggle(
+        "Low Compute Mode",
+        value=True,
+        help="Reduces options processing load and disables gamma chart rendering to conserve free Streamlit usage.",
+    )
+
+    with st.spinner("Building macro dashboard..."):
         snaps = fetch_all_data()
+        macro = _build_macro_dashboard(snaps, low_compute_mode=low_compute_mode)
 
-    regime_data = compute_regime(snaps)
-    signals = regime_data["signals"]
-    aggregate = regime_data["aggregate_score"]
-    regime = regime_data["regime"]
-    regime_color = regime_data["regime_color"]
-    regime_emoji = regime_data["regime_emoji"]
-    regime_desc = regime_data["regime_desc"]
+    regime = macro["macro_regime"]
+    regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
+    regime_emoji = "🟢" if regime == "Risk-On" else "🔴" if regime == "Risk-Off" else "🟡"
 
-    # ── Hero Banner ──
-    banner_bg = (
-        "rgba(31,48,31,0.9)" if regime == "RISK-ON" else
-        "rgba(48,24,24,0.9)" if regime == "RISK-OFF" else
-        "rgba(40,38,20,0.9)"
-    )
-    st.markdown(
-        f"""
-        <div style="background:{banner_bg};border:1px solid {regime_color};border-radius:12px;
-                    padding:24px 32px;margin-bottom:24px;">
-          <div style="display:flex;align-items:center;gap:16px;">
-            <span style="font-size:48px;">{regime_emoji}</span>
-            <div>
-              <div style="font-size:32px;font-weight:700;color:{regime_color};letter-spacing:2px;">
-                {regime}
-              </div>
-              <div style="font-size:14px;color:#c9d1d9;margin-top:4px;max-width:600px;">
-                {regime_desc}
-              </div>
-            </div>
-            <div style="margin-left:auto;text-align:right;">
-              <div style="font-size:12px;color:{COLORS['text_dim']};">Aggregate Score</div>
-              <div style="font-size:36px;font-weight:700;color:{regime_color};">
-                {aggregate:+.2f}
-              </div>
-              <div style="font-size:11px;color:{COLORS['text_dim']};">-1 (off) to +1 (on)</div>
-            </div>
-          </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("Macro Score (0-100)", macro["macro_score"])
+    col_b.metric("Macro Quadrant", macro["quadrant"])
+    col_c.metric("Current Regime", f"{regime_emoji} {regime}")
+    st.caption(f"Signal confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%).")
 
-    # ── AI Regime Plays (sectors, stocks, bonds) ──
-    from services.claude_client import suggest_regime_plays
+    st.markdown(f"### Core Signals ({len(macro['signals'])})")
+    st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
 
-    sig_summary = "; ".join(
-        f"{s['name']}: {s['label']} ({s['score']:+.2f})" for s in signals[:10]
-    ) if signals else ""
-    with st.spinner("Generating regime-based suggestions..."):
-        plays = suggest_regime_plays(regime, aggregate, sig_summary)
+    st.markdown("### Valuation")
+    cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
+    buffett_txt = "N/A" if macro["buffett"] is None else f"{macro['buffett']:.2f}%"
+    st.markdown(f"- CAPE: {cape_txt}")
+    st.markdown(f"- Buffett Indicator: {buffett_txt}")
+    st.markdown(f"- Interpretation: {macro['valuation']}")
 
-    if plays and (plays.get("sectors") or plays.get("stocks") or plays.get("bonds")):
-        dim = COLORS["text_dim"]
-        st.markdown("### What to Buy in This Regime")
-        # Legend
-        st.markdown(
-            '<span style="color:#FFD700;font-size:13px;">'
-            "★★★ Strong Buy &nbsp;|&nbsp; ★★☆ Moderate Buy &nbsp;|&nbsp; ★☆☆ Buy"
-            "</span>",
-            unsafe_allow_html=True,
-        )
-        if plays.get("rationale"):
-            st.markdown(
-                f"<div style='color:{dim};font-size:13px;margin-bottom:12px;'>"
-                f"{plays['rationale']}</div>",
-                unsafe_allow_html=True,
-            )
+    st.markdown("### Cycle Stage")
+    capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
+    st.markdown(f"- CAPEX vs Liquidity: {capliq_txt}")
+    st.markdown(f"- Stage: {macro['cycle_stage']}")
 
-        def _conviction_stars(item, fallback=1):
-            c = item.get("conviction", fallback) if isinstance(item, dict) else fallback
-            c = max(1, min(3, int(c)))
-            labels = {3: "Strong Buy", 2: "Moderate Buy", 1: "Buy"}
-            return (
-                f'<span style="color:#FFD700;" title="{labels[c]}">'
-                f'{"★" * c}{"☆" * (3 - c)}</span>'
-            )
+    st.markdown("### Summary")
+    for line in macro["summary"]:
+        st.markdown(f"- {line}")
 
-        col_sec, col_stk, col_bnd = st.columns(3)
-        with col_sec:
-            st.markdown("**Sectors to Favor**")
-            for sec in plays.get("sectors", []):
-                if isinstance(sec, dict):
-                    name = sec.get("name", "")
-                    stars = _conviction_stars(sec)
-                    st.markdown(f"- {stars} {name}", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"- ★☆☆ {sec}", unsafe_allow_html=True)
-        with col_stk:
-            st.markdown("**Stocks / ETFs**")
-            for s in plays.get("stocks", []):
-                if isinstance(s, str):
-                    st.markdown(f"- ★☆☆ `{s}`", unsafe_allow_html=True)
-                else:
-                    ticker = s.get("ticker", "")
-                    reason = s.get("reason", "")
-                    stars = _conviction_stars(s)
-                    line = f"- {stars} `{ticker}`"
-                    if reason:
-                        line += f" — {reason}"
-                    st.markdown(line, unsafe_allow_html=True)
-        with col_bnd:
-            st.markdown("**Bonds / Fixed Income**")
-            for b in plays.get("bonds", []):
-                if isinstance(b, str):
-                    st.markdown(f"- ★☆☆ `{b}`", unsafe_allow_html=True)
-                else:
-                    ticker = b.get("ticker", "")
-                    reason = b.get("reason", "")
-                    stars = _conviction_stars(b)
-                    line = f"- {stars} `{ticker}`"
-                    if reason:
-                        line += f" — {reason}"
-                    st.markdown(line, unsafe_allow_html=True)
+    st.markdown("### Portfolio Bias")
+    for sleeve, bias in macro["portfolio_bias"].items():
+        st.markdown(f"- {sleeve}: {bias}")
 
-        st.markdown(
-            f"<p style='color:{dim};font-size:10px;margin-top:4px;'>"
-            "AI-generated suggestions for informational purposes only. Not financial advice.</p>",
-            unsafe_allow_html=True,
-        )
+    st.markdown("### SPY Options Sentiment Mode")
+    gamma = macro["gamma"]
+    if gamma:
+        if macro.get("low_compute_mode"):
+            st.caption("Cached mode active (Low Compute Mode).")
 
-    # ── Signal Heatmap (compact overview) ──
-    if signals:
-        st.plotly_chart(_make_heatmap(signals), use_container_width=True)
+        asof = gamma.get("asof")
+        if asof:
+            try:
+                asof_ts = pd.to_datetime(asof, errors="coerce")
+                if pd.notna(asof_ts):
+                    if asof_ts.tzinfo is not None:
+                        asof_ts = asof_ts.tz_convert(None)
+                    st.caption(f"Last options fetch: {asof_ts.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+            except Exception:
+                pass
 
-    # ── Gauge + Radar ──
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.plotly_chart(_make_gauge(aggregate, regime, regime_color), use_container_width=True)
-    with col2:
-        if len(signals) >= 3:
-            st.plotly_chart(_make_category_radar(signals), use_container_width=True)
+        st.markdown(f"- Current market price: {gamma['price']:.2f}")
+        st.markdown(f"- Current market sentiment: {gamma['zone']}")
+        if gamma["gamma_flip"] is None:
+            st.markdown("- Gamma Flip price: N/A")
         else:
-            st.info("Not enough data for radar chart.")
+            location = "above stock price" if gamma["gamma_flip"] > gamma["price"] else "below stock price"
+            st.markdown(f"- Gamma Flip price: {gamma['gamma_flip']:.2f} ({location})")
+        st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
+        st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
 
-    # ── Regime History (#5) ──
-    history_fig = _make_regime_history()
-    if history_fig:
-        st.markdown("### Regime History")
-        st.plotly_chart(history_fig, use_container_width=True)
+        if macro.get("low_compute_mode"):
+            st.caption("Gamma chart disabled in Low Compute Mode.")
+        else:
+            fig = go.Figure()
+            bar_colors = [COLORS["green"] if val >= 0 else COLORS["red"] for val in gamma["net_gamma"]]
+            fig.add_trace(go.Bar(
+                x=gamma["strikes"],
+                y=gamma["net_gamma"],
+                marker_color=bar_colors,
+                name="Net Gamma Proxy",
+                opacity=0.65,
+                hovertemplate="Strike %{x:.0f}<br>Net Gamma %{y:.0f}<extra></extra>",
+            ))
 
-    # ── Signal Bar Chart ──
-    st.markdown("### Individual Signal Scores")
-    if signals:
-        st.plotly_chart(_make_signal_bar(signals), use_container_width=True)
-    else:
-        st.warning("No signals could be computed. Check network connectivity.")
+            fig.add_vline(x=gamma["price"], line_color=COLORS["blue"], line_dash="dash", line_width=2)
+            if gamma["gamma_flip"] is not None:
+                fig.add_vline(x=gamma["gamma_flip"], line_color=COLORS["yellow"], line_dash="dot", line_width=2)
+            if gamma["call_wall"] is not None:
+                fig.add_vline(x=gamma["call_wall"], line_color=COLORS["green"], line_dash="dash", line_width=1)
+            if gamma["put_wall"] is not None:
+                fig.add_vline(x=gamma["put_wall"], line_color=COLORS["red"], line_dash="dash", line_width=1)
 
-    # ── Signal Detail Table ──
-    with st.expander("Signal Detail Table", expanded=False):
-        if signals:
-            df_signals = pd.DataFrame(signals)[
-                ["category", "name", "value", "unit", "label", "score", "stale", "interpretation"]
-            ]
-            df_signals = df_signals.rename(columns={
-                "category": "Category", "name": "Signal", "value": "Value",
-                "unit": "Unit", "label": "Verdict", "score": "Score",
-                "stale": "Stale", "interpretation": "Notes",
-            })
-            df_signals["Score"] = df_signals["Score"].map(lambda x: f"{x:+.3f}")
-            df_signals["Stale"] = df_signals["Stale"].map(lambda x: "⚠️" if x else "")
-
-            def color_verdict(val):
-                if val == "Risk-On":
-                    return f"color: {COLORS['green']}"
-                elif val == "Risk-Off":
-                    return f"color: {COLORS['red']}"
-                return f"color: {COLORS['yellow']}"
-
-            st.dataframe(
-                df_signals.style.applymap(color_verdict, subset=["Verdict"]),
-                use_container_width=True,
-                hide_index=True,
+            fig.update_layout(
+                title="SPY Strike vs Dealer Gamma Proxy",
+                xaxis_title="Strike",
+                yaxis_title="Net Gamma Proxy",
+                height=360,
+                margin=dict(l=20, r=20, t=50, b=20),
+                showlegend=False,
             )
-
-    # ── Sparklines ──
-    st.markdown("### 3-Month Price Performance")
-    spark_fig = _make_price_sparklines(snaps)
-    if spark_fig:
-        st.plotly_chart(spark_fig, use_container_width=True)
+            apply_dark_layout(fig)
+            st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Sparkline data unavailable.")
-
-    # ── Truflation ──
-    tf_data = fetch_truflation()
-    if tf_data and isinstance(tf_data, dict):
-        st.markdown("### Truflation Real-Time Inflation")
-        tf_cols = st.columns(3)
-        for i, (k, v) in enumerate(list(tf_data.items())[:6]):
-            with tf_cols[i % 3]:
-                st.metric(k.replace("_", " ").title(), v)
-
-    # ── Signal Changes (from history) ──
-    history = _load_history()
-    if len(history) >= 2:
-        prev = history[-2]
-        curr = history[-1]
-        prev_sigs = prev.get("signals_summary", {})
-        curr_sigs = curr.get("signals_summary", {})
-        changes = []
-        for name, curr_score in curr_sigs.items():
-            prev_score = prev_sigs.get(name)
-            if prev_score is not None:
-                prev_label = _label_from_score(prev_score)
-                curr_label = _label_from_score(curr_score)
-                if prev_label != curr_label:
-                    changes.append(f"**{name}**: {prev_label} → {curr_label}")
-        if changes:
-            with st.expander(f"Signal Changes vs Previous Session ({prev.get('date', '?')})", expanded=True):
-                for c in changes:
-                    st.markdown(f"- {c}")
-
-    # ── How it Works ──
-    with st.expander("How the Regime Score Works", expanded=False):
-        st.markdown(f"""
-**Aggregate Score** is a weighted average of {len(signals)} cross-asset signals, ranging from **-1 (full Risk-Off)** to **+1 (full Risk-On)**.
-
-**Adaptive Thresholds:** Signals use z-scores computed against their own 1-year distribution, so thresholds automatically adjust to changing market conditions.
-
-| Regime | Score | Characteristics |
-|---|---|---|
-| Risk-On | > +0.35 | Equities bid, HY credit tight, VIX low, USD weak, copper rising |
-| Neutral | -0.35 to +0.35 | Mixed signals, transition phase |
-| Risk-Off | < -0.35 | Flight to safety, TLT bid, VIX elevated, gold/USD rising |
-
-**Signal Categories & Weights:**
-- Yield Curve, Credit Spreads, Volatility: **1.5x** (highest weight)
-- Equities (US): **1.2x**
-- FX (USD), Global Equities: **0.9-1.0x**
-- Commodities, Inflation: **0.8x**
-- Sector Rotation: **0.7x**
-
-**New in this version:** Gold/Copper ratio, bond volatility (MOVE proxy), MA trend signals, z-score adaptive thresholds, regime history tracking, stale data discounting.
-
-Data refreshes every **60 minutes** (cached). Click Refresh to force update.
-        """)
+        st.warning("SPY options sentiment currently unavailable.")
 
     st.markdown(
-        f"<p style='color:{COLORS['text_dim']};font-size:11px;margin-top:24px;'>"
-        f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | "
-        "Data via Yahoo Finance &amp; Truflation API | For informational purposes only.</p>",
+        f"<p style='color:{regime_color};font-size:11px;margin-top:12px;'>"
+        f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
         unsafe_allow_html=True,
     )

@@ -10,6 +10,7 @@ import numpy as np
 import yfinance as yf
 import streamlit as st
 import requests
+from io import StringIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
@@ -117,5 +118,105 @@ def fetch_truflation() -> dict | None:
         )
         r.raise_for_status()
         return r.json()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=21600)
+def fetch_fred_series(series_id: str) -> pd.Series | None:
+    """Fetch a single FRED series as a pandas Series indexed by date."""
+    try:
+        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+
+        df = pd.read_csv(StringIO(resp.text))
+        if "DATE" not in df.columns or series_id not in df.columns:
+            return None
+
+        df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+        df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
+        df = df.dropna(subset=["DATE", series_id])
+        if df.empty:
+            return None
+
+        series = pd.Series(df[series_id].values, index=df["DATE"], name=series_id)
+        return series.sort_index()
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=10800)
+def fetch_options_chain_snapshot(ticker: str = "SPY", max_expiries: int = 3) -> dict | None:
+    """
+    Fetch options chain snapshot and build strike-level aggregates.
+
+    Returns:
+        {
+            "ticker": str,
+            "price": float,
+            "asof": str,
+            "strikes": [float],
+            "call_oi": [float],
+            "put_oi": [float],
+            "net_gamma_proxy": [float],
+            "expiries": [str],
+        }
+    """
+    try:
+        tk = yf.Ticker(ticker)
+        hist = tk.history(period="5d", interval="1d", auto_adjust=True)
+        if hist is None or hist.empty:
+            return None
+
+        price = float(hist["Close"].iloc[-1])
+        expiries = list(tk.options or [])
+        if not expiries:
+            return None
+
+        selected = expiries[:max(1, min(max_expiries, len(expiries)))]
+        strike_map: dict[float, dict[str, float]] = {}
+
+        for exp in selected:
+            chain = tk.option_chain(exp)
+            for side, sign in ((chain.calls, 1.0), (chain.puts, -1.0)):
+                if side is None or side.empty:
+                    continue
+                subset = side[["strike", "openInterest", "impliedVolatility"]].copy()
+                subset["openInterest"] = pd.to_numeric(subset["openInterest"], errors="coerce").fillna(0)
+                subset["impliedVolatility"] = pd.to_numeric(subset["impliedVolatility"], errors="coerce").fillna(0.2)
+
+                for _, row in subset.iterrows():
+                    strike = float(row["strike"])
+                    oi = float(row["openInterest"])
+                    iv = float(row["impliedVolatility"])
+
+                    if strike not in strike_map:
+                        strike_map[strike] = {"call_oi": 0.0, "put_oi": 0.0, "net_gamma_proxy": 0.0}
+
+                    if sign > 0:
+                        strike_map[strike]["call_oi"] += oi
+                    else:
+                        strike_map[strike]["put_oi"] += oi
+
+                    distance = abs(strike - price) / max(price, 1e-6)
+                    weight = np.exp(-((distance / 0.1) ** 2))
+                    gamma_proxy = sign * oi * iv * weight
+                    strike_map[strike]["net_gamma_proxy"] += gamma_proxy
+
+        if not strike_map:
+            return None
+
+        strikes = sorted(strike_map.keys())
+        return {
+            "ticker": ticker,
+            "price": price,
+            "asof": str(pd.Timestamp.utcnow()),
+            "strikes": strikes,
+            "call_oi": [float(strike_map[s]["call_oi"]) for s in strikes],
+            "put_oi": [float(strike_map[s]["put_oi"]) for s in strikes],
+            "net_gamma_proxy": [float(strike_map[s]["net_gamma_proxy"]) for s in strikes],
+            "expiries": selected,
+        }
     except Exception:
         return None
