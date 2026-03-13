@@ -1004,8 +1004,15 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators.append(("Commodity Trend (Oil + Copper)", commodity_trend, "% 30d", commodity_score, _confidence_from_snap("USO", "CPER", snaps=snaps)))
 
     dxy = snaps.get("UUP").pct_change_30d if snaps.get("UUP") else None
-    dxy_score = _clamp_score((-(dxy or 0.0)), 3.0)
-    indicators.append(("US Dollar Index (DXY proxy)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
+    if dxy is None:
+        dxy_score = 0.0
+    elif dxy > 0:
+        dxy_score = -_clamp_score(abs(dxy), 3.0)
+    elif dxy < 0:
+        dxy_score = _clamp_score(abs(dxy), 3.0)
+    else:
+        dxy_score = 0.0
+    indicators.append(("US Dollar Index (DXY proxy, up=Risk-Off)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
     liquidity_score = _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
