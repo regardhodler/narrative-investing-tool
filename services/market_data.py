@@ -12,7 +12,6 @@ import streamlit as st
 import requests
 import os
 from io import StringIO
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 
@@ -73,47 +72,54 @@ def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d
         {ticker: AssetSnapshot}
     """
     results: dict[str, AssetSnapshot] = {}
+    ticker_list = list(tickers.keys())
 
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = {
-            pool.submit(_fetch_single, t, period, interval): (t, label)
-            for t, label in tickers.items()
-        }
-        for future in as_completed(futures):
-            ticker, label = futures[future]
-            df = future.result()
-            snap = AssetSnapshot(ticker=ticker, label=label)
+    try:
+        raw = yf.download(ticker_list, period=period, interval=interval,
+                          progress=False, auto_adjust=True, threads=False)
+    except Exception:
+        raw = pd.DataFrame()
 
-            if df is not None and not df.empty and "Close" in df.columns:
-                close = df["Close"].squeeze()  # ensure Series, not DataFrame
+    for ticker, label in tickers.items():
+        snap = AssetSnapshot(ticker=ticker, label=label)
+
+        try:
+            if raw is not None and not raw.empty:
+                # Single ticker: flat columns; multiple tickers: MultiIndex (Price, Ticker)
+                if len(ticker_list) == 1:
+                    if isinstance(raw.columns, pd.MultiIndex):
+                        close = raw["Close"].iloc[:, 0].dropna()
+                    else:
+                        close = raw["Close"].dropna()
+                else:
+                    close = raw["Close"][ticker].dropna()
+
                 if isinstance(close, pd.DataFrame):
                     close = close.iloc[:, 0]
-                snap.latest_price = float(close.iloc[-1])
-                snap.series = close.copy()
 
-                # Short-term momentum
-                if len(close) >= 2:
-                    snap.pct_change_1d = float((close.iloc[-1] / close.iloc[-2] - 1) * 100)
-                if len(close) >= 6:
-                    snap.pct_change_5d = float((close.iloc[-1] / close.iloc[-6] - 1) * 100)
-                # 30-day momentum (approx 22 trading days)
-                if len(close) >= 22:
-                    snap.pct_change_30d = float((close.iloc[-1] / close.iloc[-22] - 1) * 100)
+                if len(close) > 0:
+                    snap.latest_price = float(close.iloc[-1])
+                    snap.series = close.copy()
 
-                # YTD momentum
-                year_start = pd.Timestamp(pd.Timestamp.now().year, 1, 1)
-                ytd_data = close[close.index >= year_start]
-                if len(ytd_data) >= 2:
-                    snap.pct_change_ytd = float((close.iloc[-1] / ytd_data.iloc[0] - 1) * 100)
+                    if len(close) >= 2:
+                        snap.pct_change_1d = float((close.iloc[-1] / close.iloc[-2] - 1) * 100)
+                    if len(close) >= 6:
+                        snap.pct_change_5d = float((close.iloc[-1] / close.iloc[-6] - 1) * 100)
+                    if len(close) >= 22:
+                        snap.pct_change_30d = float((close.iloc[-1] / close.iloc[-22] - 1) * 100)
 
-                # Staleness check: if last data point is >2 days old
-                last_date = df.index[-1]
-                if hasattr(last_date, 'tz_localize'):
-                    pass  # already tz-aware or naive, fine either way
-                days_old = (pd.Timestamp.now(tz=last_date.tzinfo if hasattr(last_date, 'tzinfo') and last_date.tzinfo else None) - last_date).days
-                snap.stale = days_old > 3
+                    year_start = pd.Timestamp(pd.Timestamp.now().year, 1, 1)
+                    ytd_data = close[close.index >= year_start]
+                    if len(ytd_data) >= 2:
+                        snap.pct_change_ytd = float((close.iloc[-1] / ytd_data.iloc[0] - 1) * 100)
 
-            results[ticker] = snap
+                    last_date = close.index[-1]
+                    days_old = (pd.Timestamp.now(tz=last_date.tzinfo if hasattr(last_date, 'tzinfo') and last_date.tzinfo else None) - last_date).days
+                    snap.stale = days_old > 3
+        except Exception:
+            pass
+
+        results[ticker] = snap
 
     if not any(s.latest_price is not None for s in results.values()):
         raise _BatchFetchError("All tickers failed to fetch")

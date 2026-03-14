@@ -119,6 +119,9 @@ TICKERS = {
     "UUP": "USD Bull ETF",
     # Crypto proxy
     "IBIT": "Bitcoin ETF",
+    # Ticker bar extras
+    "DIA": "Dow Jones ETF",
+    "CL=F": "WTI Crude Oil",
 }
 
 
@@ -1105,12 +1108,12 @@ def render():
     # ── Market Ticker Bar ──
     TICKER_BAR = [
         ("QQQ",  "Nasdaq 100 (QQQ)"),
-        ("^DJI", "Dow 30"),
+        ("DIA",  "Dow 30 (DIA)"),
         ("SPY",  "S&P 500 (SPY)"),
         ("IWM",  "Russell 2000 (IWM)"),
         ("GLD",  "Gold (GLD)"),
         ("SLV",  "Silver (SLV)"),
-        ("USO",  "Oil (USO)"),
+        ("CL=F", "WTI Crude"),
         ("TLT",  "TLT (20Y+)"),
     ]
     ticker_tf = st.radio(
