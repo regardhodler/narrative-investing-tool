@@ -1103,29 +1103,30 @@ def render():
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
 
     # ── Market Ticker Bar ──
-    TICKER_BAR = [
-        ("QQQ", "Nasdaq 100"),
-        ("^DJI", "Dow 30"),
-        ("SPY", "S&P 500"),
-        ("IWM", "Russell 2000"),
-        ("GLD", "Gold"),
-        ("SLV", "Silver"),
-        ("USO", "Oil"),
-        ("TLT", "TLT (20Y+)"),
-    ]
+    TICKER_BAR_TICKERS = {
+        "^NDX": "Nasdaq 100",
+        "^DJI": "Dow 30",
+        "^GSPC": "S&P 500",
+        "^RUT": "Russell 2000",
+        "GC=F": "Gold",
+        "SLV": "Silver",
+        "CL=F": "Oil",
+        "TLT": "TLT (20Y+)",
+    }
+    TICKER_BAR = list(TICKER_BAR_TICKERS.items())
     ticker_tf = st.radio(
         "Timeframe", ["Daily", "Weekly", "Monthly", "YTD"],
         horizontal=True, key="ticker_bar_tf",
     )
     tf_field = {"Daily": "pct_change_1d", "Weekly": "pct_change_5d", "Monthly": "pct_change_30d", "YTD": "pct_change_ytd"}[ticker_tf]
 
-    bar_snaps = macro.get("snaps", snaps)
+    bar_snaps = fetch_batch_safe(TICKER_BAR_TICKERS, period="1y", interval="1d")
     cols = st.columns(len(TICKER_BAR))
     for col, (ticker, label) in zip(cols, TICKER_BAR):
         snap = bar_snaps.get(ticker)
         price = snap.latest_price if snap else None
         pct = getattr(snap, tf_field, None) if snap else None
-        price_str = f"${price:,.2f}" if price is not None else "N/A"
+        price_str = f"${price:,.0f}" if price is not None and price >= 1000 else f"${price:,.2f}" if price is not None else "N/A"
         if pct is not None:
             arrow = "▲" if pct >= 0 else "▼"
             pct_color = COLORS["green"] if pct >= 0 else COLORS["red"]
