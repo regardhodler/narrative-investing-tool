@@ -122,6 +122,7 @@ TICKERS = {
     # Ticker bar extras
     "DIA": "Dow Jones ETF",
     "CL=F": "WTI Crude Oil",
+    "GC=F": "Gold Futures",
 }
 
 
@@ -1111,7 +1112,7 @@ def render():
         ("DIA",  "Dow 30 (DIA)"),
         ("SPY",  "S&P 500 (SPY)"),
         ("IWM",  "Russell 2000 (IWM)"),
-        ("GLD",  "Gold (GLD)"),
+        ("GC=F", "Gold"),
         ("SLV",  "Silver (SLV)"),
         ("CL=F", "WTI Crude"),
         ("TLT",  "TLT (20Y+)"),
