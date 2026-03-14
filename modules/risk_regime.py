@@ -1251,6 +1251,11 @@ def render():
         st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
         st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
 
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Gamma Flip", f"{gamma['gamma_flip']:.2f}" if gamma["gamma_flip"] is not None else "N/A")
+        m2.metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A")
+        m3.metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A")
+
         if macro.get("low_compute_mode"):
             st.caption("Gamma chart disabled in Low Compute Mode.")
         else:
