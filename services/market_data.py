@@ -10,6 +10,7 @@ import numpy as np
 import yfinance as yf
 import streamlit as st
 import requests
+import os
 from io import StringIO
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -125,12 +126,11 @@ def fetch_truflation() -> dict | None:
 @st.cache_data(ttl=21600)
 def fetch_fred_series(series_id: str) -> pd.Series | None:
     """Fetch a single FRED series as a pandas Series indexed by date."""
-    try:
-        url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
-        resp = requests.get(url, timeout=10)
-        resp.raise_for_status()
+    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "fred_cache")
+    cache_file = os.path.join(cache_dir, f"{series_id}.csv")
 
-        df = pd.read_csv(StringIO(resp.text))
+    def _parse_csv_text(csv_text: str) -> pd.Series | None:
+        df = pd.read_csv(StringIO(csv_text))
         if "DATE" not in df.columns or series_id not in df.columns:
             return None
 
@@ -142,8 +142,31 @@ def fetch_fred_series(series_id: str) -> pd.Series | None:
 
         series = pd.Series(df[series_id].values, index=df["DATE"], name=series_id)
         return series.sort_index()
+
+    url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
+
+    for timeout in (12, 25):
+        try:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+            parsed = _parse_csv_text(resp.text)
+            if parsed is not None:
+                os.makedirs(cache_dir, exist_ok=True)
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    f.write(resp.text)
+                return parsed
+        except Exception:
+            continue
+
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cached_text = f.read()
+            return _parse_csv_text(cached_text)
     except Exception:
-        return None
+        pass
+
+    return None
 
 
 @st.cache_data(ttl=10800)
