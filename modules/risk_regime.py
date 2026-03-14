@@ -71,6 +71,7 @@ def _save_snapshot(macro: dict):
         "signal_count": len(macro["signals"]),
         "macro_score": macro["macro_score"],
         "quadrant": macro["quadrant"],
+        "signals_summary": {s["Indicator"]: s["Score"] for s in macro["signals"]},
     })
 
     # Keep last 365 days max
@@ -636,6 +637,25 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     fci_score = _clamp_score((-(fci or 0.0)), 0.5)
     indicators.append(("Financial Conditions Index", fci, "index", fci_score, _confidence_from_age(fred["fci"], expected_days=14)))
 
+    SIGNAL_CATEGORIES = {
+        "Yield Curve (10Y-2Y Spread)": "Rates",
+        "Credit Spreads (HY vs Treasuries)": "Credit",
+        "VIX (Equity Volatility)": "Volatility",
+        "Commodity Trend (Oil + Copper)": "Commodities",
+        "US Dollar Index (DXY proxy)": "FX",
+        "Global Liquidity (M2 proxy)": "Liquidity",
+        "Unemployment Trend (Sahm context)": "Labor",
+        "Core Inflation (PCE)": "Inflation",
+        "Equity Trend (S&P, Nasdaq, Dow)": "Equities",
+        "S&P 500 P/E (CAPE proxy)": "Valuation",
+        "Buffett Indicator (Mkt Cap / GDP)": "Valuation",
+        "Corporate CAPEX vs Liquidity": "Growth",
+        "Gamma Exposure (Dealer Positioning)": "Positioning",
+        "Term Premium": "Rates",
+        "ISM Manufacturing": "Growth",
+        "Financial Conditions Index": "Credit",
+    }
+
     signal_rows = []
     scores = []
     confidence_scores = []
@@ -645,6 +665,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         confidence_scores.append(confidence)
         display_value = "N/A" if value is None else f"{value:.2f} {unit}".strip()
         signal_rows.append({
+            "Category": SIGNAL_CATEGORIES.get(name, "Other"),
             "Indicator": name,
             "Signal": f"{emoji} {verdict}",
             "Value": display_value,
@@ -797,7 +818,7 @@ def _make_regime_history(timeframe: str = "All") -> go.Figure | None:
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
 
-    days_map = {"1W": 7, "1M": 30, "6M": 182, "1Y": 365, "All": None}
+    days_map = {"1D": 1, "1W": 7, "1M": 30, "6M": 182, "1Y": 365, "All": None}
     days = days_map.get(timeframe)
     if days is not None:
         cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
@@ -930,6 +951,37 @@ def _regime_timeframe_summary(timeframe: str) -> dict | None:
     }
 
 
+def _make_category_radar(signals: list[dict]) -> go.Figure | None:
+    """Radar chart showing average score per signal category."""
+    df = pd.DataFrame(signals)
+    if "Category" not in df.columns or len(df) < 3:
+        return None
+    cat_scores = df.groupby("Category")["Score"].mean().reset_index()
+    categories = cat_scores["Category"].tolist()
+    scores = cat_scores["Score"].tolist()
+    # Close the polygon
+    categories += [categories[0]]
+    scores += [scores[0]]
+
+    fig = go.Figure(go.Scatterpolar(
+        r=scores, theta=categories, fill="toself",
+        fillcolor="rgba(75, 159, 255, 0.15)",
+        line=dict(color=COLORS["blue"], width=2),
+        marker=dict(color=COLORS["blue"], size=6),
+        hovertemplate="<b>%{theta}</b><br>Score: %{r:.3f}<extra></extra>",
+    ))
+    fig.update_layout(
+        polar=dict(
+            bgcolor=COLORS["surface"],
+            radialaxis=dict(range=[-1, 1], gridcolor=COLORS["grid"], tickfont=dict(size=9)),
+            angularaxis=dict(gridcolor=COLORS["grid"], tickfont=dict(size=10, color=COLORS["text"])),
+        ),
+        height=380, margin=dict(l=40, r=40, t=30, b=30), showlegend=False,
+    )
+    apply_dark_layout(fig)
+    return fig
+
+
 # ─────────────────────────────────────────────
 # RENDER
 # ─────────────────────────────────────────────
@@ -972,9 +1024,15 @@ def render():
         st.caption(f"Signal confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%).")
         st.caption(f"Growth: {macro['growth_dir']} | Inflation: {macro['inflation_dir']}")
 
+    # ── Signal Radar ──
+    radar_fig = _make_category_radar(macro["signals"])
+    if radar_fig:
+        st.markdown("### Signal Radar")
+        st.plotly_chart(radar_fig, use_container_width=True)
+
     # ── Regime History ──
     st.markdown("### Regime History")
-    timeframe = st.radio("Timeframe", ["1W", "1M", "6M", "1Y", "All"], index=4, horizontal=True)
+    timeframe = st.radio("Timeframe", ["1D", "1W", "1M", "6M", "1Y", "All"], index=0, horizontal=True)
 
     if timeframe != "All":
         summary = _regime_timeframe_summary(timeframe)
@@ -986,6 +1044,9 @@ def render():
             c2.markdown(f"**Avg Score:** {summary['avg_score']}")
             c3.markdown(f"**Trend:** <span style='color:{t_color}'>{summary['trend']}</span>", unsafe_allow_html=True)
             st.caption(f"{summary['risk_on_days']} Risk-On / {summary['neutral_days']} Neutral / {summary['risk_off_days']} Risk-Off days (of {summary['total_days']})")
+
+        if timeframe == "1D":
+            st.caption("Note: Some signals (ISM, Unemployment, Inflation, GDP, CAPEX) update monthly or quarterly and may not show daily changes.")
 
     history_fig = _make_regime_history(timeframe=timeframe)
     if history_fig:
@@ -1000,6 +1061,26 @@ def render():
     # ── Core Signals ──
     st.markdown(f"### Core Signals ({len(macro['signals'])})")
     st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
+
+    # ── Signal Changes ──
+    history = _load_history()
+    if len(history) >= 2:
+        prev = history[-2]
+        curr = history[-1]
+        prev_sigs = prev.get("signals_summary", {})
+        curr_sigs = curr.get("signals_summary", {})
+        changes = []
+        for name, curr_score in curr_sigs.items():
+            prev_score = prev_sigs.get(name)
+            if prev_score is not None:
+                prev_label = _label_from_score(prev_score)
+                curr_label = _label_from_score(curr_score)
+                if prev_label != curr_label:
+                    changes.append(f"**{name}**: {prev_label} → {curr_label}")
+        if changes:
+            with st.expander(f"Signal Changes vs Previous Session ({prev.get('date', '?')})", expanded=True):
+                for c in changes:
+                    st.markdown(f"- {c}")
 
     # ── Valuation ──
     st.markdown("### Valuation")
