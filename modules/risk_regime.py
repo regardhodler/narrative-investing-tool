@@ -256,6 +256,210 @@ def _portfolio_bias(regime: str) -> dict[str, str]:
     }
 
 
+def _sector_rotation_recs(quadrant: str, regime: str, snaps: dict[str, AssetSnapshot]) -> list[dict]:
+    """Sector rotation recommendations based on macro quadrant and regime."""
+    quadrant_map = {
+        "Goldilocks": {
+            "Favor": [("QQQ", "Nasdaq 100"), ("SPY", "S&P 500"), ("IWM", "Russell 2000"), ("EEM", "Emerging Markets")],
+            "Avoid": [("GLD", "Gold"), ("TLT", "20Y+ Treasuries")],
+        },
+        "Reflation": {
+            "Favor": [("XLE", "Energy"), ("CPER", "Copper"), ("EEM", "Emerging Markets"), ("USO", "Oil")],
+            "Avoid": [("TLT", "20Y+ Treasuries"), ("SHY", "Short Treasuries")],
+        },
+        "Stagflation": {
+            "Favor": [("GLD", "Gold"), ("TIP", "TIPS"), ("XLE", "Energy"), ("UUP", "US Dollar")],
+            "Avoid": [("QQQ", "Nasdaq 100"), ("IWM", "Russell 2000"), ("JNK", "High Yield")],
+        },
+        "Deflation": {
+            "Favor": [("TLT", "20Y+ Treasuries"), ("IEF", "10Y Treasuries"), ("GLD", "Gold"), ("LQD", "IG Bonds")],
+            "Avoid": [("XLE", "Energy"), ("USO", "Oil"), ("JNK", "High Yield"), ("EEM", "Emerging Markets")],
+        },
+    }
+
+    mapping = quadrant_map.get(quadrant, quadrant_map["Goldilocks"])
+    recs = []
+
+    # Risk-Off override: prepend GLD, TLT to Favor if not already present
+    if regime == "Risk-Off":
+        favor_tickers = [t for t, _ in mapping["Favor"]]
+        prepend = []
+        if "GLD" not in favor_tickers:
+            prepend.append(("GLD", "Gold"))
+        if "TLT" not in favor_tickers:
+            prepend.append(("TLT", "20Y+ Treasuries"))
+        mapping["Favor"] = prepend + mapping["Favor"]
+
+    for action in ("Favor", "Avoid"):
+        for ticker, label in mapping[action]:
+            snap = snaps.get(ticker)
+            momentum = snap.pct_change_30d if snap and snap.pct_change_30d is not None else None
+            reason = f"{quadrant} regime favors this asset" if action == "Favor" else f"{quadrant} regime suggests caution"
+            if regime == "Risk-Off" and action == "Favor" and ticker in ("GLD", "TLT"):
+                reason = "Risk-Off safe haven"
+            recs.append({
+                "action": action,
+                "ticker": ticker,
+                "label": label,
+                "momentum_30d": round(momentum, 2) if momentum is not None else None,
+                "reason": reason,
+            })
+
+    return recs
+
+
+def _risk_management_alerts(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[str]:
+    """Generate risk management alerts based on current conditions."""
+    alerts = []
+    score_map = {s["Indicator"]: s["Score"] for s in macro["signals"]}
+
+    # VIX checks
+    vix_snap = snaps.get("^VIX")
+    vix_price = vix_snap.latest_price if vix_snap else None
+    if vix_price is not None:
+        if vix_price > 35:
+            alerts.append(f"VIX at {vix_price:.1f} — crisis-level volatility. Consider hedging or reducing gross exposure.")
+        elif vix_price > 25:
+            alerts.append(f"VIX at {vix_price:.1f} — elevated volatility. Widen stops and reduce position sizes.")
+
+    # Gamma checks
+    gamma = macro.get("gamma")
+    if gamma:
+        spot_gamma_score = score_map.get("Gamma Exposure (Dealer Positioning)", 0)
+        if spot_gamma_score < 0:
+            alerts.append("Negative gamma zone — dealer hedging amplifies moves in both directions.")
+
+        spy_price = gamma.get("price")
+        put_wall = gamma.get("put_wall")
+        call_wall = gamma.get("call_wall")
+        if spy_price is not None and put_wall is not None and spy_price < put_wall:
+            alerts.append(f"SPY ({spy_price:.2f}) below put wall ({put_wall:.2f}) — broken support, expect elevated downside volatility.")
+        if spy_price is not None and call_wall is not None and spy_price > call_wall:
+            alerts.append(f"SPY ({spy_price:.2f}) above call wall ({call_wall:.2f}) — resistance zone, upside may stall.")
+
+    # Valuation + Risk-On combo
+    cape = macro.get("cape")
+    if cape is not None and cape > 25 and macro["macro_regime"] == "Risk-On":
+        alerts.append(f"P/E at {cape:.1f}x with Risk-On regime — elevated valuations reduce margin of safety on long positions.")
+
+    # Credit stress
+    cs_score = score_map.get("Credit Spreads (HY vs Treasuries)", 0)
+    if cs_score < -0.3:
+        alerts.append("Credit spreads widening — stress in high-yield markets signals deteriorating risk appetite.")
+
+    # Stagflation
+    if macro["quadrant"] == "Stagflation":
+        alerts.append("Stagflation quadrant — worst environment for traditional balanced portfolios. Consider real assets and cash.")
+
+    # Dollar surge
+    uup_snap = snaps.get("UUP")
+    uup_30d = uup_snap.pct_change_30d if uup_snap else None
+    if uup_30d is not None and uup_30d > 3:
+        alerts.append(f"USD surging ({uup_30d:.1f}% 30d) — headwind for EM equities and commodities priced in dollars.")
+
+    if not alerts:
+        alerts.append("No elevated risk signals detected.")
+
+    return alerts
+
+
+def _tactical_opportunities(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
+    """Identify tactical opportunities from cross-signal analysis."""
+    score_map = {s["Indicator"]: s["Score"] for s in macro["signals"]}
+    opps = []
+
+    cs_score = score_map.get("Credit Spreads (HY vs Treasuries)", 0)
+    ism_score = score_map.get("ISM Manufacturing", 0)
+    eq_score = score_map.get("Equity Trend (S&P, Nasdaq, Dow)", 0)
+    gamma_score = score_map.get("Gamma Exposure (Dealer Positioning)", 0)
+    dxy_score = score_map.get("US Dollar Index (DXY proxy)", 0)
+    commodity_score = score_map.get("Commodity Trend (Oil + Copper)", 0)
+    infl_score = score_map.get("Core Inflation (PCE)", 0)
+    liquidity_score = score_map.get("Global Liquidity (M2 proxy)", 0)
+
+    # Gold check
+    gld_snap = snaps.get("GLD")
+    gld_30d = gld_snap.pct_change_30d if gld_snap else None
+    spy_snap = snaps.get("SPY")
+    spy_30d = spy_snap.pct_change_30d if spy_snap else None
+
+    if cs_score > 0.2 and ism_score > 0.2:
+        opps.append({"signal": "Credit tight + ISM rising", "opportunity": "Favor high-yield over investment-grade bonds", "tickers": ["JNK", "HYG"]})
+
+    if cs_score < -0.2 and ism_score < -0.2:
+        opps.append({"signal": "Credit widening + ISM falling", "opportunity": "Rotate to Treasuries for safety", "tickers": ["TLT", "IEF"]})
+
+    if eq_score > 0.2 and gamma_score > 0:
+        opps.append({"signal": "Strong equity trend + positive gamma", "opportunity": "Stay long with tight trailing stops", "tickers": ["SPY", "QQQ"]})
+
+    if eq_score < -0.2 and gamma_score < 0:
+        opps.append({"signal": "Weak equity + negative gamma", "opportunity": "Consider bear hedges or put spreads", "tickers": ["SPY", "QQQ"]})
+
+    if dxy_score > 0.2 and macro["macro_regime"] == "Risk-On":
+        opps.append({"signal": "Dollar weakness + equity risk-on", "opportunity": "EM likely to outperform US", "tickers": ["EEM", "FXI"]})
+
+    if commodity_score > 0.3 and infl_score < -0.1:
+        opps.append({"signal": "Commodity surge + rising inflation", "opportunity": "Overweight real assets as inflation hedge", "tickers": ["GLD", "TIP", "XLE"]})
+
+    if gld_30d is not None and spy_30d is not None and gld_30d > 2 and spy_30d < -2:
+        opps.append({"signal": "Gold rallying + equities declining", "opportunity": "Classic risk-off rotation underway — favor gold and Treasuries", "tickers": ["GLD", "TLT"]})
+
+    if liquidity_score > 0.2:
+        opps.append({"signal": "M2 liquidity expanding", "opportunity": "Bullish for risk assets with lag — accumulate on dips", "tickers": ["SPY", "QQQ", "IBIT"]})
+
+    return opps
+
+
+def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
+    """Compute key technical levels for SPY and QQQ plus gamma levels."""
+    levels = []
+
+    for ticker in ("SPY", "QQQ"):
+        snap = snaps.get(ticker)
+        if snap is None or snap.latest_price is None or snap.series is None:
+            continue
+        current = snap.latest_price
+        s = snap.series.dropna()
+
+        # 200d MA
+        if len(s) >= 200:
+            ma200 = float(s.rolling(200).mean().iloc[-1])
+            pct = (current / ma200 - 1) * 100
+            note = "above" if pct > 0 else "below"
+            levels.append({"asset": ticker, "level_type": "200d MA", "price": round(ma200, 2), "current": round(current, 2), "pct_away": round(pct, 2), "note": f"{note} 200d trend"})
+
+        # 50d MA
+        if len(s) >= 50:
+            ma50 = float(s.rolling(50).mean().iloc[-1])
+            pct = (current / ma50 - 1) * 100
+            note = "above" if pct > 0 else "below"
+            levels.append({"asset": ticker, "level_type": "50d MA", "price": round(ma50, 2), "current": round(current, 2), "pct_away": round(pct, 2), "note": f"{note} 50d trend"})
+
+        # 52-week high/low
+        if len(s) >= 252:
+            window = s.iloc[-252:]
+        else:
+            window = s
+        hi52 = float(window.max())
+        lo52 = float(window.min())
+        pct_hi = (current / hi52 - 1) * 100
+        pct_lo = (current / lo52 - 1) * 100
+        levels.append({"asset": ticker, "level_type": "52w High", "price": round(hi52, 2), "current": round(current, 2), "pct_away": round(pct_hi, 2), "note": "from 52-week high"})
+        levels.append({"asset": ticker, "level_type": "52w Low", "price": round(lo52, 2), "current": round(current, 2), "pct_away": round(pct_lo, 2), "note": "from 52-week low"})
+
+    # SPY gamma levels
+    gamma = macro.get("gamma")
+    if gamma:
+        spy_current = gamma.get("price", 0)
+        for level_name, key in [("Gamma Flip", "gamma_flip"), ("Call Wall", "call_wall"), ("Put Wall", "put_wall")]:
+            val = gamma.get(key)
+            if val is not None and spy_current:
+                pct = (spy_current / val - 1) * 100
+                levels.append({"asset": "SPY", "level_type": level_name, "price": round(val, 2), "current": round(spy_current, 2), "pct_away": round(pct, 2), "note": "options-derived level"})
+
+    return levels
+
+
 # ─────────────────────────────────────────────
 # DATA FETCHING
 # ─────────────────────────────────────────────
@@ -520,6 +724,11 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "low_compute_mode": low_compute_mode,
     }
 
+    result["sector_rotation"] = _sector_rotation_recs(quadrant, macro_regime, snaps)
+    result["risk_alerts"] = _risk_management_alerts(result, snaps)
+    result["tactical_opps"] = _tactical_opportunities(result, snaps)
+    result["key_levels"] = _key_levels(result, snaps)
+
     # Persist daily snapshot
     try:
         _save_snapshot(result)
@@ -709,6 +918,59 @@ def render():
     st.markdown("### Portfolio Bias")
     for sleeve, bias in macro["portfolio_bias"].items():
         st.markdown(f"- {sleeve}: {bias}")
+
+    # ── Sector Rotation ──
+    st.markdown("### Sector Rotation")
+    sector_recs = macro.get("sector_rotation", [])
+    if sector_recs:
+        col_favor, col_avoid = st.columns(2)
+        with col_favor:
+            st.markdown("**Favor**")
+            for rec in sector_recs:
+                if rec["action"] == "Favor":
+                    mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
+                    st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+        with col_avoid:
+            st.markdown("**Avoid**")
+            for rec in sector_recs:
+                if rec["action"] == "Avoid":
+                    mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
+                    st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+    else:
+        st.markdown("Sector rotation data unavailable.")
+
+    # ── Risk Management Alerts ──
+    st.markdown("### Risk Management Alerts")
+    for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
+        st.markdown(f"- {alert}")
+
+    # ── Tactical Opportunities ──
+    st.markdown("### Tactical Opportunities")
+    tactical = macro.get("tactical_opps", [])
+    if tactical:
+        for opp in tactical:
+            ticker_strs = []
+            for t in opp["tickers"]:
+                snap = snaps.get(t)
+                mom = snap.pct_change_30d if snap and snap.pct_change_30d is not None else None
+                mom_str = f" ({mom:+.1f}% 30d)" if mom is not None else ""
+                ticker_strs.append(f"**{t}**{mom_str}")
+            st.markdown(f"- **{opp['signal']}**: {opp['opportunity']} — {', '.join(ticker_strs)}")
+    else:
+        st.markdown("No strong cross-signal opportunities detected currently.")
+
+    # ── Key Levels to Watch ──
+    st.markdown("### Key Levels to Watch")
+    key_levels = macro.get("key_levels", [])
+    if key_levels:
+        current_asset = None
+        for lvl in key_levels:
+            if lvl["asset"] != current_asset:
+                current_asset = lvl["asset"]
+                st.markdown(f"**{current_asset}** (current: {lvl['current']:.2f})")
+            st.markdown(f"- {lvl['level_type']}: {lvl['price']:.2f} ({lvl['pct_away']:+.2f}%) — {lvl['note']}")
+    else:
+        st.markdown("Key level data unavailable.")
 
     # ── SPY Options Sentiment ──
     st.markdown("### SPY Options Sentiment Mode")
