@@ -1103,24 +1103,23 @@ def render():
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
 
     # ── Market Ticker Bar ──
-    TICKER_BAR_TICKERS = {
-        "^NDX": "Nasdaq 100",
-        "^DJI": "Dow 30",
-        "^GSPC": "S&P 500",
-        "^RUT": "Russell 2000",
-        "GC=F": "Gold",
-        "SLV": "Silver",
-        "CL=F": "Oil",
-        "TLT": "TLT (20Y+)",
-    }
-    TICKER_BAR = list(TICKER_BAR_TICKERS.items())
+    TICKER_BAR = [
+        ("QQQ",  "Nasdaq 100 (QQQ)"),
+        ("^DJI", "Dow 30"),
+        ("SPY",  "S&P 500 (SPY)"),
+        ("IWM",  "Russell 2000 (IWM)"),
+        ("GLD",  "Gold (GLD)"),
+        ("SLV",  "Silver (SLV)"),
+        ("USO",  "Oil (USO)"),
+        ("TLT",  "TLT (20Y+)"),
+    ]
     ticker_tf = st.radio(
         "Timeframe", ["Daily", "Weekly", "Monthly", "YTD"],
         horizontal=True, key="ticker_bar_tf",
     )
     tf_field = {"Daily": "pct_change_1d", "Weekly": "pct_change_5d", "Monthly": "pct_change_30d", "YTD": "pct_change_ytd"}[ticker_tf]
 
-    bar_snaps = fetch_batch_safe(TICKER_BAR_TICKERS, period="1y", interval="1d")
+    bar_snaps = snaps  # reuse already-fetched data
     cols = st.columns(len(TICKER_BAR))
     for col, (ticker, label) in zip(cols, TICKER_BAR):
         snap = bar_snaps.get(ticker)
