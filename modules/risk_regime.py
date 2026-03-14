@@ -26,6 +26,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import yfinance as yf
 from datetime import datetime
 
 from services.market_data import (
@@ -215,15 +216,15 @@ def _interpret_valuation(cape: float | None, buffett: float | None) -> str:
     if cape is None and buffett is None:
         return "Valuation data unavailable."
     if cape is not None and buffett is not None:
-        if cape > 30 and buffett > 150:
-            return "Both CAPE and Buffett Indicator point to an expensive equity market."
-        if cape < 20 and buffett < 110:
-            return "Both CAPE and Buffett Indicator suggest relatively attractive long-term valuation."
+        if cape > 25 and buffett > 150:
+            return "Both P/E and Buffett Indicator point to an expensive equity market."
+        if cape < 18 and buffett < 110:
+            return "Both P/E and Buffett Indicator suggest relatively attractive long-term valuation."
     if cape is not None:
-        if cape > 28:
-            return "CAPE is elevated versus long-run norms, implying lower forward return expectations."
-        if cape < 20:
-            return "CAPE is below long-run highs, valuation risk appears more moderate."
+        if cape > 23:
+            return "S&P 500 P/E is elevated versus long-run norms, implying lower forward return expectations."
+        if cape < 18:
+            return "S&P 500 P/E is below long-run highs, valuation risk appears more moderate."
     if buffett is not None:
         if buffett > 145:
             return "Buffett Indicator is elevated, signaling stretched market-cap-to-GDP conditions."
@@ -320,7 +321,6 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "sahm": "SAHMREALTIME",
         "unrate": "UNRATE",
         "core_pce": "PCEPILFE",
-        "cape": "CAPE",
         "wilshire": "WILL5000INDFC",
         "gdp": "GDP",
         "capex": "NCBDBIQ027S",
@@ -329,6 +329,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "fci": "NFCI",
     }
     fred = {k: fetch_fred_series(v) for k, v in fred_ids.items()}
+
+    # SPY trailing P/E as CAPE proxy (FRED has no Shiller CAPE series)
+    try:
+        spy_pe = yf.Ticker("SPY").info.get("trailingPE")
+    except Exception:
+        spy_pe = None
 
     indicators = []
 
@@ -356,7 +362,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         dxy_score = _clamp_score(abs(dxy), 3.0)
     else:
         dxy_score = 0.0
-    indicators.append(("US Dollar Index (DXY proxy, up=Risk-Off)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
+    indicators.append(("US Dollar Index (DXY proxy)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
     liquidity_score = _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
@@ -385,9 +391,9 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     equity_score = _clamp_score((eq_trend or 0.0), 5.0)
     indicators.append(("Equity Trend (S&P, Nasdaq, Dow)", eq_trend, "% vs 200d MA", equity_score, _confidence_from_snap("SPY", "QQQ", "^DJI", snaps=snaps)))
 
-    cape = _safe_latest(fred["cape"])
+    cape = float(spy_pe) if spy_pe is not None else None
     cape_score = _clamp_score((25.0 - (cape or 25.0)), 10.0)
-    indicators.append(("Shiller CAPE", cape, "x", cape_score, _confidence_from_age(fred["cape"], expected_days=60)))
+    indicators.append(("S&P 500 P/E (CAPE proxy)", cape, "x", cape_score, 85 if cape is not None else 0))
 
     wilshire = _safe_latest(fred["wilshire"])
     gdp = _safe_latest(fred["gdp"])
@@ -684,7 +690,7 @@ def render():
     st.markdown("### Valuation")
     cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
     buffett_txt = "N/A" if macro["buffett"] is None else f"{macro['buffett']:.2f}%"
-    st.markdown(f"- CAPE: {cape_txt}")
+    st.markdown(f"- S&P 500 P/E (CAPE proxy): {cape_txt}")
     st.markdown(f"- Buffett Indicator: {buffett_txt}")
     st.markdown(f"- Interpretation: {macro['valuation']}")
 
