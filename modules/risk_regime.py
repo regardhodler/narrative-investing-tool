@@ -30,8 +30,8 @@ import yfinance as yf
 from datetime import datetime
 
 from services.market_data import (
-    fetch_batch, AssetSnapshot,
-    fetch_fred_series_safe, fetch_options_chain_snapshot,
+    fetch_batch_safe, AssetSnapshot,
+    fetch_fred_series_safe, fetch_options_chain_snapshot_safe,
 )
 from utils.theme import COLORS, apply_dark_layout
 
@@ -515,10 +515,9 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 # DATA FETCHING
 # ─────────────────────────────────────────────
 
-@st.cache_data(ttl=3600)
 def fetch_all_data() -> dict[str, AssetSnapshot]:
     """Fetch all ticker data via shared market_data service."""
-    return fetch_batch(TICKERS, period="1y", interval="1d")
+    return fetch_batch_safe(TICKERS, period="1y", interval="1d")
 
 
 # ─────────────────────────────────────────────
@@ -526,7 +525,7 @@ def fetch_all_data() -> dict[str, AssetSnapshot]:
 # ─────────────────────────────────────────────
 
 def _compute_spy_gamma_mode(max_expiries: int = 2) -> dict | None:
-    snap = fetch_options_chain_snapshot("SPY", max_expiries=max_expiries)
+    snap = fetch_options_chain_snapshot_safe("SPY", max_expiries=max_expiries)
     if not snap:
         return None
 
@@ -568,6 +567,23 @@ def _compute_spy_gamma_mode(max_expiries: int = 2) -> dict | None:
 # MACRO DASHBOARD ENGINE (15 indicators)
 # ─────────────────────────────────────────────
 
+class _SpyPeFetchError(Exception):
+    """Raised when SPY P/E fetch fails, preventing st.cache_data from caching None."""
+    pass
+
+
+@st.cache_data(ttl=3600)
+def _fetch_spy_pe() -> float:
+    """Fetch SPY trailing P/E with raise-on-failure to avoid caching None."""
+    try:
+        val = yf.Ticker("SPY").info.get("trailingPE")
+        if val is not None:
+            return float(val)
+    except Exception:
+        pass
+    raise _SpyPeFetchError("Failed to fetch SPY P/E")
+
+
 def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
@@ -588,8 +604,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 
     # SPY trailing P/E as CAPE proxy (FRED has no Shiller CAPE series)
     try:
-        spy_pe = yf.Ticker("SPY").info.get("trailingPE")
-    except Exception:
+        spy_pe = _fetch_spy_pe()
+    except _SpyPeFetchError:
         spy_pe = None
 
     indicators = []

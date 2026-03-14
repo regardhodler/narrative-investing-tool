@@ -21,6 +21,16 @@ class _FredFetchError(Exception):
     pass
 
 
+class _BatchFetchError(Exception):
+    """Raised when all tickers fail to fetch, preventing st.cache_data from caching empty snapshots."""
+    pass
+
+
+class _OptionsFetchError(Exception):
+    """Raised when options chain fetch fails, preventing st.cache_data from caching None."""
+    pass
+
+
 @dataclass
 class AssetSnapshot:
     """Standardized snapshot for a single asset."""
@@ -105,7 +115,20 @@ def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d
 
             results[ticker] = snap
 
+    if not any(s.latest_price is not None for s in results.values()):
+        raise _BatchFetchError("All tickers failed to fetch")
     return results
+
+
+def fetch_batch_safe(tickers: dict[str, str], period: str = "1y", interval: str = "1d") -> dict[str, AssetSnapshot]:
+    """Wrapper around fetch_batch that returns empty snapshots on total failure instead of raising.
+
+    Use this at call sites so that total failures aren't cached by st.cache_data.
+    """
+    try:
+        return fetch_batch(tickers, period, interval)
+    except _BatchFetchError:
+        return {t: AssetSnapshot(ticker=t, label=label) for t, label in tickers.items()}
 
 
 def zscore(series: pd.Series, lookback: int = 252) -> float | None:
@@ -222,12 +245,12 @@ def fetch_options_chain_snapshot(ticker: str = "SPY", max_expiries: int = 3) -> 
         tk = yf.Ticker(ticker)
         hist = tk.history(period="5d", interval="1d", auto_adjust=True)
         if hist is None or hist.empty:
-            return None
+            raise _OptionsFetchError(f"No price history for {ticker}")
 
         price = float(hist["Close"].iloc[-1])
         expiries = list(tk.options or [])
         if not expiries:
-            return None
+            raise _OptionsFetchError(f"No options expiries for {ticker}")
 
         selected = expiries[:max(1, min(max_expiries, len(expiries)))]
         strike_map: dict[float, dict[str, float]] = {}
@@ -260,7 +283,7 @@ def fetch_options_chain_snapshot(ticker: str = "SPY", max_expiries: int = 3) -> 
                     strike_map[strike]["net_gamma_proxy"] += gamma_proxy
 
         if not strike_map:
-            return None
+            raise _OptionsFetchError(f"No strike data for {ticker}")
 
         strikes = sorted(strike_map.keys())
         return {
@@ -273,5 +296,18 @@ def fetch_options_chain_snapshot(ticker: str = "SPY", max_expiries: int = 3) -> 
             "net_gamma_proxy": [float(strike_map[s]["net_gamma_proxy"]) for s in strikes],
             "expiries": selected,
         }
-    except Exception:
+    except _OptionsFetchError:
+        raise
+    except Exception as e:
+        raise _OptionsFetchError(f"Options fetch failed for {ticker}: {e}")
+
+
+def fetch_options_chain_snapshot_safe(ticker: str = "SPY", max_expiries: int = 3) -> dict | None:
+    """Wrapper around fetch_options_chain_snapshot that returns None on failure instead of raising.
+
+    Use this at call sites so that transient failures aren't cached by st.cache_data.
+    """
+    try:
+        return fetch_options_chain_snapshot(ticker, max_expiries)
+    except _OptionsFetchError:
         return None
