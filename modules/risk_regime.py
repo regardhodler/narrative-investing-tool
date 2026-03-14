@@ -1,7 +1,7 @@
 """
 Module 0: Macro Dashboard
 
-Daily macro regime indicator using 15 cross-asset signals:
+Daily macro regime indicator using 16 cross-asset signals:
 - FRED macro series (yield curve, credit spreads, ISM, FCI, etc.)
 - ETF proxies (equities, commodities, FX, volatility)
 - SPY options chain (dealer gamma positioning)
@@ -15,7 +15,7 @@ Output:
 - SPY gamma sentiment (zone, flip, call wall, put wall)
 
 Architecture:
-- 15-indicator scoring engine (_build_macro_dashboard)
+- 16-indicator scoring engine (_build_macro_dashboard)
 - Daily regime history persistence (JSON snapshots)
 - Shared data layer via services/market_data.py
 """
@@ -411,6 +411,56 @@ def _tactical_opportunities(macro: dict, snaps: dict[str, AssetSnapshot]) -> lis
     return opps
 
 
+def _classify_yield_curve(spread_series: pd.Series | None, ten_year_series: pd.Series | None, lookback: int = 22) -> dict:
+    """
+    Classify yield curve regime into one of 4 states:
+    - Bull Steepening: spread widening + 10Y falling (Fed easing, growth expected)
+    - Bear Steepening: spread widening + 10Y rising (inflation fears)
+    - Bull Flattening: spread narrowing + 10Y falling (flight to safety)
+    - Bear Flattening: spread narrowing + 10Y rising (Fed tightening)
+    """
+    result = {"regime": "Unknown", "spread_change": None, "rate_direction": None,
+              "spread_now": None, "ten_year_now": None, "inverted": False}
+
+    if spread_series is None or ten_year_series is None:
+        return result
+
+    spread_clean = spread_series.dropna()
+    ten_year_clean = ten_year_series.dropna()
+
+    if len(spread_clean) < lookback + 1 or len(ten_year_clean) < lookback + 1:
+        return result
+
+    spread_now = float(spread_clean.iloc[-1])
+    spread_prev = float(spread_clean.iloc[-lookback])
+    spread_change = spread_now - spread_prev
+
+    ten_year_now = float(ten_year_clean.iloc[-1])
+    ten_year_prev = float(ten_year_clean.iloc[-lookback])
+    rate_change = ten_year_now - ten_year_prev
+
+    steepening = spread_change > 0
+    rates_rising = rate_change > 0
+
+    if steepening and not rates_rising:
+        regime = "Bull Steepening"
+    elif steepening and rates_rising:
+        regime = "Bear Steepening"
+    elif not steepening and not rates_rising:
+        regime = "Bull Flattening"
+    else:
+        regime = "Bear Flattening"
+
+    return {
+        "regime": regime,
+        "spread_change": round(spread_change, 3),
+        "rate_direction": "Rising" if rates_rising else "Falling",
+        "spread_now": round(spread_now, 3),
+        "ten_year_now": round(ten_year_now, 3),
+        "inverted": spread_now < 0,
+    }
+
+
 def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
     """Compute key technical levels for SPY and QQQ plus gamma levels."""
     levels = []
@@ -526,12 +576,13 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "sahm": "SAHMREALTIME",
         "unrate": "UNRATE",
         "core_pce": "PCEPILFE",
-        "wilshire": "WILL5000INDFC",
+        "wilshire": "NCBEILQ027S",  # Nonfinancial Corporate Equity (market value, quarterly)
         "gdp": "GDP",
         "capex": "NCBDBIQ027S",
         "term_premium": "THREEFYTP10",
-        "ism": "NAPM",
+        "ism": "INDPRO",  # Industrial Production Index (monthly, replaces discontinued NAPM)
         "fci": "NFCI",
+        "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
     }
     fred = {k: fetch_fred_series(v) for k, v in fred_ids.items()}
 
@@ -551,14 +602,31 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     cs_score = _clamp_score((4.0 - (cs or 4.0)), 2.0)
     indicators.append(("Credit Spreads (HY vs Treasuries)", cs, "%", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
 
-    oil = snaps.get("USO").pct_change_30d if snaps.get("USO") else None
-    copper = snaps.get("CPER").pct_change_30d if snaps.get("CPER") else None
+    def _blend_pct(snap):
+        """Blend 1d/5d/30d pct changes (50%/30%/20%) for a snap."""
+        if snap is None:
+            return None
+        components = [(snap.pct_change_1d, 0.5), (snap.pct_change_5d, 0.3), (snap.pct_change_30d, 0.2)]
+        vals = [(v * w) for v, w in components if v is not None]
+        weights = [w for v, w in components if v is not None]
+        return sum(vals) / sum(weights) if weights else None
+
+    oil = _blend_pct(snaps.get("USO"))
+    copper = _blend_pct(snaps.get("CPER"))
     commodity_trend = np.nanmean([oil if oil is not None else np.nan, copper if copper is not None else np.nan])
     commodity_trend = None if np.isnan(commodity_trend) else float(commodity_trend)
     commodity_score = _clamp_score((commodity_trend or 0.0), 5.0)
-    indicators.append(("Commodity Trend (Oil + Copper)", commodity_trend, "% 30d", commodity_score, _confidence_from_snap("USO", "CPER", snaps=snaps)))
+    indicators.append(("Commodity Trend (Oil + Copper)", commodity_trend, "% blend", commodity_score, _confidence_from_snap("USO", "CPER", snaps=snaps)))
 
-    dxy = snaps.get("UUP").pct_change_30d if snaps.get("UUP") else None
+    uup = snaps.get("UUP")
+    dxy_1d = uup.pct_change_1d if uup else None
+    dxy_5d = uup.pct_change_5d if uup else None
+    dxy_30d = uup.pct_change_30d if uup else None
+    # Blend: 50% daily, 30% weekly, 20% monthly — responsive to short-term moves
+    dxy_components = [(dxy_1d, 0.5), (dxy_5d, 0.3), (dxy_30d, 0.2)]
+    dxy_vals = [(v * w) for v, w in dxy_components if v is not None]
+    dxy_weights = [w for v, w in dxy_components if v is not None]
+    dxy = sum(dxy_vals) / sum(dxy_weights) if dxy_weights else None
     if dxy is None:
         dxy_score = 0.0
     elif dxy > 0:
@@ -567,7 +635,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         dxy_score = _clamp_score(abs(dxy), 3.0)
     else:
         dxy_score = 0.0
-    indicators.append(("US Dollar Index (DXY proxy)", dxy, "% 30d", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
+    indicators.append(("US Dollar Index (DXY proxy)", dxy, "% blend", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
     liquidity_score = _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
@@ -602,7 +670,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 
     wilshire = _safe_latest(fred["wilshire"])
     gdp = _safe_latest(fred["gdp"])
-    buffett = (wilshire / gdp * 100) if (wilshire is not None and gdp and gdp != 0) else None
+    # NCBEILQ027S is in millions, GDP is in billions — normalize to same unit
+    buffett = (wilshire / (gdp * 1000) * 100) if (wilshire is not None and gdp and gdp != 0) else None
     buffett_score = _clamp_score((120.0 - (buffett or 120.0)), 40.0)
     indicators.append(("Buffett Indicator (Mkt Cap / GDP)", buffett, "%", buffett_score, int(round(np.mean([
         _confidence_from_age(fred["wilshire"], expected_days=45),
@@ -629,16 +698,21 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     term_score = _clamp_score((term or 0.0), 0.75)
     indicators.append(("Term Premium", term, "%", term_score, _confidence_from_age(fred["term_premium"], expected_days=14)))
 
-    ism = _safe_latest(fred["ism"])
-    ism_score = _clamp_score(((ism or 50.0) - 50.0), 5.0)
-    indicators.append(("ISM Manufacturing", ism, "index", ism_score, _confidence_from_age(fred["ism"], expected_days=45)))
+    indpro_yoy = _yoy_latest(fred["ism"], periods=12)
+    ism_score = _clamp_score((indpro_yoy or 0.0), 5.0)  # Positive YoY = expansion = risk-on
+    indicators.append(("Industrial Production", indpro_yoy, "% YoY", ism_score, _confidence_from_age(fred["ism"], expected_days=45)))
 
     fci = _safe_latest(fred["fci"])
     fci_score = _clamp_score((-(fci or 0.0)), 0.5)
     indicators.append(("Financial Conditions Index", fci, "index", fci_score, _confidence_from_age(fred["fci"], expected_days=14)))
 
+    vix_snap = snaps.get("^VIX")
+    vix = vix_snap.latest_price if vix_snap else None
+    vix_score = _clamp_score((20.0 - (vix or 20.0)), 8.0)  # VIX 20 = neutral, lower = risk-on
+    indicators.append(("VIX (Equity Volatility)", vix, "level", vix_score, _confidence_from_snap("^VIX", snaps=snaps)))
+
     SIGNAL_CATEGORIES = {
-        "Yield Curve (10Y-2Y Spread)": "Rates",
+        "Yield Curve (10Y-2Y)": "Rates",
         "Credit Spreads (HY vs Treasuries)": "Credit",
         "VIX (Equity Volatility)": "Volatility",
         "Commodity Trend (Oil + Copper)": "Commodities",
@@ -652,7 +726,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "Corporate CAPEX vs Liquidity": "Growth",
         "Gamma Exposure (Dealer Positioning)": "Positioning",
         "Term Premium": "Rates",
-        "ISM Manufacturing": "Growth",
+        "Industrial Production": "Growth",
         "Financial Conditions Index": "Credit",
     }
 
@@ -749,6 +823,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     result["risk_alerts"] = _risk_management_alerts(result, snaps)
     result["tactical_opps"] = _tactical_opportunities(result, snaps)
     result["key_levels"] = _key_levels(result, snaps)
+    result["yield_curve_regime"] = _classify_yield_curve(fred["yield_curve"], fred["dgs10"])
+    result["snaps"] = snaps
 
     # Persist daily snapshot
     try:
@@ -1010,6 +1086,48 @@ def render():
     regime = macro["macro_regime"]
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
 
+    # ── Market Ticker Bar ──
+    TICKER_BAR = [
+        ("QQQ", "Nasdaq 100"),
+        ("^DJI", "Dow 30"),
+        ("SPY", "S&P 500"),
+        ("IWM", "Russell 2000"),
+        ("GLD", "Gold"),
+        ("SLV", "Silver"),
+        ("USO", "Oil"),
+        ("TLT", "TLT (20Y+)"),
+    ]
+    ticker_tf = st.radio(
+        "Timeframe", ["Daily", "Weekly", "Monthly", "YTD"],
+        horizontal=True, key="ticker_bar_tf",
+    )
+    tf_field = {"Daily": "pct_change_1d", "Weekly": "pct_change_5d", "Monthly": "pct_change_30d", "YTD": "pct_change_ytd"}[ticker_tf]
+
+    bar_snaps = macro.get("snaps", snaps)
+    cols = st.columns(len(TICKER_BAR))
+    for col, (ticker, label) in zip(cols, TICKER_BAR):
+        snap = bar_snaps.get(ticker)
+        price = snap.latest_price if snap else None
+        pct = getattr(snap, tf_field, None) if snap else None
+        price_str = f"${price:,.2f}" if price is not None else "N/A"
+        if pct is not None:
+            arrow = "▲" if pct >= 0 else "▼"
+            pct_color = COLORS["green"] if pct >= 0 else COLORS["red"]
+            pct_str = f"<span style='color:{pct_color}'>{arrow} {pct:+.2f}%</span>"
+        else:
+            pct_str = "<span style='color:gray'>N/A</span>"
+        dim_color = COLORS["text_dim"]
+        col.markdown(
+            f"<div style='text-align:center;'>"
+            f"<div style='color:{dim_color};font-size:0.75em;'>{label}</div>"
+            f"<div style='font-size:1.1em;font-weight:bold;'>{price_str}</div>"
+            f"<div style='font-size:0.9em;'>{pct_str}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+
     # ── Gauge + Top-level metrics ──
     col_gauge, col_metrics = st.columns([1, 2])
     with col_gauge:
@@ -1061,6 +1179,32 @@ def render():
     # ── Core Signals ──
     st.markdown(f"### Core Signals ({len(macro['signals'])})")
     st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
+
+    na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
+    if na_count > 3:
+        st.caption(f"⚠ {na_count} signals show N/A — likely due to FRED API or yfinance fetch failures. Refresh page or check network.")
+
+    # ── Yield Curve Regime ──
+    yc_regime = macro.get("yield_curve_regime", {})
+    if yc_regime.get("regime") != "Unknown":
+        st.markdown("### Yield Curve Regime")
+        regime_name = yc_regime["regime"]
+        is_bullish = regime_name.startswith("Bull")
+        yc_color = COLORS["green"] if is_bullish else COLORS["red"]
+        inv_tag = " **(Inverted)**" if yc_regime.get("inverted") else ""
+
+        yc_descriptions = {
+            "Bull Steepening": "Curve widening with rates falling — Fed easing expectations, positive for risk assets",
+            "Bear Steepening": "Curve widening with rates rising — inflation fears, long-end selling off",
+            "Bull Flattening": "Curve narrowing with rates falling — flight to safety, slowing growth expectations",
+            "Bear Flattening": "Curve narrowing with rates rising — Fed tightening, short-end rates rising faster",
+        }
+
+        c1, c2, c3 = st.columns(3)
+        c1.markdown(f"**Regime:** <span style='color:{yc_color}'>{regime_name}</span>{inv_tag}", unsafe_allow_html=True)
+        c2.markdown(f"**10Y-2Y Spread:** {yc_regime['spread_now']} bps ({yc_regime['spread_change']:+.3f} 30d chg)")
+        c3.markdown(f"**10Y Yield:** {yc_regime['ten_year_now']}% ({yc_regime['rate_direction']})")
+        st.caption(yc_descriptions.get(regime_name, ""))
 
     # ── Signal Changes ──
     history = _load_history()
@@ -1145,19 +1289,6 @@ def render():
             st.markdown(f"- **{opp['signal']}**: {opp['opportunity']} — {', '.join(ticker_strs)}")
     else:
         st.markdown("No strong cross-signal opportunities detected currently.")
-
-    # ── Key Levels to Watch ──
-    st.markdown("### Key Levels to Watch")
-    key_levels = macro.get("key_levels", [])
-    if key_levels:
-        current_asset = None
-        for lvl in key_levels:
-            if lvl["asset"] != current_asset:
-                current_asset = lvl["asset"]
-                st.markdown(f"**{current_asset}** (current: {lvl['current']:.2f})")
-            st.markdown(f"- {lvl['level_type']}: {lvl['price']:.2f} ({lvl['pct_away']:+.2f}%) — {lvl['note']}")
-    else:
-        st.markdown("Key level data unavailable.")
 
     # ── SPY Options Sentiment ──
     st.markdown("### SPY Options Sentiment Mode")
