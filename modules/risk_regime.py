@@ -972,6 +972,31 @@ def render():
         st.caption(f"Signal confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%).")
         st.caption(f"Growth: {macro['growth_dir']} | Inflation: {macro['inflation_dir']}")
 
+    # ── Regime History ──
+    st.markdown("### Regime History")
+    timeframe = st.radio("Timeframe", ["1W", "1M", "6M", "1Y", "All"], index=4, horizontal=True)
+
+    if timeframe != "All":
+        summary = _regime_timeframe_summary(timeframe)
+        if summary:
+            v_color = COLORS["green"] if summary["verdict"] == "Risk-On" else COLORS["red"] if summary["verdict"] == "Risk-Off" else COLORS["yellow"]
+            t_color = COLORS["green"] if summary["trend"] == "Improving" else COLORS["red"] if summary["trend"] == "Deteriorating" else COLORS["yellow"]
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f"**{timeframe} Verdict:** <span style='color:{v_color}'>{summary['verdict']}</span>", unsafe_allow_html=True)
+            c2.markdown(f"**Avg Score:** {summary['avg_score']}")
+            c3.markdown(f"**Trend:** <span style='color:{t_color}'>{summary['trend']}</span>", unsafe_allow_html=True)
+            st.caption(f"{summary['risk_on_days']} Risk-On / {summary['neutral_days']} Neutral / {summary['risk_off_days']} Risk-Off days (of {summary['total_days']})")
+
+    history_fig = _make_regime_history(timeframe=timeframe)
+    if history_fig:
+        st.plotly_chart(history_fig, use_container_width=True)
+
+    st.markdown(
+        f"<p style='color:{regime_color};font-size:11px;margin-top:12px;'>"
+        f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
+        unsafe_allow_html=True,
+    )
+
     # ── Core Signals ──
     st.markdown(f"### Core Signals ({len(macro['signals'])})")
     st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
@@ -1121,27 +1146,3 @@ def render():
     else:
         st.warning("SPY options sentiment currently unavailable.")
 
-    # ── Regime History ──
-    st.markdown("### Regime History")
-    timeframe = st.radio("Timeframe", ["1W", "1M", "6M", "1Y", "All"], index=4, horizontal=True)
-
-    if timeframe != "All":
-        summary = _regime_timeframe_summary(timeframe)
-        if summary:
-            v_color = COLORS["green"] if summary["verdict"] == "Risk-On" else COLORS["red"] if summary["verdict"] == "Risk-Off" else COLORS["yellow"]
-            t_color = COLORS["green"] if summary["trend"] == "Improving" else COLORS["red"] if summary["trend"] == "Deteriorating" else COLORS["yellow"]
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f"**{timeframe} Verdict:** <span style='color:{v_color}'>{summary['verdict']}</span>", unsafe_allow_html=True)
-            c2.markdown(f"**Avg Score:** {summary['avg_score']}")
-            c3.markdown(f"**Trend:** <span style='color:{t_color}'>{summary['trend']}</span>", unsafe_allow_html=True)
-            st.caption(f"{summary['risk_on_days']} Risk-On / {summary['neutral_days']} Neutral / {summary['risk_off_days']} Risk-Off days (of {summary['total_days']})")
-
-    history_fig = _make_regime_history(timeframe=timeframe)
-    if history_fig:
-        st.plotly_chart(history_fig, use_container_width=True)
-
-    st.markdown(
-        f"<p style='color:{regime_color};font-size:11px;margin-top:12px;'>"
-        f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>",
-        unsafe_allow_html=True,
-    )
