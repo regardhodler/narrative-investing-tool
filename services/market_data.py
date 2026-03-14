@@ -16,6 +16,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 
 
+class _FredFetchError(Exception):
+    """Raised when a FRED series fetch fails, preventing st.cache_data from caching None."""
+    pass
+
+
 @dataclass
 class AssetSnapshot:
     """Standardized snapshot for a single asset."""
@@ -138,7 +143,7 @@ def fetch_truflation() -> dict | None:
 
 
 @st.cache_data(ttl=21600)
-def fetch_fred_series(series_id: str) -> pd.Series | None:
+def fetch_fred_series(series_id: str) -> pd.Series:
     """Fetch a single FRED series as a pandas Series indexed by date."""
     cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "fred_cache")
     cache_file = os.path.join(cache_dir, f"{series_id}.csv")
@@ -176,11 +181,24 @@ def fetch_fred_series(series_id: str) -> pd.Series | None:
         if os.path.exists(cache_file):
             with open(cache_file, "r", encoding="utf-8") as f:
                 cached_text = f.read()
-            return _parse_csv_text(cached_text)
+            result = _parse_csv_text(cached_text)
+            if result is not None:
+                return result
     except Exception:
         pass
 
-    return None
+    raise _FredFetchError(f"Failed to fetch FRED series {series_id}")
+
+
+def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
+    """Wrapper around fetch_fred_series that returns None on failure instead of raising.
+
+    Use this at call sites so that transient failures aren't cached by st.cache_data.
+    """
+    try:
+        return fetch_fred_series(series_id)
+    except _FredFetchError:
+        return None
 
 
 @st.cache_data(ttl=10800)

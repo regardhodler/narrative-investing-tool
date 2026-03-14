@@ -31,7 +31,7 @@ from datetime import datetime
 
 from services.market_data import (
     fetch_batch, AssetSnapshot,
-    fetch_fred_series, fetch_options_chain_snapshot,
+    fetch_fred_series_safe, fetch_options_chain_snapshot,
 )
 from utils.theme import COLORS, apply_dark_layout
 
@@ -584,7 +584,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "fci": "NFCI",
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
     }
-    fred = {k: fetch_fred_series(v) for k, v in fred_ids.items()}
+    fred = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
 
     # SPY trailing P/E as CAPE proxy (FRED has no Shiller CAPE series)
     try:
