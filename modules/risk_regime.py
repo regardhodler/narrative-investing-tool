@@ -1201,8 +1201,12 @@ def render():
     st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
 
     na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
-    if na_count > 3:
-        st.caption(f"⚠ {na_count} signals show N/A — likely due to FRED API or yfinance fetch failures. Refresh page or check network.")
+    if na_count:
+        cols = st.columns([6, 1])
+        cols[0].caption(f"⚠ {na_count} signal(s) show N/A — FRED API or yfinance fetch failures.")
+        if cols[1].button("Retry", key="retry_signals"):
+            st.cache_data.clear()
+            st.rerun()
 
     # ── Yield Curve Regime ──
     yc_regime = macro.get("yield_curve_regime", {})
