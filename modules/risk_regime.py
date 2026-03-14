@@ -156,6 +156,16 @@ def _safe_latest(series: pd.Series | None) -> float | None:
     return float(series.dropna().iloc[-1]) if len(series.dropna()) else None
 
 
+def _series_trend(series: pd.Series | None, lookback: int = 22) -> float | None:
+    """Return the change (latest - lookback-ago) for a FRED series, or None."""
+    if series is None:
+        return None
+    clean = series.dropna()
+    if len(clean) < lookback + 1:
+        return None
+    return float(clean.iloc[-1] - clean.iloc[-lookback - 1])
+
+
 def _yoy_latest(series: pd.Series | None, periods: int = 12) -> float | None:
     if series is None or len(series.dropna()) <= periods:
         return None
@@ -616,11 +626,31 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 
     yc = _safe_latest(fred["yield_curve"])
     yc_score = _clamp_score((yc or 0.0), 1.0)
-    indicators.append(("Yield Curve (10Y-2Y)", yc, "bps", yc_score, _confidence_from_age(fred["yield_curve"], expected_days=14)))
+    yc_chg = _series_trend(fred["yield_curve"], lookback=22)
+    dgs10_chg = _series_trend(fred["dgs10"], lookback=22)
+    yc_dir = ""
+    if yc_chg is not None and dgs10_chg is not None:
+        steepening = yc_chg > 0
+        rates_rising = dgs10_chg > 0
+        if steepening and not rates_rising:
+            yc_dir = " — Bull Steepening"
+        elif steepening and rates_rising:
+            yc_dir = " — Bear Steepening"
+        elif not steepening and not rates_rising:
+            yc_dir = " — Bull Flattening"
+        else:
+            yc_dir = " — Bear Flattening"
+        if yc is not None and yc < 0:
+            yc_dir += " (Inverted)"
+    indicators.append(("Yield Curve (10Y-2Y)", yc, f"bps{yc_dir}", yc_score, _confidence_from_age(fred["yield_curve"], expected_days=14)))
 
     cs = _safe_latest(fred["credit_spread"])
     cs_score = _clamp_score((4.0 - (cs or 4.0)), 2.0)
-    indicators.append(("Credit Spreads (HY vs Treasuries)", cs, "%", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
+    cs_chg = _series_trend(fred["credit_spread"], lookback=22)
+    cs_dir = ""
+    if cs_chg is not None:
+        cs_dir = " ▲ Widening" if cs_chg > 0 else " ▼ Narrowing"
+    indicators.append(("Credit Spreads (HY vs Treasuries)", cs, f"%{cs_dir}", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
 
     def _blend_pct(snap):
         """Blend 1d/5d/30d pct changes (50%/30%/20%) for a snap."""
