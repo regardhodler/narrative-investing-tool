@@ -787,7 +787,7 @@ def _make_gauge(macro_score: int, regime: str, color: str) -> go.Figure:
     return fig
 
 
-def _make_regime_history() -> go.Figure | None:
+def _make_regime_history(timeframe: str = "All") -> go.Figure | None:
     """Time-series chart of historical regime scores."""
     history = _load_history()
     if len(history) < 2:
@@ -796,6 +796,14 @@ def _make_regime_history() -> go.Figure | None:
     df = pd.DataFrame(history)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
+
+    days_map = {"1W": 7, "1M": 30, "6M": 182, "1Y": 365, "All": None}
+    days = days_map.get(timeframe)
+    if days is not None:
+        cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
+        df = df[df["date"] >= cutoff]
+        if len(df) < 2:
+            return None
 
     # Use macro_score (0-100) if available, else fall back to legacy score (-1..+1)
     if "macro_score" in df.columns:
@@ -1041,7 +1049,9 @@ def render():
         st.warning("SPY options sentiment currently unavailable.")
 
     # ── Regime History ──
-    history_fig = _make_regime_history()
+    st.markdown("### Regime History")
+    timeframe = st.radio("Timeframe", ["1W", "1M", "6M", "1Y", "All"], index=4, horizontal=True)
+    history_fig = _make_regime_history(timeframe=timeframe)
     if history_fig:
         st.plotly_chart(history_fig, use_container_width=True)
 
