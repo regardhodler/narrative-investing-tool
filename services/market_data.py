@@ -58,7 +58,7 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     return None
 
 
-@st.cache_data(ttl=7200)
+@st.cache_data(ttl=14400)
 def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d") -> dict[str, AssetSnapshot]:
     """
     Fetch multiple tickers concurrently.

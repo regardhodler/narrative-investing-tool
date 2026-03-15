@@ -94,14 +94,11 @@ TICKERS = {
     # Credit spreads
     "JNK": "HY Corporate Bonds",
     "LQD": "IG Corporate Bonds",
-    "HYG": "HY (Alt)",
     # Inflation
     "TIP": "TIPS ETF",
-    "RINF": "Inflation Expectations",
     # Equity - US
     "SPY": "S&P 500",
     "QQQ": "Nasdaq 100",
-    "^DJI": "Dow Jones Industrial Average",
     "IWM": "Russell 2000",
     "XLF": "Financials",
     "XLE": "Energy",
@@ -400,7 +397,7 @@ def _tactical_opportunities(macro: dict, snaps: dict[str, AssetSnapshot]) -> lis
     spy_30d = spy_snap.pct_change_30d if spy_snap else None
 
     if cs_score > 0.2 and ism_score > 0.2:
-        opps.append({"signal": "Credit tight + ISM rising", "opportunity": "Favor high-yield over investment-grade bonds", "tickers": ["JNK", "HYG"]})
+        opps.append({"signal": "Credit tight + ISM rising", "opportunity": "Favor high-yield over investment-grade bonds", "tickers": ["JNK"]})
 
     if cs_score < -0.2 and ism_score < -0.2:
         opps.append({"signal": "Credit widening + ISM falling", "opportunity": "Rotate to Treasuries for safety", "tickers": ["TLT", "IEF"]})
@@ -532,12 +529,20 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 
 def fetch_all_data() -> dict[str, AssetSnapshot]:
     """Fetch all ticker data via shared market_data service."""
-    return fetch_batch_safe(TICKERS, period="1y", interval="1d")
+    return fetch_batch_safe(TICKERS, period="6mo", interval="1d")
 
 
 # ─────────────────────────────────────────────
 # SPY GAMMA MODE
 # ─────────────────────────────────────────────
+
+def _compute_spy_gamma_mode_with_retry(max_expiries: int = 2) -> dict | None:
+    """Try gamma computation, retry with fewer expiries on failure."""
+    result = _compute_spy_gamma_mode(max_expiries=max_expiries)
+    if result is None and max_expiries > 1:
+        result = _compute_spy_gamma_mode(max_expiries=1)
+    return result
+
 
 def _compute_spy_gamma_mode(max_expiries: int = 2) -> dict | None:
     snap = fetch_options_chain_snapshot_safe("SPY", max_expiries=max_expiries)
@@ -599,6 +604,14 @@ def _fetch_spy_pe() -> float:
     raise _SpyPeFetchError("Failed to fetch SPY P/E")
 
 
+def _fetch_spy_pe_safe() -> float | None:
+    """Wrapper around _fetch_spy_pe that returns None on failure."""
+    try:
+        return _fetch_spy_pe()
+    except _SpyPeFetchError:
+        return None
+
+
 def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
@@ -615,15 +628,15 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "fci": "NFCI",
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
     }
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
-        fred = {k: f.result() for k, f in futures.items()}
-
-    # SPY trailing P/E as CAPE proxy (FRED has no Shiller CAPE series)
-    try:
-        spy_pe = _fetch_spy_pe()
-    except _SpyPeFetchError:
-        spy_pe = None
+    gamma_expiries = 1 if low_compute_mode else 2
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        fred_futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
+        # Run SPY P/E and gamma concurrently with FRED fetches
+        spy_pe_future = executor.submit(_fetch_spy_pe_safe)
+        gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, gamma_expiries)
+        fred = {k: f.result() for k, f in fred_futures.items()}
+        spy_pe = spy_pe_future.result()
+        gamma_data = gamma_future.result()
 
     indicators = []
 
@@ -707,15 +720,15 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators.append(("Core Inflation (PCE)", core_yoy, "% YoY", core_infl_score, _confidence_from_age(fred["core_pce"], expected_days=45)))
 
     eq_components = []
-    for ticker in ("SPY", "QQQ", "^DJI"):
+    for ticker in ("SPY", "QQQ", "DIA"):
         s = snaps.get(ticker).series if snaps.get(ticker) else None
-        if s is not None and len(s) >= 200:
-            ma200 = s.rolling(200).mean().iloc[-1]
-            if ma200 and ma200 != 0:
-                eq_components.append(float((s.iloc[-1] / ma200 - 1) * 100))
+        if s is not None and len(s) >= 120:
+            ma120 = s.rolling(120).mean().iloc[-1]
+            if ma120 and ma120 != 0:
+                eq_components.append(float((s.iloc[-1] / ma120 - 1) * 100))
     eq_trend = float(np.mean(eq_components)) if eq_components else None
     equity_score = _clamp_score((eq_trend or 0.0), 5.0)
-    indicators.append(("Equity Trend (S&P, Nasdaq, Dow)", eq_trend, "% vs 200d MA", equity_score, _confidence_from_snap("SPY", "QQQ", "^DJI", snaps=snaps)))
+    indicators.append(("Equity Trend (S&P, Nasdaq, Dow)", eq_trend, "% vs 120d MA", equity_score, _confidence_from_snap("SPY", "QQQ", "DIA", snaps=snaps)))
 
     cape = float(spy_pe) if spy_pe is not None else None
     cape_score = _clamp_score((25.0 - (cape or 25.0)), 10.0)
@@ -739,7 +752,6 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         _confidence_from_age(fred["m2"], expected_days=45),
     ])))))
 
-    gamma_data = _compute_spy_gamma_mode(max_expiries=1 if low_compute_mode else 2)
     gamma_score = 0.0
     if gamma_data and len(gamma_data["net_gamma"]) > 0:
         nearest = int(np.argmin(np.abs(gamma_data["strikes"] - gamma_data["price"])))
@@ -1258,11 +1270,11 @@ def render():
         macro = _build_macro_dashboard(snaps, low_compute_mode=low_compute_mode)
         load_secs = (datetime.now() - load_start).total_seconds()
 
-    # Cache freshness indicator — batch TTL is 2h, FRED is 12h
-    cache_expiry = datetime.now() + timedelta(seconds=7200)
+    # Cache freshness indicator — batch TTL is 4h, FRED is 12h
+    cache_expiry = datetime.now() + timedelta(seconds=14400)
     st.caption(
         f"Data loaded in {load_secs:.1f}s — cached until ~{cache_expiry.strftime('%H:%M')} "
-        f"(batch 2h / FRED 12h). No need to refresh unless markets have moved significantly."
+        f"(batch 4h / FRED 12h). No need to refresh unless markets have moved significantly."
     )
 
     regime = macro["macro_regime"]
@@ -1608,4 +1620,7 @@ def render():
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("SPY options sentiment currently unavailable.")
+        if st.button("Retry SPY Gamma", key="retry_gamma"):
+            st.cache_data.clear()
+            st.rerun()
 
