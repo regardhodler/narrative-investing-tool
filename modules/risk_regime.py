@@ -33,6 +33,7 @@ from concurrent.futures import ThreadPoolExecutor
 from services.market_data import (
     fetch_batch_safe, AssetSnapshot,
     fetch_fred_series_safe, fetch_options_chain_snapshot_safe,
+    warm_fred_cache,
 )
 from utils.theme import COLORS, apply_dark_layout
 
@@ -44,8 +45,9 @@ _HISTORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 _HISTORY_FILE = os.path.join(_HISTORY_DIR, "regime_history.json")
 
 
+@st.cache_data(ttl=60)
 def _load_history() -> list[dict]:
-    """Load regime history from JSON file."""
+    """Load regime history from JSON file (cached 60s to avoid repeated I/O)."""
     if os.path.exists(_HISTORY_FILE):
         try:
             with open(_HISTORY_FILE, "r") as f:
@@ -80,6 +82,7 @@ def _save_snapshot(macro: dict):
 
     with open(_HISTORY_FILE, "w") as f:
         json.dump(history, f, indent=2)
+    _load_history.clear()
 
 
 # ─────────────────────────────────────────────
@@ -529,12 +532,12 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 
 def fetch_core_data() -> dict[str, AssetSnapshot]:
     """Fetch only the 7 core tickers needed for signal calculations."""
-    return fetch_batch_safe(CORE_TICKERS, period="6mo", interval="1d")
+    return fetch_batch_safe(CORE_TICKERS, period="3mo", interval="1d")
 
 
 def fetch_display_data() -> dict[str, AssetSnapshot]:
     """Fetch the 17 display-only tickers (ticker bar, sector rotation, tactical opps)."""
-    return fetch_batch_safe(DISPLAY_TICKERS, period="6mo", interval="1d")
+    return fetch_batch_safe(DISPLAY_TICKERS, period="3mo", interval="1d")
 
 
 def fetch_all_data() -> dict[str, AssetSnapshot]:
@@ -606,7 +609,8 @@ class _SpyPeFetchError(Exception):
 def _fetch_spy_pe() -> float:
     """Fetch SPY trailing P/E with raise-on-failure to avoid caching None."""
     try:
-        val = yf.Ticker("SPY").info.get("trailingPE")
+        info = yf.Ticker("SPY").info
+        val = info.get("trailingPE") or info.get("forwardPE")
         if val is not None:
             return float(val)
     except Exception:
@@ -732,10 +736,11 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     eq_components = []
     for ticker in ("SPY", "QQQ", "DIA"):
         s = snaps.get(ticker).series if snaps.get(ticker) else None
-        if s is not None and len(s) >= 120:
-            ma120 = s.tail(120).mean()
-            if ma120 and ma120 != 0:
-                eq_components.append(float((s.iloc[-1] / ma120 - 1) * 100))
+        if s is not None and len(s) >= 20:
+            ma_len = min(120, len(s))
+            ma = s.tail(ma_len).mean()
+            if ma and ma != 0:
+                eq_components.append(float((s.iloc[-1] / ma - 1) * 100))
     eq_trend = float(np.mean(eq_components)) if eq_components else None
     equity_score = _clamp_score((eq_trend or 0.0), 5.0)
     indicators.append(("Equity Trend (S&P, Nasdaq, Dow)", eq_trend, "% vs 120d MA", equity_score, _confidence_from_snap("SPY", "QQQ", "DIA", snaps=snaps)))
@@ -1149,6 +1154,8 @@ def _render_signals_table(signals: list[dict]):
     df = df[[c for c in display_cols if c in df.columns]]
     df = df.rename(columns={"Indicator": "Signal"})
     st.dataframe(df, use_container_width=True, hide_index=True)
+    csv = df.to_csv(index=False)
+    st.download_button("Export CSV", csv, "risk_regime_signals.csv", "text/csv", key="dl_risk_signals")
 
 
 # ─────────────────────────────────────────────
@@ -1169,11 +1176,19 @@ def render():
     )
 
     with st.spinner("Building macro dashboard..."):
+        # Pre-warm FRED cache in parallel before main build
+        _FRED_SERIES_IDS = [
+            "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
+            "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
+            "INDPRO", "NFCI", "DGS10",
+        ]
+        warm_fred_cache(_FRED_SERIES_IDS)
         load_start = datetime.now()
-        core_snaps = fetch_core_data()
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            macro_future = executor.submit(_build_macro_dashboard, core_snaps, low_compute_mode)
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            core_future = executor.submit(fetch_core_data)
             display_future = executor.submit(fetch_display_data)
+            core_snaps = core_future.result()
+            macro_future = executor.submit(_build_macro_dashboard, core_snaps, low_compute_mode)
             macro = macro_future.result()
             display_snaps = display_future.result()
         snaps = {**core_snaps, **display_snaps}
@@ -1266,7 +1281,10 @@ def render():
     na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
     if na_count:
         cols = st.columns([6, 1])
-        cols[0].caption(f"⚠ {na_count} signal(s) show N/A — FRED API or yfinance fetch failures.")
+        cols[0].warning(
+            f"{na_count} signal(s) showing N/A — FRED data may be temporarily unavailable. "
+            "Click 'Retry' to refresh. Signals auto-recover on next cache cycle."
+        )
         if cols[1].button("Retry", key="retry_signals"):
             st.cache_data.clear()
             st.rerun()
