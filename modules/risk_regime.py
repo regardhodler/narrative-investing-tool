@@ -817,9 +817,10 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
             "Category": SIGNAL_CATEGORIES.get(name, "Other"),
             "Indicator": name,
             "Signal": f"{emoji} {verdict}",
+            "Direction": verdict,
             "Value": display_value,
             "Score": round(float(score), 3),
-            "Confidence": f"{_confidence_label(confidence)} ({confidence}%)",
+            "Confidence": confidence,
         })
 
     aggregate = float(np.mean(scores)) if scores else 0.0
@@ -1161,7 +1162,7 @@ def _render_signals_table(signals: list[dict]):
 
     rows = ""
     for s in signals:
-        name = s.get("Signal", "")
+        name = s.get("Indicator", "")
         value = s.get("Value", "N/A")
         score = s.get("Score", 0)
         direction = s.get("Direction", "Neutral")
@@ -1275,8 +1276,11 @@ def render():
     with st.spinner("Building macro dashboard..."):
         load_start = datetime.now()
         core_snaps = fetch_core_data()
-        macro = _build_macro_dashboard(core_snaps, low_compute_mode=low_compute_mode)
-        display_snaps = fetch_display_data()
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            macro_future = executor.submit(_build_macro_dashboard, core_snaps, low_compute_mode)
+            display_future = executor.submit(fetch_display_data)
+            macro = macro_future.result()
+            display_snaps = display_future.result()
         snaps = {**core_snaps, **display_snaps}
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
