@@ -58,7 +58,7 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     return None
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=7200)
 def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d") -> dict[str, AssetSnapshot]:
     """
     Fetch multiple tickers concurrently.
@@ -171,7 +171,7 @@ def fetch_truflation() -> dict | None:
         return None
 
 
-@st.cache_data(ttl=21600)
+@st.cache_data(ttl=43200)
 def fetch_fred_series(series_id: str) -> pd.Series:
     """Fetch a single FRED series as a pandas Series indexed by date."""
     cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "fred_cache")
@@ -195,7 +195,7 @@ def fetch_fred_series(series_id: str) -> pd.Series:
 
     for timeout in (12, 25):
         try:
-            resp = requests.get(url, timeout=timeout)
+            resp = requests.get(url, timeout=timeout, headers={"User-Agent": "NarrativeInvestingTool/1.0"})
             resp.raise_for_status()
             parsed = _parse_csv_text(resp.text)
             if parsed is not None:

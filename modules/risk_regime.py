@@ -27,7 +27,8 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
 
 from services.market_data import (
     fetch_batch_safe, AssetSnapshot,
@@ -606,15 +607,17 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "sahm": "SAHMREALTIME",
         "unrate": "UNRATE",
         "core_pce": "PCEPILFE",
-        "wilshire": "NCBEILQ027S",  # Nonfinancial Corporate Equity (market value, quarterly)
+        "wilshire": "WILL5000INDFC",  # Wilshire 5000 Full Cap Price Index (daily)
         "gdp": "GDP",
-        "capex": "NCBDBIQ027S",
+        "capex": "PNFI",  # Private Nonresidential Fixed Investment (quarterly BEA)
         "term_premium": "THREEFYTP10",
         "ism": "INDPRO",  # Industrial Production Index (monthly, replaces discontinued NAPM)
         "fci": "NFCI",
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
     }
-    fred = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
+        fred = {k: f.result() for k, f in futures.items()}
 
     # SPY trailing P/E as CAPE proxy (FRED has no Shiller CAPE series)
     try:
@@ -720,11 +723,11 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 
     wilshire = _safe_latest(fred["wilshire"])
     gdp = _safe_latest(fred["gdp"])
-    # NCBEILQ027S is in millions, GDP is in billions — normalize to same unit
-    buffett = (wilshire / (gdp * 1000) * 100) if (wilshire is not None and gdp and gdp != 0) else None
+    # WILL5000INDFC ≈ market cap in billions (1 point ≈ $1B), GDP also in billions
+    buffett = (wilshire / gdp * 100) if (wilshire is not None and gdp and gdp != 0) else None
     buffett_score = _clamp_score((120.0 - (buffett or 120.0)), 40.0)
     indicators.append(("Buffett Indicator (Mkt Cap / GDP)", buffett, "%", buffett_score, int(round(np.mean([
-        _confidence_from_age(fred["wilshire"], expected_days=45),
+        _confidence_from_age(fred["wilshire"], expected_days=7),
         _confidence_from_age(fred["gdp"], expected_days=120),
     ])))))
 
@@ -1109,14 +1112,134 @@ def _make_category_radar(signals: list[dict]) -> go.Figure | None:
 
 
 # ─────────────────────────────────────────────
+# UI HELPERS
+# ─────────────────────────────────────────────
+
+def _section_header(title: str):
+    """Render a Bloomberg-style uppercase orange monospace section header."""
+    c_orange = COLORS["orange"]
+    c_border = COLORS["border"]
+    st.markdown(
+        f"<div style='font-family:Consolas,monospace;font-size:13px;font-weight:700;"
+        f"color:{c_orange};text-transform:uppercase;letter-spacing:1.5px;"
+        f"padding:8px 0 4px 0;border-bottom:1px solid {c_border};margin:18px 0 10px 0;'>"
+        f"{title}</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _render_signals_table(signals: list[dict]):
+    """Render core signals as a Bloomberg-style HTML table."""
+    c_border = COLORS["border"]
+    c_text = COLORS["text"]
+    c_text_dim = COLORS["text_dim"]
+    c_green = COLORS["green"]
+    c_red = COLORS["red"]
+    c_yellow = COLORS["yellow"]
+    c_orange = COLORS["orange"]
+    c_surface = COLORS["surface_dark"]
+
+    rows = ""
+    for s in signals:
+        name = s.get("Signal", "")
+        value = s.get("Value", "N/A")
+        score = s.get("Score", 0)
+        direction = s.get("Direction", "Neutral")
+        confidence = s.get("Confidence", 0)
+
+        # Score cell color
+        try:
+            score_val = float(score)
+        except (ValueError, TypeError):
+            score_val = 0.0
+        if score_val > 0.05:
+            score_color = c_green
+        elif score_val < -0.05:
+            score_color = c_red
+        else:
+            score_color = c_text_dim
+
+        # Direction cell bg
+        if "Risk-On" in str(direction) or "Bullish" in str(direction):
+            dir_bg = "rgba(0,212,170,0.12)"
+            dir_color = c_green
+        elif "Risk-Off" in str(direction) or "Bearish" in str(direction):
+            dir_bg = "rgba(255,75,75,0.12)"
+            dir_color = c_red
+        else:
+            dir_bg = "transparent"
+            dir_color = c_text_dim
+
+        # Confidence bar
+        try:
+            conf_val = int(confidence)
+        except (ValueError, TypeError):
+            conf_val = 0
+        if conf_val >= 70:
+            conf_color = c_green
+        elif conf_val >= 40:
+            conf_color = c_yellow
+        else:
+            conf_color = c_red
+        conf_bar = (
+            f"<div style='display:flex;align-items:center;gap:6px;'>"
+            f"<div style='flex:1;height:4px;background:{c_border};border-radius:2px;'>"
+            f"<div style='width:{conf_val}%;height:100%;background:{conf_color};border-radius:2px;'></div>"
+            f"</div>"
+            f"<span style='font-size:10px;color:{conf_color};'>{conf_val}%</span></div>"
+        )
+
+        rows += (
+            f"<tr style='border-bottom:1px solid {c_border};'>"
+            f"<td style='padding:4px 8px;font-size:12px;color:{c_text};'>{name}</td>"
+            f"<td style='padding:4px 8px;font-size:12px;color:{c_text};text-align:right;'>{value}</td>"
+            f"<td style='padding:4px 8px;font-size:12px;color:{score_color};text-align:right;font-weight:600;'>{score}</td>"
+            f"<td style='padding:4px 8px;font-size:12px;color:{dir_color};background:{dir_bg};text-align:center;'>{direction}</td>"
+            f"<td style='padding:4px 12px;min-width:100px;'>{conf_bar}</td>"
+            f"</tr>"
+        )
+
+    header_style = (
+        f"font-family:Consolas,monospace;font-size:10px;font-weight:700;"
+        f"color:{c_orange};text-transform:uppercase;letter-spacing:1px;"
+        f"padding:6px 8px;border-bottom:2px solid {c_border};"
+    )
+    html = (
+        f"<div style='background:{c_surface};border:1px solid {c_border};border-radius:4px;overflow:hidden;'>"
+        f"<table style='width:100%;border-collapse:collapse;font-family:Consolas,monospace;'>"
+        f"<thead><tr>"
+        f"<th style='{header_style}text-align:left;'>Signal</th>"
+        f"<th style='{header_style}text-align:right;'>Value</th>"
+        f"<th style='{header_style}text-align:right;'>Score</th>"
+        f"<th style='{header_style}text-align:center;'>Direction</th>"
+        f"<th style='{header_style}text-align:left;'>Confidence</th>"
+        f"</tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>"
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
 # RENDER
 # ─────────────────────────────────────────────
 
 def render():
-    st.markdown("## Macro Dashboard")
+    # Local color aliases to avoid escaped quotes in f-strings
+    c_orange = COLORS["orange"]
+    c_surface_dark = COLORS["surface_dark"]
+    c_border = COLORS["border"]
+    c_text = COLORS["text"]
+    c_text_dim = COLORS["text_dim"]
+
     st.markdown(
-        f"<p style='color:{COLORS['text_dim']};margin-top:-10px;'>"
-        "Concise global macro monitor for daily Risk-On / Risk-Off workflow</p>",
+        f"<div style='font-family:Consolas,monospace;font-size:22px;font-weight:700;"
+        f"color:{c_orange};text-transform:uppercase;letter-spacing:2px;'>"
+        f"MACRO DASHBOARD</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<p style='color:{c_text_dim};margin-top:-4px;font-family:Consolas,monospace;font-size:11px;'>"
+        "Global macro monitor — Risk-On / Risk-Off workflow</p>",
         unsafe_allow_html=True,
     )
 
@@ -1130,8 +1253,17 @@ def render():
     )
 
     with st.spinner("Building macro dashboard..."):
+        load_start = datetime.now()
         snaps = fetch_all_data()
         macro = _build_macro_dashboard(snaps, low_compute_mode=low_compute_mode)
+        load_secs = (datetime.now() - load_start).total_seconds()
+
+    # Cache freshness indicator — batch TTL is 2h, FRED is 12h
+    cache_expiry = datetime.now() + timedelta(seconds=7200)
+    st.caption(
+        f"Data loaded in {load_secs:.1f}s — cached until ~{cache_expiry.strftime('%H:%M')} "
+        f"(batch 2h / FRED 12h). No need to refresh unless markets have moved significantly."
+    )
 
     regime = macro["macro_regime"]
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
@@ -1154,8 +1286,8 @@ def render():
     tf_field = {"Daily": "pct_change_1d", "Weekly": "pct_change_5d", "Monthly": "pct_change_30d", "YTD": "pct_change_ytd"}[ticker_tf]
 
     bar_snaps = snaps  # reuse already-fetched data
-    cols = st.columns(len(TICKER_BAR))
-    for col, (ticker, label) in zip(cols, TICKER_BAR):
+    ticker_cells = []
+    for ticker, label in TICKER_BAR:
         snap = bar_snaps.get(ticker)
         price = snap.latest_price if snap else None
         pct = getattr(snap, tf_field, None) if snap else None
@@ -1163,20 +1295,23 @@ def render():
         if pct is not None:
             arrow = "▲" if pct >= 0 else "▼"
             pct_color = COLORS["green"] if pct >= 0 else COLORS["red"]
-            pct_str = f"<span style='color:{pct_color}'>{arrow} {pct:+.2f}%</span>"
+            pct_str = f"<span style='color:{pct_color};font-size:11px;'>{arrow} {pct:+.2f}%</span>"
         else:
-            pct_str = "<span style='color:gray'>N/A</span>"
-        dim_color = COLORS["text_dim"]
-        col.markdown(
-            f"<div style='text-align:center;'>"
-            f"<div style='color:{dim_color};font-size:0.75em;'>{label}</div>"
-            f"<div style='font-size:1.1em;font-weight:bold;'>{price_str}</div>"
-            f"<div style='font-size:0.9em;'>{pct_str}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
+            pct_str = f"<span style='color:{c_text_dim};font-size:11px;'>N/A</span>"
+        ticker_cells.append(
+            f"<div style='text-align:center;padding:4px 10px;border-right:1px solid {c_border};'>"
+            f"<div style='color:{c_text_dim};font-size:11px;'>{label}</div>"
+            f"<div style='font-size:14px;font-weight:700;color:{c_text};'>{price_str}</div>"
+            f"<div>{pct_str}</div></div>"
         )
-
-    st.divider()
+    # Remove border from last cell
+    ticker_cells[-1] = ticker_cells[-1].replace(f"border-right:1px solid {c_border};", "")
+    st.markdown(
+        f"<div style='display:flex;justify-content:space-between;background:{c_surface_dark};"
+        f"border:1px solid {c_border};border-radius:4px;padding:6px 4px;"
+        f"font-family:Consolas,monospace;overflow-x:auto;'>{''.join(ticker_cells)}</div>",
+        unsafe_allow_html=True,
+    )
 
     # ── Gauge + Top-level metrics ──
     col_gauge, col_metrics = st.columns([1, 2])
@@ -1185,21 +1320,38 @@ def render():
         st.plotly_chart(gauge_fig, use_container_width=True)
 
     with col_metrics:
-        col_a, col_b, col_c = st.columns(3)
-        col_a.metric("Macro Score (0-100)", macro["macro_score"])
-        col_b.metric("Macro Quadrant", macro["quadrant"])
-        col_c.metric("Current Regime", f"{regime}")
-        st.caption(f"Signal confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%).")
-        st.caption(f"Growth: {macro['growth_dir']} | Inflation: {macro['inflation_dir']}")
+        def _metric_card(label, value, color=COLORS["text"]):
+            return (
+                f"<div style='background:{c_surface_dark};border:1px solid {c_border};"
+                f"border-radius:4px;padding:10px 14px;text-align:center;'>"
+                f"<div style='font-family:Consolas,monospace;font-size:10px;color:{c_orange};"
+                f"text-transform:uppercase;letter-spacing:1px;'>{label}</div>"
+                f"<div style='font-family:Consolas,monospace;font-size:20px;font-weight:700;"
+                f"color:{color};margin-top:4px;'>{value}</div></div>"
+            )
+        cards_html = (
+            f"<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;'>"
+            f"{_metric_card('Macro Score', macro['macro_score'])}"
+            f"{_metric_card('Quadrant', macro['quadrant'])}"
+            f"{_metric_card('Regime', regime, regime_color)}"
+            f"</div>"
+        )
+        st.markdown(cards_html, unsafe_allow_html=True)
+        st.markdown(
+            f"<div style='font-family:Consolas,monospace;font-size:11px;color:{c_text_dim};margin-top:6px;'>"
+            f"Confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%) "
+            f"&nbsp;|&nbsp; Growth: {macro['growth_dir']} &nbsp;|&nbsp; Inflation: {macro['inflation_dir']}</div>",
+            unsafe_allow_html=True,
+        )
 
     # ── Signal Radar ──
     radar_fig = _make_category_radar(macro["signals"])
     if radar_fig:
-        st.markdown("### Signal Radar")
+        _section_header("Signal Radar")
         st.plotly_chart(radar_fig, use_container_width=True)
 
     # ── Regime History ──
-    st.markdown("### Regime History")
+    _section_header("Regime History")
     timeframe = st.radio("Timeframe", ["1D", "1W", "1M", "6M", "1Y", "All"], index=0, horizontal=True)
 
     if timeframe != "All":
@@ -1227,8 +1379,8 @@ def render():
     )
 
     # ── Core Signals ──
-    st.markdown(f"### Core Signals ({len(macro['signals'])})")
-    st.dataframe(pd.DataFrame(macro["signals"]), use_container_width=True, hide_index=True)
+    _section_header(f"Core Signals ({len(macro['signals'])})")
+    _render_signals_table(macro["signals"])
 
     na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
     if na_count:
@@ -1241,7 +1393,7 @@ def render():
     # ── Yield Curve Regime ──
     yc_regime = macro.get("yield_curve_regime", {})
     if yc_regime.get("regime") != "Unknown":
-        st.markdown("### Yield Curve Regime")
+        _section_header("Yield Curve Regime")
         regime_name = yc_regime["regime"]
         is_bullish = regime_name.startswith("Bull")
         yc_color = COLORS["green"] if is_bullish else COLORS["red"]
@@ -1281,31 +1433,76 @@ def render():
                     st.markdown(f"- {c}")
 
     # ── Valuation ──
-    st.markdown("### Valuation")
+    _section_header("Valuation")
     cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
     buffett_txt = "N/A" if macro["buffett"] is None else f"{macro['buffett']:.2f}%"
-    st.markdown(f"- S&P 500 P/E (CAPE proxy): {cape_txt}")
-    st.markdown(f"- Buffett Indicator: {buffett_txt}")
-    st.markdown(f"- Interpretation: {macro['valuation']}")
+    st.markdown(
+        f"<div style='display:flex;gap:12px;'>"
+        f"<div style='flex:1;background:{c_surface_dark};border:1px solid {c_border};"
+        f"border-radius:4px;padding:14px;text-align:center;'>"
+        f"<div style='font-family:Consolas,monospace;font-size:10px;color:{c_orange};"
+        f"text-transform:uppercase;letter-spacing:1px;'>S&P 500 P/E</div>"
+        f"<div style='font-family:Consolas,monospace;font-size:26px;font-weight:700;"
+        f"color:{c_text};margin-top:6px;'>{cape_txt}</div></div>"
+        f"<div style='flex:1;background:{c_surface_dark};border:1px solid {c_border};"
+        f"border-radius:4px;padding:14px;text-align:center;'>"
+        f"<div style='font-family:Consolas,monospace;font-size:10px;color:{c_orange};"
+        f"text-transform:uppercase;letter-spacing:1px;'>Buffett Indicator</div>"
+        f"<div style='font-family:Consolas,monospace;font-size:26px;font-weight:700;"
+        f"color:{c_text};margin-top:6px;'>{buffett_txt}</div></div></div>"
+        f"<div style='font-family:Consolas,monospace;font-size:11px;color:{c_text_dim};"
+        f"margin-top:8px;'>{macro['valuation']}</div>",
+        unsafe_allow_html=True,
+    )
 
     # ── Cycle Stage ──
-    st.markdown("### Cycle Stage")
+    _section_header("Cycle Stage")
     capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
-    st.markdown(f"- CAPEX vs Liquidity: {capliq_txt}")
-    st.markdown(f"- Stage: {macro['cycle_stage']}")
+    st.markdown(
+        f"<div style='background:{c_surface_dark};border:1px solid {c_border};"
+        f"border-radius:4px;padding:14px;text-align:center;max-width:320px;'>"
+        f"<div style='font-family:Consolas,monospace;font-size:10px;color:{c_orange};"
+        f"text-transform:uppercase;letter-spacing:1px;'>CAPEX vs Liquidity</div>"
+        f"<div style='font-family:Consolas,monospace;font-size:26px;font-weight:700;"
+        f"color:{c_text};margin-top:6px;'>{capliq_txt}</div>"
+        f"<div style='font-family:Consolas,monospace;font-size:12px;color:{c_text_dim};"
+        f"margin-top:4px;'>{macro['cycle_stage']}</div></div>",
+        unsafe_allow_html=True,
+    )
 
     # ── Summary ──
-    st.markdown("### Summary")
+    _section_header("Summary")
     for line in macro["summary"]:
         st.markdown(f"- {line}")
 
     # ── Portfolio Bias ──
-    st.markdown("### Portfolio Bias")
+    _section_header("Portfolio Bias")
+    bias_cards = []
     for sleeve, bias in macro["portfolio_bias"].items():
-        st.markdown(f"- {sleeve}: {bias}")
+        if "Overweight" in bias:
+            tag_color = COLORS["green"]
+            tag_bg = "rgba(0,212,170,0.12)"
+        elif "Underweight" in bias:
+            tag_color = COLORS["red"]
+            tag_bg = "rgba(255,75,75,0.12)"
+        else:
+            tag_color = COLORS["text_dim"]
+            tag_bg = "rgba(136,136,136,0.10)"
+        bias_cards.append(
+            f"<div style='background:{c_surface_dark};border:1px solid {c_border};"
+            f"border-radius:4px;padding:8px 14px;text-align:center;'>"
+            f"<div style='font-family:Consolas,monospace;font-size:11px;color:{c_text};'>{sleeve}</div>"
+            f"<div style='display:inline-block;margin-top:4px;padding:2px 8px;border-radius:3px;"
+            f"background:{tag_bg};font-family:Consolas,monospace;font-size:11px;font-weight:600;"
+            f"color:{tag_color};'>{bias}</div></div>"
+        )
+    st.markdown(
+        f"<div style='display:flex;flex-wrap:wrap;gap:8px;'>{''.join(bias_cards)}</div>",
+        unsafe_allow_html=True,
+    )
 
     # ── Sector Rotation ──
-    st.markdown("### Sector Rotation")
+    _section_header("Sector Rotation")
     sector_recs = macro.get("sector_rotation", [])
     if sector_recs:
         col_favor, col_avoid = st.columns(2)
@@ -1325,12 +1522,12 @@ def render():
         st.markdown("Sector rotation data unavailable.")
 
     # ── Risk Management Alerts ──
-    st.markdown("### Risk Management Alerts")
+    _section_header("Risk Management Alerts")
     for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
         st.markdown(f"- {alert}")
 
     # ── Tactical Opportunities ──
-    st.markdown("### Tactical Opportunities")
+    _section_header("Tactical Opportunities")
     tactical = macro.get("tactical_opps", [])
     if tactical:
         for opp in tactical:
@@ -1345,7 +1542,7 @@ def render():
         st.markdown("No strong cross-signal opportunities detected currently.")
 
     # ── SPY Options Sentiment ──
-    st.markdown("### SPY Options Sentiment Mode")
+    _section_header("SPY Options Sentiment")
     gamma = macro["gamma"]
     if gamma:
         if macro.get("low_compute_mode"):

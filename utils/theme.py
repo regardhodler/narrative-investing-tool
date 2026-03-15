@@ -12,6 +12,9 @@ COLORS = {
     "text": "#E0E0E0",
     "text_dim": "#888888",
     "grid": "#2A2F3E",
+    "orange": "#FF8C00",
+    "surface_dark": "#0A0E14",
+    "border": "#2A3040",
 }
 
 
