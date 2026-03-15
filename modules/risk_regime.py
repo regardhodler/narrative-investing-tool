@@ -86,7 +86,18 @@ def _save_snapshot(macro: dict):
 # TICKER UNIVERSE
 # ─────────────────────────────────────────────
 
-TICKERS = {
+CORE_TICKERS = {
+    # Used in _build_macro_dashboard signal calculations
+    "SPY": "S&P 500",
+    "QQQ": "Nasdaq 100",
+    "DIA": "Dow Jones ETF",
+    "USO": "Oil (WTI)",
+    "CPER": "Copper",
+    "UUP": "USD Bull ETF",
+    "^VIX": "VIX",
+}
+
+DISPLAY_TICKERS = {
     # Yield curve proxies
     "SHY": "2Y Treasury ETF",
     "IEF": "10Y Treasury ETF",
@@ -97,8 +108,6 @@ TICKERS = {
     # Inflation
     "TIP": "TIPS ETF",
     # Equity - US
-    "SPY": "S&P 500",
-    "QQQ": "Nasdaq 100",
     "IWM": "Russell 2000",
     "XLF": "Financials",
     "XLE": "Energy",
@@ -109,19 +118,14 @@ TICKERS = {
     # Commodities
     "GLD": "Gold",
     "SLV": "Silver",
-    "CPER": "Copper",
-    "USO": "Oil (WTI)",
-    # Volatility
-    "^VIX": "VIX",
-    # USD
-    "UUP": "USD Bull ETF",
     # Crypto proxy
     "IBIT": "Bitcoin ETF",
     # Ticker bar extras
-    "DIA": "Dow Jones ETF",
     "CL=F": "WTI Crude Oil",
     "GC=F": "Gold Futures",
 }
+
+TICKERS = {**CORE_TICKERS, **DISPLAY_TICKERS}
 
 
 # ─────────────────────────────────────────────
@@ -484,31 +488,27 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
         current = snap.latest_price
         s = snap.series.dropna()
 
-        # 200d MA
-        if len(s) >= 200:
-            ma200 = float(s.rolling(200).mean().iloc[-1])
-            pct = (current / ma200 - 1) * 100
+        # 120d MA (uses 6mo data window — ~126 trading days available)
+        if len(s) >= 120:
+            ma120 = float(s.tail(120).mean())
+            pct = (current / ma120 - 1) * 100
             note = "above" if pct > 0 else "below"
-            levels.append({"asset": ticker, "level_type": "200d MA", "price": round(ma200, 2), "current": round(current, 2), "pct_away": round(pct, 2), "note": f"{note} 200d trend"})
+            levels.append({"asset": ticker, "level_type": "120d MA", "price": round(ma120, 2), "current": round(current, 2), "pct_away": round(pct, 2), "note": f"{note} 120d trend"})
 
         # 50d MA
         if len(s) >= 50:
-            ma50 = float(s.rolling(50).mean().iloc[-1])
+            ma50 = float(s.tail(50).mean())
             pct = (current / ma50 - 1) * 100
             note = "above" if pct > 0 else "below"
             levels.append({"asset": ticker, "level_type": "50d MA", "price": round(ma50, 2), "current": round(current, 2), "pct_away": round(pct, 2), "note": f"{note} 50d trend"})
 
-        # 52-week high/low
-        if len(s) >= 252:
-            window = s.iloc[-252:]
-        else:
-            window = s
-        hi52 = float(window.max())
-        lo52 = float(window.min())
-        pct_hi = (current / hi52 - 1) * 100
-        pct_lo = (current / lo52 - 1) * 100
-        levels.append({"asset": ticker, "level_type": "52w High", "price": round(hi52, 2), "current": round(current, 2), "pct_away": round(pct_hi, 2), "note": "from 52-week high"})
-        levels.append({"asset": ticker, "level_type": "52w Low", "price": round(lo52, 2), "current": round(current, 2), "pct_away": round(pct_lo, 2), "note": "from 52-week low"})
+        # Period high/low (uses all available data — ~6mo)
+        hi = float(s.max())
+        lo = float(s.min())
+        pct_hi = (current / hi - 1) * 100
+        pct_lo = (current / lo - 1) * 100
+        levels.append({"asset": ticker, "level_type": "Period High", "price": round(hi, 2), "current": round(current, 2), "pct_away": round(pct_hi, 2), "note": "from period high"})
+        levels.append({"asset": ticker, "level_type": "Period Low", "price": round(lo, 2), "current": round(current, 2), "pct_away": round(pct_lo, 2), "note": "from period low"})
 
     # SPY gamma levels
     gamma = macro.get("gamma")
@@ -527,9 +527,19 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 # DATA FETCHING
 # ─────────────────────────────────────────────
 
+def fetch_core_data() -> dict[str, AssetSnapshot]:
+    """Fetch only the 7 core tickers needed for signal calculations."""
+    return fetch_batch_safe(CORE_TICKERS, period="6mo", interval="1d")
+
+
+def fetch_display_data() -> dict[str, AssetSnapshot]:
+    """Fetch the 17 display-only tickers (ticker bar, sector rotation, tactical opps)."""
+    return fetch_batch_safe(DISPLAY_TICKERS, period="6mo", interval="1d")
+
+
 def fetch_all_data() -> dict[str, AssetSnapshot]:
     """Fetch all ticker data via shared market_data service."""
-    return fetch_batch_safe(TICKERS, period="6mo", interval="1d")
+    return {**fetch_core_data(), **fetch_display_data()}
 
 
 # ─────────────────────────────────────────────
@@ -592,7 +602,7 @@ class _SpyPeFetchError(Exception):
     pass
 
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=14400)
 def _fetch_spy_pe() -> float:
     """Fetch SPY trailing P/E with raise-on-failure to avoid caching None."""
     try:
@@ -723,7 +733,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     for ticker in ("SPY", "QQQ", "DIA"):
         s = snaps.get(ticker).series if snaps.get(ticker) else None
         if s is not None and len(s) >= 120:
-            ma120 = s.rolling(120).mean().iloc[-1]
+            ma120 = s.tail(120).mean()
             if ma120 and ma120 != 0:
                 eq_components.append(float((s.iloc[-1] / ma120 - 1) * 100))
     eq_trend = float(np.mean(eq_components)) if eq_components else None
@@ -884,9 +894,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "low_compute_mode": low_compute_mode,
     }
 
-    result["sector_rotation"] = _sector_rotation_recs(quadrant, macro_regime, snaps)
     result["risk_alerts"] = _risk_management_alerts(result, snaps)
-    result["tactical_opps"] = _tactical_opportunities(result, snaps)
     result["key_levels"] = _key_levels(result, snaps)
     result["yield_curve_regime"] = _classify_yield_curve(fred["yield_curve"], fred["dgs10"])
     result["snaps"] = snaps
@@ -1266,8 +1274,13 @@ def render():
 
     with st.spinner("Building macro dashboard..."):
         load_start = datetime.now()
-        snaps = fetch_all_data()
-        macro = _build_macro_dashboard(snaps, low_compute_mode=low_compute_mode)
+        core_snaps = fetch_core_data()
+        macro = _build_macro_dashboard(core_snaps, low_compute_mode=low_compute_mode)
+        display_snaps = fetch_display_data()
+        snaps = {**core_snaps, **display_snaps}
+        macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
+        macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
+        macro["snaps"] = snaps
         load_secs = (datetime.now() - load_start).total_seconds()
 
     # Cache freshness indicator — batch TTL is 4h, FRED is 12h

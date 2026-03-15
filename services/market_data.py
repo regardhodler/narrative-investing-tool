@@ -230,7 +230,7 @@ def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
         return None
 
 
-@st.cache_data(ttl=10800)
+@st.cache_data(ttl=14400)
 def fetch_options_chain_snapshot(ticker: str = "SPY", max_expiries: int = 3) -> dict | None:
     """
     Fetch options chain snapshot and build strike-level aggregates.
