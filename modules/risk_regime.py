@@ -28,7 +28,7 @@ import numpy as np
 import plotly.graph_objects as go
 import yfinance as yf
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from services.market_data import (
     fetch_batch_safe, AssetSnapshot,
@@ -507,7 +507,7 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 
 def fetch_core_data() -> dict[str, AssetSnapshot]:
     """Fetch core tickers for signals + ticker bar display."""
-    return fetch_batch_safe(CORE_TICKERS, period="3mo", interval="1d")
+    return fetch_batch_safe(CORE_TICKERS, period="6mo", interval="1d")
 
 
 
@@ -1193,25 +1193,40 @@ def render():
     ]
 
     load_start = datetime.now()
-    with st.spinner("Fetching FRED, market & options data..."):
+    with st.status("MACRO DASHBOARD · INITIALIZING...", expanded=True) as status:
         t0 = datetime.now()
         with ThreadPoolExecutor(max_workers=3) as executor:
             fred_future = executor.submit(warm_fred_cache, _FRED_SERIES_IDS)
             core_future = executor.submit(fetch_core_data)
             gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, 1)
-            fred_future.result()
+
+            future_labels = {
+                fred_future: "Federal Reserve (FRED) — 13 series",
+                core_future: "Market prices — 11 tickers",
+                gamma_future: "SPY options chain — gamma exposure",
+            }
+
+            st.write("⏳ Connecting to data sources...")
+            for future in as_completed(future_labels):
+                label = future_labels[future]
+                future.result()  # raise if failed
+                st.write(f"✓ {label}")
+
             core_snaps = core_future.result()
             gamma = gamma_future.result()
         t_fetch = (datetime.now() - t0).total_seconds()
 
-    with st.spinner("Computing macro signals..."):
         t1 = datetime.now()
+        st.write("⏳ Computing risk regime signals...")
         macro = _build_macro_dashboard(core_snaps, low_compute_mode)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
         macro["snaps"] = snaps
         t_macro = (datetime.now() - t1).total_seconds()
+        st.write("✓ Risk regime signals — 17 signals")
+
+        status.update(label="MACRO DASHBOARD · READY", state="complete", expanded=False)
 
     total_load = (datetime.now() - load_start).total_seconds()
     cache_expiry = datetime.now() + timedelta(seconds=14400)
