@@ -638,7 +638,7 @@ def _fetch_spy_pe_safe() -> float | None:
 
 
 @st.cache_data(ttl=14400, show_spinner=False)
-def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False, gamma_data: dict | None = None) -> dict:
+def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | None = None) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
         "credit_spread": "BAMLH0A0HYM2",
@@ -964,7 +964,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 def get_current_regime() -> dict:
     """Public accessor for other modules to consume regime data."""
     snaps = fetch_core_data()
-    macro = _build_macro_dashboard(snaps, low_compute_mode=True)
+    macro = _build_macro_dashboard(snaps)
     return {
         "regime": macro["macro_regime"],
         "score": macro["macro_score"],
@@ -1168,12 +1168,6 @@ def render():
     if st.button("Refresh Data"):
         st.cache_data.clear()
 
-    low_compute_mode = st.toggle(
-        "Low Compute Mode",
-        value=True,
-        help="Reduces options processing load and disables gamma chart rendering to conserve free Streamlit usage.",
-    )
-
     _FRED_SERIES_IDS = [
         "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
@@ -1206,7 +1200,7 @@ def render():
 
         t1 = datetime.now()
         st.write("⏳ Computing risk regime signals...")
-        macro = _build_macro_dashboard(core_snaps, low_compute_mode)
+        macro = _build_macro_dashboard(core_snaps)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
