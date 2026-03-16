@@ -77,8 +77,8 @@ def _save_snapshot(macro: dict):
         "signals_summary": {s["Indicator"]: s["Score"] for s in macro["signals"]},
     })
 
-    # Keep last 365 days max
-    history = sorted(history, key=lambda x: x["date"])[-365:]
+    # Keep last 730 days max (2 years)
+    history = sorted(history, key=lambda x: x["date"])[-730:]
 
     with open(_HISTORY_FILE, "w") as f:
         json.dump(history, f, indent=2)
@@ -160,6 +160,38 @@ def _yoy_latest(series: pd.Series | None, periods: int = 12) -> float | None:
 
 def _clamp_score(value: float, scale: float) -> float:
     return _clamp(value / max(scale, 1e-6))
+
+
+def _zscore_score(series: pd.Series | None, invert: bool = False, lookback: int = 252) -> float:
+    """Convert a FRED/market series to a [-1, 1] score via z-score normalization.
+
+    Uses the series' own historical distribution (lookback window) rather than
+    hardcoded thresholds. Z-scores are divided by 2 so ±2σ maps to ±1.
+    """
+    if series is None:
+        return 0.0
+    clean = series.dropna()
+    n = min(lookback, len(clean))
+    if n < 20:
+        return 0.0
+    window = clean.iloc[-n:]
+    std = float(window.std())
+    if std < 1e-9:
+        return 0.0
+    z = (float(clean.iloc[-1]) - float(window.mean())) / std
+    if invert:
+        z = -z
+    return _clamp(z / 2.0)
+
+
+def _yoy_series(series: pd.Series | None, periods: int = 12) -> pd.Series | None:
+    """Compute rolling YoY % change series."""
+    if series is None:
+        return None
+    clean = series.dropna()
+    if len(clean) <= periods:
+        return None
+    return clean.pct_change(periods=periods).dropna() * 100
 
 
 def _age_days(series: pd.Series | None) -> float | None:
@@ -492,7 +524,7 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
     gamma = macro.get("gamma")
     if gamma:
         spy_current = gamma.get("price", 0)
-        for level_name, key in [("Gamma Flip", "gamma_flip"), ("Call Wall", "call_wall"), ("Put Wall", "put_wall")]:
+        for level_name, key in [("Call Wall", "call_wall"), ("Put Wall", "put_wall")]:
             val = gamma.get(key)
             if val is not None and spy_current:
                 pct = (spy_current / val - 1) * 100
@@ -632,7 +664,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators = []
 
     yc = _safe_latest(fred["yield_curve"])
-    yc_score = _clamp_score((yc or 0.0), 1.0)
+    yc_score = _zscore_score(fred["yield_curve"])
     yc_chg = _series_trend(fred["yield_curve"], lookback=22)
     dgs10_chg = _series_trend(fred["dgs10"], lookback=22)
     yc_dir = ""
@@ -652,7 +684,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators.append(("Yield Curve (10Y-2Y)", yc, f"bps{yc_dir}", yc_score, _confidence_from_age(fred["yield_curve"], expected_days=14)))
 
     cs = _safe_latest(fred["credit_spread"])
-    cs_score = _clamp_score((4.0 - (cs or 4.0)), 2.0)
+    cs_score = _zscore_score(fred["credit_spread"], invert=True)
     cs_chg = _series_trend(fred["credit_spread"], lookback=22)
     cs_dir = ""
     if cs_chg is not None:
@@ -695,7 +727,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators.append(("US Dollar Index (DXY proxy)", dxy, "% blend", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
-    liquidity_score = _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
+    m2_yoy_full = _yoy_series(fred["m2"], periods=12)
+    liquidity_score = _zscore_score(m2_yoy_full) if m2_yoy_full is not None else _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
     indicators.append(("Global Liquidity (M2 proxy)", m2_yoy, "% YoY", liquidity_score, _confidence_from_age(fred["m2"], expected_days=45)))
 
     sahm = _safe_latest(fred["sahm"])
@@ -703,11 +736,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         unrate = fred["unrate"].dropna() if fred["unrate"] is not None else None
         if unrate is not None and len(unrate) >= 12:
             sahm = float(unrate.iloc[-1] - unrate.iloc[-12:].min())
-    unemp_score = _clamp_score((0.4 - (sahm or 0.0)), 0.4)
+    unemp_score = _zscore_score(fred["sahm"], invert=True) if fred["sahm"] is not None else _clamp_score((0.4 - (sahm or 0.0)), 0.4)
     indicators.append(("Unemployment Trend (Sahm context)", sahm, "delta", unemp_score, _confidence_from_age(fred["sahm"] if fred["sahm"] is not None else fred["unrate"], expected_days=45)))
 
     core_yoy = _yoy_latest(fred["core_pce"], periods=12)
-    core_infl_score = _clamp_score((2.4 - (core_yoy or 2.4)), 1.5)
+    core_yoy_full = _yoy_series(fred["core_pce"], periods=12)
+    core_infl_score = _zscore_score(core_yoy_full, invert=True) if core_yoy_full is not None else _clamp_score((2.4 - (core_yoy or 2.4)), 1.5)
     indicators.append(("Core Inflation (PCE)", core_yoy, "% YoY", core_infl_score, _confidence_from_age(fred["core_pce"], expected_days=45)))
 
     eq_components = []
@@ -730,7 +764,14 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     gdp = _safe_latest(fred["gdp"])
     # WILL5000INDFC ≈ market cap in billions (1 point ≈ $1B), GDP also in billions
     buffett = (wilshire / gdp * 100) if (wilshire is not None and gdp and gdp != 0) else None
-    buffett_score = _clamp_score((120.0 - (buffett or 120.0)), 40.0)
+    # Compute Buffett ratio as a series for z-score (forward-fill GDP to match daily wilshire)
+    buffett_ratio_series = None
+    if fred["wilshire"] is not None and fred["gdp"] is not None:
+        gdp_daily = fred["gdp"].reindex(fred["wilshire"].dropna().index, method="ffill")
+        gdp_daily = gdp_daily.replace(0, np.nan).dropna()
+        if len(gdp_daily) > 20:
+            buffett_ratio_series = fred["wilshire"].reindex(gdp_daily.index).dropna() / gdp_daily * 100
+    buffett_score = _zscore_score(buffett_ratio_series, invert=True) if buffett_ratio_series is not None else _clamp_score((120.0 - (buffett or 120.0)), 40.0)
     indicators.append(("Buffett Indicator (Mkt Cap / GDP)", buffett, "%", buffett_score, int(round(np.mean([
         _confidence_from_age(fred["wilshire"], expected_days=7),
         _confidence_from_age(fred["gdp"], expected_days=120),
@@ -752,20 +793,22 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
     indicators.append(("Gamma Exposure (Dealer Positioning)", gamma_score, "score", gamma_score, gamma_conf))
 
     term = _safe_latest(fred["term_premium"])
-    term_score = _clamp_score((term or 0.0), 0.75)
+    term_score = _zscore_score(fred["term_premium"])
     indicators.append(("Term Premium", term, "%", term_score, _confidence_from_age(fred["term_premium"], expected_days=14)))
 
     indpro_yoy = _yoy_latest(fred["ism"], periods=12)
-    ism_score = _clamp_score((indpro_yoy or 0.0), 5.0)  # Positive YoY = expansion = risk-on
+    indpro_yoy_full = _yoy_series(fred["ism"], periods=12)
+    ism_score = _zscore_score(indpro_yoy_full) if indpro_yoy_full is not None else _clamp_score((indpro_yoy or 0.0), 5.0)
     indicators.append(("Industrial Production", indpro_yoy, "% YoY", ism_score, _confidence_from_age(fred["ism"], expected_days=45)))
 
     fci = _safe_latest(fred["fci"])
-    fci_score = _clamp_score((-(fci or 0.0)), 0.5)
+    fci_score = _zscore_score(fred["fci"], invert=True)
     indicators.append(("Financial Conditions Index", fci, "index", fci_score, _confidence_from_age(fred["fci"], expected_days=14)))
 
     vix_snap = snaps.get("^VIX")
     vix = vix_snap.latest_price if vix_snap else None
-    vix_score = _clamp_score((20.0 - (vix or 20.0)), 8.0)  # VIX 20 = neutral, lower = risk-on
+    vix_series = vix_snap.series if vix_snap else None
+    vix_score = _zscore_score(vix_series, invert=True) if vix_series is not None else _clamp_score((20.0 - (vix or 20.0)), 8.0)
     indicators.append(("VIX (Equity Volatility)", vix, "level", vix_score, _confidence_from_snap("^VIX", snaps=snaps)))
 
     SIGNAL_CATEGORIES = {
@@ -787,6 +830,29 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "Financial Conditions Index": "Credit",
     }
 
+    SIGNAL_WEIGHTS = {
+        # Tier 1 — Leading/highly predictive of regime shifts
+        "Credit Spreads (HY vs Treasuries)": 2.0,
+        "Yield Curve (10Y-2Y)": 2.0,
+        "VIX (Equity Volatility)": 2.0,
+        "Financial Conditions Index": 2.0,
+        # Tier 2 — Strong regime signals
+        "Equity Trend (S&P, Nasdaq, Dow)": 1.5,
+        "Unemployment Trend (Sahm context)": 1.5,
+        "Global Liquidity (M2 proxy)": 1.5,
+        # Tier 3 — Standard
+        "Commodity Trend (Oil + Copper)": 1.0,
+        "US Dollar Index (DXY proxy)": 1.0,
+        "Industrial Production": 1.0,
+        "Core Inflation (PCE)": 1.0,
+        "Term Premium": 1.0,
+        "Gamma Exposure (Dealer Positioning)": 1.0,
+        # Tier 4 — Slow-moving / noisy
+        "S&P 500 P/E (CAPE proxy)": 0.5,
+        "Buffett Indicator (Mkt Cap / GDP)": 0.5,
+        "Corporate CAPEX vs Liquidity": 0.5,
+    }
+
     signal_rows = []
     scores = []
     confidence_scores = []
@@ -805,7 +871,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
             "Confidence": confidence,
         })
 
-    aggregate = float(np.mean(scores)) if scores else 0.0
+    weights = [SIGNAL_WEIGHTS.get(row["Indicator"], 1.0) for row in signal_rows]
+    aggregate = float(np.average(scores, weights=weights)) if scores else 0.0
     macro_score = int(round((aggregate + 1.0) * 50))
 
     if macro_score >= 60:
@@ -1372,51 +1439,40 @@ def render():
 
         st.markdown(f"- Current market price: {gamma['price']:.2f}")
         st.markdown(f"- Current market sentiment: {gamma['zone']}")
-        if gamma["gamma_flip"] is None:
-            st.markdown("- Gamma Flip price: N/A")
-        else:
-            location = "above stock price" if gamma["gamma_flip"] > gamma["price"] else "below stock price"
-            st.markdown(f"- Gamma Flip price: {gamma['gamma_flip']:.2f} ({location})")
         st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
         st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
 
-        m1, m2, m3 = st.columns(3)
-        m1.markdown(bloomberg_metric("Gamma Flip", f"{gamma['gamma_flip']:.2f}" if gamma["gamma_flip"] is not None else "N/A", COLORS["yellow"]), unsafe_allow_html=True)
-        m2.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)
-        m3.markdown(bloomberg_metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A", COLORS["red"]), unsafe_allow_html=True)
+        m1, m2 = st.columns(2)
+        m1.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)
+        m2.markdown(bloomberg_metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A", COLORS["red"]), unsafe_allow_html=True)
 
-        if low_compute_mode:
-            st.caption("Gamma chart disabled in Low Compute Mode.")
-        else:
-            fig = go.Figure()
-            bar_colors = [COLORS["green"] if val >= 0 else COLORS["red"] for val in gamma["net_gamma"]]
-            fig.add_trace(go.Bar(
-                x=gamma["strikes"],
-                y=gamma["net_gamma"],
-                marker_color=bar_colors,
-                name="Net Gamma Proxy",
-                opacity=0.65,
-                hovertemplate="Strike %{x:.0f}<br>Net Gamma %{y:.0f}<extra></extra>",
-            ))
+        fig = go.Figure()
+        bar_colors = [COLORS["green"] if val >= 0 else COLORS["red"] for val in gamma["net_gamma"]]
+        fig.add_trace(go.Bar(
+            x=gamma["strikes"],
+            y=gamma["net_gamma"],
+            marker_color=bar_colors,
+            name="Net Gamma Proxy",
+            opacity=0.65,
+            hovertemplate="Strike %{x:.0f}<br>Net Gamma %{y:.0f}<extra></extra>",
+        ))
 
-            fig.add_vline(x=gamma["price"], line_color=COLORS["blue"], line_dash="dash", line_width=2)
-            if gamma["gamma_flip"] is not None:
-                fig.add_vline(x=gamma["gamma_flip"], line_color=COLORS["yellow"], line_dash="dot", line_width=2)
-            if gamma["call_wall"] is not None:
-                fig.add_vline(x=gamma["call_wall"], line_color=COLORS["green"], line_dash="dash", line_width=1)
-            if gamma["put_wall"] is not None:
-                fig.add_vline(x=gamma["put_wall"], line_color=COLORS["red"], line_dash="dash", line_width=1)
+        fig.add_vline(x=gamma["price"], line_color=COLORS["blue"], line_dash="dash", line_width=2)
+        if gamma["call_wall"] is not None:
+            fig.add_vline(x=gamma["call_wall"], line_color=COLORS["green"], line_dash="dash", line_width=1)
+        if gamma["put_wall"] is not None:
+            fig.add_vline(x=gamma["put_wall"], line_color=COLORS["red"], line_dash="dash", line_width=1)
 
-            fig.update_layout(
-                title="SPY Strike vs Dealer Gamma Proxy",
-                xaxis_title="Strike",
-                yaxis_title="Net Gamma Proxy",
-                height=360,
-                margin=dict(l=20, r=20, t=50, b=20),
-                showlegend=False,
-            )
-            apply_dark_layout(fig)
-            st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(
+            title="SPY Strike vs Dealer Gamma Proxy",
+            xaxis_title="Strike",
+            yaxis_title="Net Gamma Proxy",
+            height=360,
+            margin=dict(l=20, r=20, t=50, b=20),
+            showlegend=False,
+        )
+        apply_dark_layout(fig)
+        st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning("SPY options sentiment currently unavailable.")
         if st.button("Retry SPY Gamma", key="retry_gamma"):
