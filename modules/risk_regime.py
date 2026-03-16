@@ -939,7 +939,7 @@ def _make_gauge(macro_score: int, regime: str, color: str) -> go.Figure:
     return fig
 
 
-def _make_regime_history(timeframe: str = "All") -> go.Figure | None:
+def _make_regime_history() -> go.Figure | None:
     """Time-series chart of historical regime scores."""
     history = _load_history()
     if len(history) < 2:
@@ -948,14 +948,6 @@ def _make_regime_history(timeframe: str = "All") -> go.Figure | None:
     df = pd.DataFrame(history)
     df["date"] = pd.to_datetime(df["date"])
     df = df.sort_values("date")
-
-    days_map = {"1D": 1, "1W": 7, "1M": 30, "6M": 182, "1Y": 365, "All": None}
-    days = days_map.get(timeframe)
-    if days is not None:
-        cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
-        df = df[df["date"] >= cutoff]
-        if len(df) < 2:
-            return None
 
     # Use macro_score (0-100) if available, else fall back to legacy score (-1..+1)
     if "macro_score" in df.columns:
@@ -1009,77 +1001,6 @@ def _make_regime_history(timeframe: str = "All") -> go.Figure | None:
     return fig
 
 
-def _regime_timeframe_summary(timeframe: str) -> dict | None:
-    """Compute summary stats for the selected timeframe window."""
-    history = _load_history()
-    if len(history) < 2:
-        return None
-
-    df = pd.DataFrame(history)
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date")
-
-    days_map = {"1W": 7, "1M": 30, "6M": 182, "1Y": 365}
-    days = days_map.get(timeframe)
-    if days is None:
-        return None
-    cutoff = pd.Timestamp.now() - pd.Timedelta(days=days)
-    df = df[df["date"] >= cutoff]
-    if len(df) < 2:
-        return None
-
-    # Use macro_score if available, else legacy score
-    if "macro_score" in df.columns:
-        scores = df["macro_score"].dropna()
-        thresh_hi, thresh_lo = 60, 40
-    else:
-        scores = df["score"].dropna()
-        thresh_hi, thresh_lo = 0.35, -0.35
-
-    if len(scores) < 2:
-        return None
-
-    avg_score = round(scores.mean(), 1)
-
-    # Classify each day
-    risk_on = int((scores >= thresh_hi).sum())
-    risk_off = int((scores <= thresh_lo).sum())
-    neutral = int(len(scores) - risk_on - risk_off)
-
-    # Dominant regime
-    counts = {"Risk-On": risk_on, "Neutral": neutral, "Risk-Off": risk_off}
-    dominant = max(counts, key=counts.get)
-
-    # Trend: compare first half avg vs second half avg
-    mid = len(scores) // 2
-    first_half = scores.iloc[:mid].mean()
-    second_half = scores.iloc[mid:].mean()
-    diff = second_half - first_half
-    # Use a small threshold to avoid noise
-    threshold = 3 if "macro_score" in df.columns else 0.05
-    if diff > threshold:
-        trend = "Improving"
-    elif diff < -threshold:
-        trend = "Deteriorating"
-    else:
-        trend = "Stable"
-
-    # Period verdict from avg score
-    if "macro_score" in df.columns:
-        verdict = "Risk-On" if avg_score >= 60 else ("Risk-Off" if avg_score <= 40 else "Neutral")
-    else:
-        verdict = "Risk-On" if avg_score >= 0.35 else ("Risk-Off" if avg_score <= -0.35 else "Neutral")
-
-    return {
-        "avg_score": avg_score,
-        "verdict": verdict,
-        "dominant_regime": dominant,
-        "risk_on_days": risk_on,
-        "risk_off_days": risk_off,
-        "neutral_days": neutral,
-        "total_days": len(scores),
-        "trend": trend,
-    }
 
 
 def _make_category_radar(signals: list[dict]) -> go.Figure | None:
@@ -1296,24 +1217,9 @@ def render():
 
     # ── Regime History ──
     _section_header("Regime History")
-    timeframe = st.radio("Timeframe", ["1D", "1W", "1M", "6M", "1Y", "All"], index=0, horizontal=True)
-
-    if timeframe != "All":
-        summary = _regime_timeframe_summary(timeframe)
-        if summary:
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f"**{timeframe} Verdict:** {summary['verdict']}")
-            c2.markdown(f"**Avg Score:** {summary['avg_score']}")
-            c3.markdown(f"**Trend:** {summary['trend']}")
-            st.caption(f"{summary['risk_on_days']} Risk-On / {summary['neutral_days']} Neutral / {summary['risk_off_days']} Risk-Off days (of {summary['total_days']})")
-
-        if timeframe == "1D":
-            st.caption("Note: Some signals (ISM, Unemployment, Inflation, GDP, CAPEX) update monthly or quarterly and may not show daily changes.")
-
-    history_fig = _make_regime_history(timeframe=timeframe)
+    history_fig = _make_regime_history()
     if history_fig:
         st.plotly_chart(history_fig, use_container_width=True)
-
     st.caption(f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
     # ── Core Signals ──
