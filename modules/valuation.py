@@ -24,6 +24,9 @@ def render():
         st.warning("Could not collect enough data for valuation.")
         return
 
+    from datetime import datetime
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
+
     signals_text = _format_signals_text(ticker, signals)
 
     with st.spinner("Generating AI valuation..."):

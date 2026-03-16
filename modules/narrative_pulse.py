@@ -61,6 +61,9 @@ def render():
     with st.spinner("Fetching price data..."):
         df = _get_price_data(ticker, yf_period, yf_interval)
 
+    from datetime import datetime
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 15M")
+
     # Resample 1h → 4H if needed
     if df is not None and not df.empty and interval == "4H":
         df = _resample_4h(df)

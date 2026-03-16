@@ -1,5 +1,5 @@
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -53,6 +53,8 @@ def _render_insider(ticker: str):
 
     with st.spinner("Fetching insider trades..."):
         df = get_insider_trades(ticker)
+
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
 
     if df.empty:
         st.info("No recent insider trades found for this ticker.")
@@ -140,6 +142,9 @@ def _render_insider(ticker: str):
             "value": "Value",
         },
     )
+
+    csv = df.to_csv(index=False)
+    st.download_button("Export CSV", csv, f"{ticker}_insider_trades.csv", "text/csv", key="dl_insider")
 
 
 def _render_insider_flow(df: pd.DataFrame, ticker: str):
@@ -549,6 +554,8 @@ def _render_congress(ticker: str):
             st.error(f"Congress data fetch failed: {e}")
             return
 
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
+
     if error:
         st.error(error)
         return
@@ -598,3 +605,6 @@ def _render_congress(ticker: str):
             "price": "Price",
         },
     )
+
+    csv = df.to_csv(index=False)
+    st.download_button("Export CSV", csv, f"{ticker}_congress_trades.csv", "text/csv", key="dl_congress")

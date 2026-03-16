@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -70,6 +72,7 @@ def render():
             lookback_quarters=lookback_q,
         )
         progress_bar.empty()
+        st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 4H")
     except Exception as e:
         progress_bar.empty()
         st.error(f"Failed to fetch 13F data: {e}")
@@ -193,6 +196,8 @@ def _render_main_table(df: pd.DataFrame):
             _color_change, subset=["Change ($M)", "Change %"]
         )
         st.dataframe(styled, use_container_width=True, hide_index=True, height=500)
+        csv_data = show.to_csv(index=False)
+        st.download_button("Export CSV", csv_data, "whale_positions.csv", "text/csv", key="dl_whale")
 
 
 def _render_new_positions_chart(df: pd.DataFrame):

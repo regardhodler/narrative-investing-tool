@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -22,6 +24,8 @@ def render():
     if df is None or df.empty:
         st.warning("No options data available for this ticker.")
         return
+
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 5M")
 
     # Expiration filter
     selected_exps = st.multiselect(
@@ -92,6 +96,8 @@ def render():
         display["impliedVolatility"] = display["impliedVolatility"].apply(lambda v: f"{v:.1%}")
         display["strike"] = display["strike"].apply(lambda v: f"${v:.2f}")
         st.dataframe(display, use_container_width=True, hide_index=True)
+        csv = display.to_csv(index=False)
+        st.download_button("Export CSV", csv, f"{ticker}_options_chain.csv", "text/csv", key="dl_options_chain")
 
 
 def _render_volume_by_expiration(df: pd.DataFrame):
@@ -311,6 +317,8 @@ def _render_unusual_activity(df: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
     )
+    csv = show.to_csv(index=False)
+    st.download_button("Export CSV", csv, f"unusual_options.csv", "text/csv", key="dl_unusual_options")
 
 
 def _render_unusual_chart(unusual: pd.DataFrame):

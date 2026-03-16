@@ -15,6 +15,13 @@ COLORS = {
     "orange": "#FF8C00",
     "surface_dark": "#0A0E14",
     "border": "#2A3040",
+    "bloomberg_orange": "#FF8811",
+    "header_bg": "#0A0D12",
+    "sidebar_bg": "#0C1018",
+    "input_bg": "#141922",
+    "hover": "#1F2940",
+    "positive": "#00C853",
+    "negative": "#FF1744",
 }
 
 
@@ -23,7 +30,7 @@ def dark_layout(**overrides) -> dict:
         template="plotly_dark",
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["bg"],
-        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        font=dict(family="JetBrains Mono, Consolas, Courier New, monospace", color=COLORS["text"], size=12),
         xaxis=dict(gridcolor=COLORS["grid"], zerolinecolor=COLORS["grid"]),
         yaxis=dict(gridcolor=COLORS["grid"], zerolinecolor=COLORS["grid"]),
         margin=dict(l=40, r=40, t=50, b=40),

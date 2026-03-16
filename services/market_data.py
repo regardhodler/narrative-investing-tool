@@ -76,7 +76,7 @@ def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d
 
     try:
         raw = yf.download(ticker_list, period=period, interval=interval,
-                          progress=False, auto_adjust=True, threads=False)
+                          progress=False, auto_adjust=True, threads=True)
     except Exception:
         raw = pd.DataFrame()
 
@@ -193,7 +193,7 @@ def fetch_fred_series(series_id: str) -> pd.Series:
 
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
-    for timeout in (12, 25):
+    for timeout in (10, 20, 30):
         try:
             resp = requests.get(url, timeout=timeout, headers={"User-Agent": "NarrativeInvestingTool/1.0"})
             resp.raise_for_status()
@@ -228,6 +228,16 @@ def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
         return fetch_fred_series(series_id)
     except _FredFetchError:
         return None
+
+
+def warm_fred_cache(series_ids: list[str]):
+    """Pre-fetch FRED series in parallel to warm disk cache.
+
+    Call at app startup so the dashboard build doesn't serialize FRED fetches.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        list(executor.map(fetch_fred_series_safe, series_ids))
 
 
 @st.cache_data(ttl=14400)

@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -21,6 +23,8 @@ def render():
     if error:
         st.error(error)
         return
+
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
 
     # --- Major holders summary + ownership donut ---
     if major is not None and not major.empty:
@@ -316,6 +320,9 @@ def _render_holders_table(holders: pd.DataFrame):
         use_container_width=True,
         hide_index=True,
     )
+
+    csv = show.to_csv(index=False)
+    st.download_button("Export CSV", csv, f"13f_holdings.csv", "text/csv", key="dl_13f")
 
 
 @st.cache_data(ttl=3600)

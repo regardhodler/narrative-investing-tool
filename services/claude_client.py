@@ -182,16 +182,18 @@ def _group_tickers_cached(tickers_json: str) -> list[dict]:
 
     prompt = f"""You are a financial analyst. Given these trending tickers, group them into 3-6 investment narrative themes.
 
+The list may include stocks, commodity futures (tickers ending in =F), bond ETFs, and currency ETFs. Create cross-asset themes where appropriate (e.g. "Inflation Hedge" grouping gold futures with TIPS ETFs, or "Risk-Off Flight" grouping treasuries with yen).
+
 Tickers:
 {tickers_json}
 
-For each narrative group, pick a short punchy title (e.g. "AI Infrastructure Boom", "Rate Cut Beneficiaries", "Energy Transition", "Momentum Leaders").
+For each narrative group, pick a short punchy title (e.g. "AI Infrastructure Boom", "Rate Cut Beneficiaries", "Energy Transition", "Commodity Super-Cycle", "Safe Haven Rotation").
 
 Return ONLY valid JSON (no markdown fences) — a list of objects:
 [
   {{
     "narrative": "Theme Title",
-    "description": "One sentence explaining why these stocks are grouped together",
+    "description": "One sentence explaining why these assets are grouped together",
     "tickers": ["SYM1", "SYM2"]
   }}
 ]

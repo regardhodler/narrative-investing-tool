@@ -388,6 +388,8 @@ def render():
     with st.spinner("Checking canary watchlist..."):
         canary_df = get_canary_signals()
 
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 12H (FRED) / 4H (CANARY)")
+
     # ── 1. Stress-O-Meter ──
     stress_score, stress_components = _compute_stress_score(fred_data, canary_df)
 

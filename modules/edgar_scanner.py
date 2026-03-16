@@ -52,6 +52,8 @@ def render():
         st.warning(f"No filings found for **{ticker_input}**.")
         return
 
+    from datetime import datetime
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
     st.success(f"Found {len(df)} recent filings")
 
     # Form type filter

@@ -8,9 +8,41 @@ from services.trends_client import (
     get_yahoo_trending_tickers,
 )
 from services.claude_client import classify_narrative, describe_company, group_tickers_by_narrative
+from services.market_data import fetch_batch_safe
 from services.sec_client import get_company_info
 from utils.session import get_ticker, set_narrative, set_ticker
 from utils.theme import COLORS, apply_dark_layout
+
+ASSET_CLASSES = {
+    "Equities": None,  # sentinel — use Yahoo trending
+    "Commodities": {
+        "GC=F": "Gold", "SI=F": "Silver", "CL=F": "WTI Crude",
+        "NG=F": "Natural Gas", "HG=F": "Copper",
+        "ZW=F": "Wheat", "ZC=F": "Corn", "ZS=F": "Soybeans",
+    },
+    "Bonds": {
+        "TLT": "20Y+ Treasury", "IEF": "10Y Treasury", "SHY": "2Y Treasury",
+        "LQD": "IG Corporate", "HYG": "High Yield Corp",
+        "TIP": "TIPS", "AGG": "US Agg Bond",
+    },
+    "Currencies": {
+        "UUP": "USD Bull", "FXE": "Euro", "FXY": "Yen",
+        "FXB": "GBP", "FXA": "AUD", "FXC": "CAD",
+    },
+}
+
+_ASSET_BADGE = {
+    "Commodities": ("CMDTY", COLORS["orange"]),
+    "Bonds": ("BOND", COLORS["blue"]),
+    "Currencies": ("FX", COLORS["yellow"]),
+}
+
+# Lookup: ticker → asset class name (for non-equity classes)
+_TICKER_TO_CLASS = {}
+for _cls, _tickers in ASSET_CLASSES.items():
+    if _tickers is not None:
+        for _t in _tickers:
+            _TICKER_TO_CLASS[_t] = _cls
 
 _NON_FINANCIAL_KEYWORDS = {
     "nfl", "nba", "mlb", "nhl", "ufc", "wwe", "espn", "super bowl",
@@ -35,10 +67,60 @@ def render():
         _render_manual()
 
 
+def _fetch_curated_assets(ticker_dict: dict[str, str], asset_class: str) -> list[dict]:
+    """Fetch price data for curated non-equity tickers and return in trending-compatible shape."""
+    snapshots = fetch_batch_safe(ticker_dict, period="5d")
+    items = []
+    for idx, (ticker, label) in enumerate(ticker_dict.items()):
+        snap = snapshots.get(ticker)
+        pct = snap.pct_change_1d if snap and snap.pct_change_1d is not None else 0.0
+        items.append({
+            "symbol": ticker,
+            "name": label,
+            "pct_change": pct,
+            "buzz_rank": idx,
+            "asset_class": asset_class,
+        })
+    items.sort(key=lambda x: abs(x.get("pct_change", 0)), reverse=True)
+    return items
+
+
 def _render_auto():
-    # --- Yahoo Finance trending tickers (primary, always financial) ---
-    with st.spinner("Fetching trending tickers from Yahoo Finance..."):
-        yf_trending = get_yahoo_trending_tickers()
+    # --- Asset class filter ---
+    selected_classes = st.multiselect(
+        "Asset Classes", list(ASSET_CLASSES.keys()),
+        default=["Equities"], key="asset_class_filter",
+    )
+
+    if not selected_classes:
+        st.info("Select at least one asset class to discover trending assets.")
+        return
+
+    all_trending = []
+
+    # --- Equities: Yahoo Finance trending tickers ---
+    if "Equities" in selected_classes:
+        with st.spinner("Fetching trending tickers from Yahoo Finance..."):
+            yf_trending = get_yahoo_trending_tickers()
+        if yf_trending:
+            for item in yf_trending:
+                item["asset_class"] = "Equities"
+            all_trending.extend(yf_trending)
+
+    # --- Non-equity asset classes ---
+    for cls in selected_classes:
+        if cls == "Equities":
+            continue
+        ticker_dict = ASSET_CLASSES.get(cls)
+        if ticker_dict:
+            with st.spinner(f"Fetching {cls} data..."):
+                all_trending.extend(_fetch_curated_assets(ticker_dict, cls))
+
+    if not all_trending:
+        st.warning("No data available for the selected asset classes.")
+        return
+
+    yf_trending = all_trending  # keep variable name for downstream compat
 
     if yf_trending:
         # Build a lookup from symbol → item
@@ -51,6 +133,9 @@ def _render_auto():
         )
         with st.spinner("Grouping tickers by narrative..."):
             narrative_groups = group_tickers_by_narrative(tickers_for_grouping)
+
+        from datetime import datetime
+        st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
 
         if narrative_groups:
             st.subheader(f"{len(yf_trending)} Trending Tickers · {len(narrative_groups)} Narratives")
@@ -85,6 +170,16 @@ def _render_auto():
                     col = cols[i % len(cols)]
                     with col:
                         with st.container(border=True):
+                            # Asset class badge
+                            _badge = _ASSET_BADGE.get(item.get("asset_class"))
+                            if _badge:
+                                st.markdown(
+                                    f'<span style="background:{_badge[1]}22;color:{_badge[1]};'
+                                    f'font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;'
+                                    f'letter-spacing:0.08em;font-family:\'JetBrains Mono\',monospace;">'
+                                    f'{_badge[0]}</span>',
+                                    unsafe_allow_html=True,
+                                )
                             st.markdown(f"**{item['name']}**")
                             st.code(item["symbol"], language=None)
                             # Intraday % change
@@ -109,6 +204,10 @@ def _render_auto():
                             if st.button("Select", key=f"yf_select_{g_idx}_{i}", type="primary"):
                                 set_narrative(narrative_title)
                                 set_ticker(item["symbol"])
+                                st.rerun()
+                            if st.button("Watch", key=f"wl_add_{g_idx}_{i}"):
+                                from utils.watchlist import add_to_watchlist
+                                add_to_watchlist(item["symbol"], narrative_title)
                                 st.rerun()
         else:
             # Fallback: flat list if grouping fails
@@ -141,8 +240,10 @@ def _render_auto():
                             set_narrative(item["name"])
                             set_ticker(item["symbol"])
                             st.rerun()
-    else:
-        st.warning("Could not fetch Yahoo Finance trending tickers.")
+                        if st.button("Watch", key=f"wl_add_flat_{i}"):
+                            from utils.watchlist import add_to_watchlist
+                            add_to_watchlist(item["symbol"], item["name"])
+                            st.rerun()
 
     # --- Show overview for selected ticker ---
     active = get_ticker()
@@ -314,6 +415,11 @@ def _render_trending_interest(trending: list[dict]):
 
 def _render_company_overview(ticker: str):
     """Show company description and narrative for a ticker."""
+    # Route non-equity assets to simplified overview
+    if ticker in _TICKER_TO_CLASS:
+        _render_asset_overview(ticker)
+        return
+
     with st.spinner(f"Looking up {ticker}..."):
         company_info = get_company_info(ticker)
 
@@ -345,6 +451,67 @@ def _render_company_overview(ticker: str):
 
         if overview.get("narrative"):
             st.info(f"**Narrative:** {overview['narrative']}")
+
+
+def _render_asset_overview(ticker: str):
+    """Simplified overview for non-equity assets (commodities, bonds, currencies)."""
+    asset_class = _TICKER_TO_CLASS.get(ticker, "Unknown")
+    # Find label from ASSET_CLASSES
+    label = ticker
+    class_dict = ASSET_CLASSES.get(asset_class, {})
+    if class_dict:
+        label = class_dict.get(ticker, ticker)
+
+    with st.spinner(f"Fetching {label} data..."):
+        snapshots = fetch_batch_safe({ticker: label}, period="3mo")
+
+    snap = snapshots.get(ticker)
+    badge_info = _ASSET_BADGE.get(asset_class, (asset_class.upper(), COLORS["accent"]))
+
+    with st.container(border=True):
+        st.markdown(
+            f'<span style="background:{badge_info[1]}22;color:{badge_info[1]};'
+            f'font-size:11px;font-weight:700;padding:2px 8px;border-radius:3px;'
+            f'letter-spacing:0.08em;">{badge_info[0]}</span>',
+            unsafe_allow_html=True,
+        )
+        st.subheader(f"{label}  ·  {ticker}")
+
+        if snap and snap.latest_price is not None:
+            col_price, col_1d, col_5d, col_30d = st.columns(4)
+            with col_price:
+                st.metric("Price", f"${snap.latest_price:,.2f}")
+            with col_1d:
+                val = snap.pct_change_1d
+                st.metric("1D", f"{val:+.2f}%" if val is not None else "N/A",
+                           delta=f"{val:+.2f}%" if val is not None else None)
+            with col_5d:
+                val = snap.pct_change_5d
+                st.metric("5D", f"{val:+.2f}%" if val is not None else "N/A",
+                           delta=f"{val:+.2f}%" if val is not None else None)
+            with col_30d:
+                val = snap.pct_change_30d
+                st.metric("30D", f"{val:+.2f}%" if val is not None else "N/A",
+                           delta=f"{val:+.2f}%" if val is not None else None)
+
+            # Mini sparkline
+            if snap.series is not None and not snap.series.empty:
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=snap.series.index,
+                    y=snap.series.values,
+                    mode="lines",
+                    line=dict(color=COLORS["accent"], width=2),
+                    fill="tozeroy",
+                    fillcolor="rgba(0, 212, 170, 0.1)",
+                    hovertemplate="<b>%{x|%b %d}</b><br>$%{y:,.2f}<extra></extra>",
+                ))
+                apply_dark_layout(fig, title=f"{label} — 3 Month",
+                                  margin=dict(l=40, r=20, t=40, b=30))
+                fig.update_layout(height=250, showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning(f"Could not fetch price data for {ticker}.")
 
 
 def _render_interest_chart(keyword: str, key_suffix: str = "default"):
