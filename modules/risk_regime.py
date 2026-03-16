@@ -567,28 +567,39 @@ class _SpyPeFetchError(Exception):
     pass
 
 
+_SPY_PE_FALLBACK = 24.0  # Recent historical average; CAPE/Buffett from FRED are more reliable
+
+
 @st.cache_data(ttl=14400)
 def _fetch_spy_pe() -> float:
-    """Fetch SPY trailing P/E with raise-on-failure to avoid caching None."""
-    try:
+    """Fetch SPY trailing P/E with 5s timeout, falling back to hardcoded value."""
+    import concurrent.futures
+    def _do_fetch():
         info = yf.Ticker("SPY").info
         val = info.get("trailingPE") or info.get("forwardPE")
         if val is not None:
             return float(val)
+        return None
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(_do_fetch)
+            result = fut.result(timeout=5)
+            if result is not None:
+                return result
     except Exception:
         pass
-    raise _SpyPeFetchError("Failed to fetch SPY P/E")
+    return _SPY_PE_FALLBACK
 
 
 def _fetch_spy_pe_safe() -> float | None:
-    """Wrapper around _fetch_spy_pe that returns None on failure."""
+    """Wrapper around _fetch_spy_pe — always returns a value (fallback-safe)."""
     try:
         return _fetch_spy_pe()
-    except _SpyPeFetchError:
-        return None
+    except Exception:
+        return _SPY_PE_FALLBACK
 
 
-def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False) -> dict:
+def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False, gamma_data: dict | None = None) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
         "credit_spread": "BAMLH0A0HYM2",
@@ -604,15 +615,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "fci": "NFCI",
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
     }
-    gamma_expiries = 1 if low_compute_mode else 2
     with ThreadPoolExecutor(max_workers=10) as executor:
         fred_futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
-        # Run SPY P/E and gamma concurrently with FRED fetches
+        # Run SPY P/E concurrently with FRED fetches (gamma loaded lazily after render)
         spy_pe_future = executor.submit(_fetch_spy_pe_safe)
-        gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, gamma_expiries)
         fred = {k: f.result() for k, f in fred_futures.items()}
         spy_pe = spy_pe_future.result()
-        gamma_data = gamma_future.result()
 
     indicators = []
 
@@ -859,7 +867,6 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
         "summary": summary[:5],
         "portfolio_bias": _portfolio_bias(macro_regime),
         "gamma": gamma_data,
-        "low_compute_mode": low_compute_mode,
     }
 
     result["risk_alerts"] = _risk_management_alerts(result, snaps)
@@ -1137,32 +1144,36 @@ def render():
         help="Reduces options processing load and disables gamma chart rendering to conserve free Streamlit usage.",
     )
 
-    with st.spinner("Building macro dashboard..."):
-        # Pre-warm FRED cache and fetch core tickers in parallel
-        _FRED_SERIES_IDS = [
-            "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
-            "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
-            "INDPRO", "NFCI", "DGS10",
-        ]
-        load_start = datetime.now()
+    _FRED_SERIES_IDS = [
+        "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
+        "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
+        "INDPRO", "NFCI", "DGS10",
+    ]
+
+    load_start = datetime.now()
+    with st.spinner("Fetching FRED & market data..."):
+        t0 = datetime.now()
         with ThreadPoolExecutor(max_workers=2) as executor:
             fred_future = executor.submit(warm_fred_cache, _FRED_SERIES_IDS)
             core_future = executor.submit(fetch_core_data)
-            fred_future.result()  # ensure FRED is warm before macro build
+            fred_future.result()
             core_snaps = core_future.result()
-            macro_future = executor.submit(_build_macro_dashboard, core_snaps, low_compute_mode)
-            macro = macro_future.result()
+        t_fred = (datetime.now() - t0).total_seconds()
+
+    with st.spinner("Computing macro signals..."):
+        t1 = datetime.now()
+        macro = _build_macro_dashboard(core_snaps, low_compute_mode)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
         macro["snaps"] = snaps
-        load_secs = (datetime.now() - load_start).total_seconds()
+        t_macro = (datetime.now() - t1).total_seconds()
 
     # Cache freshness indicator — batch TTL is 4h, FRED is 12h
     cache_expiry = datetime.now() + timedelta(seconds=14400)
     st.caption(
-        f"Data loaded in {load_secs:.1f}s — cached until ~{cache_expiry.strftime('%H:%M')} "
-        f"(batch 4h / FRED 12h). No need to refresh unless markets have moved significantly."
+        f"FRED+core: {t_fred:.1f}s | Signals: {t_macro:.1f}s — "
+        f"cached until ~{cache_expiry.strftime('%H:%M')} (batch 4h / FRED 12h)"
     )
 
     regime = macro["macro_regime"]
@@ -1331,13 +1342,15 @@ def render():
     else:
         st.markdown("No strong cross-signal opportunities detected currently.")
 
-    # ── SPY Options Sentiment ──
+    # ── SPY Options Sentiment (lazy-loaded) ──
     _section_header("SPY Options Sentiment")
-    gamma = macro["gamma"]
+    with st.spinner("Loading SPY options data..."):
+        t_gamma_start = datetime.now()
+        gamma = _compute_spy_gamma_mode_with_retry(max_expiries=1)
+        t_gamma = (datetime.now() - t_gamma_start).total_seconds()
+    total_secs = (datetime.now() - load_start).total_seconds()
+    st.caption(f"Options loaded in {t_gamma:.1f}s | Total: {total_secs:.1f}s")
     if gamma:
-        if macro.get("low_compute_mode"):
-            st.caption("Cached mode active (Low Compute Mode).")
-
         asof = gamma.get("asof")
         if asof:
             try:
@@ -1364,7 +1377,7 @@ def render():
         m2.metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A")
         m3.metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A")
 
-        if macro.get("low_compute_mode"):
+        if low_compute_mode:
             st.caption("Gamma chart disabled in Low Compute Mode.")
         else:
             fig = go.Figure()
