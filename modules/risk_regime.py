@@ -35,7 +35,7 @@ from services.market_data import (
     fetch_fred_series_safe, fetch_options_chain_snapshot_safe,
     warm_fred_cache,
 )
-from utils.theme import COLORS, apply_dark_layout
+from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 
 # ─────────────────────────────────────────────
 # HISTORY PERSISTENCE
@@ -98,6 +98,11 @@ CORE_TICKERS = {
     "CPER": "Copper",
     "UUP": "USD Bull ETF",
     "^VIX": "VIX",
+    # Display-only (ticker bar)
+    "IWM": "Russell 2000",
+    "GLD": "Gold",
+    "SLV": "Silver",
+    "TLT": "20Y+ Treasury",
 }
 
 
@@ -501,7 +506,7 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 # ─────────────────────────────────────────────
 
 def fetch_core_data() -> dict[str, AssetSnapshot]:
-    """Fetch only the 7 core tickers needed for signal calculations."""
+    """Fetch core tickers for signals + ticker bar display."""
     return fetch_batch_safe(CORE_TICKERS, period="3mo", interval="1d")
 
 
@@ -519,6 +524,7 @@ def _compute_spy_gamma_mode_with_retry(max_expiries: int = 2) -> dict | None:
     return result
 
 
+@st.cache_data(ttl=14400, show_spinner=False)
 def _compute_spy_gamma_mode(max_expiries: int = 2) -> dict | None:
     snap = fetch_options_chain_snapshot_safe("SPY", max_expiries=max_expiries)
     if not snap:
@@ -572,7 +578,7 @@ _SPY_PE_FALLBACK = 24.0  # Recent historical average; CAPE/Buffett from FRED are
 
 @st.cache_data(ttl=14400)
 def _fetch_spy_pe() -> float:
-    """Fetch SPY trailing P/E with 5s timeout, falling back to hardcoded value."""
+    """Fetch SPY trailing P/E with 2s timeout, falling back to hardcoded value."""
     import concurrent.futures
     def _do_fetch():
         info = yf.Ticker("SPY").info
@@ -583,7 +589,7 @@ def _fetch_spy_pe() -> float:
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
             fut = ex.submit(_do_fetch)
-            result = fut.result(timeout=5)
+            result = fut.result(timeout=2)
             if result is not None:
                 return result
     except Exception:
@@ -599,6 +605,7 @@ def _fetch_spy_pe_safe() -> float | None:
         return _SPY_PE_FALLBACK
 
 
+@st.cache_data(ttl=14400, show_spinner=False)
 def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bool = False, gamma_data: dict | None = None) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
@@ -1111,18 +1118,53 @@ def _make_category_radar(signals: list[dict]) -> go.Figure | None:
 # ─────────────────────────────────────────────
 
 def _section_header(title: str):
-    """Render a section header using native Streamlit."""
-    st.subheader(title)
+    """Render a Bloomberg-styled section header."""
+    st.markdown(
+        f'<div style="border-left:3px solid {COLORS["bloomberg_orange"]};'
+        f'background:{COLORS["surface"]};padding:8px 14px;margin:20px 0 10px 0;'
+        f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:14px;'
+        f'font-weight:600;color:{COLORS["bloomberg_orange"]};letter-spacing:0.08em;'
+        f'text-transform:uppercase;">{title}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_signals_table(signals: list[dict]):
-    """Render core signals as a native Streamlit dataframe."""
+    """Render core signals as a styled Bloomberg-terminal dataframe."""
     import pandas as pd
     df = pd.DataFrame(signals)
     display_cols = ["Indicator", "Value", "Score", "Direction", "Confidence"]
     df = df[[c for c in display_cols if c in df.columns]]
     df = df.rename(columns={"Indicator": "Signal"})
-    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    def _color_score(val):
+        try:
+            v = float(val)
+        except (ValueError, TypeError):
+            return ""
+        if v > 0:
+            return f"color: {COLORS['green']}"
+        elif v < 0:
+            return f"color: {COLORS['red']}"
+        return f"color: {COLORS['text_dim']}"
+
+    def _color_direction(val):
+        if val == "Risk-On":
+            return f"color: {COLORS['green']}"
+        elif val == "Risk-Off":
+            return f"color: {COLORS['red']}"
+        return f"color: {COLORS['yellow']}"
+
+    styled = (
+        df.style
+        .map(_color_score, subset=["Score"] if "Score" in df.columns else [])
+        .map(_color_direction, subset=["Direction"] if "Direction" in df.columns else [])
+        .set_properties(**{
+            "font-family": "'JetBrains Mono', Consolas, monospace",
+            "font-size": "12px",
+        })
+    )
+    st.dataframe(styled, use_container_width=True, hide_index=True)
     csv = df.to_csv(index=False)
     st.download_button("Export CSV", csv, "risk_regime_signals.csv", "text/csv", key="dl_risk_signals")
 
@@ -1151,14 +1193,16 @@ def render():
     ]
 
     load_start = datetime.now()
-    with st.spinner("Fetching FRED & market data..."):
+    with st.spinner("Fetching FRED, market & options data..."):
         t0 = datetime.now()
-        with ThreadPoolExecutor(max_workers=2) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             fred_future = executor.submit(warm_fred_cache, _FRED_SERIES_IDS)
             core_future = executor.submit(fetch_core_data)
+            gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, 1)
             fred_future.result()
             core_snaps = core_future.result()
-        t_fred = (datetime.now() - t0).total_seconds()
+            gamma = gamma_future.result()
+        t_fetch = (datetime.now() - t0).total_seconds()
 
     with st.spinner("Computing macro signals..."):
         t1 = datetime.now()
@@ -1169,12 +1213,43 @@ def render():
         macro["snaps"] = snaps
         t_macro = (datetime.now() - t1).total_seconds()
 
-    # Cache freshness indicator — batch TTL is 4h, FRED is 12h
+    total_load = (datetime.now() - load_start).total_seconds()
     cache_expiry = datetime.now() + timedelta(seconds=14400)
-    st.caption(
-        f"FRED+core: {t_fred:.1f}s | Signals: {t_macro:.1f}s — "
-        f"cached until ~{cache_expiry.strftime('%H:%M')} (batch 4h / FRED 12h)"
+    st.markdown(
+        f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+        f'padding:2px 0;letter-spacing:0.03em;">'
+        f'FETCH {t_fetch:.1f}s | SIGNALS {t_macro:.1f}s | TOTAL {total_load:.1f}s — '
+        f'cached until ~{cache_expiry.strftime("%H:%M")} (4h TTL)</div>',
+        unsafe_allow_html=True,
     )
+
+    # ── Ticker Bar ──
+    _TICKER_BAR = [
+        ("SPY", "SPY"), ("NDX", "QQQ"), ("DJ30", "DIA"), ("IWM", "IWM"),
+        ("GOLD", "GLD"), ("SILVER", "SLV"), ("OIL", "USO"), ("TLT", "TLT"),
+    ]
+    cells = []
+    for label, ticker in _TICKER_BAR:
+        snap = snaps.get(ticker)
+        if snap and snap.latest_price:
+            pct = snap.pct_change_1d or 0.0
+            color = COLORS["green"] if pct >= 0 else COLORS["red"]
+            arrow = "▲" if pct >= 0 else "▼"
+            cells.append(
+                f'<div style="display:inline-block;padding:4px 12px;text-align:center;">'
+                f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};letter-spacing:0.06em;">{label}</div>'
+                f'<div style="font-size:15px;font-weight:700;color:{COLORS["text"]};">${snap.latest_price:,.2f}</div>'
+                f'<div style="font-size:12px;color:{color};">{arrow} {pct:+.2f}%</div>'
+                f'</div>'
+            )
+    if cells:
+        bar_html = (
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+            f'border-radius:4px;padding:6px 4px;margin-bottom:12px;display:flex;'
+            f'justify-content:space-around;font-family:\'JetBrains Mono\',Consolas,monospace;">'
+            + "".join(cells) + '</div>'
+        )
+        st.markdown(bar_html, unsafe_allow_html=True)
 
     regime = macro["macro_regime"]
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
@@ -1187,10 +1262,16 @@ def render():
 
     with col_metrics:
         m1, m2, m3 = st.columns(3)
-        m1.metric("Macro Score", macro["macro_score"])
-        m2.metric("Quadrant", macro["quadrant"])
-        m3.metric("Regime", regime)
-        st.caption(f"Confidence: {_confidence_label(macro['avg_confidence'])} ({macro['avg_confidence']}%) | Growth: {macro['growth_dir']} | Inflation: {macro['inflation_dir']}")
+        m1.markdown(bloomberg_metric("Macro Score", str(macro["macro_score"])), unsafe_allow_html=True)
+        m2.markdown(bloomberg_metric("Quadrant", macro["quadrant"]), unsafe_allow_html=True)
+        m3.markdown(bloomberg_metric("Regime", regime, regime_color), unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+            f'margin-top:8px;letter-spacing:0.03em;">'
+            f'CONFIDENCE {_confidence_label(macro["avg_confidence"])} ({macro["avg_confidence"]}%) '
+            f'| GROWTH {macro["growth_dir"]} | INFLATION {macro["inflation_dir"]}</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Signal Radar ──
     radar_fig = _make_category_radar(macro["signals"])
@@ -1280,14 +1361,14 @@ def render():
     cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
     buffett_txt = "N/A" if macro["buffett"] is None else f"{macro['buffett']:.2f}%"
     c1, c2 = st.columns(2)
-    c1.metric("S&P 500 P/E", cape_txt)
-    c2.metric("Buffett Indicator", buffett_txt)
+    c1.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
+    c2.markdown(bloomberg_metric("Buffett Indicator", buffett_txt), unsafe_allow_html=True)
     st.caption(macro["valuation"])
 
     # ── Cycle Stage ──
     _section_header("Cycle Stage")
     capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
-    st.metric("CAPEX vs Liquidity", capliq_txt)
+    st.markdown(bloomberg_metric("CAPEX vs Liquidity", capliq_txt), unsafe_allow_html=True)
     st.caption(macro["cycle_stage"])
 
     # ── Summary ──
@@ -1300,7 +1381,7 @@ def render():
     bias_items = list(macro["portfolio_bias"].items())
     cols = st.columns(len(bias_items))
     for col, (sleeve, bias) in zip(cols, bias_items):
-        col.metric(sleeve, bias)
+        col.markdown(bloomberg_metric(sleeve, bias), unsafe_allow_html=True)
 
     # ── Sector Rotation ──
     _section_header("Sector Rotation")
@@ -1308,13 +1389,21 @@ def render():
     if sector_recs:
         col_favor, col_avoid = st.columns(2)
         with col_favor:
-            st.markdown("**Favor**")
+            st.markdown(
+                f'<div style="color:{COLORS["green"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Favor</div>',
+                unsafe_allow_html=True,
+            )
             for rec in sector_recs:
                 if rec["action"] == "Favor":
                     mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
                     st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
         with col_avoid:
-            st.markdown("**Avoid**")
+            st.markdown(
+                f'<div style="color:{COLORS["red"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Avoid</div>',
+                unsafe_allow_html=True,
+            )
             for rec in sector_recs:
                 if rec["action"] == "Avoid":
                     mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
@@ -1325,7 +1414,11 @@ def render():
     # ── Risk Management Alerts ──
     _section_header("Risk Management Alerts")
     for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
-        st.markdown(f"- {alert}")
+        st.markdown(
+            f'<div style="border-left:2px solid {COLORS["red"]};padding:4px 10px;margin:4px 0;'
+            f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13px;color:{COLORS["text"]};">{alert}</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Tactical Opportunities ──
     _section_header("Tactical Opportunities")
@@ -1342,14 +1435,8 @@ def render():
     else:
         st.markdown("No strong cross-signal opportunities detected currently.")
 
-    # ── SPY Options Sentiment (lazy-loaded) ──
+    # ── SPY Options Sentiment (pre-fetched in parallel) ──
     _section_header("SPY Options Sentiment")
-    with st.spinner("Loading SPY options data..."):
-        t_gamma_start = datetime.now()
-        gamma = _compute_spy_gamma_mode_with_retry(max_expiries=1)
-        t_gamma = (datetime.now() - t_gamma_start).total_seconds()
-    total_secs = (datetime.now() - load_start).total_seconds()
-    st.caption(f"Options loaded in {t_gamma:.1f}s | Total: {total_secs:.1f}s")
     if gamma:
         asof = gamma.get("asof")
         if asof:
@@ -1373,9 +1460,9 @@ def render():
         st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
 
         m1, m2, m3 = st.columns(3)
-        m1.metric("Gamma Flip", f"{gamma['gamma_flip']:.2f}" if gamma["gamma_flip"] is not None else "N/A")
-        m2.metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A")
-        m3.metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A")
+        m1.markdown(bloomberg_metric("Gamma Flip", f"{gamma['gamma_flip']:.2f}" if gamma["gamma_flip"] is not None else "N/A", COLORS["yellow"]), unsafe_allow_html=True)
+        m2.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)
+        m3.markdown(bloomberg_metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A", COLORS["red"]), unsafe_allow_html=True)
 
         if low_compute_mode:
             st.caption("Gamma chart disabled in Low Compute Mode.")

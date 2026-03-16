@@ -43,3 +43,16 @@ def dark_layout(**overrides) -> dict:
 def apply_dark_layout(fig: go.Figure, **overrides) -> go.Figure:
     fig.update_layout(**dark_layout(**overrides))
     return fig
+
+
+def bloomberg_metric(label: str, value: str, color: str | None = None) -> str:
+    """Return styled HTML for a Bloomberg-terminal-style metric block."""
+    val_color = color or COLORS["text"]
+    return (
+        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+        f'padding:10px 14px;border-radius:4px;font-family:\'JetBrains Mono\',Consolas,monospace;">'
+        f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};'
+        f'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">{label}</div>'
+        f'<div style="font-size:20px;font-weight:700;color:{val_color};">{value}</div>'
+        f'</div>'
+    )
