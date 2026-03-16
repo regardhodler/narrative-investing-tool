@@ -100,36 +100,6 @@ CORE_TICKERS = {
     "^VIX": "VIX",
 }
 
-DISPLAY_TICKERS = {
-    # Yield curve proxies
-    "SHY": "2Y Treasury ETF",
-    "IEF": "10Y Treasury ETF",
-    "TLT": "20Y+ Treasury ETF",
-    # Credit spreads
-    "JNK": "HY Corporate Bonds",
-    "LQD": "IG Corporate Bonds",
-    # Inflation
-    "TIP": "TIPS ETF",
-    # Equity - US
-    "IWM": "Russell 2000",
-    "XLF": "Financials",
-    "XLE": "Energy",
-    # Equity - International
-    "EEM": "Emerging Markets",
-    "EFA": "Developed ex-US",
-    "FXI": "China",
-    # Commodities
-    "GLD": "Gold",
-    "SLV": "Silver",
-    # Crypto proxy
-    "IBIT": "Bitcoin ETF",
-    # Ticker bar extras
-    "CL=F": "WTI Crude Oil",
-    "GC=F": "Gold Futures",
-}
-
-TICKERS = {**CORE_TICKERS, **DISPLAY_TICKERS}
-
 
 # ─────────────────────────────────────────────
 # SCORING UTILITIES
@@ -535,14 +505,6 @@ def fetch_core_data() -> dict[str, AssetSnapshot]:
     return fetch_batch_safe(CORE_TICKERS, period="3mo", interval="1d")
 
 
-def fetch_display_data() -> dict[str, AssetSnapshot]:
-    """Fetch the 17 display-only tickers (ticker bar, sector rotation, tactical opps)."""
-    return fetch_batch_safe(DISPLAY_TICKERS, period="3mo", interval="1d")
-
-
-def fetch_all_data() -> dict[str, AssetSnapshot]:
-    """Fetch all ticker data via shared market_data service."""
-    return {**fetch_core_data(), **fetch_display_data()}
 
 
 # ─────────────────────────────────────────────
@@ -920,7 +882,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], low_compute_mode: bo
 
 def get_current_regime() -> dict:
     """Public accessor for other modules to consume regime data."""
-    snaps = fetch_all_data()
+    snaps = fetch_core_data()
     macro = _build_macro_dashboard(snaps, low_compute_mode=True)
     return {
         "regime": macro["macro_regime"],
@@ -1176,22 +1138,21 @@ def render():
     )
 
     with st.spinner("Building macro dashboard..."):
-        # Pre-warm FRED cache in parallel before main build
+        # Pre-warm FRED cache and fetch core tickers in parallel
         _FRED_SERIES_IDS = [
             "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
             "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
             "INDPRO", "NFCI", "DGS10",
         ]
-        warm_fred_cache(_FRED_SERIES_IDS)
         load_start = datetime.now()
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            fred_future = executor.submit(warm_fred_cache, _FRED_SERIES_IDS)
             core_future = executor.submit(fetch_core_data)
-            display_future = executor.submit(fetch_display_data)
+            fred_future.result()  # ensure FRED is warm before macro build
             core_snaps = core_future.result()
             macro_future = executor.submit(_build_macro_dashboard, core_snaps, low_compute_mode)
             macro = macro_future.result()
-            display_snaps = display_future.result()
-        snaps = {**core_snaps, **display_snaps}
+        snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
         macro["snaps"] = snaps
@@ -1206,32 +1167,6 @@ def render():
 
     regime = macro["macro_regime"]
     regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
-
-    # ── Market Ticker Bar ──
-    TICKER_BAR = [
-        ("QQQ",  "Nasdaq 100 (QQQ)"),
-        ("DIA",  "Dow 30 (DIA)"),
-        ("SPY",  "S&P 500 (SPY)"),
-        ("IWM",  "Russell 2000 (IWM)"),
-        ("GC=F", "Gold"),
-        ("SLV",  "Silver (SLV)"),
-        ("CL=F", "WTI Crude"),
-        ("TLT",  "TLT (20Y+)"),
-    ]
-    ticker_tf = st.radio(
-        "Timeframe", ["Daily", "Weekly", "Monthly", "YTD"],
-        horizontal=True, key="ticker_bar_tf",
-    )
-    tf_field = {"Daily": "pct_change_1d", "Weekly": "pct_change_5d", "Monthly": "pct_change_30d", "YTD": "pct_change_ytd"}[ticker_tf]
-
-    cols = st.columns(len(TICKER_BAR))
-    for col, (ticker, label) in zip(cols, TICKER_BAR):
-        snap = snaps.get(ticker)
-        price = snap.latest_price if snap else None
-        pct = getattr(snap, tf_field, None) if snap else None
-        price_str = f"${price:,.2f}" if price is not None else "N/A"
-        delta_str = f"{pct:+.2f}%" if pct is not None else None
-        col.metric(label, price_str, delta_str)
 
     # ── Gauge + Top-level metrics ──
     col_gauge, col_metrics = st.columns([1, 2])

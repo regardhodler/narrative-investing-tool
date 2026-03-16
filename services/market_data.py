@@ -193,7 +193,7 @@ def fetch_fred_series(series_id: str) -> pd.Series:
 
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
-    for timeout in (10, 20, 30):
+    for timeout in (8, 15):
         try:
             resp = requests.get(url, timeout=timeout, headers={"User-Agent": "NarrativeInvestingTool/1.0"})
             resp.raise_for_status()
