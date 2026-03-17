@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 .streamlit/secrets.toml
 CLAUDE.md
-data/fred_cache/
 data/regime_history.json
 data/watchlist.json
 .claude/
