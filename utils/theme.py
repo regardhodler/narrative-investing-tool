@@ -1,5 +1,7 @@
 import plotly.graph_objects as go
 
+FONT_FAMILY = "JetBrains Mono, Consolas, Courier New, monospace"
+
 COLORS = {
     "bg": "#0E1117",
     "surface": "#1A1F2E",

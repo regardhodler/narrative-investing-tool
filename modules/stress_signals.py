@@ -242,10 +242,11 @@ def _make_whale_exit_chart(exits_df: pd.DataFrame) -> go.Figure | None:
         y=df["label"],
         orientation="h",
         marker_color=DOOM_RED,
-        text=[f"${v:,.0f}M" for v in df["value_change_m"]],
+        text=[f"${v:,.0f}M ({p:+.1f}%)" if "pct_change" in df.columns and pd.notna(p) else f"${v:,.0f}M" for v, p in zip(df["value_change_m"], df.get("pct_change", [0]*len(df)))],
         textposition="outside",
         textfont=dict(color=COLORS["text"], size=10),
-        hovertemplate="<b>%{y}</b><br>Change: $%{x:,.0f}M<extra></extra>",
+        hovertemplate="<b>%{y}</b><br>Change: $%{x:,.0f}M<br>%{customdata}<extra></extra>",
+        customdata=[f"{p:+.1f}%" if pd.notna(p) else "N/A" for p in df.get("pct_change", [None]*len(df))],
     ))
 
     fig.update_layout(
@@ -335,6 +336,87 @@ CANARY_TICKERS_ORDER = [
     "Regional Banks", "Commercial Real Estate", "Private Equity Exposure",
     "Subprime / Consumer Credit", "High Yield / Distressed", "Volatility / Fear",
 ]
+
+
+def _render_recommendations(stress_score: float, components: dict,
+                            canary_df: pd.DataFrame, exits_df: pd.DataFrame):
+    """Rules-based actionable recommendations keyed on stress level."""
+    st.markdown(f"### <span style='color:{DOOM_RED};'>Actionable Recommendations</span>", unsafe_allow_html=True)
+
+    recs = []
+    if stress_score >= 80:
+        severity_color = DOOM_RED
+        recs = [
+            "REDUCE GROSS EXPOSURE IMMEDIATELY",
+            "MAX HEDGE RATIOS — put spreads on major indices",
+            "FAVOR CASH & TREASURIES over equities",
+            "Halt new risk-on positions until stress subsides",
+        ]
+    elif stress_score >= 60:
+        severity_color = DOOM_RED
+        recs = [
+            "Reduce equity beta — trim high-beta positions",
+            "Increase put protection on core holdings",
+            "Favor quality over growth — rotate to strong balance sheets",
+            "Raise cash allocation by 10-15%",
+        ]
+    elif stress_score >= 40:
+        severity_color = DOOM_YELLOW
+        recs = [
+            "Monitor credit spreads daily for acceleration",
+            "Tighten stop-losses on speculative positions",
+            "Reduce small-cap exposure — shift to large-cap quality",
+            "Consider adding Treasury duration as hedge",
+        ]
+    else:
+        severity_color = COLORS["green"]
+        recs = [
+            "Maintain current positioning",
+            "Selective risk-on opportunities remain viable",
+            "Monitor for deterioration in leading indicators",
+        ]
+
+    # Canary-specific warnings
+    if not canary_df.empty and "drawdown_52w" in canary_df.columns:
+        severe_canaries = canary_df[canary_df["drawdown_52w"] < -20]
+        for _, row in severe_canaries.iterrows():
+            cat = row.get("category", "")
+            ticker = row.get("ticker", "")
+            recs.append(f"AVOID {cat} sector — {ticker} down {row['drawdown_52w']:.0f}% from 52W high")
+
+    # Whale-exit-specific warnings
+    if not exits_df.empty:
+        top_exits = exits_df.head(3)
+        exit_names = [str(row.get("issuer", "Unknown"))[:20] for _, row in top_exits.iterrows()]
+        if exit_names:
+            recs.append(f"Smart money exiting: {', '.join(exit_names)} — consider reducing exposure")
+
+    # Render
+    for rec in recs:
+        if rec.startswith("REDUCE") or rec.startswith("MAX") or rec.startswith("FAVOR CASH") or rec.startswith("Halt") or rec.startswith("AVOID"):
+            icon = "&#9760;"
+            color = DOOM_RED
+        elif rec.startswith("Smart money"):
+            icon = "&#9888;"
+            color = DOOM_YELLOW
+        elif stress_score >= 60:
+            icon = "&#9888;"
+            color = DOOM_RED
+        elif stress_score >= 40:
+            icon = "&#9888;"
+            color = DOOM_YELLOW
+        else:
+            icon = "&#9679;"
+            color = COLORS["green"]
+
+        st.markdown(
+            f'<div style="border-left:3px solid {color};padding:6px 12px;margin:4px 0;'
+            f'background:{DOOM_SURFACE};border-radius:0 4px 4px 0;">'
+            f'<span style="color:{color};font-weight:700;">{icon}</span> '
+            f'<span style="color:{COLORS["text"]};font-size:13px;">{rec}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def render():
@@ -505,16 +587,7 @@ def render():
                     unsafe_allow_html=True,
                 )
     else:
-        st.markdown(
-            _doom_container(
-                f"<div style='color:{_dim};'>"
-                "&#9888; <b>FRED_API_KEY not set.</b> Set this environment variable to enable credit spread data from FRED. "
-                "Get a free key at <a href='https://fred.stlouisfed.org/docs/api/api_key.html' "
-                f"style='color:{_blue};'>fred.stlouisfed.org</a>."
-                "<br><br>Showing credit ETF proxies from canary watchlist instead.</div>"
-            ),
-            unsafe_allow_html=True,
-        )
+        st.caption("ℹ FRED API key not set — using ETF proxies for credit spread data.")
         # Show HY/distressed canary data as proxy
         if not canary_df.empty:
             hy_proxy = canary_df[canary_df["category"] == "High Yield / Distressed"]
@@ -690,7 +763,7 @@ def render():
         # Detail table
         with st.expander("Whale Exit Details", expanded=False):
             display_cols = []
-            for col in ["filing_date", "filer", "issuer", "status", "value_change", "whale_category"]:
+            for col in ["filing_date", "filer", "issuer", "status", "value_change", "pct_change", "whale_category"]:
                 if col in exits_df.columns:
                     display_cols.append(col)
 
@@ -699,6 +772,10 @@ def render():
                 if "value_change" in display_df.columns:
                     display_df["value_change"] = display_df["value_change"].apply(
                         lambda x: f"${x / 1000:,.0f}M" if pd.notna(x) else "N/A"
+                    )
+                if "pct_change" in display_df.columns:
+                    display_df["pct_change"] = display_df["pct_change"].apply(
+                        lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A"
                     )
                 display_df.columns = [c.replace("_", " ").title() for c in display_df.columns]
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -831,6 +908,9 @@ def render():
         """,
         unsafe_allow_html=True,
     )
+
+    # ── 8. Recommendations ──
+    _render_recommendations(stress_score, stress_components, canary_df, exits_df)
 
     # ── Footer ──
     st.markdown(

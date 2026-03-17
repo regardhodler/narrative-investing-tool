@@ -10,7 +10,7 @@ from services.whale_screener import (
     screen_whale_buyers,
 )
 from services.claude_client import summarize_whale_activity
-from utils.theme import COLORS, apply_dark_layout
+from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
 
 
 def render():
@@ -146,7 +146,7 @@ def _render_main_table(df: pd.DataFrame):
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:Courier New,monospace;">'
+            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:{FONT_FAMILY};">'
             "POSITION CHANGES</span></div>",
             unsafe_allow_html=True,
         )
@@ -212,7 +212,7 @@ def _render_new_positions_chart(df: pd.DataFrame):
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:Courier New,monospace;">'
+            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:{FONT_FAMILY};">'
             "TOP 20 POSITION CHANGES — BUYS vs SELLS</span></div>",
             unsafe_allow_html=True,
         )
@@ -225,6 +225,7 @@ def _render_new_positions_chart(df: pd.DataFrame):
             for iss, fil in zip(issuer_names, filer_names)
         ]
         values = top["value_change"] / 1000  # to $M
+        pct_changes = top["pct_change"]
 
         bar_colors = []
         for _, row in top.iterrows():
@@ -244,9 +245,10 @@ def _render_new_positions_chart(df: pd.DataFrame):
                 x=values,
                 orientation="h",
                 marker_color=bar_colors,
-                text=[f"${v:+,.0f}M" for v in values],
+                text=[f"${v:+,.0f}M ({p:+.1f}%)" if abs(p) < 10000 else f"${v:+,.0f}M" for v, p in zip(values, pct_changes)],
                 textposition="outside",
-                hovertemplate="<b>%{y}</b><br>Change: $%{x:+,.0f}M<extra></extra>",
+                customdata=pct_changes.tolist(),
+                hovertemplate="<b>%{y}</b><br>Change: $%{x:+,.0f}M (%{customdata:+.1f}%)<extra></extra>",
             )
         )
 
@@ -281,6 +283,7 @@ def _render_convergence(df: pd.DataFrame):
             issuer=("issuer", "first"),
             total_change=("value_change", "sum"),
             latest_date=("filing_date", "max"),
+            avg_pct_change=("pct_change", "mean"),
         ).reset_index()
 
     def _find_convergence(data, min_whales=2):
@@ -294,13 +297,14 @@ def _render_convergence(df: pd.DataFrame):
         for _, row in conv_df.head(10).iterrows():
             issuer = str(row["issuer"])[:30] if pd.notna(row["issuer"]) else row["cusip"]
             val_m = abs(row["total_change"]) / 1000
+            avg_pct = row.get("avg_pct_change", 0)
             filed = row.get("latest_date", "")
             date_str = f" · Filed {filed}" if filed else ""
             st.markdown(
                 f'<div style="padding:6px 12px;margin:4px 0;border-left:3px solid {color};">'
-                f'<span style="color:{COLORS["text"]};font-family:Courier New,monospace;">'
+                f'<span style="color:{COLORS["text"]};font-family:{FONT_FAMILY};">'
                 f'<b style="color:{color}">{issuer}</b> — '
-                f'{row["whale_count"]} whales {action_word}, ${val_m:,.0f}M total'
+                f'{row["whale_count"]} whales {action_word}, ${val_m:,.0f}M total ({avg_pct:+.1f}% avg)'
                 f'<span style="color:{dim};font-size:0.8em;">{date_str}</span><br>'
                 f'<span style="color:{dim};font-size:0.85em;">{row["whales"]}</span>'
                 "</span></div>",
@@ -321,7 +325,7 @@ def _render_convergence(df: pd.DataFrame):
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["yellow"]};font-weight:700;font-family:Courier New,monospace;">'
+            f'<span style="color:{COLORS["yellow"]};font-weight:700;font-family:{FONT_FAMILY};">'
             "WHALE CONVERGENCE — Multiple whales on the same name</span></div>",
             unsafe_allow_html=True,
         )
@@ -346,7 +350,7 @@ def _render_ai_summary(df: pd.DataFrame):
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["blue"]};font-weight:700;font-family:Courier New,monospace;">'
+            f'<span style="color:{COLORS["blue"]};font-weight:700;font-family:{FONT_FAMILY};">'
             "AI WHALE ACTIVITY SUMMARY</span></div>",
             unsafe_allow_html=True,
         )
@@ -360,10 +364,11 @@ def _render_ai_summary(df: pd.DataFrame):
             filer = str(row.get("filer", "Unknown"))[:30]
             issuer = str(row.get("issuer", "Unknown"))[:30]
             val_m = row["value_change"] / 1000
+            pct = row.get("pct_change", 0)
             status = row.get("status", "")
             category = row.get("whale_category", "")
             lines.append(
-                f"{filer} ({category}): {status} {issuer} — ${val_m:+,.0f}M change"
+                f"{filer} ({category}): {status} {issuer} — ${val_m:+,.0f}M change ({pct:+.1f}%)"
             )
 
         activity_text = "\n".join(lines)
@@ -388,7 +393,7 @@ def _render_treemap(df: pd.DataFrame):
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
-            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:Courier New,monospace;">'
+            f'<span style="color:{COLORS["accent"]};font-weight:700;font-family:{FONT_FAMILY};">'
             "POSITION CHANGES TREEMAP — BUYS vs SELLS</span></div>",
             unsafe_allow_html=True,
         )
@@ -399,9 +404,10 @@ def _render_treemap(df: pd.DataFrame):
         )
 
         change_m = chart_df["value_change"] / 1000  # to $M
+        pct_changes_tree = chart_df["pct_change"]
         labels = [
-            f"{iss}<br>({fil})<br>${v:+,.0f}M"
-            for iss, fil, v in zip(issuer_names, filer_names, change_m)
+            f"{iss}<br>({fil})<br>${v:+,.0f}M ({p:+.1f}%)" if abs(p) < 10000 else f"{iss}<br>({fil})<br>${v:+,.0f}M"
+            for iss, fil, v, p in zip(issuer_names, filer_names, change_m, pct_changes_tree)
         ]
         values = (chart_df["abs_change"] / 1000).tolist()  # absolute $M for block size
 
@@ -421,7 +427,7 @@ def _render_treemap(df: pd.DataFrame):
                     line=dict(color=COLORS["bg"], width=2),
                 ),
                 textinfo="label",
-                textfont=dict(size=10, color="white", family="Courier New, monospace"),
+                textfont=dict(size=10, color="white", family=FONT_FAMILY),
                 hovertemplate="<b>%{label}</b><br>|Change|: $%{value:,.0f}M<extra></extra>",
             )
         )
@@ -432,7 +438,7 @@ def _render_treemap(df: pd.DataFrame):
                 font=dict(color=COLORS["text"]),
             ),
             paper_bgcolor=COLORS["bg"],
-            font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+            font=dict(family=FONT_FAMILY, color=COLORS["text"], size=12),
             height=600,
             margin=dict(l=10, r=10, t=50, b=10),
         )

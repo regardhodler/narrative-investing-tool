@@ -1,11 +1,27 @@
 import pandas as pd
 import requests as _requests
 import streamlit as st
+
+# Patch urllib3 Retry to fix pytrends using deprecated 'method_whitelist' kwarg
+# (renamed to 'allowed_methods' in urllib3 2.x)
+import urllib3.util.retry as _retry_module
+_OrigRetry = _retry_module.Retry
+
+class _PatchedRetry(_OrigRetry):
+    def __init__(self, *args, **kwargs):
+        if "method_whitelist" in kwargs and "allowed_methods" not in kwargs:
+            kwargs["allowed_methods"] = kwargs.pop("method_whitelist")
+        elif "method_whitelist" in kwargs:
+            kwargs.pop("method_whitelist")
+        super().__init__(*args, **kwargs)
+
+_retry_module.Retry = _PatchedRetry
+
 from pytrends.request import TrendReq
 
 
 def _get_pytrends() -> TrendReq:
-    return TrendReq(hl="en-US", tz=360)
+    return TrendReq(hl="en-US", tz=360, retries=3, backoff_factor=1.0)
 
 
 @st.cache_data(ttl=900)
@@ -60,6 +76,8 @@ def get_trending_searches() -> list[str]:
     try:
         df = pytrends.trending_searches(pn="united_states")
         return df[0].tolist()
+    except (ConnectionError, TimeoutError):
+        return []
     except Exception:
         # Fallback: try realtime trending
         try:

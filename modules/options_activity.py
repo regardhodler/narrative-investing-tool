@@ -7,7 +7,8 @@ import streamlit as st
 import yfinance as yf
 
 from utils.session import get_ticker
-from utils.theme import COLORS, apply_dark_layout
+from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
+from services.market_data import fetch_options_chain_snapshot_safe
 
 
 def render():
@@ -79,6 +80,9 @@ def render():
     # --- OI by strike ---
     _render_oi_by_strike(df, ticker)
 
+    # --- Gamma Exposure ---
+    _render_gamma_exposure(ticker)
+
     # --- IV smile ---
     _render_iv_smile(df, ticker)
 
@@ -88,16 +92,9 @@ def render():
     # --- Unusual activity ---
     _render_unusual_activity(df)
 
-    # --- Full chain ---
-    with st.expander("Full Options Chain"):
-        display = df.copy()
-        display["volume"] = display["volume"].apply(lambda v: f"{v:,.0f}")
-        display["openInterest"] = display["openInterest"].apply(lambda v: f"{v:,.0f}")
-        display["impliedVolatility"] = display["impliedVolatility"].apply(lambda v: f"{v:.1%}")
-        display["strike"] = display["strike"].apply(lambda v: f"${v:.2f}")
-        st.dataframe(display, use_container_width=True, hide_index=True)
-        csv = display.to_csv(index=False)
-        st.download_button("Export CSV", csv, f"{ticker}_options_chain.csv", "text/csv", key="dl_options_chain")
+    # --- Highest OI concentration ---
+    _render_oi_concentration(df)
+
 
 
 def _render_volume_by_expiration(df: pd.DataFrame):
@@ -124,6 +121,8 @@ def _render_oi_by_strike(df: pd.DataFrame, ticker: str):
     oi = df.groupby(["strike", "right"])["openInterest"].sum().reset_index()
     call_oi = oi[oi["right"] == "Call"].set_index("strike")["openInterest"]
     put_oi = oi[oi["right"] == "Put"].set_index("strike")["openInterest"]
+    call_wall_strike = call_oi.idxmax() if not call_oi.empty else None
+    put_wall_strike = put_oi.idxmax() if not put_oi.empty else None
 
     all_strikes = sorted(set(call_oi.index) | set(put_oi.index))
 
@@ -154,8 +153,16 @@ def _render_oi_by_strike(df: pd.DataFrame, ticker: str):
         legend=dict(orientation="h", y=1.1),
     )
     fig.update_layout(height=400)
+    if call_wall_strike is not None:
+        fig.add_vline(x=call_wall_strike, line_dash="dash", line_color=COLORS["green"], line_width=2,
+                      annotation_text=f"CALL WALL ${call_wall_strike:.0f}", annotation_position="top right",
+                      annotation_font=dict(color=COLORS["green"], size=11))
+    if put_wall_strike is not None:
+        fig.add_vline(x=put_wall_strike, line_dash="dash", line_color=COLORS["red"], line_width=2,
+                      annotation_text=f"PUT WALL ${put_wall_strike:.0f}", annotation_position="top left",
+                      annotation_font=dict(color=COLORS["red"], size=11))
     st.plotly_chart(fig, use_container_width=True)
-    st.caption("Above = Call OI · Below = Put OI · Peaks show key support/resistance levels")
+    st.caption("Above = Call OI · Below = Put OI · Dashed lines = Call/Put walls (max OI strikes)")
 
 
 def _render_iv_smile(df: pd.DataFrame, ticker: str):
@@ -218,7 +225,7 @@ def _render_options_treemap(df: pd.DataFrame, ticker: str):
             values=grouped["total_vol"].tolist(),
             marker=dict(colors=colors, line=dict(color=COLORS["bg"], width=2)),
             textinfo="label",
-            textfont=dict(size=12, color="white", family="Courier New, monospace"),
+            textfont=dict(size=12, color="white", family=FONT_FAMILY),
             hovertemplate="<b>%{label}</b><br>OI: %{customdata:,.0f}<extra></extra>",
             customdata=grouped["total_oi"].tolist(),
         )
@@ -227,7 +234,7 @@ def _render_options_treemap(df: pd.DataFrame, ticker: str):
     fig.update_layout(
         title=dict(text=f"Options Volume Map: {ticker}", font=dict(color=COLORS["text"])),
         paper_bgcolor=COLORS["bg"],
-        font=dict(family="Courier New, monospace", color=COLORS["text"], size=12),
+        font=dict(family=FONT_FAMILY, color=COLORS["text"], size=12),
         height=450,
         margin=dict(l=10, r=10, t=50, b=10),
     )
@@ -377,6 +384,110 @@ def _render_unusual_chart(unusual: pd.DataFrame):
     fig.update_layout(height=max(350, len(all_labels) * 40 + 140))
     st.plotly_chart(fig, use_container_width=True)
     st.caption("Green bars (right) = unusual call volume · Red bars (left) = unusual put volume · Sorted by strike")
+
+
+def _render_oi_concentration(df: pd.DataFrame):
+    """Show top 5 strikes by OI with call/put split."""
+    oi_by_strike = df.groupby("strike").agg(
+        call_oi=("openInterest", lambda x: x[df.loc[x.index, "right"] == "Call"].sum()),
+        put_oi=("openInterest", lambda x: x[df.loc[x.index, "right"] == "Put"].sum()),
+        total_oi=("openInterest", "sum"),
+    ).reset_index()
+
+    if oi_by_strike.empty:
+        return
+
+    top5 = oi_by_strike.nlargest(5, "total_oi")
+    if top5.empty:
+        return
+
+    st.subheader("Highest OI Concentration")
+    st.caption("Key support/resistance levels based on open interest concentration")
+
+    for _, row in top5.iterrows():
+        total = row["total_oi"]
+        call_pct = row["call_oi"] / total * 100 if total > 0 else 0
+        put_pct = row["put_oi"] / total * 100 if total > 0 else 0
+        dominant = "CALL" if call_pct > put_pct else "PUT"
+        dom_color = COLORS["green"] if dominant == "CALL" else COLORS["red"]
+
+        st.markdown(
+            f'<div style="display:flex;align-items:center;gap:12px;padding:6px 12px;'
+            f'border-left:3px solid {dom_color};margin:4px 0;">'
+            f'<span style="font-size:16px;font-weight:700;color:{COLORS["text"]};">${row["strike"]:.0f}</span>'
+            f'<span style="color:{COLORS["green"]};font-size:13px;">C: {row["call_oi"]:,.0f} ({call_pct:.0f}%)</span>'
+            f'<span style="color:{COLORS["red"]};font-size:13px;">P: {row["put_oi"]:,.0f} ({put_pct:.0f}%)</span>'
+            f'<span style="color:{COLORS["text_dim"]};font-size:12px;">Total: {total:,.0f}</span>'
+            f'<span style="color:{dom_color};font-size:11px;font-weight:700;">{dominant} DOMINANT</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _render_gamma_exposure(ticker: str):
+    """Gamma exposure profile using options chain snapshot."""
+    snap = fetch_options_chain_snapshot_safe(ticker, max_expiries=3)
+    if not snap:
+        st.caption("Gamma exposure data unavailable for this ticker.")
+        return
+
+    import numpy as np
+
+    strikes = np.array(snap["strikes"])
+    net_gamma = np.array(snap["net_gamma_proxy"])
+    price = snap["price"]
+
+    total_gamma = float(net_gamma.sum())
+    if total_gamma >= 0:
+        gamma_label = "LONG GAMMA — STABLE / PIN RISK"
+        gamma_color = COLORS["green"]
+    else:
+        gamma_label = "SHORT GAMMA — VOLATILE / BREAKOUT RISK"
+        gamma_color = COLORS["red"]
+
+    st.subheader("Gamma Exposure")
+    st.markdown(
+        f'<div style="text-align:center;padding:12px;border:2px solid {gamma_color};'
+        f'border-radius:8px;margin:10px 0;">'
+        f'<span style="color:{gamma_color};font-size:1.2em;font-weight:bold;">'
+        f'{gamma_label}</span></div>',
+        unsafe_allow_html=True,
+    )
+
+    # Gamma profile chart
+    bar_colors = [COLORS["green"] if v >= 0 else COLORS["red"] for v in net_gamma]
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=strikes.tolist(),
+        y=net_gamma.tolist(),
+        marker_color=bar_colors,
+        opacity=0.7,
+        hovertemplate="Strike $%{x:.0f}<br>Net Gamma: %{y:.0f}<extra></extra>",
+    ))
+
+    # Current price line
+    fig.add_vline(x=price, line_color=COLORS["blue"], line_dash="dash", line_width=2,
+                  annotation_text=f"SPOT ${price:.2f}", annotation_position="top right",
+                  annotation_font=dict(color=COLORS["blue"], size=11))
+
+    # Gamma flip point
+    cumulative = np.cumsum(net_gamma)
+    gamma_flip = None
+    for i in range(1, len(cumulative)):
+        if (cumulative[i - 1] <= 0 < cumulative[i]) or (cumulative[i - 1] >= 0 > cumulative[i]):
+            gamma_flip = float(strikes[i])
+            break
+
+    if gamma_flip is not None:
+        fig.add_vline(x=gamma_flip, line_color=COLORS["yellow"], line_dash="dot", line_width=2,
+                      annotation_text=f"FLIP ${gamma_flip:.0f}", annotation_position="bottom right",
+                      annotation_font=dict(color=COLORS["yellow"], size=11))
+
+    apply_dark_layout(fig, title=f"Net Gamma by Strike: {ticker}",
+                      xaxis_title="Strike ($)", yaxis_title="Net Gamma Proxy")
+    fig.update_layout(height=400, showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption("Green = positive gamma (stabilizing) · Red = negative gamma (amplifying) · Yellow = gamma flip point")
 
 
 @st.cache_data(ttl=300)

@@ -38,6 +38,38 @@ def get_cik_ticker_map() -> dict[str, str]:
     return mapping
 
 
+@st.cache_data(ttl=86400)
+def get_ticker_company_map() -> list[tuple[str, str]]:
+    """Return (ticker, company_name) pairs from SEC company_tickers.json."""
+    _rate_limit()
+    resp = requests.get(
+        "https://www.sec.gov/files/company_tickers.json",
+        headers=SEC_HEADERS,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return [(entry["ticker"], entry["title"]) for entry in data.values()]
+
+
+def search_ticker_by_name(query: str, max_results: int = 10) -> list[dict]:
+    """Search for tickers by company name or ticker substring."""
+    query_lower = query.lower().strip()
+    if not query_lower:
+        return []
+    all_companies = get_ticker_company_map()
+    exact = []
+    partial = []
+    for ticker, name in all_companies:
+        if query_lower == ticker.lower():
+            exact.append({"ticker": ticker, "name": name})
+        elif query_lower in name.lower() or query_lower in ticker.lower():
+            partial.append({"ticker": ticker, "name": name})
+        if len(exact) + len(partial) >= max_results:
+            break
+    return (exact + partial)[:max_results]
+
+
 @st.cache_data(ttl=3600)
 def search_filings(keyword: str, max_results: int = 500) -> pd.DataFrame:
     """Search EDGAR full-text search for keyword mentions in filings.

@@ -179,21 +179,27 @@ def fetch_fred_series(series_id: str) -> pd.Series:
 
     def _parse_csv_text(csv_text: str) -> pd.Series | None:
         df = pd.read_csv(StringIO(csv_text))
-        if "DATE" not in df.columns or series_id not in df.columns:
+        # FRED CSV uses "observation_date" (newer) or "DATE" (legacy) as date column
+        date_col = None
+        for candidate in ("DATE", "observation_date"):
+            if candidate in df.columns:
+                date_col = candidate
+                break
+        if date_col is None or series_id not in df.columns:
             return None
 
-        df["DATE"] = pd.to_datetime(df["DATE"], errors="coerce")
+        df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
         df[series_id] = pd.to_numeric(df[series_id], errors="coerce")
-        df = df.dropna(subset=["DATE", series_id])
+        df = df.dropna(subset=[date_col, series_id])
         if df.empty:
             return None
 
-        series = pd.Series(df[series_id].values, index=df["DATE"], name=series_id)
+        series = pd.Series(df[series_id].values, index=df[date_col], name=series_id)
         return series.sort_index()
 
     url = f"https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}"
 
-    for timeout in (8, 15):
+    for timeout in (5, 10):
         try:
             resp = requests.get(url, timeout=timeout, headers={"User-Agent": "NarrativeInvestingTool/1.0"})
             resp.raise_for_status()
@@ -231,13 +237,22 @@ def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
 
 
 def warm_fred_cache(series_ids: list[str]):
-    """Pre-fetch FRED series in parallel to warm disk cache.
+    """Pre-fetch FRED series in staggered mini-batches to warm disk cache.
 
+    Uses batches of 4 with 0.5s delay between batches to avoid FRED rate limits.
     Call at app startup so the dashboard build doesn't serialize FRED fetches.
     """
+    import time
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=6) as executor:
-        list(executor.map(fetch_fred_series_safe, series_ids))
+    cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "fred_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    batch_size = 4
+    for i in range(0, len(series_ids), batch_size):
+        batch = series_ids[i:i + batch_size]
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            list(executor.map(fetch_fred_series_safe, batch))
+        if i + batch_size < len(series_ids):
+            time.sleep(0.5)
 
 
 @st.cache_data(ttl=14400)
