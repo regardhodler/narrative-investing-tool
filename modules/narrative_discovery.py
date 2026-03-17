@@ -9,8 +9,9 @@ from services.trends_client import (
 )
 from services.claude_client import classify_narrative, describe_company, group_tickers_by_narrative
 from services.market_data import fetch_batch_safe
-from services.sec_client import get_company_info
+from services.sec_client import get_company_info, search_ticker_by_name
 from utils.session import get_ticker, set_narrative, set_ticker
+from utils.watchlist import add_to_watchlist, is_in_watchlist
 from utils.theme import COLORS, apply_dark_layout
 
 ASSET_CLASSES = {
@@ -59,7 +60,7 @@ _NON_FINANCIAL_KEYWORDS = {
 def render():
     st.header("NARRATIVE DISCOVERY")
 
-    mode = st.radio("Mode", ["Auto — Trending", "Manual"], horizontal=True)
+    mode = st.radio("Mode", ["Manual", "Auto — Trending"], horizontal=True)
 
     if mode == "Auto — Trending":
         _render_auto()
@@ -256,8 +257,12 @@ def _render_auto():
 
     # --- Google Trends supplement (filtered for financial topics) ---
     with st.expander("Google Trends (filtered)", expanded=False):
-        with st.spinner("Fetching Google Trends..."):
-            topics = get_trending_searches()
+        try:
+            with st.spinner("Fetching Google Trends..."):
+                topics = get_trending_searches()
+        except Exception:
+            st.caption("Google Trends unavailable — service may be temporarily down.")
+            topics = []
 
         if not topics:
             st.caption("No trending topics from Google Trends.")
@@ -306,7 +311,52 @@ def _render_auto():
 
 
 def _render_manual():
-    tab_narrative, tab_ticker = st.tabs(["Narrative Keyword", "Ticker Symbol"])
+    tab_ticker, tab_narrative = st.tabs(["Ticker Symbol", "Narrative Keyword"])
+
+    with tab_ticker:
+        search_input = st.text_input(
+            "Search by ticker or company name",
+            placeholder="e.g. AAPL, Apple, TSLA, Tesla Inc",
+        ).strip()
+
+        if st.button("Search", type="primary", key="set_ticker_btn") and search_input:
+            st.session_state["ticker_search_query"] = search_input
+
+        query = st.session_state.get("ticker_search_query", "")
+        if query:
+            # Quick-set if it looks like a ticker (short alpha string)
+            if query.isalpha() and len(query) <= 5:
+                if st.button(f"Set **{query.upper()}** as active ticker", key="direct_set_ticker"):
+                    set_ticker(query.upper())
+                    st.rerun()
+
+            # Company name search results
+            results = search_ticker_by_name(query)
+            if results:
+                st.caption(f"Matches ({len(results)}):")
+                for r in results:
+                    c_name, c_btn = st.columns([3, 1])
+                    c_name.markdown(f"**{r['ticker']}** — {r['name']}")
+                    if c_btn.button("Select", key=f"co_sel_{r['ticker']}"):
+                        set_ticker(r["ticker"])
+                        st.rerun()
+            elif not (query.isalpha() and len(query) <= 5):
+                st.caption("No matching companies found.")
+
+        # Show confirmed ticker info + watchlist + overview
+        active = get_ticker()
+        if active:
+            st.success(f"Active ticker: **{active}**")
+            if is_in_watchlist(active):
+                st.caption(f"**{active}** is on your watchlist")
+            elif st.button("+ Watch", key="watch_ticker_manual"):
+                add_to_watchlist(active, st.session_state.get("active_narrative", ""))
+                st.rerun()
+            _render_company_overview(active)
+            try:
+                _render_interest_chart(active, key_suffix="ticker")
+            except Exception:
+                st.caption("Search interest data unavailable.")
 
     with tab_narrative:
         keyword = st.text_input(
@@ -342,24 +392,16 @@ def _render_manual():
         # Show company overview and interest chart for confirmed ticker
         active = get_ticker()
         if active and result:
+            if is_in_watchlist(active):
+                st.caption(f"**{active}** is on your watchlist")
+            elif st.button("+ Watch", key="watch_narrative_manual"):
+                add_to_watchlist(active, kw)
+                st.rerun()
             _render_company_overview(active)
-            _render_interest_chart(active, key_suffix="narrative")
-
-    with tab_ticker:
-        ticker_input = st.text_input(
-            "Enter a ticker symbol",
-            placeholder="e.g. AAPL, TSLA, NVDA",
-        ).strip().upper()
-        if st.button("Set Ticker", type="primary", key="set_ticker_btn") and ticker_input:
-            set_ticker(ticker_input)
-            st.rerun()
-
-        # Show company overview and interest chart for the active ticker
-        active = get_ticker()
-        if active:
-            st.success(f"Active ticker: **{active}**")
-            _render_company_overview(active)
-            _render_interest_chart(active, key_suffix="ticker")
+            try:
+                _render_interest_chart(active, key_suffix="narrative")
+            except Exception:
+                st.caption("Search interest data unavailable.")
 
 
 def _render_trending_interest(trending: list[dict]):

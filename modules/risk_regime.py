@@ -1,21 +1,21 @@
 """
 Module 0: Macro Dashboard
 
-Daily macro regime indicator using 16 cross-asset signals:
-- FRED macro series (yield curve, credit spreads, ISM, FCI, etc.)
-- ETF proxies (equities, commodities, FX, volatility)
+Daily macro regime indicator using 21 cross-asset signals:
+- FRED macro series (yield curve, credit spreads, ISM, FCI, jobless claims, LEI, etc.)
+- ETF proxies (equities, commodities, FX, volatility, credit ratios)
 - SPY options chain (dealer gamma positioning)
 
 Output:
 - Risk-On / Neutral / Risk-Off verdict with Macro Score (0-100)
 - Ray Dalio quadrant (Goldilocks / Reflation / Stagflation / Deflation)
-- Valuation (CAPE + Buffett Indicator)
+- Valuation (CAPE)
 - Cycle stage (CAPEX vs Liquidity)
 - Portfolio bias by asset class
 - SPY gamma sentiment (zone, flip, call wall, put wall)
 
 Architecture:
-- 16-indicator scoring engine (_build_macro_dashboard)
+- 21-indicator scoring engine (_build_macro_dashboard)
 - Daily regime history persistence (JSON snapshots)
 - Shared data layer via services/market_data.py
 """
@@ -98,6 +98,8 @@ CORE_TICKERS = {
     "CPER": "Copper",
     "UUP": "USD Bull ETF",
     "^VIX": "VIX",
+    "HYG": "High Yield Corp",
+    "LQD": "Inv Grade Corp",
     # Display-only (ticker bar)
     "IWM": "Russell 2000",
     "GLD": "Gold",
@@ -239,25 +241,14 @@ def _confidence_from_snap(*tickers: str, snaps: dict[str, AssetSnapshot]) -> int
     return int(round(np.mean(vals))) if vals else 35
 
 
-def _interpret_valuation(cape: float | None, buffett: float | None) -> str:
-    if cape is None and buffett is None:
+def _interpret_valuation(cape: float | None) -> str:
+    if cape is None:
         return "Valuation data unavailable."
-    if cape is not None and buffett is not None:
-        if cape > 25 and buffett > 150:
-            return "Both P/E and Buffett Indicator point to an expensive equity market."
-        if cape < 18 and buffett < 110:
-            return "Both P/E and Buffett Indicator suggest relatively attractive long-term valuation."
-    if cape is not None:
-        if cape > 23:
-            return "S&P 500 P/E is elevated versus long-run norms, implying lower forward return expectations."
-        if cape < 18:
-            return "S&P 500 P/E is below long-run highs, valuation risk appears more moderate."
-    if buffett is not None:
-        if buffett > 145:
-            return "Buffett Indicator is elevated, signaling stretched market-cap-to-GDP conditions."
-        if buffett < 110:
-            return "Buffett Indicator is in a more balanced zone relative to GDP."
-    return "Valuation is mixed; neither clearly cheap nor deeply stretched."
+    if cape > 25:
+        return "S&P 500 P/E is elevated versus long-run norms, implying lower forward return expectations."
+    if cape < 18:
+        return "S&P 500 P/E is below long-run highs, valuation risk appears more moderate."
+    return "S&P 500 P/E is near historical midrange; valuation neither clearly cheap nor deeply stretched."
 
 
 def _portfolio_bias(regime: str) -> dict[str, str]:
@@ -638,7 +629,7 @@ def _fetch_spy_pe_safe() -> float | None:
 
 
 @st.cache_data(ttl=14400, show_spinner=False)
-def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | None = None) -> dict:
+def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | None = None, fred_data: dict | None = None) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
         "credit_spread": "BAMLH0A0HYM2",
@@ -646,20 +637,26 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "sahm": "SAHMREALTIME",
         "unrate": "UNRATE",
         "core_pce": "PCEPILFE",
-        "wilshire": "WILL5000INDFC",  # Wilshire 5000 Full Cap Price Index (daily)
-        "gdp": "GDP",
         "capex": "PNFI",  # Private Nonresidential Fixed Investment (quarterly BEA)
+        "icsa": "ICSA",  # Initial Jobless Claims (weekly)
+        "lei": "USSLIND",  # Leading Economic Index (monthly, Philly Fed)
         "term_premium": "THREEFYTP10",
         "ism": "INDPRO",  # Industrial Production Index (monthly, replaces discontinued NAPM)
         "fci": "NFCI",
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
+        "umcsent": "UMCSENT",  # Consumer Sentiment (University of Michigan)
+        "permit": "PERMIT",  # Building Permits (housing leading indicator)
     }
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        fred_futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
-        # Run SPY P/E concurrently with FRED fetches (gamma loaded lazily after render)
-        spy_pe_future = executor.submit(_fetch_spy_pe_safe)
-        fred = {k: f.result() for k, f in fred_futures.items()}
-        spy_pe = spy_pe_future.result()
+    if fred_data is not None:
+        # Use pre-fetched FRED data from warm cache — avoid duplicate requests
+        fred = fred_data
+        spy_pe = _fetch_spy_pe_safe()
+    else:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            fred_futures = {k: executor.submit(fetch_fred_series_safe, v) for k, v in fred_ids.items()}
+            spy_pe_future = executor.submit(_fetch_spy_pe_safe)
+            fred = {k: f.result() for k, f in fred_futures.items()}
+            spy_pe = spy_pe_future.result()
 
     indicators = []
 
@@ -760,24 +757,9 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     cape_score = _clamp_score((25.0 - (cape or 25.0)), 10.0)
     indicators.append(("S&P 500 P/E (CAPE proxy)", cape, "x", cape_score, 85 if cape is not None else 0))
 
-    wilshire = _safe_latest(fred["wilshire"])
-    gdp = _safe_latest(fred["gdp"])
-    # WILL5000INDFC ≈ market cap in billions (1 point ≈ $1B), GDP also in billions
-    buffett = (wilshire / gdp * 100) if (wilshire is not None and gdp and gdp != 0) else None
-    # Compute Buffett ratio as a series for z-score (forward-fill GDP to match daily wilshire)
-    buffett_ratio_series = None
-    if fred["wilshire"] is not None and fred["gdp"] is not None:
-        gdp_daily = fred["gdp"].reindex(fred["wilshire"].dropna().index, method="ffill")
-        gdp_daily = gdp_daily.replace(0, np.nan).dropna()
-        if len(gdp_daily) > 20:
-            buffett_ratio_series = fred["wilshire"].reindex(gdp_daily.index).dropna() / gdp_daily * 100
-    buffett_score = _zscore_score(buffett_ratio_series, invert=True) if buffett_ratio_series is not None else _clamp_score((120.0 - (buffett or 120.0)), 40.0)
-    indicators.append(("Buffett Indicator (Mkt Cap / GDP)", buffett, "%", buffett_score, int(round(np.mean([
-        _confidence_from_age(fred["wilshire"], expected_days=7),
-        _confidence_from_age(fred["gdp"], expected_days=120),
-    ])))))
-
     capex_yoy = _yoy_latest(fred["capex"], periods=4)
+    capex_level = _safe_latest(fred["capex"])   # PNFI in $B
+    m2_level = _safe_latest(fred["m2"])          # M2 in $B
     capex_vs_liquidity = (capex_yoy - m2_yoy) if (capex_yoy is not None and m2_yoy is not None) else None
     capliq_score = _clamp_score((capex_vs_liquidity or 0.0), 5.0)
     indicators.append(("Corporate CAPEX vs Liquidity", capex_vs_liquidity, "pp", capliq_score, int(round(np.mean([
@@ -811,6 +793,53 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     vix_score = _zscore_score(vix_series, invert=True) if vix_series is not None else _clamp_score((20.0 - (vix or 20.0)), 8.0)
     indicators.append(("VIX (Equity Volatility)", vix, "level", vix_score, _confidence_from_snap("^VIX", snaps=snaps)))
 
+    # --- Initial Jobless Claims ---
+    icsa = _safe_latest(fred["icsa"])
+    icsa_score = _zscore_score(fred["icsa"], invert=True)  # higher claims = risk-off
+    indicators.append(("Initial Jobless Claims", icsa, "K", icsa_score, _confidence_from_age(fred["icsa"], expected_days=14)))
+
+    # --- HYG/LQD Ratio (high-yield vs investment-grade credit) ---
+    hyg_snap = snaps.get("HYG")
+    lqd_snap = snaps.get("LQD")
+    hyg_lqd_val = None
+    hyg_lqd_score = 0.0
+    hyg_lqd_series = None
+    if hyg_snap and lqd_snap and hyg_snap.series is not None and lqd_snap.series is not None:
+        aligned = pd.DataFrame({"hyg": hyg_snap.series, "lqd": lqd_snap.series}).dropna()
+        if len(aligned) > 20:
+            hyg_lqd_series = aligned["hyg"] / aligned["lqd"]
+            hyg_lqd_val = float(hyg_lqd_series.iloc[-1])
+            hyg_lqd_score = _zscore_score(hyg_lqd_series)  # higher ratio = risk-on
+    indicators.append(("HYG/LQD Ratio (Credit Risk Appetite)", hyg_lqd_val, "ratio", hyg_lqd_score, _confidence_from_snap("HYG", "LQD", snaps=snaps)))
+
+    # --- Copper/Gold Ratio (CPER/GLD) ---
+    cper_snap = snaps.get("CPER")
+    gld_snap = snaps.get("GLD")
+    cu_au_val = None
+    cu_au_score = 0.0
+    if cper_snap and gld_snap and cper_snap.series is not None and gld_snap.series is not None:
+        aligned_cg = pd.DataFrame({"cper": cper_snap.series, "gld": gld_snap.series}).dropna()
+        if len(aligned_cg) > 20:
+            cu_au_series = aligned_cg["cper"] / aligned_cg["gld"]
+            cu_au_val = float(cu_au_series.iloc[-1])
+            cu_au_score = _zscore_score(cu_au_series)  # higher ratio = risk-on
+    indicators.append(("Copper/Gold Ratio (Growth vs Safety)", cu_au_val, "ratio", cu_au_score, _confidence_from_snap("CPER", "GLD", snaps=snaps)))
+
+    # --- Leading Economic Index (Philly Fed) ---
+    lei = _safe_latest(fred["lei"])
+    lei_score = _zscore_score(fred["lei"])  # higher = risk-on
+    indicators.append(("Leading Economic Index", lei, "index", lei_score, _confidence_from_age(fred["lei"], expected_days=45)))
+
+    # --- Consumer Sentiment (Michigan) ---
+    umcsent = _safe_latest(fred["umcsent"])
+    umcsent_score = _zscore_score(fred["umcsent"])  # higher sentiment = risk-on
+    indicators.append(("Consumer Sentiment (Michigan)", umcsent, "index", umcsent_score, _confidence_from_age(fred["umcsent"], expected_days=30)))
+
+    # --- Building Permits ---
+    permit = _safe_latest(fred["permit"])
+    permit_score = _zscore_score(fred["permit"])  # higher permits = risk-on
+    indicators.append(("Building Permits", permit, "K", permit_score, _confidence_from_age(fred["permit"], expected_days=30)))
+
     SIGNAL_CATEGORIES = {
         "Yield Curve (10Y-2Y)": "Rates",
         "Credit Spreads (HY vs Treasuries)": "Credit",
@@ -822,12 +851,17 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Core Inflation (PCE)": "Inflation",
         "Equity Trend (S&P, Nasdaq, Dow)": "Equities",
         "S&P 500 P/E (CAPE proxy)": "Valuation",
-        "Buffett Indicator (Mkt Cap / GDP)": "Valuation",
         "Corporate CAPEX vs Liquidity": "Growth",
+        "Initial Jobless Claims": "Labor",
+        "HYG/LQD Ratio (Credit Risk Appetite)": "Credit",
+        "Copper/Gold Ratio (Growth vs Safety)": "Commodities",
+        "Leading Economic Index": "Growth",
         "Gamma Exposure (Dealer Positioning)": "Positioning",
         "Term Premium": "Rates",
         "Industrial Production": "Growth",
         "Financial Conditions Index": "Credit",
+        "Consumer Sentiment (Michigan)": "Sentiment",
+        "Building Permits": "Housing",
     }
 
     SIGNAL_WEIGHTS = {
@@ -840,6 +874,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Equity Trend (S&P, Nasdaq, Dow)": 1.5,
         "Unemployment Trend (Sahm context)": 1.5,
         "Global Liquidity (M2 proxy)": 1.5,
+        "Initial Jobless Claims": 1.5,
+        "HYG/LQD Ratio (Credit Risk Appetite)": 1.5,
         # Tier 3 — Standard
         "Commodity Trend (Oil + Copper)": 1.0,
         "US Dollar Index (DXY proxy)": 1.0,
@@ -847,9 +883,13 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Core Inflation (PCE)": 1.0,
         "Term Premium": 1.0,
         "Gamma Exposure (Dealer Positioning)": 1.0,
+        "Copper/Gold Ratio (Growth vs Safety)": 1.0,
+        "Consumer Sentiment (Michigan)": 1.0,
+        "Building Permits": 1.0,
+        # Tier 1 — Leading
+        "Leading Economic Index": 2.0,
         # Tier 4 — Slow-moving / noisy
         "S&P 500 P/E (CAPE proxy)": 0.5,
-        "Buffett Indicator (Mkt Cap / GDP)": 0.5,
         "Corporate CAPEX vs Liquidity": 0.5,
     }
 
@@ -871,7 +911,11 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
             "Confidence": confidence,
         })
 
-    weights = [SIGNAL_WEIGHTS.get(row["Indicator"], 1.0) for row in signal_rows]
+    # Confidence-weighted scoring: effective_weight = tier_weight * (confidence / 100)
+    weights = [
+        SIGNAL_WEIGHTS.get(row["Indicator"], 1.0) * (row["Confidence"] / 100.0)
+        for row in signal_rows
+    ]
     aggregate = float(np.average(scores, weights=weights)) if scores else 0.0
     macro_score = int(round((aggregate + 1.0) * 50))
 
@@ -912,7 +956,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     else:
         cycle_stage = "Balanced mid-cycle"
 
-    valuation_text = _interpret_valuation(cape, buffett)
+    valuation_text = _interpret_valuation(cape)
 
     ranked = sorted(signal_rows, key=lambda x: abs(x["Score"]), reverse=True)
     summary = [
@@ -935,9 +979,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "inflation_dir": inflation_dir,
         "valuation": valuation_text,
         "cape": cape,
-        "buffett": buffett,
         "cycle_stage": cycle_stage,
         "capex_vs_liquidity": capex_vs_liquidity,
+        "capex_level": capex_level,
+        "m2_level": m2_level,
+        "capex_yoy": capex_yoy,
+        "m2_yoy": m2_yoy,
         "summary": summary[:5],
         "portfolio_bias": _portfolio_bias(macro_regime),
         "gamma": gamma_data,
@@ -1170,8 +1217,9 @@ def render():
 
     _FRED_SERIES_IDS = [
         "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
-        "PCEPILFE", "WILL5000INDFC", "GDP", "PNFI", "THREEFYTP10",
-        "INDPRO", "NFCI", "DGS10",
+        "PCEPILFE", "PNFI", "THREEFYTP10",
+        "INDPRO", "NFCI", "DGS10", "ICSA", "USSLIND",
+        "UMCSENT", "PERMIT",
     ]
 
     load_start = datetime.now()
@@ -1183,8 +1231,8 @@ def render():
             gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, 1)
 
             future_labels = {
-                fred_future: "Federal Reserve (FRED) — 13 series",
-                core_future: "Market prices — 11 tickers",
+                fred_future: "Federal Reserve (FRED) — 15 series",
+                core_future: "Market prices — 13 tickers",
                 gamma_future: "SPY options chain — gamma exposure",
             }
 
@@ -1200,13 +1248,32 @@ def render():
 
         t1 = datetime.now()
         st.write("⏳ Computing risk regime signals...")
-        macro = _build_macro_dashboard(core_snaps)
+        # Collect warmed FRED data (hits st.cache — no new network requests)
+        fred_ids = {
+            "yield_curve": "T10Y2Y",
+            "credit_spread": "BAMLH0A0HYM2",
+            "m2": "M2SL",
+            "sahm": "SAHMREALTIME",
+            "unrate": "UNRATE",
+            "core_pce": "PCEPILFE",
+            "capex": "PNFI",
+            "icsa": "ICSA",
+            "lei": "USSLIND",
+            "term_premium": "THREEFYTP10",
+            "ism": "INDPRO",
+            "fci": "NFCI",
+            "dgs10": "DGS10",
+            "umcsent": "UMCSENT",
+            "permit": "PERMIT",
+        }
+        fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
+        macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
         macro["snaps"] = snaps
         t_macro = (datetime.now() - t1).total_seconds()
-        st.write("✓ Risk regime signals — 17 signals")
+        st.write("✓ Risk regime signals — 21 signals")
 
         status.update(label="MACRO DASHBOARD · READY", state="complete", expanded=False)
 
@@ -1298,6 +1365,45 @@ def render():
             st.cache_data.clear()
             st.rerun()
 
+    # ── Signal Health ──
+    with st.expander("Signal Health", expanded=False):
+        _md_age_days = _age_days
+        health_rows = []
+        _expected_freq = {
+            "Yield Curve (10Y-2Y)": 1, "Credit Spreads (HY vs Treasuries)": 1,
+            "Financial Conditions Index": 7, "VIX (Equity Volatility)": 1,
+            "Equity Trend (S&P, Nasdaq, Dow)": 1, "Commodity Trend (Oil + Copper)": 1,
+            "US Dollar Index (DXY proxy)": 1, "Initial Jobless Claims": 7,
+            "HYG/LQD Ratio (Credit Risk Appetite)": 1, "Copper/Gold Ratio (Growth vs Safety)": 1,
+            "Global Liquidity (M2 proxy)": 30, "Unemployment Trend (Sahm context)": 30,
+            "Core Inflation (PCE)": 30, "Industrial Production": 30,
+            "Term Premium": 7, "S&P 500 P/E (CAPE proxy)": 1,
+            "Corporate CAPEX vs Liquidity": 90, "Leading Economic Index": 30,
+            "Gamma Exposure (Dealer Positioning)": 1,
+            "Consumer Sentiment (Michigan)": 30, "Building Permits": 30,
+        }
+        for sig in macro["signals"]:
+            name = sig["Indicator"]
+            conf = sig["Confidence"]
+            expected = _expected_freq.get(name, 7)
+            conf_color = COLORS["green"] if conf >= 75 else (COLORS["yellow"] if conf >= 50 else COLORS["red"])
+            stale_flag = "STALE" if conf < 50 else ""
+            health_rows.append({
+                "Signal": name,
+                "Confidence": f"{conf}%",
+                "Expected Freq": f"{expected}d",
+                "Status": stale_flag,
+            })
+        health_df = pd.DataFrame(health_rows)
+
+        def _color_status(val):
+            if val == "STALE":
+                return f"color: {COLORS['red']}; font-weight: bold"
+            return ""
+
+        styled_health = health_df.style.map(_color_status, subset=["Status"])
+        st.dataframe(styled_health, use_container_width=True, hide_index=True)
+
     # ── Yield Curve Regime ──
     yc_regime = macro.get("yield_curve_regime", {})
     if yc_regime.get("regime") != "Unknown":
@@ -1341,16 +1447,29 @@ def render():
     # ── Valuation ──
     _section_header("Valuation")
     cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
-    buffett_txt = "N/A" if macro["buffett"] is None else f"{macro['buffett']:.2f}%"
-    c1, c2 = st.columns(2)
-    c1.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
-    c2.markdown(bloomberg_metric("Buffett Indicator", buffett_txt), unsafe_allow_html=True)
+    st.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
     st.caption(macro["valuation"])
 
     # ── Cycle Stage ──
     _section_header("Cycle Stage")
+
+    c1, c2, c3, c4 = st.columns(4)
+    capex_lvl = macro.get("capex_level")
+    m2_lvl = macro.get("m2_level")
+    capex_yoy_val = macro.get("capex_yoy")
+    m2_yoy_val = macro.get("m2_yoy")
+
+    c1.markdown(bloomberg_metric("CAPEX (PNFI)",
+        f"${capex_lvl:,.0f}B" if capex_lvl is not None else "N/A"), unsafe_allow_html=True)
+    c2.markdown(bloomberg_metric("M2 Money Supply",
+        f"${m2_lvl:,.0f}B" if m2_lvl is not None else "N/A"), unsafe_allow_html=True)
+    c3.markdown(bloomberg_metric("CAPEX YoY",
+        f"{capex_yoy_val:+.1f}%" if capex_yoy_val is not None else "N/A"), unsafe_allow_html=True)
+    c4.markdown(bloomberg_metric("M2 YoY",
+        f"{m2_yoy_val:+.1f}%" if m2_yoy_val is not None else "N/A"), unsafe_allow_html=True)
+
     capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
-    st.markdown(bloomberg_metric("CAPEX vs Liquidity", capliq_txt), unsafe_allow_html=True)
+    st.markdown(bloomberg_metric("CAPEX vs Liquidity Spread", capliq_txt), unsafe_allow_html=True)
     st.caption(macro["cycle_stage"])
 
     # ── Summary ──
