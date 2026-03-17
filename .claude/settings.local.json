@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls \"C:/Users/16476/claude projects/narrative-investing-tool/learn.md\" 2>/dev/null; echo \"EXIT:$?\")",
+      "Bash(cd \"C:/Users/16476/claude projects/narrative-investing-tool\" && python -c \"import ast; ast.parse\\(open\\('modules/risk_regime.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(cd \"C:/Users/16476/claude projects/narrative-investing-tool\" && python -c \"import py_compile; py_compile.compile\\('modules/risk_regime.py', doraise=True\\); print\\('Compile OK'\\)\")",
+      "Bash(cd \"C:\\\\Users\\\\16476\\\\claude projects\\\\narrative-investing-tool\" && python -c \"import ast; ast.parse\\(open\\('modules/risk_regime.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(cd \"C:\\\\Users\\\\16476\\\\claude projects\\\\narrative-investing-tool\" && python -c \"import py_compile; py_compile.compile\\('services/market_data.py', doraise=True\\); py_compile.compile\\('modules/risk_regime.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(cd \"C:\\\\Users\\\\16476\\\\claude projects\\\\narrative-investing-tool\" && python -c \"import py_compile; py_compile.compile\\('modules/risk_regime.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(grep -A 1 \"_yoy_latest\" modules/risk_regime.py | grep -v \"^--$\")",
+      "Bash(find data:*)",
+      "Bash(cd:*)",
+      "Bash(tasklist:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)"
+    ]
+  }
+}

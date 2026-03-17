@@ -1,0 +1,59 @@
+[
+  {
+    "date": "2026-03-15",
+    "score": -0.02,
+    "regime": "Neutral",
+    "signal_count": 16,
+    "macro_score": 49,
+    "quadrant": "Goldilocks",
+    "signals_summary": {
+      "Yield Curve (10Y-2Y)": 0.0,
+      "Credit Spreads (HY vs Treasuries)": 0.0,
+      "Commodity Trend (Oil + Copper)": -0.562,
+      "US Dollar Index (DXY proxy)": 0.0,
+      "Global Liquidity (M2 proxy)": -0.5,
+      "Unemployment Trend (Sahm context)": 1.0,
+      "Core Inflation (PCE)": 0.0,
+      "Equity Trend (S&P, Nasdaq, Dow)": 0.0,
+      "S&P 500 P/E (CAPE proxy)": -0.127,
+      "Buffett Indicator (Mkt Cap / GDP)": 0.0,
+      "Corporate CAPEX vs Liquidity": 0.0,
+      "Gamma Exposure (Dealer Positioning)": -0.056,
+      "Term Premium": 0.0,
+      "Industrial Production": 0.0,
+      "Financial Conditions Index": -0.0,
+      "VIX (Equity Volatility)": 0.0
+    }
+  },
+  {
+    "date": "2026-03-16",
+    "score": -0.02,
+    "regime": "Neutral",
+    "signal_count": 21,
+    "macro_score": 49,
+    "quadrant": "Stagflation",
+    "signals_summary": {
+      "Yield Curve (10Y-2Y)": 0.014,
+      "Credit Spreads (HY vs Treasuries)": -0.303,
+      "Commodity Trend (Oil + Copper)": 1.0,
+      "US Dollar Index (DXY proxy)": -0.229,
+      "Global Liquidity (M2 proxy)": -0.195,
+      "Unemployment Trend (Sahm context)": 0.084,
+      "Core Inflation (PCE)": -0.396,
+      "Equity Trend (S&P, Nasdaq, Dow)": -0.329,
+      "S&P 500 P/E (CAPE proxy)": -0.154,
+      "Corporate CAPEX vs Liquidity": 0.72,
+      "Gamma Exposure (Dealer Positioning)": 0.009,
+      "Term Premium": 0.241,
+      "Industrial Production": 0.106,
+      "Financial Conditions Index": 0.357,
+      "VIX (Equity Volatility)": -0.831,
+      "Initial Jobless Claims": 0.234,
+      "HYG/LQD Ratio (Credit Risk Appetite)": 0.645,
+      "Copper/Gold Ratio (Growth vs Safety)": -0.616,
+      "Leading Economic Index": 0.361,
+      "Consumer Sentiment (Michigan)": -0.834,
+      "Building Permits": 0.131
+    }
+  }
+]
