@@ -193,6 +193,15 @@ if APP_PASSWORD and not st.session_state.get("authenticated"):
         ">v1.0 &middot; {_now}</div>""", unsafe_allow_html=True)
     st.stop()
 
+# --- Alert check on page load (1hr cooldown) ---
+try:
+    from services.alerts_service import check_and_send_alerts
+    _fired = check_and_send_alerts()
+    for _alert_msg in _fired:
+        st.toast(_alert_msg, icon="📡")
+except Exception:
+    pass
+
 # Sidebar
 with st.sidebar:
     st.markdown(
@@ -247,7 +256,8 @@ with st.sidebar:
 
     top_level = st.radio(
         "Module",
-        ["Discovery", "Risk Regime", "Whale Movement", "Stress Signals"],
+        ["Discovery", "Risk Regime", "Elliott Wave", "Whale Movement", "Stress Signals",
+         "Signal Scorecard", "Backtesting", "Trade Journal", "Alerts"],
         key="top_module",
     )
 
@@ -279,6 +289,9 @@ with st.sidebar:
 # Route to module
 if top_level == "Risk Regime":
     from modules.risk_regime import render
+    render()
+elif top_level == "Elliott Wave":
+    from modules.elliott_wave import render
     render()
 elif top_level == "Whale Movement":
     from modules.whale_buyers import render
@@ -319,3 +332,15 @@ elif top_level == "Discovery":
     elif sub_module == "Valuation":
         from modules.valuation import render
         render()
+elif top_level == "Signal Scorecard":
+    from modules.signal_scorecard import render
+    render()
+elif top_level == "Backtesting":
+    from modules.backtesting import render
+    render()
+elif top_level == "Trade Journal":
+    from modules.trade_journal import render
+    render()
+elif top_level == "Alerts":
+    from modules.alerts_settings import render
+    render()
