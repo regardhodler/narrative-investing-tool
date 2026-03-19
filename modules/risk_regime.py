@@ -117,19 +117,21 @@ def _clamp(val: float, lo: float = -1.0, hi: float = 1.0) -> float:
 
 
 def _label_from_score(score: float) -> str:
-    if score >= 0.2:
+    macro_score = int(round((score + 1.0) * 50))
+    if macro_score >= 60:
         return "Risk-On"
-    elif score <= -0.2:
+    elif macro_score <= 40:
         return "Risk-Off"
-    return "Neutral"
+    return _neutral_lean_label(macro_score)
 
 
 def _score_to_bucket(score: float) -> tuple[str, str]:
-    if score >= 0.2:
+    macro_score = int(round((score + 1.0) * 50))
+    if macro_score >= 60:
         return "🟢", "Risk-On"
-    if score <= -0.2:
+    if macro_score <= 40:
         return "🔴", "Risk-Off"
-    return "🟡", "Neutral"
+    return "🟡", _neutral_lean_label(macro_score)
 
 
 def _safe_latest(series: pd.Series | None) -> float | None:
@@ -219,6 +221,15 @@ def _confidence_label(score: int) -> str:
     if score >= 50:
         return "Medium"
     return "Low"
+
+
+def _neutral_lean_label(score: int) -> str:
+    """Three-tier neutral label based on macro score (0-100 scale)."""
+    if score >= 53:
+        return "Neutral — Leaning Risk-On"
+    elif score <= 47:
+        return "Neutral — Leaning Risk-Off"
+    return "True Neutral"
 
 
 def _confidence_from_age(series: pd.Series | None, expected_days: int, fallback: int = 35) -> int:
