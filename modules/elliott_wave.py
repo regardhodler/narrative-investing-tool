@@ -44,6 +44,7 @@ def _build_groq_narrative(
     confidence: int,
     invalidation_level: float,
     fibonacci_hits: tuple,
+    current_price: float = 0.0,
 ) -> str:
     """
     Call Groq LLaMA to generate a 3-5 sentence Elliott Wave narrative.
@@ -55,6 +56,15 @@ def _build_groq_narrative(
 
     fib_text = "\n".join(f"  - {h}" for h in fibonacci_hits) if fibonacci_hits else "  None detected"
 
+    # Price context
+    price_ctx = ""
+    if current_price > 0:
+        dist = current_price - invalidation_level
+        dist_pct = (dist / invalidation_level) * 100 if invalidation_level else 0
+        price_ctx = f"""- Current SPY Price: ${current_price:.2f}
+- Distance to Invalidation: ${dist:+.2f} ({dist_pct:+.1f}%)
+"""
+
     prompt = f"""You are an expert Elliott Wave analyst. Interpret the following automated wave count for SPY (S&P 500 ETF) and write a concise 3-5 sentence market commentary.
 
 Current Wave Count:
@@ -62,13 +72,13 @@ Current Wave Count:
 - Active Wave: {current_wave_label}
 - Count Confidence: {confidence}/100
 - Invalidation Level: ${invalidation_level:.2f}
-- Fibonacci Confirmations:
+{price_ctx}- Fibonacci Confirmations:
 {fib_text}
 
 Write your commentary covering:
 1. What the current wave position means for near-term price action
 2. What Elliott Wave theory predicts should happen next
-3. The key invalidation level and what a break below/above it would signal
+3. The key invalidation level, how far price is from it, and what a breach would signal
 
 Be direct and specific. Do not hedge excessively. Do not repeat the input data verbatim."""
 
@@ -208,12 +218,14 @@ def render():
 
     # AI Narrative
     with st.expander("Elliott Wave AI Narrative", expanded=False):
+        current_price = float(series.iloc[-1])
         narrative_args = (
             best_count.wave_position,
             best_count.current_wave_label,
             best_count.confidence,
             best_count.invalidation_level,
             tuple(best_count.fibonacci_hits),
+            current_price,
         )
         try:
             narrative = _build_groq_narrative(*narrative_args)

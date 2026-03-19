@@ -156,6 +156,73 @@ class TestScoreSequence:
         is_valid, _, _ = score_sequence(seq)
         assert is_valid is False
 
+    def _bearish_impulse(self) -> WaveSequence:
+        """Well-formed bearish impulse (5-wave down) with near-perfect Fibonacci ratios."""
+        p = [
+            Pivot(pd.Timestamp("2024-01-01"), 200.00, "high"),
+            Pivot(pd.Timestamp("2024-02-01"), 190.00, "low"),   # W1=10
+            Pivot(pd.Timestamp("2024-03-01"), 196.18, "high"),  # retraces 0.618 of W1
+            Pivot(pd.Timestamp("2024-04-01"), 180.00, "low"),   # W3=16.18 ~ 1.618*W1
+            Pivot(pd.Timestamp("2024-05-01"), 186.18, "high"),  # retraces 0.382 of W3
+            Pivot(pd.Timestamp("2024-06-01"), 176.18, "low"),   # W5~10
+        ]
+        return WaveSequence(pivots=p, wave_type="impulse", labels=["0","1","2","3","4","5"])
+
+    def test_valid_bearish_impulse_is_valid(self):
+        seq = self._bearish_impulse()
+        is_valid, confidence, hits = score_sequence(seq)
+        assert is_valid is True
+        assert confidence > 0
+
+    def test_bearish_wave4_overlap_rejects(self):
+        """Bearish: wave 4 high must not exceed wave 1 low."""
+        p = [
+            Pivot(pd.Timestamp("2024-01-01"), 200, "high"),
+            Pivot(pd.Timestamp("2024-02-01"), 180, "low"),   # W1 low=180
+            Pivot(pd.Timestamp("2024-03-01"), 192, "high"),
+            Pivot(pd.Timestamp("2024-04-01"), 160, "low"),
+            Pivot(pd.Timestamp("2024-05-01"), 185, "high"),  # W4 high=185 > W1 low=180 — INVALID
+            Pivot(pd.Timestamp("2024-06-01"), 150, "low"),
+        ]
+        seq = WaveSequence(pivots=p, wave_type="impulse", labels=["0","1","2","3","4","5"])
+        is_valid, _, _ = score_sequence(seq)
+        assert is_valid is False
+
+    def test_bearish_wave2_retrace_rejects(self):
+        """Bearish: wave 2 high must not exceed wave 0 high."""
+        p = [
+            Pivot(pd.Timestamp("2024-01-01"), 200, "high"),  # wave 0 high=200
+            Pivot(pd.Timestamp("2024-02-01"), 180, "low"),
+            Pivot(pd.Timestamp("2024-03-01"), 205, "high"),  # wave 2 high=205 > wave 0 high=200 — INVALID
+            Pivot(pd.Timestamp("2024-04-01"), 160, "low"),
+            Pivot(pd.Timestamp("2024-05-01"), 170, "high"),
+            Pivot(pd.Timestamp("2024-06-01"), 140, "low"),
+        ]
+        seq = WaveSequence(pivots=p, wave_type="impulse", labels=["0","1","2","3","4","5"])
+        is_valid, _, _ = score_sequence(seq)
+        assert is_valid is False
+
+    def test_bearish_wave3_shortest_rejects(self):
+        """Bearish: wave 3 must not be the shortest impulse wave."""
+        p = [
+            Pivot(pd.Timestamp("2024-01-01"), 200, "high"),
+            Pivot(pd.Timestamp("2024-02-01"), 180, "low"),   # W1=20
+            Pivot(pd.Timestamp("2024-03-01"), 188, "high"),
+            Pivot(pd.Timestamp("2024-04-01"), 183, "low"),   # W3=5 (shortest — INVALID)
+            Pivot(pd.Timestamp("2024-05-01"), 190, "high"),
+            Pivot(pd.Timestamp("2024-06-01"), 155, "low"),   # W5=35
+        ]
+        seq = WaveSequence(pivots=p, wave_type="impulse", labels=["0","1","2","3","4","5"])
+        is_valid, _, _ = score_sequence(seq)
+        assert is_valid is False
+
+    def test_bearish_fibonacci_hits(self):
+        seq = self._bearish_impulse()
+        _, _, hits = score_sequence(seq)
+        assert len(hits) > 0
+        for hit in hits:
+            assert "pts" in hit
+
     def test_fibonacci_hits_format(self):
         seq = self._bullish_impulse()
         _, _, hits = score_sequence(seq)

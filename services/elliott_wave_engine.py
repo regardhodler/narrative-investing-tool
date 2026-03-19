@@ -138,9 +138,9 @@ def find_wave_sequences(pivots: list[Pivot]) -> list[WaveSequence]:
     sequences: list[WaveSequence] = []
 
     for i in range(len(window) - 5):
-        # Impulse candidate: 6 pivots starting on a low
+        # Impulse candidate: 6 pivots starting on a low (bullish) or high (bearish)
         chunk6 = window[i:i + 6]
-        if chunk6[0].type == "low":
+        if chunk6[0].type == "low" or chunk6[0].type == "high":
             sequences.append(WaveSequence(
                 pivots=chunk6,
                 wave_type="impulse",
@@ -148,9 +148,9 @@ def find_wave_sequences(pivots: list[Pivot]) -> list[WaveSequence]:
             ))
 
     for i in range(len(window) - 3):
-        # Corrective candidate: 4 pivots starting on a high
+        # Corrective candidate: 4 pivots starting on a high (bearish ABC) or low (bullish ABC)
         chunk4 = window[i:i + 4]
-        if chunk4[0].type == "high":
+        if chunk4[0].type == "high" or chunk4[0].type == "low":
             sequences.append(WaveSequence(
                 pivots=chunk4,
                 wave_type="corrective",
@@ -160,7 +160,7 @@ def find_wave_sequences(pivots: list[Pivot]) -> list[WaveSequence]:
     return sequences
 
 
-_FIB_TOLERANCE = 0.10  # +/-10%
+_FIB_TOLERANCE = 0.15  # +/-15%
 
 
 def _fib_close(ratio: float, target: float) -> bool:
@@ -190,14 +190,24 @@ def score_sequence(seq: WaveSequence) -> tuple[bool, int, list[str]]:
         if w3 <= w1 and w3 <= w5:
             return False, 0, []
 
-        # 2. Wave 4 does not overlap wave 1 (upward impulse: w4 low >= w1 high)
+        # 2. Wave 4 does not overlap wave 1
         if p[0].type == "low":
+            # Bullish: wave 4 low must not drop below wave 1 high
             if p[4].price < p[1].price:
+                return False, 0, []
+        else:
+            # Bearish: wave 4 high must not exceed wave 1 low
+            if p[4].price > p[1].price:
                 return False, 0, []
 
         # 3. Wave 2 never retraces beyond wave 0
         if p[0].type == "low":
+            # Bullish: wave 2 low must not drop below wave 0 low
             if p[2].price < p[0].price:
+                return False, 0, []
+        else:
+            # Bearish: wave 2 high must not exceed wave 0 high
+            if p[2].price > p[0].price:
                 return False, 0, []
 
         # Fibonacci Scoring
