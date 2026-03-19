@@ -7,6 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from services.elliott_wave_engine import (
     Pivot, WaveSequence, BestCount,
     detect_pivots, find_wave_sequences, score_sequence, get_best_wave_count,
+    get_top_wave_counts, _sequences_overlap,
 )
 
 
@@ -288,3 +289,59 @@ class TestGetBestWaveCount:
             assert isinstance(result.fibonacci_hits, list)
             for hit in result.fibonacci_hits:
                 assert isinstance(hit, str)
+
+
+class TestGetTopWaveCounts:
+    def _spy_like_series(self) -> pd.Series:
+        np.random.seed(42)
+        prices = [400.0]
+        for i in range(251):
+            change = np.random.normal(0.05, 1.5)
+            prices.append(max(300.0, prices[-1] + change))
+        dates = pd.date_range("2023-01-01", periods=252, freq="B")
+        return pd.Series(prices, index=dates)
+
+    def test_returns_list(self):
+        series = self._spy_like_series()
+        result = get_top_wave_counts(series)
+        assert isinstance(result, list)
+        assert all(isinstance(bc, BestCount) for bc in result)
+
+    def test_respects_top_n(self):
+        series = self._spy_like_series()
+        result = get_top_wave_counts(series, top_n=2)
+        assert len(result) <= 2
+
+    def test_sorted_by_confidence_desc(self):
+        series = self._spy_like_series()
+        result = get_top_wave_counts(series, top_n=5)
+        if len(result) >= 2:
+            confidences = [bc.confidence for bc in result]
+            assert confidences == sorted(confidences, reverse=True)
+
+    def test_no_excessive_overlap(self):
+        """No two results share 4+ pivots (dedup works)."""
+        series = self._spy_like_series()
+        result = get_top_wave_counts(series, top_n=5)
+        for i in range(len(result)):
+            for j in range(i + 1, len(result)):
+                assert not _sequences_overlap(result[i].sequence, result[j].sequence)
+
+    def test_consistent_with_get_best(self):
+        """Top count confidence should match get_best_wave_count confidence."""
+        series = self._spy_like_series()
+        best = get_best_wave_count(series)
+        top = get_top_wave_counts(series, top_n=5)
+        if best is not None and top:
+            assert top[0].confidence == best.confidence
+
+    def test_too_few_bars_returns_empty(self):
+        short = pd.Series(
+            [100 + i for i in range(30)],
+            index=pd.date_range("2024-01-01", periods=30, freq="B"),
+        )
+        assert get_top_wave_counts(short) == []
+
+    def test_empty_on_flat_data(self):
+        flat = pd.Series([100.0] * 100, index=pd.date_range("2024-01-01", periods=100, freq="B"))
+        assert get_top_wave_counts(flat) == []

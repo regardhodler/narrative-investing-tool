@@ -58,6 +58,12 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     return None
 
 
+@st.cache_data(ttl=3600)
+def fetch_ohlcv_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame | None:
+    """Fetch OHLCV DataFrame for a single ticker."""
+    return _fetch_single(ticker, period, interval)
+
+
 @st.cache_data(ttl=14400)
 def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d") -> dict[str, AssetSnapshot]:
     """

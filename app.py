@@ -256,7 +256,7 @@ with st.sidebar:
 
     top_level = st.radio(
         "Module",
-        ["Discovery", "Risk Regime", "Elliott Wave", "Whale Movement", "Stress Signals",
+        ["Discovery", "Risk Regime", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
          "Signal Scorecard", "Backtesting", "Trade Journal", "Alerts"],
         key="top_module",
     )
@@ -292,6 +292,9 @@ if top_level == "Risk Regime":
     render()
 elif top_level == "Elliott Wave":
     from modules.elliott_wave import render
+    render()
+elif top_level == "Wyckoff":
+    from modules.wyckoff import render
     render()
 elif top_level == "Whale Movement":
     from modules.whale_buyers import render

@@ -1,0 +1,17 @@
+{
+  "telegram_bot_token": "7724499267 :AAHh12RR1dpA4dxP5cq5D1JhnaLgfoIvYII",
+  "telegram_chat_id": "7638374481",
+  "triggers": {
+    "regime_flip": true,
+    "insider_cluster": true,
+    "options_pc_ratio": true,
+    "stress_threshold": true
+  },
+  "thresholds": {
+    "pc_ratio": 1.5,
+    "stress_score": 70
+  },
+  "last_check": "1773955024.169922",
+  "last_regime": "Neutral \u2014 Leaning Risk-Off",
+  "alert_history": []
+}
