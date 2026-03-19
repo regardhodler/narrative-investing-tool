@@ -935,7 +935,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     elif macro_score <= 40:
         macro_regime = "Risk-Off"
     else:
-        macro_regime = "Neutral"
+        macro_regime = _neutral_lean_label(macro_score)
 
     growth_signal = np.mean([yc_score, equity_score, ism_score, unemp_score])
     core_series = fred["core_pce"].dropna() if fred["core_pce"] is not None else None

@@ -63,3 +63,21 @@ class TestLabelFromScore:
         assert _label_from_score(0.16) == "Neutral — Leaning Risk-On"
         assert _label_from_score(0.0) == "True Neutral"
         assert _label_from_score(-0.1) == "Neutral — Leaning Risk-Off"
+
+
+class TestNeutralLeanBoundaries:
+    """Verify exact boundary values to prevent off-by-one regressions."""
+
+    def test_boundary_60_is_risk_on(self):
+        assert _label_from_score(0.2) == "Risk-On"   # macro_score=60
+
+    def test_boundary_40_is_risk_off(self):
+        assert _label_from_score(-0.2) == "Risk-Off"  # macro_score=40
+
+    def test_boundary_59_is_leaning_on(self):
+        # score=0.18 → macro_score=int(round(1.18*50))=59
+        assert _label_from_score(0.18) == "Neutral — Leaning Risk-On"
+
+    def test_boundary_41_is_leaning_off(self):
+        # score=-0.18 → macro_score=int(round(0.82*50))=41
+        assert _label_from_score(-0.18) == "Neutral — Leaning Risk-Off"
