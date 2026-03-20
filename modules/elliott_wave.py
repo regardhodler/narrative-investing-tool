@@ -506,14 +506,80 @@ def render():
     st.title("Elliott Wave Analysis")
     
     # ── Ticker Selector ───────────────────────────────────────────────────────
+    # Use a plain session state key (not a widget key) so quick-pick buttons
+    # can update it freely without triggering the "widget key locked" error.
     if "ew_ticker" not in st.session_state:
         st.session_state["ew_ticker"] = "SPY"
+
+    # Human-readable labels for cryptic futures/forex tickers
+    _TICKER_LABELS: dict[str, str] = {
+        # US Equity Futures
+        "ES=F": "ES=F  S&P 500",  "NQ=F": "NQ=F  Nasdaq",
+        "YM=F": "YM=F  Dow",     "RTY=F": "RTY=F  Russell",
+        # Commodities
+        "GC=F": "GC=F  Gold",    "SI=F": "SI=F  Silver",
+        "CL=F": "CL=F  Crude Oil","NG=F": "NG=F  Nat Gas",
+        "HG=F": "HG=F  Copper",  "PL=F": "PL=F  Platinum",
+        "PA=F": "PA=F  Palladium","ZC=F": "ZC=F  Corn",
+        "ZW=F": "ZW=F  Wheat",   "ZS=F": "ZS=F  Soybeans",
+        "ZL=F": "ZL=F  Soy Oil", "CC=F": "CC=F  Cocoa",
+        "KC=F": "KC=F  Coffee",  "CT=F": "CT=F  Cotton",
+        "LBS=F":"LBS=F Lumber",
+        # Bonds / Rates
+        "ZB=F": "ZB=F  30yr T-Bond","ZN=F": "ZN=F  10yr T-Note",
+        "ZF=F": "ZF=F  5yr T-Note", "ZT=F": "ZT=F  2yr T-Note",
+        "^TNX": "^TNX  10yr Yield","^TYX": "^TYX  30yr Yield",
+        # TSX Index
+        "^GSPTSE": "^GSPTSE  TSX",
+        # Forex
+        "EURUSD=X": "EUR/USD","GBPUSD=X": "GBP/USD",
+        "USDJPY=X": "USD/JPY","USDCAD=X": "USD/CAD",
+        "AUDUSD=X": "AUD/USD","USDCHF=X": "USD/CHF",
+        # Crypto
+        "BTC-USD": "BTC-USD  Bitcoin","ETH-USD": "ETH-USD  Ethereum",
+        "SOL-USD": "SOL-USD  Solana","XRP-USD": "XRP-USD  Ripple",
+    }
+
+    # Quick-pick data: {tab_label: [(ticker, button_label), ...]}
+    _QUICK_PICKS: dict[str, list[tuple[str, str]]] = {
+        "🇺🇸 US Equities": [
+            ("SPY","SPY"),("QQQ","QQQ"),("IWM","IWM"),("DIA","DIA"),
+            ("AAPL","AAPL"),("NVDA","NVDA"),("TSLA","TSLA"),
+            ("MSFT","MSFT"),("AMZN","AMZN"),("META","META"),
+        ],
+        "🇨🇦 TSX": [
+            ("^GSPTSE","TSX Index"),("XIU.TO","XIU"),("RY.TO","RY"),
+            ("TD.TO","TD"),("ENB.TO","ENB"),("SHOP.TO","SHOP"),
+            ("CNR.TO","CNR"),("ABX.TO","ABX"),
+        ],
+        "📊 Eq. Futures": [
+            ("ES=F","ES — S&P 500"),("NQ=F","NQ — Nasdaq"),
+            ("YM=F","YM — Dow"),("RTY=F","RTY — Russell"),
+        ],
+        "🛢 Commodities": [
+            ("GC=F","Gold"),("SI=F","Silver"),("CL=F","Crude Oil"),
+            ("NG=F","Nat Gas"),("HG=F","Copper"),("PL=F","Platinum"),
+            ("ZC=F","Corn"),("ZW=F","Wheat"),("ZS=F","Soybeans"),
+            ("CC=F","Cocoa"),("KC=F","Coffee"),
+        ],
+        "🏛 Bonds/Rates": [
+            ("ZB=F","30yr Bond"),("ZN=F","10yr Note"),
+            ("ZF=F","5yr Note"),("ZT=F","2yr Note"),
+            ("TLT","TLT"),("IEF","IEF"),
+            ("^TNX","10yr Yield"),("^TYX","30yr Yield"),
+        ],
+        "💱 Forex & Crypto": [
+            ("EURUSD=X","EUR/USD"),("GBPUSD=X","GBP/USD"),
+            ("USDJPY=X","USD/JPY"),("USDCAD=X","USD/CAD"),
+            ("BTC-USD","Bitcoin"),("ETH-USD","Ethereum"),("SOL-USD","Solana"),
+        ],
+    }
 
     tk_col, iv_col = st.columns([3, 1])
     with tk_col:
         raw_ticker = st.text_input(
             "Ticker Symbol",
-            key="ew_ticker",
+            value=st.session_state["ew_ticker"],
             placeholder="SPY · GC=F · RY.TO · BTC-USD · ZB=F · ^TNX",
             help=(
                 "Any yfinance-compatible symbol. "
@@ -531,24 +597,20 @@ def render():
         )
 
     ticker = (raw_ticker or "SPY").strip().upper()
-
-    _QUICK_PICKS = {
-        "🇺🇸 US Equities":   ["SPY", "QQQ", "IWM", "DIA", "AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "META"],
-        "🇨🇦 TSX":           ["^GSPTSE", "XIU.TO", "RY.TO", "TD.TO", "ENB.TO", "SHOP.TO", "CNR.TO", "ABX.TO"],
-        "📊 Eq. Futures":    ["ES=F", "NQ=F", "YM=F", "RTY=F"],
-        "🛢 Commodities":    ["GC=F", "SI=F", "CL=F", "NG=F", "HG=F", "PL=F", "ZC=F", "ZW=F", "ZS=F"],
-        "🏛 Bonds/Rates":    ["ZB=F", "ZN=F", "ZF=F", "ZT=F", "TLT", "IEF", "^TNX", "^TYX"],
-        "💱 Forex & Crypto": ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCAD=X", "BTC-USD", "ETH-USD", "SOL-USD"],
-    }
+    # Sync back so quick-pick rerun picks up the latest typed value
+    st.session_state["ew_ticker"] = ticker
 
     with st.expander("⚡ Quick Pick — Asset Classes", expanded=False):
         _qp_tabs = st.tabs(list(_QUICK_PICKS.keys()))
-        for _tab, (_cat, _tlist) in zip(_qp_tabs, _QUICK_PICKS.items()):
+        for _tab, (_cat, _pairs) in zip(_qp_tabs, _QUICK_PICKS.items()):
             with _tab:
-                _nc = min(len(_tlist), 5)
+                _nc = min(len(_pairs), 5)
                 _qcols = st.columns(_nc)
-                for _i, _t in enumerate(_tlist):
-                    if _qcols[_i % _nc].button(_t, key=f"ew_qp_{_t}", use_container_width=True):
+                for _i, (_t, _lbl) in enumerate(_pairs):
+                    if _qcols[_i % _nc].button(
+                        _lbl, key=f"ew_qp_{_t}", use_container_width=True,
+                        help=_TICKER_LABELS.get(_t, _t),
+                    ):
                         st.session_state["ew_ticker"] = _t
                         st.rerun()
 
