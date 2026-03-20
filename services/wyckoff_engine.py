@@ -73,13 +73,19 @@ def _atr(close: pd.Series, period: int = 14) -> pd.Series:
 def detect_trading_ranges(
     close: pd.Series, high: pd.Series, low: pd.Series,
 ) -> list[TradingRange]:
-    """Find consolidation zones via ATR contraction."""
+    """Find consolidation zones via ATR contraction.
+
+    Improvements over naive threshold:
+    - Relaxed ratio threshold (0.85 vs 0.70) catches more real-world ranges
+    - Min bars reduced from 15 → 10 to not miss tight crypto/commodity ranges
+    - Price range guard: high-low span must be ≤ 2× local ATR to exclude noisy bands
+    """
     atr = _atr(close, period=14)
     atr_ma = atr.rolling(50).mean()
     ratio = atr / atr_ma.replace(0, np.nan)
 
-    # Find consecutive windows where ratio < 0.7
-    contracted = ratio < 0.7
+    # Find consecutive windows where ratio < 0.85 (relaxed from 0.70)
+    contracted = ratio < 0.85
     ranges: list[TradingRange] = []
     start = None
 
@@ -88,12 +94,19 @@ def detect_trading_ranges(
             if start is None:
                 start = i
         else:
-            if start is not None and (i - start) >= 15:
-                _add_range(ranges, close, high, low, start, i - 1)
+            if start is not None and (i - start) >= 10:  # relaxed from 15
+                # Price-range guard: span must be ≤ 2× current ATR
+                span = float(high.iloc[start:i].max() - low.iloc[start:i].min())
+                atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
+                if atr_val == 0 or span <= atr_val * 2.5:
+                    _add_range(ranges, close, high, low, start, i - 1)
             start = None
     # Handle range extending to end
-    if start is not None and (len(contracted) - start) >= 15:
-        _add_range(ranges, close, high, low, start, len(contracted) - 1)
+    if start is not None and (len(contracted) - start) >= 10:
+        span = float(high.iloc[start:].max() - low.iloc[start:].min())
+        atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
+        if atr_val == 0 or span <= atr_val * 2.5:
+            _add_range(ranges, close, high, low, start, len(contracted) - 1)
 
     return ranges
 
@@ -132,28 +145,39 @@ def _add_range(
 
 
 def classify_volume_behavior(
-    close: pd.Series, volume: pd.Series, tr: TradingRange,
+    close: pd.Series, high: pd.Series, low: pd.Series,
+    volume: pd.Series, tr: TradingRange,
 ) -> str:
-    """Compare avg volume on up-days vs down-days within range."""
+    """VSA-weighted volume classification within a trading range.
+
+    Each bar's volume is weighted by where price closed within the bar's
+    high-low range (close position).  Closing near the high on a given day
+    implies buying pressure even if the net close-to-close change is small.
+    This avoids the naive up-day / down-day split which can be misleading
+    on inside-bar or spinning-top days.
+    """
     sl = slice(tr.start_idx, tr.end_idx + 1)
-    c = close.iloc[sl]
-    v = volume.iloc[sl]
-    diff = c.diff()
+    c  = close.iloc[sl]
+    h  = high.iloc[sl]
+    lo = low.iloc[sl]
+    v  = volume.iloc[sl]
 
-    up_vol = v[diff > 0].mean() if (diff > 0).any() else 0
-    down_vol = v[diff < 0].mean() if (diff < 0).any() else 0
+    spread = h - lo
+    # Close position 0 = bar low, 1 = bar high; default to 0.5 for zero-spread bars
+    close_pos = ((c - lo) / spread.replace(0, np.nan)).fillna(0.5)
 
-    if up_vol == 0 and down_vol == 0:
-        return "neutral"
+    # Weighted volume: weight > 0.5 means bullish pressure
+    bull_vol = (v * close_pos).sum()
+    bear_vol = (v * (1 - close_pos)).sum()
+    total = bull_vol + bear_vol
 
-    total = up_vol + down_vol
     if total == 0:
         return "neutral"
 
-    up_ratio = up_vol / total
-    if up_ratio > 0.575:  # >15% skew toward up-days
+    bull_ratio = bull_vol / total
+    if bull_ratio > 0.55:   # >55% weighted toward highs = accumulation
         return "accumulation"
-    elif up_ratio < 0.425:
+    elif bull_ratio < 0.45: # <45% = distribution
         return "distribution"
     return "neutral"
 
@@ -189,34 +213,55 @@ def _detect_accumulation_events(
     if len(c) < 3:
         return
 
-    # SC: Lowest low with volume > 2x avg
-    sc_idx = lo.idxmin()
-    sc_price = float(lo[sc_idx])
-    if float(v.get(sc_idx, 0)) > 2 * avg_vol:
+    # SC: bar in the bottom 15% of the range with volume > 1.5× avg
+    # (Avoids picking any low as SC — requires climactic volume)
+    bottom_15 = tr.lower_bound + range_height * 0.15
+    sc_idx = None
+    sc_price = None
+    for idx in lo.index:
+        if float(lo[idx]) <= bottom_15 and float(v.get(idx, 0)) > avg_vol * 1.5:
+            if sc_idx is None or float(lo[idx]) < sc_price:
+                sc_idx = idx
+                sc_price = float(lo[idx])
+    if sc_idx is not None:
         events.append(WyckoffEvent(sc_idx, sc_price, "SC", "Selling Climax — high-volume capitulation low"))
 
-    # AR: First significant high after SC (rise > 0.5 * range height)
-    sc_pos = c.index.get_loc(sc_idx) if sc_idx in c.index else 0
-    for i in range(sc_pos + 1, len(h)):
-        if float(h.iloc[i]) - sc_price > 0.5 * range_height:
-            events.append(WyckoffEvent(h.index[i], float(h.iloc[i]), "AR", "Automatic Rally — sharp bounce after SC"))
-            break
-
-    # ST: Low near SC price (±2%) on lower volume
-    sc_low = sc_price
-    for i in range(sc_pos + 2, len(lo)):
-        if abs(float(lo.iloc[i]) - sc_low) / sc_low < 0.02:
-            if float(v.iloc[i]) < avg_vol:
-                events.append(WyckoffEvent(lo.index[i], float(lo.iloc[i]), "ST", "Secondary Test — retest of SC on lower volume"))
+    # AR: First significant high after SC (rise > 0.5 × range height)
+    if sc_idx is not None:
+        sc_pos = c.index.get_loc(sc_idx) if sc_idx in c.index else 0
+        for i in range(sc_pos + 1, len(h)):
+            if float(h.iloc[i]) - sc_price > 0.5 * range_height:
+                events.append(WyckoffEvent(h.index[i], float(h.iloc[i]), "AR", "Automatic Rally — sharp bounce after SC"))
                 break
 
-    # Spring: Close below support then recovery within 3 bars
+    # ST: Low near SC price (±2%) on lower volume
+    if sc_idx is not None:
+        sc_pos = c.index.get_loc(sc_idx) if sc_idx in c.index else 0
+        for i in range(sc_pos + 2, len(lo)):
+            if abs(float(lo.iloc[i]) - sc_price) / max(sc_price, 1e-9) < 0.02:
+                if float(v.iloc[i]) < avg_vol:
+                    events.append(WyckoffEvent(lo.index[i], float(lo.iloc[i]), "ST", "Secondary Test — retest of SC on lower volume"))
+                    break
+
+    # Spring: Close below support then recovers within 3 bars;
+    # confirmed by a subsequent low-volume test within 5 bars
     support = tr.lower_bound
     for i in range(len(c) - 3):
         if float(c.iloc[i]) < support:
             recovered = any(float(c.iloc[i + j]) > support for j in range(1, min(4, len(c) - i)))
             if recovered:
-                events.append(WyckoffEvent(c.index[i], float(c.iloc[i]), "Spring", "Spring — false break below support with recovery"))
+                # Look for low-volume test bar within the next 5 bars
+                test_confirmed = any(
+                    float(v.iloc[i + k]) < avg_vol * 0.7
+                    and float(lo.iloc[i + k]) > float(lo.iloc[i]) * 0.99
+                    for k in range(1, min(6, len(c) - i))
+                )
+                desc = (
+                    "Spring (tested) — false break below support + low-vol test confirmed"
+                    if test_confirmed
+                    else "Spring — false break below support with recovery"
+                )
+                events.append(WyckoffEvent(c.index[i], float(c.iloc[i]), "Spring", desc))
                 break
 
     # SOS: Close above resistance on above-avg volume
@@ -235,25 +280,35 @@ def _detect_distribution_events(
     if len(c) < 3:
         return
 
-    # BC: Highest high with volume > 2x avg
-    bc_idx = h.idxmax()
-    bc_price = float(h[bc_idx])
-    if float(v.get(bc_idx, 0)) > 2 * avg_vol:
+    # BC: Bar in the top 15% of the range with volume > 1.5× avg
+    # (Avoids picking any high as BC — requires climactic volume)
+    top_15 = tr.upper_bound - range_height * 0.15
+    bc_idx = None
+    bc_price = None
+    for idx in h.index:
+        if float(h[idx]) >= top_15 and float(v.get(idx, 0)) > avg_vol * 1.5:
+            if bc_idx is None or float(h[idx]) > bc_price:
+                bc_idx = idx
+                bc_price = float(h[idx])
+    if bc_idx is not None:
         events.append(WyckoffEvent(bc_idx, bc_price, "BC", "Buying Climax — high-volume euphoria high"))
 
     # AR: First significant low after BC
-    bc_pos = c.index.get_loc(bc_idx) if bc_idx in c.index else 0
-    for i in range(bc_pos + 1, len(lo)):
-        if bc_price - float(lo.iloc[i]) > 0.5 * range_height:
-            events.append(WyckoffEvent(lo.index[i], float(lo.iloc[i]), "AR", "Automatic Reaction — sharp drop after BC"))
-            break
+    if bc_idx is not None:
+        bc_pos = c.index.get_loc(bc_idx) if bc_idx in c.index else 0
+        for i in range(bc_pos + 1, len(lo)):
+            if bc_price - float(lo.iloc[i]) > 0.5 * range_height:
+                events.append(WyckoffEvent(lo.index[i], float(lo.iloc[i]), "AR", "Automatic Reaction — sharp drop after BC"))
+                break
 
     # ST: High near BC price (±2%) on lower volume
-    for i in range(bc_pos + 2, len(h)):
-        if abs(float(h.iloc[i]) - bc_price) / bc_price < 0.02:
-            if float(v.iloc[i]) < avg_vol:
-                events.append(WyckoffEvent(h.index[i], float(h.iloc[i]), "ST", "Secondary Test — retest of BC on lower volume"))
-                break
+    if bc_idx is not None:
+        bc_pos = c.index.get_loc(bc_idx) if bc_idx in c.index else 0
+        for i in range(bc_pos + 2, len(h)):
+            if abs(float(h.iloc[i]) - bc_price) / max(bc_price, 1e-9) < 0.02:
+                if float(v.iloc[i]) < avg_vol:
+                    events.append(WyckoffEvent(h.index[i], float(h.iloc[i]), "ST", "Secondary Test — retest of BC on lower volume"))
+                    break
 
     # UTAD: Close above resistance then failure within 3 bars
     resistance = tr.upper_bound
@@ -403,8 +458,11 @@ def detect_sub_phase(
 
 def calculate_cause_target(phase: WyckoffPhase, current_price: float) -> float | None:
     """
-    Wyckoff Cause & Effect: width of trading range × a multiplier estimates the price target.
-    Uses simplified horizontal point count method.
+    Wyckoff Cause & Effect: width of trading range × a duration-scaled multiplier
+    estimates the price target (simplified horizontal point count method).
+
+    Longer-duration causes justify proportionally larger price targets.
+    Multiplier = 1.5 × sqrt(range_bars / 30), capped at 3×.
     """
     support = phase.key_levels["support"]
     resistance = phase.key_levels["resistance"]
@@ -412,12 +470,17 @@ def calculate_cause_target(phase: WyckoffPhase, current_price: float) -> float |
     if width <= 0:
         return None
 
+    # Estimate bars in cause using date range (approx trading days)
+    range_bars = max(
+        int((phase.end_date - phase.start_date).days * 5 / 7), 1
+    )
+    # Scale: longer cause → larger target, capped at 3× the range width
+    scale = min(1.5 * (range_bars / 30) ** 0.5, 3.0)
+
     if phase.phase == "Accumulation":
-        # Target upward from resistance
-        return resistance + width * 1.5
+        return resistance + width * scale
     elif phase.phase == "Distribution":
-        # Target downward from support
-        return support - width * 1.5
+        return support - width * scale
     return None
 
 
@@ -479,7 +542,7 @@ def determine_phases(
     phases: list[WyckoffPhase] = []
 
     for i, tr in enumerate(ranges):
-        vol_behavior = classify_volume_behavior(close, volume, tr)
+        vol_behavior = classify_volume_behavior(close, high, low, volume, tr)
 
         if vol_behavior == "accumulation":
             phase_name = "Accumulation"

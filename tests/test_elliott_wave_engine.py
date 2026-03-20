@@ -85,12 +85,12 @@ class TestFindWaveSequences:
         pivots = _make_pivots([100, 110, 95], ["low", "high", "low"])
         assert find_wave_sequences(pivots) == []
 
-    def test_search_bound_last_30_pivots(self):
-        prices = [100 + i * 3 if i % 2 == 0 else 100 + i * 3 - 5 for i in range(40)]
-        types = ["low" if i % 2 == 0 else "high" for i in range(40)]
+    def test_search_bound_last_50_pivots(self):
+        prices = [100 + i * 3 if i % 2 == 0 else 100 + i * 3 - 5 for i in range(60)]
+        types = ["low" if i % 2 == 0 else "high" for i in range(60)]
         pivots = _make_pivots(prices, types)
         result = find_wave_sequences(pivots)
-        cutoff_date = pivots[-30].date
+        cutoff_date = pivots[-50].date
         for seq in result:
             assert seq.pivots[0].date >= cutoff_date
 

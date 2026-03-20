@@ -83,7 +83,7 @@ class TestClassifyVolumeBehavior:
         close, high, low, volume = _make_ohlcv()
         ranges = detect_trading_ranges(close, high, low)
         if ranges:
-            result = classify_volume_behavior(close, volume, ranges[0])
+            result = classify_volume_behavior(close, high, low, volume, ranges[0])
             assert result in ("accumulation", "distribution", "neutral")
 
     def test_detects_accumulation_pattern(self):
@@ -91,16 +91,22 @@ class TestClassifyVolumeBehavior:
         ranges = detect_trading_ranges(close, high, low)
         if ranges:
             tr = ranges[0]
-            # Bias volume toward up-days
+            # Bias volume AND close-position toward up-days (close near high)
             sl = slice(tr.start_idx, tr.end_idx + 1)
             diff = close.iloc[sl].diff()
             for i in range(len(diff)):
                 idx = diff.index[i]
                 if diff.iloc[i] > 0:
+                    # Close near high: small upper wick, large lower wick
                     volume.loc[idx] = 8_000_000.0
+                    high.loc[idx] = close.loc[idx] + 0.1
+                    low.loc[idx]  = close.loc[idx] - 1.0
                 else:
+                    # Close near low: large upper wick, small lower wick
                     volume.loc[idx] = 2_000_000.0
-            result = classify_volume_behavior(close, volume, tr)
+                    high.loc[idx] = close.loc[idx] + 1.0
+                    low.loc[idx]  = close.loc[idx] - 0.1
+            result = classify_volume_behavior(close, high, low, volume, tr)
             assert result == "accumulation"
 
     def test_detects_distribution_pattern(self):
@@ -108,15 +114,22 @@ class TestClassifyVolumeBehavior:
         ranges = detect_trading_ranges(close, high, low)
         if ranges:
             tr = ranges[0]
+            # Bias volume AND close-position toward down-days (close near low)
             sl = slice(tr.start_idx, tr.end_idx + 1)
             diff = close.iloc[sl].diff()
             for i in range(len(diff)):
                 idx = diff.index[i]
                 if diff.iloc[i] < 0:
+                    # Close near low: large upper wick, small lower wick
                     volume.loc[idx] = 8_000_000.0
+                    high.loc[idx] = close.loc[idx] + 1.0
+                    low.loc[idx]  = close.loc[idx] - 0.1
                 else:
+                    # Close near high on low volume
                     volume.loc[idx] = 2_000_000.0
-            result = classify_volume_behavior(close, volume, tr)
+                    high.loc[idx] = close.loc[idx] + 0.1
+                    low.loc[idx]  = close.loc[idx] - 1.0
+            result = classify_volume_behavior(close, high, low, volume, tr)
             assert result == "distribution"
 
 

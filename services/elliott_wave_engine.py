@@ -139,8 +139,8 @@ def find_wave_sequences(pivots: list[Pivot]) -> list[WaveSequence]:
     if len(pivots) < 4:
         return []
 
-    # Restrict to last 30 pivots
-    window = pivots[-30:]
+    # Restrict to last 50 pivots — wider window finds better structural counts
+    window = pivots[-50:]
     sequences: list[WaveSequence] = []
 
     for i in range(len(window) - 5):
@@ -166,12 +166,18 @@ def find_wave_sequences(pivots: list[Pivot]) -> list[WaveSequence]:
     return sequences
 
 
-_FIB_TOLERANCE = 0.08  # +/-8%
+_FIB_RETRACE_TOL = 0.07   # tighter: retracements (W2, W4, WB) are more predictable
+_FIB_EXTEND_TOL  = 0.12   # wider: extensions (W3, WC, W5) vary more in practice
 
 
-def _fib_close(ratio: float, target: float) -> bool:
-    """Return True if ratio is within FIB_TOLERANCE of target."""
-    return abs(ratio - target) / max(target, 1e-9) <= _FIB_TOLERANCE
+def _retrace_close(ratio: float, target: float) -> bool:
+    """True if ratio is within FIB_RETRACE_TOL of target."""
+    return abs(ratio - target) / max(target, 1e-9) <= _FIB_RETRACE_TOL
+
+
+def _extend_close(ratio: float, target: float) -> bool:
+    """True if ratio is within FIB_EXTEND_TOL of target."""
+    return abs(ratio - target) / max(target, 1e-9) <= _FIB_EXTEND_TOL
 
 
 def score_sequence(seq: WaveSequence) -> tuple[bool, int, list[str]]:
@@ -220,48 +226,60 @@ def score_sequence(seq: WaveSequence) -> tuple[bool, int, list[str]]:
         raw_score = 0
         hits: list[str] = []
 
-        # Wave 2: 61.8%, 50%, 76.4%, 85.4% of Wave 1
+        # Wave 2: 61.8%, 50%, 76.4%, 85.4% of Wave 1 (retracement — tight tolerance)
         w2_retrace = w2 / w1 if w1 > 0 else 0
-        if _fib_close(w2_retrace, 0.618):
+        if _retrace_close(w2_retrace, 0.618):
             raw_score += 15; hits.append("Wave 2 = 61.8% of Wave 1 (+15pts)")
-        elif _fib_close(w2_retrace, 0.500):
+        elif _retrace_close(w2_retrace, 0.500):
             raw_score += 12; hits.append("Wave 2 = 50% of Wave 1 (+12pts)")
-        elif _fib_close(w2_retrace, 0.764):
+        elif _retrace_close(w2_retrace, 0.764):
             raw_score += 10; hits.append("Wave 2 = 76.4% of Wave 1 (+10pts)")
-        elif _fib_close(w2_retrace, 0.854):
+        elif _retrace_close(w2_retrace, 0.854):
             raw_score += 8; hits.append("Wave 2 = 85.4% of Wave 1 (+8pts)")
 
-        # Wave 3: 161.8%, 261.8%, 200%, 323.6% of Wave 1
+        # Wave 3: 161.8%, 261.8%, 200%, 323.6% of Wave 1 (extension — wide tolerance)
         w3_ext = w3 / w1 if w1 > 0 else 0
-        if _fib_close(w3_ext, 1.618):
+        if _extend_close(w3_ext, 1.618):
             raw_score += 25; hits.append("Wave 3 = 161.8% of Wave 1 (+25pts)")
-        elif _fib_close(w3_ext, 2.618):
+        elif _extend_close(w3_ext, 2.618):
             raw_score += 22; hits.append("Wave 3 = 261.8% of Wave 1 (+22pts)")
-        elif _fib_close(w3_ext, 2.000):
+        elif _extend_close(w3_ext, 2.000):
             raw_score += 18; hits.append("Wave 3 = 200% of Wave 1 (+18pts)")
-        elif _fib_close(w3_ext, 3.236):
+        elif _extend_close(w3_ext, 3.236):
             raw_score += 15; hits.append("Wave 3 = 323.6% of Wave 1 (+15pts)")
 
-        # Wave 4: 38.2%, 23.6%, 14.6% of Wave 3 (hard max 50%)
+        # Wave 4: 38.2%, 23.6%, 14.6% of Wave 3 (retracement — tight tolerance)
         w4_retrace = w4 / w3 if w3 > 0 else 0
         if w4_retrace <= 0.50:
-            if _fib_close(w4_retrace, 0.382):
+            if _retrace_close(w4_retrace, 0.382):
                 raw_score += 15; hits.append("Wave 4 = 38.2% of Wave 3 (+15pts)")
-            elif _fib_close(w4_retrace, 0.236):
+            elif _retrace_close(w4_retrace, 0.236):
                 raw_score += 12; hits.append("Wave 4 = 23.6% of Wave 3 (+12pts)")
-            elif _fib_close(w4_retrace, 0.146):
+            elif _retrace_close(w4_retrace, 0.146):
                 raw_score += 10; hits.append("Wave 4 = 14.6% of Wave 3 (+10pts)")
 
-        # Wave 5: equal to Wave 1, or 61.8% of Wave 1+3
-        w5_vs_w1 = w5 / w1 if w1 > 0 else 0
-        w5_vs_w1w3 = w5 / (w1 + w3) if (w1 + w3) > 0 else 0
-        if _fib_close(w5_vs_w1, 1.000):
+        # Wave 5: equal to Wave 1, 61.8% of Wave 1+3, or 1.618× Wave 1 (extension)
+        w5_vs_w1    = w5 / w1 if w1 > 0 else 0
+        w5_vs_w1w3  = w5 / (w1 + w3) if (w1 + w3) > 0 else 0
+        if _extend_close(w5_vs_w1, 1.618):
+            raw_score += 12; hits.append("Wave 5 = 161.8% of Wave 1 (+12pts)")
+        elif _extend_close(w5_vs_w1, 1.000):
             raw_score += 12; hits.append("Wave 5 = Wave 1 (+12pts)")
-        elif _fib_close(w5_vs_w1w3, 0.618):
+        elif _extend_close(w5_vs_w1w3, 0.618):
             raw_score += 10; hits.append("Wave 5 = 61.8% of Wave 1+3 (+10pts)")
+        elif _extend_close(w5_vs_w1w3, 0.382):
+            raw_score += 8;  hits.append("Wave 5 = 38.2% of Wave 1+3 (+8pts)")
 
-        # Normalize: max possible raw score = 67
-        confidence = int(round(raw_score / 67 * 100))
+        # Wave Alternation bonus: W2 and W4 should differ in depth
+        # Deep W2 (>50%) pairs with shallow W4 (<38.2%), or vice versa
+        w2_deep = w2_retrace >= 0.50
+        w4_deep = w4_retrace >= 0.382
+        if (w2_deep and not w4_deep) or (not w2_deep and w4_deep):
+            raw_score += 8
+            hits.append("Wave alternation confirmed: W2/W4 differ in depth (+8pts)")
+
+        # Normalize: max possible raw score = 75 (15+25+15+12+8 alternation)
+        confidence = int(round(raw_score / 75 * 100))
         return True, confidence, hits
 
     else:  # corrective (Zigzag 5-3-5)
@@ -278,25 +296,27 @@ def score_sequence(seq: WaveSequence) -> tuple[bool, int, list[str]]:
         raw_score = 0
         hits: list[str] = []
 
-        # Wave B: 61.8%, 50%, 76.4%, 85.4% of Wave A
+        # Wave B: 61.8%, 50%, 76.4%, 85.4% of Wave A (retracement — tight tolerance)
         wb_retrace = wb / wa if wa > 0 else 0
-        if _fib_close(wb_retrace, 0.618):
+        if _retrace_close(wb_retrace, 0.618):
             raw_score += 20; hits.append("Wave B = 61.8% of Wave A (+20pts)")
-        elif _fib_close(wb_retrace, 0.500):
+        elif _retrace_close(wb_retrace, 0.500):
             raw_score += 16; hits.append("Wave B = 50% of Wave A (+16pts)")
-        elif _fib_close(wb_retrace, 0.764):
+        elif _retrace_close(wb_retrace, 0.764):
             raw_score += 14; hits.append("Wave B = 76.4% of Wave A (+14pts)")
-        elif _fib_close(wb_retrace, 0.854):
+        elif _retrace_close(wb_retrace, 0.854):
             raw_score += 12; hits.append("Wave B = 85.4% of Wave A (+12pts)")
 
-        # Wave C: 100%, 61.8%, 123.6% of Wave A
+        # Wave C: 100%, 61.8%, 123.6% of Wave A (extension — wide tolerance)
         wc_vs_wa = wc / wa if wa > 0 else 0
-        if _fib_close(wc_vs_wa, 1.000):
+        if _extend_close(wc_vs_wa, 1.000):
             raw_score += 30; hits.append("Wave C = 100% of Wave A (+30pts)")
-        elif _fib_close(wc_vs_wa, 0.618):
+        elif _extend_close(wc_vs_wa, 0.618):
             raw_score += 24; hits.append("Wave C = 61.8% of Wave A (+24pts)")
-        elif _fib_close(wc_vs_wa, 1.236):
+        elif _extend_close(wc_vs_wa, 1.236):
             raw_score += 24; hits.append("Wave C = 123.6% of Wave A (+24pts)")
+        elif _extend_close(wc_vs_wa, 1.618):
+            raw_score += 20; hits.append("Wave C = 161.8% of Wave A (+20pts)")
 
         confidence = int(round(min(raw_score / 50 * 100, 100)))
         return True, confidence, hits

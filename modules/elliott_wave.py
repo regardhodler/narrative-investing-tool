@@ -946,7 +946,7 @@ def render():
             int(h.split("(+")[1].replace("pts)", ""))
             for h in primary.fibonacci_hits if "(+" in h
         )
-        max_pts = 67  # impulse max
+        max_pts = 75  # impulse max (15+25+15+12+8 alternation)
         score_pct = min(int(round(total_pts / max_pts * 100)), 100)
         score_color = COLORS["green"] if score_pct >= 60 else (COLORS["yellow"] if score_pct >= 30 else COLORS["red"])
 
