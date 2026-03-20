@@ -112,10 +112,11 @@ CORRECTIVE_OPACITY = 0.75
 # ── Data & analysis ───────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=3600)
-def _fetch_spy_data(interval: str = "1d") -> pd.DataFrame | None:
+def _fetch_ticker_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None:
     """
-    Fetch full SPY history for multi-degree analysis.
+    Fetch price history for any ticker for multi-degree EW analysis.
     Adjusts lookback period based on interval to stay within yfinance limits.
+    Supports US equities, TSX (.TO), futures (=F), ETFs, crypto (-USD), indices (^).
     """
     # Map interval to max valid period
     period_map = {
@@ -127,14 +128,14 @@ def _fetch_spy_data(interval: str = "1d") -> pd.DataFrame | None:
         "5m":  "60d",   # ~2 months
     }
     period = period_map.get(interval, "1y")
-    
+
     # Try fetching with mapped period
-    df = fetch_ohlcv_single("SPY", period=period, interval=interval)
-    
+    df = fetch_ohlcv_single(ticker, period=period, interval=interval)
+
     # Fallback for daily/weekly/monthly if max fails
     if (df is None or df.empty) and interval in ("1d", "1wk", "1mo"):
-        df = fetch_ohlcv_single("SPY", period="10y", interval=interval)
-        
+        df = fetch_ohlcv_single(ticker, period="10y", interval=interval)
+
     return df
 
 
@@ -147,6 +148,7 @@ def _build_groq_narrative(
     fibonacci_hits: tuple,
     degree_summary: tuple,   # tuple of (degree, label, confidence) for hashability
     current_price: float = 0.0,
+    ticker_label: str = "SPY",
 ) -> str:
     """Call Groq LLaMA to generate a multi-degree Elliott Wave narrative."""
     api_key = os.getenv("GROQ_API_KEY", "")
@@ -163,11 +165,11 @@ def _build_groq_narrative(
     if current_price > 0:
         dist = current_price - primary_invalidation
         dist_pct = (dist / primary_invalidation) * 100 if primary_invalidation else 0
-        price_ctx = f"""- Current SPY Price: ${current_price:.2f}
+        price_ctx = f"""- Current {ticker_label} Price: ${current_price:.2f}
 - Distance to Primary Invalidation: ${dist:+.2f} ({dist_pct:+.1f}%)
 """
 
-    prompt = f"""You are an expert Elliott Wave analyst. Interpret the following automated multi-degree wave count for SPY (S&P 500 ETF) and write a concise 4-6 sentence market commentary.
+    prompt = f"""You are an expert Elliott Wave analyst. Interpret the following automated multi-degree wave count for {ticker_label} and write a concise 4-6 sentence market commentary.
 
 Primary Degree (most actionable):
 - Position: {primary_position}
@@ -219,9 +221,10 @@ def _make_wave_chart(
     rsi_series: pd.Series,
     chart_height: int = 860,
     forecast: "WaveForecast | None" = None,
+    ticker: str = "SPY",
 ) -> go.Figure:
     """
-    SPY line chart with all 7 EW degree overlays, volume, and RSI.
+    Multi-instrument line chart with all 7 EW degree overlays, volume, and RSI.
 
     Price is a clean line (not candlestick) to let wave structure shine through.
     Each degree is a colored line connecting its pivot points with text labels.
@@ -243,9 +246,9 @@ def _make_wave_chart(
         y=close,
         mode="lines",
         line=dict(color="#3D4F6B", width=1.2),
-        name="SPY Close",
+        name=f"{ticker} Close",
         showlegend=True,
-        hovertemplate="$%{y:.2f}  %{x|%Y-%m-%d}<extra>SPY</extra>",
+        hovertemplate=f"$%{{y:.2f}}  %{{x|%Y-%m-%d}}<extra>{ticker}</extra>",
     ), row=1, col=1)
 
     # ── Wave degree overlays ──────────────────────────────────────────────────
@@ -487,7 +490,7 @@ def _make_wave_chart(
     apply_dark_layout(fig, title="")
     # Title centered at top, above the legend row
     fig.add_annotation(
-        text="SPY — Elliott Wave · All Degrees",
+        text=f"{ticker} — Elliott Wave · All Degrees",
         xref="paper", yref="paper",
         x=0.5, y=1.22,
         showarrow=False,
@@ -502,19 +505,57 @@ def _make_wave_chart(
 def render():
     st.title("Elliott Wave Analysis")
     
-    # ── Controls ──────────────────────────────────────────────────────────────
-    c1, c2 = st.columns([3, 1])
-    with c1:
-        st.caption(
-            "SPY · 7 degrees · Impulse 1-2-3-4-5 only · Toggle degrees via legend · Groq AI narrative"
+    # ── Ticker Selector ───────────────────────────────────────────────────────
+    if "ew_ticker" not in st.session_state:
+        st.session_state["ew_ticker"] = "SPY"
+
+    tk_col, iv_col = st.columns([3, 1])
+    with tk_col:
+        raw_ticker = st.text_input(
+            "Ticker Symbol",
+            key="ew_ticker",
+            placeholder="SPY · GC=F · RY.TO · BTC-USD · ZB=F · ^TNX",
+            help=(
+                "Any yfinance-compatible symbol. "
+                "Append .TO for TSX (e.g. RY.TO), =F for futures (GC=F), "
+                "-USD for crypto (BTC-USD), ^ for indices (^TNX). "
+                "Note: indices (^) have no volume data."
+            ),
         )
-    with c2:
+    with iv_col:
         interval = st.selectbox(
             "Interval",
             options=["1d", "1wk", "1mo", "1h", "15m", "5m"],
             index=0,
-            label_visibility="collapsed"
+            label_visibility="collapsed",
         )
+
+    ticker = (raw_ticker or "SPY").strip().upper()
+
+    _QUICK_PICKS = {
+        "🇺🇸 US Equities":   ["SPY", "QQQ", "IWM", "DIA", "AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "META"],
+        "🇨🇦 TSX":           ["^GSPTSE", "XIU.TO", "RY.TO", "TD.TO", "ENB.TO", "SHOP.TO", "CNR.TO", "ABX.TO"],
+        "📊 Eq. Futures":    ["ES=F", "NQ=F", "YM=F", "RTY=F"],
+        "🛢 Commodities":    ["GC=F", "SI=F", "CL=F", "NG=F", "HG=F", "PL=F", "ZC=F", "ZW=F", "ZS=F"],
+        "🏛 Bonds/Rates":    ["ZB=F", "ZN=F", "ZF=F", "ZT=F", "TLT", "IEF", "^TNX", "^TYX"],
+        "💱 Forex & Crypto": ["EURUSD=X", "GBPUSD=X", "USDJPY=X", "USDCAD=X", "BTC-USD", "ETH-USD", "SOL-USD"],
+    }
+
+    with st.expander("⚡ Quick Pick — Asset Classes", expanded=False):
+        _qp_tabs = st.tabs(list(_QUICK_PICKS.keys()))
+        for _tab, (_cat, _tlist) in zip(_qp_tabs, _QUICK_PICKS.items()):
+            with _tab:
+                _nc = min(len(_tlist), 5)
+                _qcols = st.columns(_nc)
+                for _i, _t in enumerate(_tlist):
+                    if _qcols[_i % _nc].button(_t, key=f"ew_qp_{_t}", use_container_width=True):
+                        st.session_state["ew_ticker"] = _t
+                        st.rerun()
+
+    # ── Controls ─────────────────────────────────────────────────────────────
+    st.caption(
+        f"{ticker} · 7 degrees · Impulse 1-2-3-4-5 only · Toggle degrees via legend · Groq AI narrative"
+    )
 
     chart_height = st.slider(
         "Chart Height", min_value=500, max_value=1400, value=860, step=50,
@@ -525,11 +566,11 @@ def render():
         st.cache_data.clear()
         st.rerun()
 
-    with st.spinner(f"Fetching SPY data ({interval})..."):
-        ohlcv = _fetch_spy_data(interval=interval)
+    with st.spinner(f"Fetching {ticker} data ({interval})..."):
+        ohlcv = _fetch_ticker_data(ticker, interval=interval)
 
     if ohlcv is None or ohlcv.empty:
-        st.error(f"SPY price data unavailable for {interval}. Please try again later.")
+        st.error(f"{ticker} price data unavailable for {interval}. Please try again later.")
         return
 
     # For intraday, we likely have much less data than daily "max".
@@ -567,7 +608,7 @@ def render():
     rsi_series = rsi(close)
 
     # ── Chart ─────────────────────────────────────────────────────────────────
-    fig = _make_wave_chart(ohlcv, degree_counts, corrective_counts, rsi_series, chart_height, forecast)
+    fig = _make_wave_chart(ohlcv, degree_counts, corrective_counts, rsi_series, chart_height, forecast, ticker=ticker)
     st.plotly_chart(
         fig,
         use_container_width=True,
@@ -767,6 +808,7 @@ def render():
                     tuple(primary.fibonacci_hits),
                     degree_summary,
                     current_price,
+                    ticker_label=ticker,
                 )
                 if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ"):
                     st.warning("AI narrative unavailable.")
