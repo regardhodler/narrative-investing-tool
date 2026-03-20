@@ -28,6 +28,45 @@ from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
+_PERIOD_MAP: dict[str, list[str]] = {
+    "15m": ["5d",  "10d", "20d", "30d", "45d", "60d"],
+    "30m": ["10d", "20d", "30d", "45d", "60d"],
+    "1h":  ["30d", "60d", "90d", "180d", "365d"],
+    "1d":  ["6mo", "1y",  "2y",  "5y"],
+    "1wk": ["2y",  "5y",  "10y", "max"],
+    "1mo": ["5y",  "10y", "max"],
+}
+
+# Maps each interval to the next-higher timeframe for MTF confirmation
+_MTF_HIGHER: dict[str, tuple[str, str]] = {
+    "15m": ("1h",  "1d"),
+    "30m": ("1h",  "1d"),
+    "1h":  ("1d",  "1wk"),
+    "1d":  ("1wk", "1mo"),
+    "1wk": ("1mo", "1mo"),
+}
+
+
+@st.cache_data(ttl=3600)
+def _fetch_mtf_phase(ticker: str, interval: str) -> str:
+    """Return the dominant phase label for a single ticker/interval (for MTF panel)."""
+    period_map = {"15m": "60d", "30m": "60d", "1h": "365d", "1d": "2y", "1wk": "10y", "1mo": "max"}
+    period = period_map.get(interval, "2y")
+    from services.wyckoff_engine import analyze_wyckoff as _aw
+    try:
+        df = fetch_ohlcv_single(ticker, period=period, interval=interval)
+        if df is None or df.empty:
+            return "—"
+        c = df["Close"].iloc[:, 0] if isinstance(df["Close"], pd.DataFrame) else df["Close"]
+        h = df["High"].iloc[:,  0] if isinstance(df["High"],  pd.DataFrame) else df["High"]
+        lo= df["Low"].iloc[:,  0] if isinstance(df["Low"],   pd.DataFrame) else df["Low"]
+        v = df["Volume"].iloc[:,0] if isinstance(df["Volume"],pd.DataFrame) else df["Volume"]
+        result = _aw(c.dropna(), h.dropna(), lo.dropna(), v.dropna(), interval=interval)
+        return result.current_phase.phase if result else "—"
+    except Exception:
+        return "—"
+
+
 PHASE_COLORS = {
     "Accumulation": "rgba(0,212,170,0.08)",
     "Distribution": "rgba(255,75,75,0.08)",
@@ -44,9 +83,9 @@ PHASE_BORDER_COLORS = {
 
 
 @st.cache_data(ttl=3600)
-def _fetch_spy_data() -> pd.DataFrame | None:
-    """Fetch 1 year of SPY daily OHLCV."""
-    return fetch_ohlcv_single("SPY", period="1y", interval="1d")
+def _fetch_wyckoff_data(ticker: str, period: str, interval: str) -> pd.DataFrame | None:
+    """Fetch OHLCV for any ticker/period/interval."""
+    return fetch_ohlcv_single(ticker, period=period, interval=interval)
 
 
 @st.cache_data(ttl=3600)
@@ -57,6 +96,8 @@ def _build_groq_narrative(
     resistance: float,
     events: tuple,
     current_price: float = 0.0,
+    ticker: str = "SPY",
+    interval: str = "1d",
 ) -> str:
     """Call Groq LLaMA to generate a Wyckoff narrative."""
     api_key = os.getenv("GROQ_API_KEY", "")
@@ -69,12 +110,12 @@ def _build_groq_narrative(
     if current_price > 0:
         dist_s = current_price - support
         dist_r = resistance - current_price
-        price_ctx = f"""- Current SPY Price: ${current_price:.2f}
+        price_ctx = f"""- Current {ticker} Price: ${current_price:.2f}
 - Distance to Support: ${dist_s:+.2f}
 - Distance to Resistance: ${dist_r:+.2f}
 """
 
-    prompt = f"""You are an expert Wyckoff Method analyst. Interpret the following automated phase detection for SPY (S&P 500 ETF) and write a concise 3-5 sentence market commentary.
+    prompt = f"""You are an expert Wyckoff Method analyst. Interpret the following automated phase detection for {ticker} on the {interval} timeframe and write a concise 3-5 sentence market commentary.
 
 Current Wyckoff Phase:
 - Phase: {phase}
@@ -308,24 +349,32 @@ def _make_wyckoff_chart(
 def render():
     st.title("Wyckoff Method Analysis")
 
-    # Controls row
-    c1, c2, c3 = st.columns([2, 1, 1])
+    # ── Controls Row ──────────────────────────────────────────────────────────
+    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
     with c1:
         st.caption("Phase detection · VSA · Cause & Effect targets · Demand/Supply lines · Groq AI narrative")
     with c2:
         ticker = st.text_input("Ticker", value="SPY", max_chars=10).upper().strip()
     with c3:
-        interval = st.selectbox("Interval", ["1d", "1wk", "1mo"], index=0, label_visibility="collapsed")
+        interval = st.selectbox(
+            "Interval",
+            ["15m", "30m", "1h", "1d", "1wk", "1mo"],
+            index=3,
+            help="'15m'/'30m'/'1h' = intraday  ·  '1d' = daily (default)  ·  '1wk'/'1mo' = macro view",
+        )
+    with c4:
+        period_choices = _PERIOD_MAP.get(interval, ["2y"])
+        # Guess a sensible default index (middle of list)
+        default_idx = len(period_choices) // 2
+        period = st.selectbox("Lookback", period_choices, index=default_idx,
+                              help="Amount of history to fetch")
 
     if st.button("Refresh Data"):
         st.cache_data.clear()
         st.rerun()
 
-    period_map = {"1d": "2y", "1wk": "10y", "1mo": "max"}
-    period = period_map.get(interval, "2y")
-
-    with st.spinner(f"Fetching {ticker} data and analyzing Wyckoff phases..."):
-        ohlcv = fetch_ohlcv_single(ticker, period=period, interval=interval)
+    with st.spinner(f"Fetching {ticker} {interval} data and analyzing Wyckoff phases..."):
+        ohlcv = _fetch_wyckoff_data(ticker, period=period, interval=interval)
 
     if ohlcv is None or ohlcv.empty:
         st.error(f"{ticker} price data unavailable. Check the ticker and try again.")
@@ -356,7 +405,7 @@ def render():
         st.warning(f"Insufficient price history for {ticker} Wyckoff analysis (need >= 60 bars).")
         return
 
-    analysis = analyze_wyckoff(close, high, low, volume)
+    analysis = analyze_wyckoff(close, high, low, volume, interval=interval)
 
     # Compute indicators
     rsi_series = rsi(close)
@@ -420,7 +469,42 @@ def render():
         unsafe_allow_html=True,
     )
 
-    # ── Trade Setup Panel ─────────────────────────────────────────────────────
+    # ── Multi-Timeframe Confirmation ──────────────────────────────────────────
+    if interval in _MTF_HIGHER:
+        htf1, htf2 = _MTF_HIGHER[interval]
+        with st.spinner("Loading higher-TF context…"):
+            htf1_phase = _fetch_mtf_phase(ticker, htf1)
+            htf2_phase = _fetch_mtf_phase(ticker, htf2) if htf2 != htf1 else None
+
+        _pc = lambda p: {"Accumulation": COLORS["green"], "Distribution": COLORS["red"],
+                         "Markup": COLORS["blue"], "Markdown": COLORS["orange"]}.get(p, COLORS["text_dim"])
+
+        st.markdown(
+            f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+            f'color:{COLORS["text_dim"]};margin:12px 0 4px 0;text-transform:uppercase;letter-spacing:0.06em;">'
+            f'Multi-Timeframe Confirmation</div>',
+            unsafe_allow_html=True,
+        )
+        mtf_cols = st.columns(3)
+        mtf_cols[0].markdown(bloomberg_metric(f"{interval.upper()} (selected)", current.phase, phase_color), unsafe_allow_html=True)
+        mtf_cols[1].markdown(bloomberg_metric(f"{htf1.upper()}", htf1_phase, _pc(htf1_phase)), unsafe_allow_html=True)
+        if htf2_phase is not None:
+            mtf_cols[2].markdown(bloomberg_metric(f"{htf2.upper()}", htf2_phase, _pc(htf2_phase)), unsafe_allow_html=True)
+
+        # Confluence note
+        phases_seen = {current.phase, htf1_phase} | ({htf2_phase} if htf2_phase else set())
+        if all(p in ("Accumulation", "Markup") for p in phases_seen if p not in ("—", "")):
+            st.success("✅ Bullish confluence across all timeframes — strengthens long bias.")
+        elif all(p in ("Distribution", "Markdown") for p in phases_seen if p not in ("—", "")):
+            st.error("🔴 Bearish confluence across all timeframes — strengthens short bias.")
+        elif current.phase in ("Accumulation", "Markup") and htf1_phase in ("Markup", "Accumulation"):
+            st.info("ℹ️ Selected TF bullish, higher TF agrees — trade in direction of trend.")
+        elif current.phase in ("Distribution", "Markdown") and htf1_phase in ("Markdown", "Distribution"):
+            st.info("ℹ️ Selected TF bearish, higher TF agrees — trade in direction of trend.")
+        else:
+            st.warning("⚠️ Timeframe divergence — wait for alignment before committing.")
+
+
     support = current.key_levels["support"]
     resistance = current.key_levels["resistance"]
     current_price_val = float(close.iloc[-1])
@@ -526,6 +610,8 @@ def render():
                 current.key_levels["resistance"],
                 event_strs,
                 current_price,
+                ticker=ticker,
+                interval=interval,
             )
             if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ"):
                 st.warning("AI narrative unavailable.")

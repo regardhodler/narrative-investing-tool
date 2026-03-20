@@ -2,13 +2,37 @@
 Wyckoff Method Engine — Phase Detection
 
 Detects Accumulation, Distribution, Markup, and Markdown phases
-using price structure and volume behavior on daily OHLCV data.
+using price structure and volume behavior on any timeframe OHLCV data.
 """
 
 from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
+
+
+# ── Interval-adaptive parameters ─────────────────────────────────────────────
+
+def _interval_params(interval: str) -> tuple[int, int]:
+    """Return (atr_window, min_bars) scaled to the interval granularity.
+
+    Shorter timeframes use tighter windows so the ATR baseline is calculated
+    over a representative session-equivalent span rather than calendar time.
+    min_bars is also relaxed so intraday consolidations (which are shorter)
+    are not missed.
+    """
+    return {
+        "1m":  (30,  5),
+        "2m":  (30,  5),
+        "5m":  (24,  5),
+        "15m": (20,  6),
+        "30m": (18,  6),
+        "1h":  (24,  8),
+        "4h":  (30,  8),
+        "1d":  (50, 10),
+        "1wk": (50, 10),
+        "1mo": (50, 10),
+    }.get(interval, (50, 10))
 
 
 # ── Dataclasses ──────────────────────────────────────────────────────────────
@@ -72,19 +96,19 @@ def _atr(close: pd.Series, period: int = 14) -> pd.Series:
 
 def detect_trading_ranges(
     close: pd.Series, high: pd.Series, low: pd.Series,
+    atr_window: int = 50, min_bars: int = 10,
 ) -> list[TradingRange]:
     """Find consolidation zones via ATR contraction.
 
-    Improvements over naive threshold:
-    - Relaxed ratio threshold (0.85 vs 0.70) catches more real-world ranges
-    - Min bars reduced from 15 → 10 to not miss tight crypto/commodity ranges
-    - Price range guard: high-low span must be ≤ 2× local ATR to exclude noisy bands
+    atr_window / min_bars are interval-adaptive (see _interval_params).
+    Shorter timeframes use a tighter rolling window so session-length
+    consolidations are detected instead of being swamped by daily ATR norms.
     """
     atr = _atr(close, period=14)
-    atr_ma = atr.rolling(50).mean()
+    atr_ma = atr.rolling(atr_window).mean()
     ratio = atr / atr_ma.replace(0, np.nan)
 
-    # Find consecutive windows where ratio < 0.85 (relaxed from 0.70)
+    # Find consecutive windows where ratio < 0.85
     contracted = ratio < 0.85
     ranges: list[TradingRange] = []
     start = None
@@ -94,15 +118,13 @@ def detect_trading_ranges(
             if start is None:
                 start = i
         else:
-            if start is not None and (i - start) >= 10:  # relaxed from 15
-                # Price-range guard: span must be ≤ 2× current ATR
+            if start is not None and (i - start) >= min_bars:
                 span = float(high.iloc[start:i].max() - low.iloc[start:i].min())
                 atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
                 if atr_val == 0 or span <= atr_val * 2.5:
                     _add_range(ranges, close, high, low, start, i - 1)
             start = None
-    # Handle range extending to end
-    if start is not None and (len(contracted) - start) >= 10:
+    if start is not None and (len(contracted) - start) >= min_bars:
         span = float(high.iloc[start:].max() - low.iloc[start:].min())
         atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
         if atr_val == 0 or span <= atr_val * 2.5:
@@ -536,9 +558,10 @@ def _classify_trend_phase(
 
 def determine_phases(
     close: pd.Series, high: pd.Series, low: pd.Series, volume: pd.Series,
+    atr_window: int = 50, min_bars: int = 10,
 ) -> list[WyckoffPhase]:
     """Orchestrate: ranges → volume → events → phases with confidence scoring."""
-    ranges = detect_trading_ranges(close, high, low)
+    ranges = detect_trading_ranges(close, high, low, atr_window=atr_window, min_bars=min_bars)
     phases: list[WyckoffPhase] = []
 
     for i, tr in enumerate(ranges):
@@ -625,12 +648,19 @@ def determine_phases(
 
 def analyze_wyckoff(
     close: pd.Series, high: pd.Series, low: pd.Series, volume: pd.Series,
+    interval: str = "1d",
 ) -> WyckoffAnalysis | None:
-    """Public entry point. Returns WyckoffAnalysis or None if insufficient data."""
-    if len(close) < 60:
+    """Public entry point. Returns WyckoffAnalysis or None if insufficient data.
+
+    Pass *interval* (e.g. '15m', '1h', '1d') so ATR window and minimum
+    consolidation length adapt to the selected timeframe granularity.
+    """
+    atr_window, min_bars = _interval_params(interval)
+    min_len = max(atr_window + 20, 60)
+    if len(close) < min_len:
         return None
 
-    phases = determine_phases(close, high, low, volume)
+    phases = determine_phases(close, high, low, volume, atr_window=atr_window, min_bars=min_bars)
     if not phases:
         return None
 
