@@ -509,7 +509,7 @@ def render():
     # Use a plain session state key (not a widget key) so quick-pick buttons
     # can update it freely without triggering the "widget key locked" error.
     if "ew_ticker" not in st.session_state:
-        st.session_state["ew_ticker"] = "SPY"
+        st.session_state["ew_ticker"] = ""
 
     # Human-readable labels for cryptic futures/forex tickers
     _TICKER_LABELS: dict[str, str] = {
@@ -627,7 +627,7 @@ def render():
             label_visibility="collapsed",
         )
 
-    ticker = (raw_ticker or "SPY").strip().upper()
+    ticker = raw_ticker.strip().upper() if raw_ticker else ""
     # Sync back so quick-pick rerun picks up the latest typed value
     st.session_state["ew_ticker"] = ticker
 
@@ -644,6 +644,11 @@ def render():
                     ):
                         st.session_state["ew_ticker"] = _t
                         st.rerun()
+
+    # ── Guard: nothing entered yet ────────────────────────────────────────────
+    if not ticker:
+        st.info("Enter a ticker symbol above or pick one from ⚡ Quick Pick to begin analysis.")
+        return
 
     # ── Controls ─────────────────────────────────────────────────────────────
     st.caption(
