@@ -536,8 +536,22 @@ def render():
         "USDJPY=X": "USD/JPY","USDCAD=X": "USD/CAD",
         "AUDUSD=X": "AUD/USD","USDCHF=X": "USD/CHF",
         # Crypto
-        "BTC-USD": "BTC-USD  Bitcoin","ETH-USD": "ETH-USD  Ethereum",
-        "SOL-USD": "SOL-USD  Solana","XRP-USD": "XRP-USD  Ripple",
+        "BTC-USD": "BTC-USD  Bitcoin",  "ETH-USD": "ETH-USD  Ethereum",
+        "SOL-USD": "SOL-USD  Solana",   "XRP-USD": "XRP-USD  XRP/Ripple",
+        "BNB-USD": "BNB-USD  BNB",      "DOGE-USD": "DOGE-USD  Dogecoin",
+        # Global Indices
+        "^N225":   "^N225    Nikkei 225 (Japan)",
+        "000001.SS": "000001.SS  Shanghai Composite (China)",
+        "^HSI":    "^HSI     Hang Seng (Hong Kong)",
+        "^NSEI":   "^NSEI    Nifty 50 (India)",
+        "^BSESN":  "^BSESN   Sensex (India)",
+        "^AXJO":   "^AXJO    ASX 200 (Australia)",
+        "^FTSE":   "^FTSE    FTSE 100 (UK)",
+        "^GDAXI":  "^GDAXI   DAX (Germany)",
+        "^FCHI":   "^FCHI    CAC 40 (France)",
+        "^STOXX50E": "^STOXX50E  Euro Stoxx 50",
+        "^KS11":   "^KS11    KOSPI (South Korea)",
+        "^TWII":   "^TWII    Taiwan Weighted",
     }
 
     # Quick-pick data: {tab_label: [(ticker, button_label), ...]}
@@ -571,7 +585,24 @@ def render():
         "💱 Forex & Crypto": [
             ("EURUSD=X","EUR/USD"),("GBPUSD=X","GBP/USD"),
             ("USDJPY=X","USD/JPY"),("USDCAD=X","USD/CAD"),
-            ("BTC-USD","Bitcoin"),("ETH-USD","Ethereum"),("SOL-USD","Solana"),
+            ("AUDUSD=X","AUD/USD"),("USDCHF=X","USD/CHF"),
+            ("BTC-USD","Bitcoin"),("ETH-USD","Ethereum"),
+            ("SOL-USD","Solana"),("XRP-USD","XRP"),
+            ("BNB-USD","BNB"),("DOGE-USD","Dogecoin"),
+        ],
+        "🌏 Global Indices": [
+            ("^N225","Nikkei 225"),
+            ("000001.SS","Shanghai"),
+            ("^HSI","Hang Seng"),
+            ("^NSEI","Nifty 50"),
+            ("^BSESN","Sensex"),
+            ("^AXJO","ASX 200"),
+            ("^FTSE","FTSE 100"),
+            ("^GDAXI","DAX"),
+            ("^FCHI","CAC 40"),
+            ("^STOXX50E","Euro Stoxx 50"),
+            ("^KS11","KOSPI"),
+            ("^TWII","Taiwan"),
         ],
     }
 
