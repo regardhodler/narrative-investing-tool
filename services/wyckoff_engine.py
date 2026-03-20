@@ -24,7 +24,7 @@ def _interval_params(interval: str) -> tuple[int, int]:
     return {
         "1m":  (30,  5),
         "2m":  (30,  5),
-        "5m":  (24,  5),
+        "5m":  (20,  5),
         "15m": (20,  6),
         "30m": (18,  6),
         "1h":  (24,  8),

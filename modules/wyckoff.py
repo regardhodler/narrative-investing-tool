@@ -29,6 +29,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 _PERIOD_MAP: dict[str, list[str]] = {
+    "5m":  ["5d", "10d", "20d", "30d", "60d"],
     "15m": ["5d",  "10d", "20d", "30d", "45d", "60d"],
     "30m": ["10d", "20d", "30d", "45d", "60d"],
     "1h":  ["30d", "60d", "90d", "180d", "365d"],
@@ -39,6 +40,7 @@ _PERIOD_MAP: dict[str, list[str]] = {
 
 # Maps each interval to the next-higher timeframe for MTF confirmation
 _MTF_HIGHER: dict[str, tuple[str, str]] = {
+    "5m":  ("15m", "1h"),
     "15m": ("1h",  "1d"),
     "30m": ("1h",  "1d"),
     "1h":  ("1d",  "1wk"),
@@ -50,7 +52,7 @@ _MTF_HIGHER: dict[str, tuple[str, str]] = {
 @st.cache_data(ttl=3600)
 def _fetch_mtf_phase(ticker: str, interval: str) -> str:
     """Return the dominant phase label for a single ticker/interval (for MTF panel)."""
-    period_map = {"15m": "60d", "30m": "60d", "1h": "365d", "1d": "2y", "1wk": "10y", "1mo": "max"}
+    period_map = {"5m": "30d", "15m": "60d", "30m": "60d", "1h": "365d", "1d": "2y", "1wk": "10y", "1mo": "max"}
     period = period_map.get(interval, "2y")
     from services.wyckoff_engine import analyze_wyckoff as _aw
     try:
@@ -349,29 +351,254 @@ def _make_wyckoff_chart(
 def render():
     st.title("Wyckoff Method Analysis")
 
-    # ── Controls Row ──────────────────────────────────────────────────────────
-    c1, c2, c3, c4 = st.columns([2, 1, 1, 1])
-    with c1:
-        st.caption("Phase detection · VSA · Cause & Effect targets · Demand/Supply lines · Groq AI narrative")
-    with c2:
-        ticker = st.text_input("Ticker", value="SPY", max_chars=10).upper().strip()
-    with c3:
+    # ── Session state ticker (same pattern as Elliott Wave) ───────────────────
+    if "wy_ticker" not in st.session_state:
+        st.session_state["wy_ticker"] = ""
+
+    # Human-readable labels for quick-pick button tooltips
+    _TICKER_LABELS: dict[str, str] = {
+        "ES=F": "ES=F  S&P 500",   "NQ=F": "NQ=F  Nasdaq",
+        "YM=F": "YM=F  Dow",       "RTY=F": "RTY=F  Russell",
+        "GC=F": "GC=F  Gold",      "SI=F":  "SI=F  Silver",
+        "CL=F": "CL=F  Crude Oil", "NG=F":  "NG=F  Nat Gas",
+        "HG=F": "HG=F  Copper",    "PL=F":  "PL=F  Platinum",
+        "PA=F": "PA=F  Palladium", "ZC=F":  "ZC=F  Corn",
+        "ZW=F": "ZW=F  Wheat",     "ZS=F":  "ZS=F  Soybeans",
+        "CC=F": "CC=F  Cocoa",     "KC=F":  "KC=F  Coffee",
+        "LBS=F":"LBS=F Lumber",
+        "ZB=F": "ZB=F  30yr T-Bond","ZN=F": "ZN=F  10yr T-Note",
+        "ZF=F": "ZF=F  5yr T-Note", "ZT=F": "ZT=F  2yr T-Note",
+        "^TNX": "^TNX  10yr Yield","^TYX":  "^TYX  30yr Yield",
+        "^GSPTSE": "^GSPTSE  TSX",
+        "EURUSD=X":"EUR/USD","GBPUSD=X":"GBP/USD",
+        "USDJPY=X":"USD/JPY","USDCAD=X":"USD/CAD",
+        "AUDUSD=X":"AUD/USD","USDCHF=X":"USD/CHF",
+        "BTC-USD":"BTC-USD  Bitcoin",   "ETH-USD":"ETH-USD  Ethereum",
+        "SOL-USD":"SOL-USD  Solana",    "XRP-USD":"XRP-USD  XRP/Ripple",
+        "BNB-USD":"BNB-USD  BNB",       "DOGE-USD":"DOGE-USD  Dogecoin",
+        "^N225":     "^N225    Nikkei 225 (Japan)",
+        "000001.SS": "000001.SS  Shanghai Composite (China)",
+        "^HSI":      "^HSI     Hang Seng (Hong Kong)",
+        "^NSEI":     "^NSEI    Nifty 50 (India)",
+        "^BSESN":    "^BSESN   Sensex (India)",
+        "^AXJO":     "^AXJO    ASX 200 (Australia)",
+        "^FTSE":     "^FTSE    FTSE 100 (UK)",
+        "^GDAXI":    "^GDAXI   DAX (Germany)",
+        "^FCHI":     "^FCHI    CAC 40 (France)",
+        "^STOXX50E": "^STOXX50E  Euro Stoxx 50",
+        "^KS11":     "^KS11    KOSPI (South Korea)",
+        "^TWII":     "^TWII    Taiwan Weighted",
+        "^MXX":      "^MXX     IPC (Mexico)",
+        "^BVSP":     "^BVSP    Bovespa (Brazil)",
+        "^JKSE":     "^JKSE    IDX Composite (Indonesia)",
+    }
+
+    # Full name + asset class shown in the ticker info bar below input
+    _TICKER_DESC: dict[str, tuple[str, str]] = {
+        "SPY":  ("SPDR S&P 500 ETF",           "US Large-Cap Equity ETF"),
+        "QQQ":  ("Invesco Nasdaq-100 ETF",      "US Tech/Growth Equity ETF"),
+        "IWM":  ("iShares Russell 2000 ETF",    "US Small-Cap Equity ETF"),
+        "DIA":  ("SPDR Dow Jones ETF",          "US Blue-Chip Equity ETF"),
+        "^SPX": ("S&P 500 Index",               "US Large-Cap Index"),
+        "^NDX": ("Nasdaq-100 Index",            "US Tech Index"),
+        "^DJI": ("Dow Jones Industrial Avg",    "US Blue-Chip Index"),
+        "AAPL": ("Apple Inc.",                  "Technology — Consumer Electronics"),
+        "MSFT": ("Microsoft Corp.",             "Technology — Cloud & Software"),
+        "NVDA": ("NVIDIA Corp.",                "Technology — Semiconductors / AI"),
+        "TSLA": ("Tesla Inc.",                  "Automotive / Clean Energy"),
+        "AMZN": ("Amazon.com Inc.",             "E-Commerce & Cloud (AWS)"),
+        "META": ("Meta Platforms Inc.",         "Social Media / VR"),
+        "GOOGL":("Alphabet Inc.",               "Technology — Search & Advertising"),
+        "GOOG": ("Alphabet Inc. (C Shares)",    "Technology — Search & Advertising"),
+        "BRK-B":("Berkshire Hathaway B",        "Conglomerate / Financial"),
+        "JPM":  ("JPMorgan Chase & Co.",        "Banking & Financial Services"),
+        "GS":   ("Goldman Sachs Group",         "Investment Banking"),
+        "XOM":  ("Exxon Mobil Corp.",           "Energy — Integrated Oil & Gas"),
+        "^GSPTSE":("S&P/TSX Composite Index",   "Canadian Broad Market Index"),
+        "XIU.TO":("iShares S&P/TSX 60 ETF",    "Canadian Large-Cap ETF"),
+        "RY.TO": ("Royal Bank of Canada",       "Canadian Banking"),
+        "TD.TO": ("TD Bank Group",              "Canadian Banking"),
+        "ENB.TO":("Enbridge Inc.",              "Canadian Energy — Pipelines"),
+        "SHOP.TO":("Shopify Inc.",              "E-Commerce Platform"),
+        "CNR.TO":("Canadian Nat. Railway",      "Transportation — Rail"),
+        "ABX.TO":("Barrick Gold Corp.",         "Gold Mining"),
+        "ES=F":  ("E-mini S&P 500 Futures",     "US Large-Cap Equity Futures"),
+        "NQ=F":  ("E-mini Nasdaq-100 Futures",  "US Tech Equity Futures"),
+        "YM=F":  ("E-mini Dow Futures",         "US Blue-Chip Equity Futures"),
+        "RTY=F": ("E-mini Russell 2000 Futures","US Small-Cap Equity Futures"),
+        "GC=F":  ("Gold Futures",               "Precious Metal — Safe Haven"),
+        "SI=F":  ("Silver Futures",             "Precious Metal — Industrial Use"),
+        "CL=F":  ("WTI Crude Oil Futures",      "Energy — Benchmark Crude"),
+        "NG=F":  ("Natural Gas Futures",        "Energy — Utility/Heating Fuel"),
+        "HG=F":  ("Copper Futures",             "Industrial Metal — Economic Indicator"),
+        "PL=F":  ("Platinum Futures",           "Precious Metal — Industrial/Auto"),
+        "PA=F":  ("Palladium Futures",          "Precious Metal — Auto Catalysts"),
+        "ZC=F":  ("Corn Futures",               "Agriculture — Feed & Ethanol"),
+        "ZW=F":  ("Wheat Futures",              "Agriculture — Food Staple"),
+        "ZS=F":  ("Soybean Futures",            "Agriculture — Food & Biofuel"),
+        "CC=F":  ("Cocoa Futures",              "Soft Commodity — Food"),
+        "KC=F":  ("Coffee Futures",             "Soft Commodity — Beverage"),
+        "LBS=F": ("Lumber Futures",             "Building Material — Housing Indicator"),
+        "ZB=F":  ("30-Year T-Bond Futures",     "US Government Long Bond"),
+        "ZN=F":  ("10-Year T-Note Futures",     "US Government Benchmark Bond"),
+        "ZF=F":  ("5-Year T-Note Futures",      "US Government Medium Bond"),
+        "ZT=F":  ("2-Year T-Note Futures",      "US Government Short Bond"),
+        "TLT":   ("iShares 20+ Yr Treasury ETF","Long-Duration Bond ETF"),
+        "IEF":   ("iShares 7-10 Yr Treasury ETF","Medium-Duration Bond ETF"),
+        "^TNX":  ("10-Year Treasury Yield",     "US Benchmark Interest Rate"),
+        "^TYX":  ("30-Year Treasury Yield",     "US Long-Term Interest Rate"),
+        "EURUSD=X":("Euro / US Dollar",         "Forex — Major Pair"),
+        "GBPUSD=X":("British Pound / USD",      "Forex — Major Pair"),
+        "USDJPY=X":("USD / Japanese Yen",       "Forex — Major Pair"),
+        "USDCAD=X":("USD / Canadian Dollar",    "Forex — Major Pair"),
+        "AUDUSD=X":("Australian Dollar / USD",  "Forex — Major Pair"),
+        "USDCHF=X":("USD / Swiss Franc",        "Forex — Safe-Haven Pair"),
+        "BTC-USD": ("Bitcoin",                  "Cryptocurrency — Store of Value"),
+        "ETH-USD": ("Ethereum",                 "Cryptocurrency — Smart Contract Platform"),
+        "SOL-USD": ("Solana",                   "Cryptocurrency — High-Speed L1"),
+        "XRP-USD": ("XRP (Ripple)",             "Cryptocurrency — Payments Network"),
+        "BNB-USD": ("BNB (Binance Coin)",       "Cryptocurrency — Exchange Token"),
+        "DOGE-USD":("Dogecoin",                 "Cryptocurrency — Meme Coin"),
+        "^N225":     ("Nikkei 225",             "Japan — Top 225 Companies"),
+        "000001.SS": ("Shanghai Composite",     "China — All SSE-Listed Stocks"),
+        "^HSI":      ("Hang Seng Index",        "Hong Kong — Top 50 Companies"),
+        "^NSEI":     ("Nifty 50",               "India — NSE Top 50 Companies"),
+        "^BSESN":    ("BSE Sensex",             "India — BSE Top 30 Companies"),
+        "^AXJO":     ("S&P/ASX 200",            "Australia — Top 200 Companies"),
+        "^FTSE":     ("FTSE 100",               "UK — London Stock Exchange Top 100"),
+        "^GDAXI":    ("DAX 40",                 "Germany — Frankfurt Top 40"),
+        "^FCHI":     ("CAC 40",                 "France — Paris Top 40"),
+        "^STOXX50E": ("Euro Stoxx 50",          "Eurozone — Top 50 Blue Chips"),
+        "^KS11":     ("KOSPI",                  "South Korea — Broad Market Index"),
+        "^TWII":     ("Taiwan Weighted Index",  "Taiwan — TWSE Broad Market"),
+        "^MXX":      ("S&P/BMV IPC",            "Mexico — Largest Companies"),
+        "^BVSP":     ("Ibovespa",               "Brazil — B3 Exchange Top Stocks"),
+        "^JKSE":     ("IDX Composite",          "Indonesia — Jakarta Stock Exchange"),
+    }
+
+    # Quick-pick tabs
+    _QUICK_PICKS: dict[str, list[tuple[str, str]]] = {
+        "🇺🇸 US Equities": [
+            ("SPY","SPY"),("QQQ","QQQ"),("IWM","IWM"),("DIA","DIA"),
+            ("AAPL","AAPL"),("NVDA","NVDA"),("TSLA","TSLA"),
+            ("MSFT","MSFT"),("AMZN","AMZN"),("META","META"),
+        ],
+        "🇨🇦 TSX": [
+            ("^GSPTSE","TSX Index"),("XIU.TO","XIU"),("RY.TO","RY"),
+            ("TD.TO","TD"),("ENB.TO","ENB"),("SHOP.TO","SHOP"),
+            ("CNR.TO","CNR"),("ABX.TO","ABX"),
+        ],
+        "📊 Eq. Futures": [
+            ("ES=F","ES — S&P 500"),("NQ=F","NQ — Nasdaq"),
+            ("YM=F","YM — Dow"),("RTY=F","RTY — Russell"),
+        ],
+        "🛢 Commodities": [
+            ("GC=F","Gold"),("SI=F","Silver"),("CL=F","Crude Oil"),
+            ("NG=F","Nat Gas"),("HG=F","Copper"),("PL=F","Platinum"),
+            ("ZC=F","Corn"),("ZW=F","Wheat"),("ZS=F","Soybeans"),
+            ("CC=F","Cocoa"),("KC=F","Coffee"),("LBS=F","Lumber"),
+        ],
+        "🏛 Bonds/Rates": [
+            ("ZB=F","30yr Bond"),("ZN=F","10yr Note"),
+            ("ZF=F","5yr Note"),("ZT=F","2yr Note"),
+            ("TLT","TLT"),("IEF","IEF"),
+            ("^TNX","10yr Yield"),("^TYX","30yr Yield"),
+        ],
+        "💱 Forex & Crypto": [
+            ("EURUSD=X","EUR/USD"),("GBPUSD=X","GBP/USD"),
+            ("USDJPY=X","USD/JPY"),("USDCAD=X","USD/CAD"),
+            ("AUDUSD=X","AUD/USD"),("USDCHF=X","USD/CHF"),
+            ("BTC-USD","Bitcoin"),("ETH-USD","Ethereum"),
+            ("SOL-USD","Solana"),("XRP-USD","XRP"),
+            ("BNB-USD","BNB"),("DOGE-USD","Dogecoin"),
+        ],
+        "🌏 Global Indices": [
+            ("^N225","Nikkei 225"),("000001.SS","Shanghai"),
+            ("^HSI","Hang Seng"),("^NSEI","Nifty 50"),
+            ("^BSESN","Sensex"),("^AXJO","ASX 200"),
+            ("^FTSE","FTSE 100"),("^GDAXI","DAX"),
+            ("^FCHI","CAC 40"),("^STOXX50E","Euro Stoxx 50"),
+            ("^KS11","KOSPI"),("^TWII","Taiwan"),
+            ("^MXX","IPC Mexico"),("^BVSP","Bovespa"),("^JKSE","IDX"),
+        ],
+    }
+
+    # ── Controls ──────────────────────────────────────────────────────────────
+    st.caption("Phase detection · VSA · Cause & Effect targets · Demand/Supply lines · Groq AI narrative")
+    tk_col, iv_col, lk_col = st.columns([3, 1, 1])
+    with tk_col:
+        raw_ticker = st.text_input(
+            "Ticker Symbol",
+            value=st.session_state["wy_ticker"],
+            placeholder="SPY · GC=F · RY.TO · BTC-USD · ^FTSE · ZN=F",
+            help=(
+                "Any yfinance-compatible symbol. "
+                "Append .TO for TSX, =F for futures, -USD for crypto, ^ for indices. "
+                "Note: some index symbols (^) have no volume — VSA bars will be skipped."
+            ),
+        )
+    with iv_col:
         interval = st.selectbox(
             "Interval",
-            ["15m", "30m", "1h", "1d", "1wk", "1mo"],
-            index=3,
-            help="'15m'/'30m'/'1h' = intraday  ·  '1d' = daily (default)  ·  '1wk'/'1mo' = macro view",
+            ["5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+            index=4,
+            help="'5m'/'15m'/'30m'/'1h' = intraday  ·  '1d' = daily (default)  ·  '1wk'/'1mo' = macro",
         )
-    with c4:
+    with lk_col:
         period_choices = _PERIOD_MAP.get(interval, ["2y"])
-        # Guess a sensible default index (middle of list)
         default_idx = len(period_choices) // 2
         period = st.selectbox("Lookback", period_choices, index=default_idx,
                               help="Amount of history to fetch")
 
+    ticker = raw_ticker.strip().upper() if raw_ticker else ""
+    st.session_state["wy_ticker"] = ticker
+
+    with st.expander("⚡ Quick Pick — Asset Classes", expanded=False):
+        _qp_tabs = st.tabs(list(_QUICK_PICKS.keys()))
+        for _tab, (_cat, _pairs) in zip(_qp_tabs, _QUICK_PICKS.items()):
+            with _tab:
+                _nc = min(len(_pairs), 5)
+                _qcols = st.columns(_nc)
+                for _i, (_t, _lbl) in enumerate(_pairs):
+                    if _qcols[_i % _nc].button(
+                        _lbl, key=f"wy_qp_{_t}", use_container_width=True,
+                        help=_TICKER_LABELS.get(_t, _t),
+                    ):
+                        st.session_state["wy_ticker"] = _t
+                        st.rerun()
+
     if st.button("Refresh Data"):
         st.cache_data.clear()
         st.rerun()
+
+    # ── Guard: nothing entered ────────────────────────────────────────────────
+    if not ticker:
+        st.info("Enter a ticker symbol above or pick one from ⚡ Quick Pick to begin analysis.")
+        return
+
+    # ── Ticker info bar ───────────────────────────────────────────────────────
+    _desc_entry = _TICKER_DESC.get(ticker)
+    if _desc_entry:
+        _full_name, _asset_class = _desc_entry
+    else:
+        _full_name = ticker
+        _asset_class = "Custom symbol — enter any yfinance-compatible ticker"
+    st.markdown(
+        f"""
+<div style="display:flex;align-items:center;justify-content:space-between;
+            background:#0E1E2E;border:1px solid #1E3A4A;border-radius:6px;
+            padding:10px 18px;margin:4px 0 14px 0;">
+  <div>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:18px;
+                 font-weight:700;color:#C8D8E8;">{_full_name}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;
+                 color:#5A7A8A;margin-left:12px;">{_asset_class}</span>
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;
+              font-weight:800;color:#4B9FFF;letter-spacing:0.05em;">{ticker}</div>
+</div>""",
+        unsafe_allow_html=True,
+    )
 
     with st.spinner(f"Fetching {ticker} {interval} data and analyzing Wyckoff phases..."):
         ohlcv = _fetch_wyckoff_data(ticker, period=period, interval=interval)
