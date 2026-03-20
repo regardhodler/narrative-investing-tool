@@ -554,6 +554,95 @@ def render():
         "^TWII":   "^TWII    Taiwan Weighted",
     }
 
+    # Full descriptions shown in the ticker info bar
+    _TICKER_DESC: dict[str, tuple[str, str]] = {
+        # (full name, asset class / detail)
+        # US ETFs & Indices
+        "SPY":  ("SPDR S&P 500 ETF",         "US Large-Cap Equity ETF"),
+        "QQQ":  ("Invesco Nasdaq-100 ETF",    "US Tech/Growth Equity ETF"),
+        "IWM":  ("iShares Russell 2000 ETF",  "US Small-Cap Equity ETF"),
+        "DIA":  ("SPDR Dow Jones ETF",        "US Blue-Chip Equity ETF"),
+        "^SPX": ("S&P 500 Index",             "US Large-Cap Index"),
+        "^NDX": ("Nasdaq-100 Index",          "US Tech Index"),
+        "^DJI": ("Dow Jones Industrial Avg",  "US Blue-Chip Index"),
+        # Popular US Stocks
+        "AAPL": ("Apple Inc.",                "Technology — Consumer Electronics"),
+        "MSFT": ("Microsoft Corp.",           "Technology — Cloud & Software"),
+        "NVDA": ("NVIDIA Corp.",              "Technology — Semiconductors / AI"),
+        "TSLA": ("Tesla Inc.",               "Automotive / Clean Energy"),
+        "AMZN": ("Amazon.com Inc.",           "E-Commerce & Cloud (AWS)"),
+        "META": ("Meta Platforms Inc.",       "Social Media / VR"),
+        "GOOGL":("Alphabet Inc.",             "Technology — Search & Advertising"),
+        "GOOG": ("Alphabet Inc. (C Shares)",  "Technology — Search & Advertising"),
+        "BRK-B":("Berkshire Hathaway B",      "Conglomerate / Financial"),
+        "JPM":  ("JPMorgan Chase & Co.",      "Banking & Financial Services"),
+        "GS":   ("Goldman Sachs Group",       "Investment Banking"),
+        "XOM":  ("Exxon Mobil Corp.",         "Energy — Integrated Oil & Gas"),
+        # TSX
+        "^GSPTSE":("S&P/TSX Composite Index", "Canadian Broad Market Index"),
+        "XIU.TO":("iShares S&P/TSX 60 ETF",  "Canadian Large-Cap ETF"),
+        "RY.TO": ("Royal Bank of Canada",     "Canadian Banking"),
+        "TD.TO": ("TD Bank Group",            "Canadian Banking"),
+        "ENB.TO":("Enbridge Inc.",            "Canadian Energy — Pipelines"),
+        "SHOP.TO":("Shopify Inc.",            "E-Commerce Platform"),
+        "CNR.TO":("Canadian Nat. Railway",    "Transportation — Rail"),
+        "ABX.TO":("Barrick Gold Corp.",       "Gold Mining"),
+        # Equity Futures
+        "ES=F":  ("E-mini S&P 500 Futures",   "US Large-Cap Equity Futures"),
+        "NQ=F":  ("E-mini Nasdaq-100 Futures", "US Tech Equity Futures"),
+        "YM=F":  ("E-mini Dow Futures",        "US Blue-Chip Equity Futures"),
+        "RTY=F": ("E-mini Russell 2000 Futures","US Small-Cap Equity Futures"),
+        # Commodities
+        "GC=F":  ("Gold Futures",              "Precious Metal — Safe Haven"),
+        "SI=F":  ("Silver Futures",            "Precious Metal — Industrial Use"),
+        "CL=F":  ("WTI Crude Oil Futures",     "Energy — Benchmark Crude"),
+        "NG=F":  ("Natural Gas Futures",       "Energy — Utility/Heating Fuel"),
+        "HG=F":  ("Copper Futures",            "Industrial Metal — Economic Indicator"),
+        "PL=F":  ("Platinum Futures",          "Precious Metal — Industrial/Auto"),
+        "PA=F":  ("Palladium Futures",         "Precious Metal — Auto Catalysts"),
+        "ZC=F":  ("Corn Futures",              "Agriculture — Feed & Ethanol"),
+        "ZW=F":  ("Wheat Futures",             "Agriculture — Food Staple"),
+        "ZS=F":  ("Soybean Futures",           "Agriculture — Food & Biofuel"),
+        "CC=F":  ("Cocoa Futures",             "Soft Commodity — Food"),
+        "KC=F":  ("Coffee Futures",            "Soft Commodity — Beverage"),
+        # Bonds / Rates
+        "ZB=F":  ("30-Year T-Bond Futures",    "US Government Long Bond"),
+        "ZN=F":  ("10-Year T-Note Futures",    "US Government Benchmark Bond"),
+        "ZF=F":  ("5-Year T-Note Futures",     "US Government Medium Bond"),
+        "ZT=F":  ("2-Year T-Note Futures",     "US Government Short Bond"),
+        "TLT":   ("iShares 20+ Yr Treasury ETF","Long-Duration Bond ETF"),
+        "IEF":   ("iShares 7-10 Yr Treasury ETF","Medium-Duration Bond ETF"),
+        "^TNX":  ("10-Year Treasury Yield",    "US Benchmark Interest Rate"),
+        "^TYX":  ("30-Year Treasury Yield",    "US Long-Term Interest Rate"),
+        # Forex
+        "EURUSD=X":("Euro / US Dollar",        "Forex — Major Pair"),
+        "GBPUSD=X":("British Pound / USD",     "Forex — Major Pair"),
+        "USDJPY=X":("USD / Japanese Yen",      "Forex — Major Pair"),
+        "USDCAD=X":("USD / Canadian Dollar",   "Forex — Major Pair"),
+        "AUDUSD=X":("Australian Dollar / USD", "Forex — Major Pair"),
+        "USDCHF=X":("USD / Swiss Franc",       "Forex — Safe-Haven Pair"),
+        # Crypto
+        "BTC-USD": ("Bitcoin",                 "Cryptocurrency — Store of Value"),
+        "ETH-USD": ("Ethereum",                "Cryptocurrency — Smart Contract Platform"),
+        "SOL-USD": ("Solana",                  "Cryptocurrency — High-Speed L1"),
+        "XRP-USD": ("XRP (Ripple)",            "Cryptocurrency — Payments Network"),
+        "BNB-USD": ("BNB (Binance Coin)",      "Cryptocurrency — Exchange Token"),
+        "DOGE-USD":("Dogecoin",                "Cryptocurrency — Meme Coin"),
+        # Global Indices
+        "^N225":    ("Nikkei 225",             "Japan — Top 225 Companies"),
+        "000001.SS":("Shanghai Composite",     "China — All SSE-Listed Stocks"),
+        "^HSI":     ("Hang Seng Index",        "Hong Kong — Top 50 Companies"),
+        "^NSEI":    ("Nifty 50",               "India — NSE Top 50 Companies"),
+        "^BSESN":   ("BSE Sensex",             "India — BSE Top 30 Companies"),
+        "^AXJO":    ("S&P/ASX 200",            "Australia — Top 200 Companies"),
+        "^FTSE":    ("FTSE 100",               "UK — London Stock Exchange Top 100"),
+        "^GDAXI":   ("DAX 40",                 "Germany — Frankfurt Top 40"),
+        "^FCHI":    ("CAC 40",                 "France — Paris Top 40"),
+        "^STOXX50E":("Euro Stoxx 50",          "Eurozone — Top 50 Blue Chips"),
+        "^KS11":    ("KOSPI",                  "South Korea — Broad Market Index"),
+        "^TWII":    ("Taiwan Weighted Index",   "Taiwan — TWSE Broad Market"),
+    }
+
     # Quick-pick data: {tab_label: [(ticker, button_label), ...]}
     _QUICK_PICKS: dict[str, list[tuple[str, str]]] = {
         "🇺🇸 US Equities": [
@@ -650,9 +739,28 @@ def render():
         st.info("Enter a ticker symbol above or pick one from ⚡ Quick Pick to begin analysis.")
         return
 
-    # ── Controls ─────────────────────────────────────────────────────────────
-    st.caption(
-        f"{ticker} · 7 degrees · Impulse 1-2-3-4-5 only · Toggle degrees via legend · Groq AI narrative"
+    # ── Ticker info bar ───────────────────────────────────────────────────
+    _desc_entry = _TICKER_DESC.get(ticker)
+    if _desc_entry:
+        _full_name, _asset_class = _desc_entry
+    else:
+        _full_name = ticker
+        _asset_class = "Custom symbol — enter any yfinance-compatible ticker"
+    st.markdown(
+        f"""
+<div style="display:flex;align-items:center;justify-content:space-between;
+            background:#0E1E2E;border:1px solid #1E3A4A;border-radius:6px;
+            padding:10px 18px;margin:4px 0 14px 0;">
+  <div>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:18px;
+                 font-weight:700;color:#C8D8E8;">{_full_name}</span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;
+                 color:#5A7A8A;margin-left:12px;">{_asset_class}</span>
+  </div>
+  <div style="font-family:'JetBrains Mono',monospace;font-size:22px;
+              font-weight:800;color:#4B9FFF;letter-spacing:0.05em;">{ticker}</div>
+</div>""",
+        unsafe_allow_html=True,
     )
 
     chart_height = st.slider(
