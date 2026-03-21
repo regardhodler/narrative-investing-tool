@@ -324,6 +324,8 @@ GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
 
 def _groq_headers() -> dict:
     api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY environment variable is not set")
     return {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -336,6 +338,7 @@ def _strip_fences(text: str) -> str:
     if text.startswith("```"):
         lines = text.split("\n", 1)
         text = lines[1] if len(lines) > 1 else ""
+        text = text.rstrip()
         if text.endswith("```"):
             text = text[:-3]
     return text.strip()
@@ -436,15 +439,16 @@ def _call_groq_forecast(context_json: str, scenarios_json: str) -> dict | None:
     Not cached — called by the cached generate_forecast wrapper.
     Returns parsed dict or None on failure.
     """
-    context = json.loads(context_json)
-    scenarios = json.loads(scenarios_json)
+    try:
+        context = json.loads(context_json)
+        scenarios = json.loads(scenarios_json)
 
-    scenarios_text = "\n".join(
-        f"- {SCENARIO_LABELS[s['scenario']]}: {s['prob']*100:.0f}%"
-        for s in scenarios
-    )
+        scenarios_text = "\n".join(
+            f"- {SCENARIO_LABELS[s['scenario']]}: {s['prob']*100:.0f}%"
+            for s in scenarios
+        )
 
-    prompt = f"""You are a senior macro strategist. Given the current economic regime and Fed policy scenarios below, provide a probability-weighted forecast for 4 asset classes.
+        prompt = f"""You are a senior macro strategist. Given the current economic regime and Fed policy scenarios below, provide a probability-weighted forecast for 4 asset classes.
 
 CURRENT REGIME:
 - Fed Funds Rate: {context.get('fed_funds_rate', 'N/A')}%
@@ -489,7 +493,6 @@ Rules:
 - p25 < p50 < p75 for each month
 - Use scenario keys: hold, cut_25, cut_50, hike_25"""
 
-    try:
         resp = requests.post(
             GROQ_API_URL,
             headers=_groq_headers(),

@@ -331,9 +331,10 @@ class TestScoreFedTone:
 
     def test_returns_aggregate_bias_and_adjustments(self):
         from services.fed_forecaster import _call_groq_tone
-        with patch("services.fed_forecaster.requests.post") as mock_post:
-            mock_post.return_value = self._mock_groq(_HAWKISH_TONE_RESPONSE)
-            result = _call_groq_tone(_SAMPLE_COMMS)
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
+            with patch("services.fed_forecaster.requests.post") as mock_post:
+                mock_post.return_value = self._mock_groq(_HAWKISH_TONE_RESPONSE)
+                result = _call_groq_tone(_SAMPLE_COMMS)
         assert result["aggregate_bias"] == "hawkish"
         assert "prob_adjustments" in result
         assert result["prob_adjustments"]["hold"] == 0.08
@@ -362,8 +363,6 @@ class TestScoreFedTone:
         assert result["aggregate_bias"] == "neutral"
 
 # ── generate_forecast ─────────────────────────────────────────────────────────
-
-import json as _json
 
 _MINIMAL_FORECAST = {
     "near_term": {
@@ -417,25 +416,26 @@ class TestGenerateForecast:
         mock_resp = MagicMock()
         mock_resp.raise_for_status = MagicMock()
         mock_resp.json.return_value = {
-            "choices": [{"message": {"content": _json.dumps(response_dict)}}]
+            "choices": [{"message": {"content": json.dumps(response_dict)}}]
         }
         return mock_resp
 
     def _context_json(self):
-        return _json.dumps({"fed_funds_rate": 5.33, "quadrant": "Stagflation",
+        return json.dumps({"fed_funds_rate": 5.33, "quadrant": "Stagflation",
                             "macro_score": 28, "regime": "Risk-Off"})
 
     def _scenarios_json(self):
-        return _json.dumps([{"scenario": "hold", "prob": 0.52},
+        return json.dumps([{"scenario": "hold", "prob": 0.52},
                             {"scenario": "cut_25", "prob": 0.38},
                             {"scenario": "cut_50", "prob": 0.07},
                             {"scenario": "hike_25", "prob": 0.03}])
 
     def test_returns_parsed_forecast_dict(self):
         from services.fed_forecaster import _call_groq_forecast
-        with patch("services.fed_forecaster.requests.post") as mock_post:
-            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
-            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
+            with patch("services.fed_forecaster.requests.post") as mock_post:
+                mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+                result = _call_groq_forecast(self._context_json(), self._scenarios_json())
         assert result is not None
         assert "near_term" in result
         assert "medium_term" in result
@@ -443,9 +443,10 @@ class TestGenerateForecast:
 
     def test_near_term_has_all_four_scenarios(self):
         from services.fed_forecaster import _call_groq_forecast
-        with patch("services.fed_forecaster.requests.post") as mock_post:
-            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
-            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
+            with patch("services.fed_forecaster.requests.post") as mock_post:
+                mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+                result = _call_groq_forecast(self._context_json(), self._scenarios_json())
         assert set(result["near_term"].keys()) == {"hold", "cut_25", "cut_50", "hike_25"}
 
     def test_returns_none_on_api_failure(self):
@@ -456,8 +457,9 @@ class TestGenerateForecast:
 
     def test_monthly_arrays_have_12_elements(self):
         from services.fed_forecaster import _call_groq_forecast
-        with patch("services.fed_forecaster.requests.post") as mock_post:
-            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
-            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        with patch.dict(os.environ, {"GROQ_API_KEY": "test-key"}):
+            with patch("services.fed_forecaster.requests.post") as mock_post:
+                mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+                result = _call_groq_forecast(self._context_json(), self._scenarios_json())
         equities_hold = result["medium_term"]["hold"]["equities"]
         assert len(equities_hold["monthly_p50"]) == 12
