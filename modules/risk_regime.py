@@ -1636,8 +1636,7 @@ def _render_fed_forecaster(macro: dict, fred_data: dict):
     """Render Tab 2: Fed Forecaster."""
     from services.fed_forecaster import (
         fetch_zq_probabilities, fetch_fed_communications, score_fed_tone,
-        adjust_probabilities, build_fed_context, generate_forecast,
-        get_next_fomc, SCENARIO_KEYS, SCENARIO_LABELS,
+        adjust_probabilities, get_next_fomc, SCENARIO_KEYS, SCENARIO_LABELS,
     )
     import hashlib, json as _json
     from datetime import datetime as _dt
@@ -1717,8 +1716,7 @@ def _render_fed_forecaster(macro: dict, fred_data: dict):
 def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict):
     """Sections 3–6: probability bars, asset matrix, causal chain, fan charts."""
     from services.fed_forecaster import (
-        fetch_zq_probabilities, build_fed_context, generate_forecast,
-        adjust_probabilities, SCENARIO_KEYS, SCENARIO_LABELS,
+        fetch_zq_probabilities, adjust_probabilities, SCENARIO_KEYS, SCENARIO_LABELS,
     )
     import json as _json
     from datetime import datetime as _dt
