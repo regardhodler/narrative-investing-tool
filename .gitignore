@@ -6,3 +6,5 @@ CLAUDE.md
 data/regime_history.json
 data/watchlist.json
 .claude/
+.worktrees/
+.superpowers/
