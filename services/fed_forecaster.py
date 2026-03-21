@@ -16,6 +16,7 @@ import os
 import hashlib
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import numpy as np
 import pandas as pd
@@ -196,7 +197,6 @@ def _parse_rss_feed(xml_text: str, source: str) -> list[dict]:
 
         # Parse date to sortable datetime
         try:
-            from email.utils import parsedate_to_datetime
             dt = parsedate_to_datetime(pub_date)
             date_str = dt.strftime("%Y-%m-%d")
             sort_key = dt.timestamp()
@@ -213,10 +213,8 @@ def _parse_rss_feed(xml_text: str, source: str) -> list[dict]:
             "_sort_key": sort_key,
         })
 
-    # Most recent first
+    # Most recent first within this feed
     items.sort(key=lambda x: x["_sort_key"], reverse=True)
-    for item in items:
-        item.pop("_sort_key", None)
     return items
 
 
@@ -240,6 +238,8 @@ def fetch_fed_communications(max_items: int = 5) -> list[dict]:
         except Exception:
             continue
 
-    # Sort merged list by date descending, return top max_items
-    all_items.sort(key=lambda x: x["date"], reverse=True)
+    # Sort merged list by numeric timestamp descending, strip internal key, truncate
+    all_items.sort(key=lambda x: x["_sort_key"], reverse=True)
+    for item in all_items:
+        item.pop("_sort_key", None)
     return all_items[:max_items]

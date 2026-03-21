@@ -168,6 +168,10 @@ class TestFetchFedCommunications:
     def test_max_items_respected(self):
         """fetch_fed_communications must truncate to max_items."""
         from services.fed_forecaster import fetch_fed_communications
+        try:
+            fetch_fed_communications.clear()
+        except Exception:
+            pass
         mock_resp = MagicMock()
         mock_resp.text = _SAMPLE_RSS  # has 2 items
         mock_resp.raise_for_status = MagicMock()
