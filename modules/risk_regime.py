@@ -1689,50 +1689,23 @@ def _render_fed_forecaster(macro: dict, fred_data: dict):
         ).hexdigest()
         tone_result = score_fed_tone(comm_key, comms)
 
-        tone_colors = {
-            "hawkish": COLORS["red"],
-            "neutral": COLORS["yellow"],
-            "dovish":  COLORS["green"],
+        # Simplified: just show aggregate badge + link
+        tone = tone_result.get("aggregate_bias", tone_result.get("tone", "neutral"))
+        tone_color_map = {
+            "hawkish": COLORS.get("red", "#ef4444"),
+            "dovish":  COLORS.get("green", "#22c55e"),
+            "neutral": COLORS.get("text_dim", "#94a3b8"),
         }
-
-        for item_data, scored in zip(comms, tone_result.get("items", [])):
-            h = scored.get("hawkish_prob", 0.0)
-            n = scored.get("neutral_prob", 1.0)
-            d = scored.get("dovish_prob", 0.0)
-            if h >= n and h >= d:
-                tone_label, tone_emoji = "Hawkish", "🔴"
-                tone_pct = int(round(h * 100))
-            elif d >= h and d >= n:
-                tone_label, tone_emoji = "Dovish", "🟢"
-                tone_pct = int(round(d * 100))
-            else:
-                tone_label, tone_emoji = "Neutral", "🟡"
-                tone_pct = int(round(n * 100))
-
-            adj_conf = scored.get("adjustment_confidence", 0.0)
-            adj_html = ""
-            prob_adj = tone_result.get("prob_adjustments", {})
-            dominant_scenario = max(SCENARIO_KEYS, key=lambda k: abs(prob_adj.get(k, 0)))
-            dominant_adj = prob_adj.get(dominant_scenario, 0.0)
-            if abs(dominant_adj) > 0.01:
-                sign = "+" if dominant_adj > 0 else ""
-                pp = int(round(abs(dominant_adj) * 100))
-                adj_html = (
-                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;"> '
-                    f'Δ {SCENARIO_LABELS[dominant_scenario]} {sign}{pp}pp '
-                    f'[{int(round(adj_conf*100))}% conf]</span>'
-                )
-
-            title_short = item_data["title"][:80] + ("…" if len(item_data["title"]) > 80 else "")
-            st.markdown(
-                f'<div style="padding:6px 0;border-bottom:1px solid {COLORS["border"]};">'
-                f'{tone_emoji} <b style="color:{tone_colors.get(tone_label.lower(), COLORS["text"])};">'
-                f'{tone_label} [{tone_pct}%]</b> '
-                f'<span style="color:{COLORS["text_dim"]};font-size:12px;">{item_data["source"].upper()} · {item_data["date"]}</span>'
-                f'<br><span style="font-size:13px;">{title_short}</span>{adj_html}'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
+        badge_color = tone_color_map.get(tone, COLORS.get("text_dim", "#94a3b8"))
+        st.markdown(
+            f'<span style="background:{badge_color};color:white;padding:4px 14px;'
+            f'border-radius:12px;font-weight:bold;font-size:14px;">'
+            f'{tone.upper()}</span>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "[View Latest Fed Communications →](https://www.federalreserve.gov/newsevents.htm)"
+        )
 
     st.caption(f"Comms as of {comms_updated}")
     st.markdown("---")
@@ -1824,42 +1797,46 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 
 
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
-    """Sections 4-6: asset matrix, causal chain, fan charts."""
+    """Section 4: grouped 18-asset near-term impact matrix."""
     from services.fed_forecaster import (
-        build_fed_context, generate_forecast, SCENARIO_KEYS, SCENARIO_LABELS,
+        build_fed_context, generate_expanded_forecast,
+        SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
     import json as _json
 
-    # Build and call forecast
     context = build_fed_context(macro, fred_data)
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
-    forecast = generate_forecast(context_json, scenarios_json)
+    expanded = generate_expanded_forecast(context_json, scenarios_json)
 
-    if forecast is None:
+    # Show call status diagnostics if any errors
+    status = expanded.get("_call_status", {})
+    errors = {k: v for k, v in status.items() if v != "ok"}
+    if errors:
+        with st.expander("⚠ Forecast API warnings", expanded=False):
+            for call_name, msg in errors.items():
+                st.caption(f"{call_name}: {msg}")
+
+    near = expanded.get("near_term", {})
+
+    if not near:
         st.error("Fed forecast unavailable — Groq API error or key not set.")
+        _render_fed_causal_chain(expanded.get("causal_chains", {}), adj_probs, expanded.get("medium_term", {}), expanded)
         return
 
-    near = forecast.get("near_term", {})
-    medium = forecast.get("medium_term", {})
-    chains = forecast.get("causal_chains", {})
-
     # ── Section 4: Near-Term Asset Impact Matrix ──────────────────────────────
-    _section_header("Near-Term Asset Impact (0–3 months)")
+    _section_header("Near-Term Asset Impact (0–7 Days)")
 
-    ASSET_KEYS   = ["equities", "bonds", "commodities", "usd"]
-    ASSET_LABELS = {"equities": "Equities", "bonds": "Bonds",
-                    "commodities": "Commodities", "usd": "USD"}
-
-    DIR_COLORS = {
-        "up":   COLORS.get("green", "#40c080"),
-        "down": COLORS.get("red",   "#e05050"),
-        "flat": COLORS.get("text_dim", "#888"),
-    }
-    DIR_ARROWS = {"up": "▲ UP", "down": "▼ DOWN", "flat": "— FLAT"}
+    GROUP_ORDER = [
+        ("🇺🇸 US Equities",    ["spy", "qqq", "iwm", "dji"]),
+        ("🏦 Bonds",            ["bonds_long", "bonds_short"]),
+        ("🛢 Commodities",      ["oil", "natgas", "gold", "silver", "fertilizer"]),
+        ("🌏 International",    ["china", "india", "japan", "germany", "europe", "hongkong"]),
+        ("💵 Dollar",           ["usd"]),
+    ]
 
     # Header row
-    header_cols = st.columns([2, 1, 1, 1, 1])
+    header_cols = st.columns([2] + [1] * 4)
     header_cols[0].markdown(
         f'<div style="font-size:11px;color:{COLORS["text_dim"]};'
         f'font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;'
@@ -1875,43 +1852,48 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             unsafe_allow_html=True
         )
 
-    # Data rows
-    for asset in ASSET_KEYS:
-        row_cols = st.columns([2, 1, 1, 1, 1])
-        row_cols[0].markdown(
-            f'<div style="font-size:13px;font-weight:600;padding:8px 0;">'
-            f'{ASSET_LABELS[asset]}</div>', unsafe_allow_html=True
+    for group_name, assets in GROUP_ORDER:
+        st.markdown(
+            f'<div style="font-size:12px;font-weight:700;color:{COLORS["text_dim"]};'
+            f'margin:12px 0 4px 0;text-transform:uppercase;letter-spacing:0.08em;">'
+            f'{group_name}</div>',
+            unsafe_allow_html=True,
         )
-        for i, scenario_key in enumerate(SCENARIO_KEYS):
-            cell = (near.get(scenario_key) or {}).get(asset, {})
-            if not cell:
-                row_cols[i+1].markdown("—")
-                continue
-            direction  = cell.get("direction", "flat")
-            dir_prob   = int(round(cell.get("direction_prob", 0.5) * 100))
-            mag_low    = cell.get("magnitude_low", 0.0)
-            mag_high   = cell.get("magnitude_high", 0.0)
-            mag_conf   = int(round(cell.get("magnitude_confidence", 0.5) * 100))
-            color = DIR_COLORS.get(direction, COLORS["text_dim"])
-            arrow = DIR_ARROWS.get(direction, "— FLAT")
-            row_cols[i+1].markdown(
-                f'<div style="background:{COLORS["surface"]};border-radius:4px;'
-                f'padding:6px 8px;margin:2px;">'
-                f'<div style="font-size:13px;font-weight:700;color:{color};">'
-                f'{arrow} [{dir_prob}%]</div>'
-                f'<div style="font-size:11px;color:{COLORS["text_dim"]};">'
-                f'{mag_low:+.0f}% to {mag_high:+.0f}%</div>'
-                f'<div style="font-size:10px;color:{COLORS["text_dim"]};">'
-                f'[{mag_conf}% CI]</div>'
-                f'</div>',
-                unsafe_allow_html=True
+        for asset in assets:
+            row_cols = st.columns([2] + [1] * 4)
+            row_cols[0].markdown(
+                f'<div style="font-size:13px;padding:6px 0;">'
+                f'{SVC_ASSET_LABELS.get(asset, asset)}</div>',
+                unsafe_allow_html=True,
             )
+            for i, scenario_key in enumerate(SCENARIO_KEYS):
+                vals = near.get(scenario_key, {}).get(asset, [])
+                day1 = vals[0] if vals else None
+                if day1 is None:
+                    row_cols[i+1].markdown(
+                        f'<div style="font-size:13px;color:{COLORS["text_dim"]};padding:6px 0;">—</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    if day1 > 2:
+                        color = COLORS.get("green", "#22c55e")
+                    elif day1 > 0:
+                        color = "#86efac"
+                    elif day1 > -2:
+                        color = "#fca5a5"
+                    else:
+                        color = COLORS.get("red", "#ef4444")
+                    row_cols[i+1].markdown(
+                        f'<div style="font-size:13px;font-weight:600;color:{color};padding:6px 0;">'
+                        f'{day1:+.1f}%</div>',
+                        unsafe_allow_html=True,
+                    )
 
     st.markdown("---")
-    _render_fed_causal_chain(chains, adj_probs, medium)
+    _render_fed_causal_chain(expanded.get("causal_chains", {}), adj_probs, expanded.get("medium_term", {}), expanded)
 
 
-def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict):
+def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, expanded: dict):
     """Section 5: full causal chain with cumulative confidence decay."""
     from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
 
@@ -1933,45 +1915,27 @@ def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict):
                 st.caption("Chain data unavailable.")
                 continue
 
-            start_conf = chain_steps[0]["confidence"]
-            end_conf   = chain_steps[-1]["confidence"]
-
-            # Render chain steps with indented confidence
-            for step_data in chain_steps:
-                step = step_data["step"]
-                conf = step_data["confidence"]
-                conf_pct = int(round(conf * 100))
+            for idx, step_text in enumerate(chain_steps):
+                # Fade confidence: start at 95%, decay 5% per step, floor at 50%
+                conf_pct = max(50, 95 - idx * 5)
                 color = (
-                    COLORS.get("green",    "#40c080") if conf >= 0.70 else
-                    COLORS.get("yellow",   "#f0c040") if conf >= 0.55 else
+                    COLORS.get("green",    "#40c080") if conf_pct >= 70 else
+                    COLORS.get("yellow",   "#f0c040") if conf_pct >= 55 else
                     COLORS.get("text_dim", "#888888")
                 )
                 st.markdown(
                     f'<div style="padding:3px 0 3px 16px;border-left:2px solid {color};">'
-                    f'<span style="font-size:13px;">{step}</span>'
+                    f'<span style="font-size:13px;">{step_text}</span>'
                     f'<span style="float:right;font-size:11px;color:{color};">'
                     f'[{conf_pct}%]</span></div>',
                     unsafe_allow_html=True,
                 )
 
-            # Confidence decay bar
-            if start_conf > 0:
-                decay_pct = int(round((end_conf / start_conf) * 100))
-                filled = int(round(decay_pct / 10))
-                bar = "█" * filled + "░" * (10 - filled)
-                st.markdown(
-                    f'<div style="font-size:11px;color:{COLORS["text_dim"]};'
-                    f'font-family:\'JetBrains Mono\',monospace;margin-top:8px;">'
-                    f'Confidence: {bar} {int(round(start_conf*100))}% → '
-                    f'{int(round(end_conf*100))}%</div>',
-                    unsafe_allow_html=True,
-                )
-
     st.markdown("---")
-    _render_fed_fan_charts(medium, adj_probs)
+    _render_fed_fan_charts(medium, adj_probs, expanded)
 
 
-def _render_fed_fan_charts(medium: dict, adj_probs: list[dict]):
+def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     """Section 6: probability-weighted medium-term fan charts per asset class."""
     from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
     import plotly.graph_objects as go
