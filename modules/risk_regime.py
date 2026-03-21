@@ -1612,5 +1612,114 @@ def render():
 
 
 def _render_fed_forecaster(macro: dict, fred_data: dict):
-    """Render Tab 2: Fed Forecaster — placeholder stub."""
-    st.info("Fed Forecaster loading...")
+    """Render Tab 2: Fed Forecaster."""
+    from services.fed_forecaster import (
+        fetch_zq_probabilities, fetch_fed_communications, score_fed_tone,
+        adjust_probabilities, build_fed_context, generate_forecast,
+        get_next_fomc, SCENARIO_KEYS, SCENARIO_LABELS,
+    )
+    import hashlib, json as _json
+    from datetime import datetime as _dt
+
+    # ── Section 1: FOMC Context Strip ────────────────────────────────────────
+    fomc = get_next_fomc()
+    fedfunds_series = fred_data.get("fedfunds")
+    current_rate_str = "N/A"
+    if fedfunds_series is not None and not fedfunds_series.empty:
+        current_rate_str = f"{fedfunds_series.dropna().iloc[-1]:.2f}%"
+
+    regime_label = macro.get("macro_regime", "Unknown")
+    quadrant = macro.get("quadrant", "")
+    regime_color = COLORS["red"] if "Risk-Off" in regime_label else (
+        COLORS["green"] if "Risk-On" in regime_label else COLORS["yellow"]
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🗓 Next FOMC", fomc["date"], f"{fomc['days_away']} days away")
+    c2.metric("🏦 Fed Funds Rate", current_rate_str)
+    c3.markdown(
+        f'<div style="padding:8px 0;">'
+        f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',monospace;'
+        f'text-transform:uppercase;letter-spacing:0.06em;">Regime</div>'
+        f'<div style="font-size:18px;font-weight:700;color:{regime_color};">'
+        f'{regime_label} · {quadrant}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("---")
+
+    # ── Section 2: Fed Communications Tracker ────────────────────────────────
+    _section_header("Fed Communications")
+
+    comms = fetch_fed_communications(max_items=5)
+    comms_updated = _dt.now().strftime("%H:%M")
+
+    if not comms:
+        st.markdown(
+            f'<div style="color:{COLORS["text_dim"]};font-size:13px;">'
+            f'Fed communications unavailable — tone adjustment skipped</div>',
+            unsafe_allow_html=True,
+        )
+        tone_result = {"aggregate_bias": "neutral",
+                       "prob_adjustments": {k: 0.0 for k in SCENARIO_KEYS}}
+    else:
+        comm_key = hashlib.md5(
+            str([(c["title"], c["date"]) for c in comms]).encode()
+        ).hexdigest()
+        tone_result = score_fed_tone(comm_key, comms)
+
+        tone_colors = {
+            "hawkish": COLORS["red"],
+            "neutral": COLORS["yellow"],
+            "dovish":  COLORS["green"],
+        }
+
+        for item_data, scored in zip(comms, tone_result.get("items", [])):
+            h = scored.get("hawkish_prob", 0.0)
+            n = scored.get("neutral_prob", 1.0)
+            d = scored.get("dovish_prob", 0.0)
+            if h >= n and h >= d:
+                tone_label, tone_emoji = "Hawkish", "🔴"
+                tone_pct = int(round(h * 100))
+            elif d >= h and d >= n:
+                tone_label, tone_emoji = "Dovish", "🟢"
+                tone_pct = int(round(d * 100))
+            else:
+                tone_label, tone_emoji = "Neutral", "🟡"
+                tone_pct = int(round(n * 100))
+
+            adj_conf = scored.get("adjustment_confidence", 0.0)
+            adj_html = ""
+            prob_adj = tone_result.get("prob_adjustments", {})
+            dominant_scenario = max(SCENARIO_KEYS, key=lambda k: abs(prob_adj.get(k, 0)))
+            dominant_adj = prob_adj.get(dominant_scenario, 0.0)
+            if abs(dominant_adj) > 0.01:
+                sign = "+" if dominant_adj > 0 else ""
+                pp = int(round(abs(dominant_adj) * 100))
+                adj_html = (
+                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;"> '
+                    f'Δ {SCENARIO_LABELS[dominant_scenario]} {sign}{pp}pp '
+                    f'[{int(round(adj_conf*100))}% conf]</span>'
+                )
+
+            title_short = item_data["title"][:80] + ("…" if len(item_data["title"]) > 80 else "")
+            st.markdown(
+                f'<div style="padding:6px 0;border-bottom:1px solid {COLORS["border"]};">'
+                f'{tone_emoji} <b style="color:{tone_colors.get(tone_label.lower(), COLORS["text"])};">'
+                f'{tone_label} [{tone_pct}%]</b> '
+                f'<span style="color:{COLORS["text_dim"]};font-size:12px;">{item_data["source"].upper()} · {item_data["date"]}</span>'
+                f'<br><span style="font-size:13px;">{title_short}</span>{adj_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.caption(f"Comms as of {comms_updated}")
+    st.markdown("---")
+
+    # ── Sections 3-6 placeholder ─────────────────────────────────────────────
+    _render_fed_probability_bars(macro, fred_data, tone_result)
+
+
+def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict):
+    """Sections 3-6: placeholder stub."""
+    st.info("Probability bars — coming in next step")
