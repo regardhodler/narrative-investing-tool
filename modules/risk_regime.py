@@ -1230,7 +1230,7 @@ def render():
         "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "PNFI", "THREEFYTP10",
         "INDPRO", "NFCI", "DGS10", "ICSA", "USSLIND",
-        "UMCSENT", "PERMIT",
+        "UMCSENT", "PERMIT", "FEDFUNDS",
     ]
 
     load_start = datetime.now()
@@ -1276,6 +1276,7 @@ def render():
             "dgs10": "DGS10",
             "umcsent": "UMCSENT",
             "permit": "PERMIT",
+            "fedfunds": "FEDFUNDS",
         }
         fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
         macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
@@ -1298,308 +1299,318 @@ def render():
         unsafe_allow_html=True,
     )
 
-    # ── Ticker Bar ──
-    _TICKER_BAR = [
-        ("SPY", "SPY"), ("NDX", "QQQ"), ("DJ30", "DIA"), ("IWM", "IWM"),
-        ("GOLD", "GLD"), ("SILVER", "SLV"), ("OIL", "USO"), ("TLT", "TLT"),
-    ]
-    cells = []
-    for label, ticker in _TICKER_BAR:
-        snap = snaps.get(ticker)
-        if snap and snap.latest_price:
-            pct = snap.pct_change_1d or 0.0
-            color = COLORS["green"] if pct >= 0 else COLORS["red"]
-            arrow = "▲" if pct >= 0 else "▼"
-            cells.append(
-                f'<div style="display:inline-block;padding:4px 12px;text-align:center;">'
-                f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};letter-spacing:0.06em;">{label}</div>'
-                f'<div style="font-size:15px;font-weight:700;color:{COLORS["text"]};">${snap.latest_price:,.2f}</div>'
-                f'<div style="font-size:12px;color:{color};">{arrow} {pct:+.2f}%</div>'
-                f'</div>'
+    tab1, tab2 = st.tabs(["📊 Macro Dashboard", "🏦 Fed Forecaster"])
+
+    with tab1:
+        # ── Ticker Bar ──
+        _TICKER_BAR = [
+            ("SPY", "SPY"), ("NDX", "QQQ"), ("DJ30", "DIA"), ("IWM", "IWM"),
+            ("GOLD", "GLD"), ("SILVER", "SLV"), ("OIL", "USO"), ("TLT", "TLT"),
+        ]
+        cells = []
+        for label, ticker in _TICKER_BAR:
+            snap = snaps.get(ticker)
+            if snap and snap.latest_price:
+                pct = snap.pct_change_1d or 0.0
+                color = COLORS["green"] if pct >= 0 else COLORS["red"]
+                arrow = "▲" if pct >= 0 else "▼"
+                cells.append(
+                    f'<div style="display:inline-block;padding:4px 12px;text-align:center;">'
+                    f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};letter-spacing:0.06em;">{label}</div>'
+                    f'<div style="font-size:15px;font-weight:700;color:{COLORS["text"]};">${snap.latest_price:,.2f}</div>'
+                    f'<div style="font-size:12px;color:{color};">{arrow} {pct:+.2f}%</div>'
+                    f'</div>'
+                )
+        if cells:
+            bar_html = (
+                f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                f'border-radius:4px;padding:6px 4px;margin-bottom:12px;display:flex;'
+                f'justify-content:space-around;font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                + "".join(cells) + '</div>'
             )
-    if cells:
-        bar_html = (
-            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
-            f'border-radius:4px;padding:6px 4px;margin-bottom:12px;display:flex;'
-            f'justify-content:space-around;font-family:\'JetBrains Mono\',Consolas,monospace;">'
-            + "".join(cells) + '</div>'
-        )
-        st.markdown(bar_html, unsafe_allow_html=True)
+            st.markdown(bar_html, unsafe_allow_html=True)
 
-    regime = macro["macro_regime"]
-    regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
+        regime = macro["macro_regime"]
+        regime_color = COLORS["green"] if regime == "Risk-On" else COLORS["red"] if regime == "Risk-Off" else COLORS["yellow"]
 
-    # ── Gauge + Top-level metrics ──
-    col_gauge, col_metrics = st.columns([1, 2])
-    with col_gauge:
-        gauge_fig = _make_gauge(macro["macro_score"], regime, regime_color)
-        st.plotly_chart(gauge_fig, use_container_width=True)
+        # ── Gauge + Top-level metrics ──
+        col_gauge, col_metrics = st.columns([1, 2])
+        with col_gauge:
+            gauge_fig = _make_gauge(macro["macro_score"], regime, regime_color)
+            st.plotly_chart(gauge_fig, use_container_width=True)
 
-    with col_metrics:
-        m1, m2, m3 = st.columns(3)
-        m1.markdown(bloomberg_metric("Macro Score", str(macro["macro_score"])), unsafe_allow_html=True)
-        m2.markdown(bloomberg_metric("Quadrant", macro["quadrant"]), unsafe_allow_html=True)
-        m3.markdown(bloomberg_metric("Regime", regime, regime_color), unsafe_allow_html=True)
-        st.markdown(
-            f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
-            f'margin-top:8px;letter-spacing:0.03em;">'
-            f'CONFIDENCE {_confidence_label(macro["avg_confidence"])} ({macro["avg_confidence"]}%) '
-            f'| GROWTH {macro["growth_dir"]} | INFLATION {macro["inflation_dir"]}</div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── Signal Radar ──
-    radar_fig = _make_category_radar(macro["signals"])
-    if radar_fig:
-        _section_header("Signal Radar")
-        st.plotly_chart(radar_fig, use_container_width=True)
-
-    # ── Regime History ──
-    _section_header("Regime History")
-    history_fig = _make_regime_history()
-    if history_fig:
-        st.plotly_chart(history_fig, use_container_width=True)
-    st.caption(f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-    # ── Core Signals ──
-    _section_header(f"Core Signals ({len(macro['signals'])})")
-    _render_signals_table(macro["signals"])
-
-    na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
-    if na_count:
-        cols = st.columns([6, 1])
-        cols[0].warning(
-            f"{na_count} signal(s) showing N/A — FRED data may be temporarily unavailable. "
-            "Click 'Retry' to refresh. Signals auto-recover on next cache cycle."
-        )
-        if cols[1].button("Retry", key="retry_signals"):
-            st.cache_data.clear()
-            st.rerun()
-
-    # ── Signal Health ──
-    with st.expander("Signal Health", expanded=False):
-        _md_age_days = _age_days
-        health_rows = []
-        _expected_freq = {
-            "Yield Curve (10Y-2Y)": 1, "Credit Spreads (HY vs Treasuries)": 1,
-            "Financial Conditions Index": 7, "VIX (Equity Volatility)": 1,
-            "Equity Trend (S&P, Nasdaq, Dow)": 1, "Commodity Trend (Oil + Copper)": 1,
-            "US Dollar Index (DXY proxy)": 1, "Initial Jobless Claims": 7,
-            "HYG/LQD Ratio (Credit Risk Appetite)": 1, "Copper/Gold Ratio (Growth vs Safety)": 1,
-            "Global Liquidity (M2 proxy)": 30, "Unemployment Trend (Sahm context)": 30,
-            "Core Inflation (PCE)": 30, "Industrial Production": 30,
-            "Term Premium": 7, "S&P 500 P/E (CAPE proxy)": 1,
-            "Corporate CAPEX vs Liquidity": 90, "Leading Economic Index": 30,
-            "Gamma Exposure (Dealer Positioning)": 1,
-            "Consumer Sentiment (Michigan)": 30, "Building Permits": 30,
-        }
-        for sig in macro["signals"]:
-            name = sig["Indicator"]
-            conf = sig["Confidence"]
-            expected = _expected_freq.get(name, 7)
-            conf_color = COLORS["green"] if conf >= 75 else (COLORS["yellow"] if conf >= 50 else COLORS["red"])
-            stale_flag = "STALE" if conf < 50 else ""
-            health_rows.append({
-                "Signal": name,
-                "Confidence": f"{conf}%",
-                "Expected Freq": f"{expected}d",
-                "Status": stale_flag,
-            })
-        health_df = pd.DataFrame(health_rows)
-
-        def _color_status(val):
-            if val == "STALE":
-                return f"color: {COLORS['red']}; font-weight: bold"
-            return ""
-
-        styled_health = health_df.style.map(_color_status, subset=["Status"])
-        st.dataframe(styled_health, use_container_width=True, hide_index=True)
-
-    # ── Yield Curve Regime ──
-    yc_regime = macro.get("yield_curve_regime", {})
-    if yc_regime.get("regime") != "Unknown":
-        _section_header("Yield Curve Regime")
-        regime_name = yc_regime["regime"]
-        inv_tag = " **(Inverted)**" if yc_regime.get("inverted") else ""
-
-        yc_descriptions = {
-            "Bull Steepening": "Curve widening with rates falling — Fed easing expectations, positive for risk assets",
-            "Bear Steepening": "Curve widening with rates rising — inflation fears, long-end selling off",
-            "Bull Flattening": "Curve narrowing with rates falling — flight to safety, slowing growth expectations",
-            "Bear Flattening": "Curve narrowing with rates rising — Fed tightening, short-end rates rising faster",
-        }
-
-        c1, c2, c3 = st.columns(3)
-        c1.markdown(f"**Regime:** {regime_name}{inv_tag}")
-        c2.markdown(f"**10Y-2Y Spread:** {yc_regime['spread_now']} bps ({yc_regime['spread_change']:+.3f} 30d chg)")
-        c3.markdown(f"**10Y Yield:** {yc_regime['ten_year_now']}% ({yc_regime['rate_direction']})")
-        st.caption(yc_descriptions.get(regime_name, ""))
-
-    # ── Signal Changes ──
-    history = _load_history()
-    if len(history) >= 2:
-        prev = history[-2]
-        curr = history[-1]
-        prev_sigs = prev.get("signals_summary", {})
-        curr_sigs = curr.get("signals_summary", {})
-        changes = []
-        for name, curr_score in curr_sigs.items():
-            prev_score = prev_sigs.get(name)
-            if prev_score is not None:
-                prev_label = _label_from_score(prev_score)
-                curr_label = _label_from_score(curr_score)
-                if prev_label != curr_label:
-                    changes.append(f"**{name}**: {prev_label} → {curr_label}")
-        if changes:
-            with st.expander(f"Signal Changes vs Previous Session ({prev.get('date', '?')})", expanded=True):
-                for c in changes:
-                    st.markdown(f"- {c}")
-
-    # ── Valuation ──
-    _section_header("Valuation")
-    cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
-    st.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
-    st.caption(macro["valuation"])
-
-    # ── Cycle Stage ──
-    _section_header("Cycle Stage")
-
-    c1, c2, c3, c4 = st.columns(4)
-    capex_lvl = macro.get("capex_level")
-    m2_lvl = macro.get("m2_level")
-    capex_yoy_val = macro.get("capex_yoy")
-    m2_yoy_val = macro.get("m2_yoy")
-
-    c1.markdown(bloomberg_metric("CAPEX (PNFI)",
-        f"${capex_lvl:,.0f}B" if capex_lvl is not None else "N/A"), unsafe_allow_html=True)
-    c2.markdown(bloomberg_metric("M2 Money Supply",
-        f"${m2_lvl:,.0f}B" if m2_lvl is not None else "N/A"), unsafe_allow_html=True)
-    c3.markdown(bloomberg_metric("CAPEX YoY",
-        f"{capex_yoy_val:+.1f}%" if capex_yoy_val is not None else "N/A"), unsafe_allow_html=True)
-    c4.markdown(bloomberg_metric("M2 YoY",
-        f"{m2_yoy_val:+.1f}%" if m2_yoy_val is not None else "N/A"), unsafe_allow_html=True)
-
-    capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
-    st.markdown(bloomberg_metric("CAPEX vs Liquidity Spread", capliq_txt), unsafe_allow_html=True)
-    st.caption(macro["cycle_stage"])
-
-    # ── Summary ──
-    _section_header("Summary")
-    for line in macro["summary"]:
-        st.markdown(f"- {line}")
-
-    # ── Portfolio Bias ──
-    _section_header("Portfolio Bias")
-    bias_items = list(macro["portfolio_bias"].items())
-    cols = st.columns(len(bias_items))
-    for col, (sleeve, bias) in zip(cols, bias_items):
-        col.markdown(bloomberg_metric(sleeve, bias), unsafe_allow_html=True)
-
-    # ── Sector Rotation ──
-    _section_header("Sector Rotation")
-    sector_recs = macro.get("sector_rotation", [])
-    if sector_recs:
-        col_favor, col_avoid = st.columns(2)
-        with col_favor:
+        with col_metrics:
+            m1, m2, m3 = st.columns(3)
+            m1.markdown(bloomberg_metric("Macro Score", str(macro["macro_score"])), unsafe_allow_html=True)
+            m2.markdown(bloomberg_metric("Quadrant", macro["quadrant"]), unsafe_allow_html=True)
+            m3.markdown(bloomberg_metric("Regime", regime, regime_color), unsafe_allow_html=True)
             st.markdown(
-                f'<div style="color:{COLORS["green"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
-                f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Favor</div>',
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                f'margin-top:8px;letter-spacing:0.03em;">'
+                f'CONFIDENCE {_confidence_label(macro["avg_confidence"])} ({macro["avg_confidence"]}%) '
+                f'| GROWTH {macro["growth_dir"]} | INFLATION {macro["inflation_dir"]}</div>',
                 unsafe_allow_html=True,
             )
-            for rec in sector_recs:
-                if rec["action"] == "Favor":
-                    mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
-                    st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
-        with col_avoid:
+
+        # ── Signal Radar ──
+        radar_fig = _make_category_radar(macro["signals"])
+        if radar_fig:
+            _section_header("Signal Radar")
+            st.plotly_chart(radar_fig, use_container_width=True)
+
+        # ── Regime History ──
+        _section_header("Regime History")
+        history_fig = _make_regime_history()
+        if history_fig:
+            st.plotly_chart(history_fig, use_container_width=True)
+        st.caption(f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # ── Core Signals ──
+        _section_header(f"Core Signals ({len(macro['signals'])})")
+        _render_signals_table(macro["signals"])
+
+        na_count = sum(1 for s in macro["signals"] if "N/A" in s.get("Value", ""))
+        if na_count:
+            cols = st.columns([6, 1])
+            cols[0].warning(
+                f"{na_count} signal(s) showing N/A — FRED data may be temporarily unavailable. "
+                "Click 'Retry' to refresh. Signals auto-recover on next cache cycle."
+            )
+            if cols[1].button("Retry", key="retry_signals"):
+                st.cache_data.clear()
+                st.rerun()
+
+        # ── Signal Health ──
+        with st.expander("Signal Health", expanded=False):
+            _md_age_days = _age_days
+            health_rows = []
+            _expected_freq = {
+                "Yield Curve (10Y-2Y)": 1, "Credit Spreads (HY vs Treasuries)": 1,
+                "Financial Conditions Index": 7, "VIX (Equity Volatility)": 1,
+                "Equity Trend (S&P, Nasdaq, Dow)": 1, "Commodity Trend (Oil + Copper)": 1,
+                "US Dollar Index (DXY proxy)": 1, "Initial Jobless Claims": 7,
+                "HYG/LQD Ratio (Credit Risk Appetite)": 1, "Copper/Gold Ratio (Growth vs Safety)": 1,
+                "Global Liquidity (M2 proxy)": 30, "Unemployment Trend (Sahm context)": 30,
+                "Core Inflation (PCE)": 30, "Industrial Production": 30,
+                "Term Premium": 7, "S&P 500 P/E (CAPE proxy)": 1,
+                "Corporate CAPEX vs Liquidity": 90, "Leading Economic Index": 30,
+                "Gamma Exposure (Dealer Positioning)": 1,
+                "Consumer Sentiment (Michigan)": 30, "Building Permits": 30,
+            }
+            for sig in macro["signals"]:
+                name = sig["Indicator"]
+                conf = sig["Confidence"]
+                expected = _expected_freq.get(name, 7)
+                conf_color = COLORS["green"] if conf >= 75 else (COLORS["yellow"] if conf >= 50 else COLORS["red"])
+                stale_flag = "STALE" if conf < 50 else ""
+                health_rows.append({
+                    "Signal": name,
+                    "Confidence": f"{conf}%",
+                    "Expected Freq": f"{expected}d",
+                    "Status": stale_flag,
+                })
+            health_df = pd.DataFrame(health_rows)
+
+            def _color_status(val):
+                if val == "STALE":
+                    return f"color: {COLORS['red']}; font-weight: bold"
+                return ""
+
+            styled_health = health_df.style.map(_color_status, subset=["Status"])
+            st.dataframe(styled_health, use_container_width=True, hide_index=True)
+
+        # ── Yield Curve Regime ──
+        yc_regime = macro.get("yield_curve_regime", {})
+        if yc_regime.get("regime") != "Unknown":
+            _section_header("Yield Curve Regime")
+            regime_name = yc_regime["regime"]
+            inv_tag = " **(Inverted)**" if yc_regime.get("inverted") else ""
+
+            yc_descriptions = {
+                "Bull Steepening": "Curve widening with rates falling — Fed easing expectations, positive for risk assets",
+                "Bear Steepening": "Curve widening with rates rising — inflation fears, long-end selling off",
+                "Bull Flattening": "Curve narrowing with rates falling — flight to safety, slowing growth expectations",
+                "Bear Flattening": "Curve narrowing with rates rising — Fed tightening, short-end rates rising faster",
+            }
+
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f"**Regime:** {regime_name}{inv_tag}")
+            c2.markdown(f"**10Y-2Y Spread:** {yc_regime['spread_now']} bps ({yc_regime['spread_change']:+.3f} 30d chg)")
+            c3.markdown(f"**10Y Yield:** {yc_regime['ten_year_now']}% ({yc_regime['rate_direction']})")
+            st.caption(yc_descriptions.get(regime_name, ""))
+
+        # ── Signal Changes ──
+        history = _load_history()
+        if len(history) >= 2:
+            prev = history[-2]
+            curr = history[-1]
+            prev_sigs = prev.get("signals_summary", {})
+            curr_sigs = curr.get("signals_summary", {})
+            changes = []
+            for name, curr_score in curr_sigs.items():
+                prev_score = prev_sigs.get(name)
+                if prev_score is not None:
+                    prev_label = _label_from_score(prev_score)
+                    curr_label = _label_from_score(curr_score)
+                    if prev_label != curr_label:
+                        changes.append(f"**{name}**: {prev_label} → {curr_label}")
+            if changes:
+                with st.expander(f"Signal Changes vs Previous Session ({prev.get('date', '?')})", expanded=True):
+                    for c in changes:
+                        st.markdown(f"- {c}")
+
+        # ── Valuation ──
+        _section_header("Valuation")
+        cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
+        st.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
+        st.caption(macro["valuation"])
+
+        # ── Cycle Stage ──
+        _section_header("Cycle Stage")
+
+        c1, c2, c3, c4 = st.columns(4)
+        capex_lvl = macro.get("capex_level")
+        m2_lvl = macro.get("m2_level")
+        capex_yoy_val = macro.get("capex_yoy")
+        m2_yoy_val = macro.get("m2_yoy")
+
+        c1.markdown(bloomberg_metric("CAPEX (PNFI)",
+            f"${capex_lvl:,.0f}B" if capex_lvl is not None else "N/A"), unsafe_allow_html=True)
+        c2.markdown(bloomberg_metric("M2 Money Supply",
+            f"${m2_lvl:,.0f}B" if m2_lvl is not None else "N/A"), unsafe_allow_html=True)
+        c3.markdown(bloomberg_metric("CAPEX YoY",
+            f"{capex_yoy_val:+.1f}%" if capex_yoy_val is not None else "N/A"), unsafe_allow_html=True)
+        c4.markdown(bloomberg_metric("M2 YoY",
+            f"{m2_yoy_val:+.1f}%" if m2_yoy_val is not None else "N/A"), unsafe_allow_html=True)
+
+        capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
+        st.markdown(bloomberg_metric("CAPEX vs Liquidity Spread", capliq_txt), unsafe_allow_html=True)
+        st.caption(macro["cycle_stage"])
+
+        # ── Summary ──
+        _section_header("Summary")
+        for line in macro["summary"]:
+            st.markdown(f"- {line}")
+
+        # ── Portfolio Bias ──
+        _section_header("Portfolio Bias")
+        bias_items = list(macro["portfolio_bias"].items())
+        cols = st.columns(len(bias_items))
+        for col, (sleeve, bias) in zip(cols, bias_items):
+            col.markdown(bloomberg_metric(sleeve, bias), unsafe_allow_html=True)
+
+        # ── Sector Rotation ──
+        _section_header("Sector Rotation")
+        sector_recs = macro.get("sector_rotation", [])
+        if sector_recs:
+            col_favor, col_avoid = st.columns(2)
+            with col_favor:
+                st.markdown(
+                    f'<div style="color:{COLORS["green"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Favor</div>',
+                    unsafe_allow_html=True,
+                )
+                for rec in sector_recs:
+                    if rec["action"] == "Favor":
+                        mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
+                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+            with col_avoid:
+                st.markdown(
+                    f'<div style="color:{COLORS["red"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Avoid</div>',
+                    unsafe_allow_html=True,
+                )
+                for rec in sector_recs:
+                    if rec["action"] == "Avoid":
+                        mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
+                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+        else:
+            st.markdown("Sector rotation data unavailable.")
+
+        # ── Risk Management Alerts ──
+        _section_header("Risk Management Alerts")
+        for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
             st.markdown(
-                f'<div style="color:{COLORS["red"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
-                f'font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Avoid</div>',
+                f'<div style="border-left:2px solid {COLORS["red"]};padding:4px 10px;margin:4px 0;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13px;color:{COLORS["text"]};">{alert}</div>',
                 unsafe_allow_html=True,
             )
-            for rec in sector_recs:
-                if rec["action"] == "Avoid":
-                    mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
-                    st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
-    else:
-        st.markdown("Sector rotation data unavailable.")
 
-    # ── Risk Management Alerts ──
-    _section_header("Risk Management Alerts")
-    for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
-        st.markdown(
-            f'<div style="border-left:2px solid {COLORS["red"]};padding:4px 10px;margin:4px 0;'
-            f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13px;color:{COLORS["text"]};">{alert}</div>',
-            unsafe_allow_html=True,
-        )
+        # ── Tactical Opportunities ──
+        _section_header("Tactical Opportunities")
+        tactical = macro.get("tactical_opps", [])
+        if tactical:
+            for opp in tactical:
+                ticker_strs = []
+                for t in opp["tickers"]:
+                    snap = snaps.get(t)
+                    mom = snap.pct_change_30d if snap and snap.pct_change_30d is not None else None
+                    mom_str = f" ({mom:+.1f}% 30d)" if mom is not None else ""
+                    ticker_strs.append(f"**{t}**{mom_str}")
+                st.markdown(f"- **{opp['signal']}**: {opp['opportunity']} — {', '.join(ticker_strs)}")
+        else:
+            st.markdown("No strong cross-signal opportunities detected currently.")
 
-    # ── Tactical Opportunities ──
-    _section_header("Tactical Opportunities")
-    tactical = macro.get("tactical_opps", [])
-    if tactical:
-        for opp in tactical:
-            ticker_strs = []
-            for t in opp["tickers"]:
-                snap = snaps.get(t)
-                mom = snap.pct_change_30d if snap and snap.pct_change_30d is not None else None
-                mom_str = f" ({mom:+.1f}% 30d)" if mom is not None else ""
-                ticker_strs.append(f"**{t}**{mom_str}")
-            st.markdown(f"- **{opp['signal']}**: {opp['opportunity']} — {', '.join(ticker_strs)}")
-    else:
-        st.markdown("No strong cross-signal opportunities detected currently.")
+        # ── SPY Options Sentiment (pre-fetched in parallel) ──
+        _section_header("SPY Options Sentiment")
+        if gamma:
+            asof = gamma.get("asof")
+            if asof:
+                try:
+                    asof_ts = pd.to_datetime(asof, errors="coerce")
+                    if pd.notna(asof_ts):
+                        if asof_ts.tzinfo is not None:
+                            asof_ts = asof_ts.tz_convert(None)
+                        st.caption(f"Last options fetch: {asof_ts.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+                except Exception:
+                    pass
 
-    # ── SPY Options Sentiment (pre-fetched in parallel) ──
-    _section_header("SPY Options Sentiment")
-    if gamma:
-        asof = gamma.get("asof")
-        if asof:
-            try:
-                asof_ts = pd.to_datetime(asof, errors="coerce")
-                if pd.notna(asof_ts):
-                    if asof_ts.tzinfo is not None:
-                        asof_ts = asof_ts.tz_convert(None)
-                    st.caption(f"Last options fetch: {asof_ts.strftime('%Y-%m-%d %H:%M:%S')} UTC")
-            except Exception:
-                pass
+            st.markdown(f"- Current market price: {gamma['price']:.2f}")
+            st.markdown(f"- Current market sentiment: {gamma['zone']}")
+            st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
+            st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
 
-        st.markdown(f"- Current market price: {gamma['price']:.2f}")
-        st.markdown(f"- Current market sentiment: {gamma['zone']}")
-        st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
-        st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
+            m1, m2 = st.columns(2)
+            m1.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)
+            m2.markdown(bloomberg_metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A", COLORS["red"]), unsafe_allow_html=True)
 
-        m1, m2 = st.columns(2)
-        m1.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)
-        m2.markdown(bloomberg_metric("Put Wall", f"{gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "N/A", COLORS["red"]), unsafe_allow_html=True)
+            fig = go.Figure()
+            bar_colors = [COLORS["green"] if val >= 0 else COLORS["red"] for val in gamma["net_gamma"]]
+            fig.add_trace(go.Bar(
+                x=gamma["strikes"],
+                y=gamma["net_gamma"],
+                marker_color=bar_colors,
+                name="Net Gamma Proxy",
+                opacity=0.65,
+                hovertemplate="Strike %{x:.0f}<br>Net Gamma %{y:.0f}<extra></extra>",
+            ))
 
-        fig = go.Figure()
-        bar_colors = [COLORS["green"] if val >= 0 else COLORS["red"] for val in gamma["net_gamma"]]
-        fig.add_trace(go.Bar(
-            x=gamma["strikes"],
-            y=gamma["net_gamma"],
-            marker_color=bar_colors,
-            name="Net Gamma Proxy",
-            opacity=0.65,
-            hovertemplate="Strike %{x:.0f}<br>Net Gamma %{y:.0f}<extra></extra>",
-        ))
+            fig.add_vline(x=gamma["price"], line_color=COLORS["blue"], line_dash="dash", line_width=2)
+            if gamma["call_wall"] is not None:
+                fig.add_vline(x=gamma["call_wall"], line_color=COLORS["green"], line_dash="dash", line_width=1)
+            if gamma["put_wall"] is not None:
+                fig.add_vline(x=gamma["put_wall"], line_color=COLORS["red"], line_dash="dash", line_width=1)
 
-        fig.add_vline(x=gamma["price"], line_color=COLORS["blue"], line_dash="dash", line_width=2)
-        if gamma["call_wall"] is not None:
-            fig.add_vline(x=gamma["call_wall"], line_color=COLORS["green"], line_dash="dash", line_width=1)
-        if gamma["put_wall"] is not None:
-            fig.add_vline(x=gamma["put_wall"], line_color=COLORS["red"], line_dash="dash", line_width=1)
+            fig.update_layout(
+                title="SPY Strike vs Dealer Gamma Proxy",
+                xaxis_title="Strike",
+                yaxis_title="Net Gamma Proxy",
+                height=360,
+                margin=dict(l=20, r=20, t=50, b=20),
+                showlegend=False,
+            )
+            apply_dark_layout(fig)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("SPY options sentiment currently unavailable.")
+            if st.button("Retry SPY Gamma", key="retry_gamma"):
+                st.cache_data.clear()
+                st.rerun()
 
-        fig.update_layout(
-            title="SPY Strike vs Dealer Gamma Proxy",
-            xaxis_title="Strike",
-            yaxis_title="Net Gamma Proxy",
-            height=360,
-            margin=dict(l=20, r=20, t=50, b=20),
-            showlegend=False,
-        )
-        apply_dark_layout(fig)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("SPY options sentiment currently unavailable.")
-        if st.button("Retry SPY Gamma", key="retry_gamma"):
-            st.cache_data.clear()
-            st.rerun()
+    with tab2:
+        _render_fed_forecaster(macro, fred_data)
 
+
+def _render_fed_forecaster(macro: dict, fred_data: dict):
+    """Render Tab 2: Fed Forecaster — placeholder stub."""
+    st.info("Fed Forecaster loading...")
