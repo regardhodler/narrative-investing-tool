@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from unittest.mock import patch, MagicMock
 import pandas as pd
 import numpy as np
+import json
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -291,3 +292,71 @@ class TestBuildFedContext:
         with patch("services.fed_forecaster.fetch_fred_series_safe", return_value=None):
             ctx = build_fed_context(self._make_macro(), fred_data)
         assert ctx["fed_funds_rate"] is None
+
+# ── score_fed_tone ────────────────────────────────────────────────────────────
+
+_SAMPLE_COMMS = [
+    {
+        "title": "Powell: Inflation Still Too High",
+        "date": "2026-03-19",
+        "url": "https://federalreserve.gov/...",
+        "source": "speech",
+        "raw_text": "Chair Powell stated inflation remains well above target and the committee is prepared to hold rates.",
+    }
+]
+
+_HAWKISH_TONE_RESPONSE = {
+    "items": [
+        {
+            "title": "Powell: Inflation Still Too High",
+            "hawkish_prob": 0.85,
+            "neutral_prob": 0.12,
+            "dovish_prob": 0.03,
+            "adjustment_confidence": 0.78,
+        }
+    ],
+    "aggregate_bias": "hawkish",
+    "prob_adjustments": {"hold": 0.08, "cut_25": -0.03, "cut_50": -0.05, "hike_25": 0.00},
+}
+
+
+class TestScoreFedTone:
+    def _mock_groq(self, response_dict):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": json.dumps(response_dict)}}]
+        }
+        return mock_resp
+
+    def test_returns_aggregate_bias_and_adjustments(self):
+        from services.fed_forecaster import _call_groq_tone
+        with patch("services.fed_forecaster.requests.post") as mock_post:
+            mock_post.return_value = self._mock_groq(_HAWKISH_TONE_RESPONSE)
+            result = _call_groq_tone(_SAMPLE_COMMS)
+        assert result["aggregate_bias"] == "hawkish"
+        assert "prob_adjustments" in result
+        assert result["prob_adjustments"]["hold"] == 0.08
+
+    def test_returns_neutral_fallback_on_api_error(self):
+        from services.fed_forecaster import _call_groq_tone
+        with patch("services.fed_forecaster.requests.post", side_effect=Exception("timeout")):
+            result = _call_groq_tone(_SAMPLE_COMMS)
+        assert result["aggregate_bias"] == "neutral"
+        assert all(v == 0.0 for v in result["prob_adjustments"].values())
+
+    def test_returns_neutral_fallback_on_bad_json(self):
+        from services.fed_forecaster import _call_groq_tone
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"choices": [{"message": {"content": "not json"}}]}
+        with patch("services.fed_forecaster.requests.post", return_value=mock_resp):
+            result = _call_groq_tone(_SAMPLE_COMMS)
+        assert result["aggregate_bias"] == "neutral"
+
+    def test_empty_comms_returns_neutral_without_api_call(self):
+        from services.fed_forecaster import _call_groq_tone
+        with patch("services.fed_forecaster.requests.post") as mock_post:
+            result = _call_groq_tone([])
+        mock_post.assert_not_called()
+        assert result["aggregate_bias"] == "neutral"

@@ -313,3 +313,114 @@ def build_fed_context(macro: dict, fred_data: dict) -> dict:
         "macro_score":     macro.get("macro_score", 50),
         "regime":          macro.get("macro_regime", "Unknown"),
     }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GROQ HELPERS
+# ─────────────────────────────────────────────────────────────────────────────
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL   = "meta-llama/llama-4-scout-17b-16e-instruct"
+
+
+def _groq_headers() -> dict:
+    api_key = os.getenv("GROQ_API_KEY", "")
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _strip_fences(text: str) -> str:
+    """Remove markdown code fences from Groq response if present."""
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n", 1)
+        text = lines[1] if len(lines) > 1 else ""
+        if text.endswith("```"):
+            text = text[:-3]
+    return text.strip()
+
+
+def _neutral_tone_fallback() -> dict:
+    return {
+        "items": [],
+        "aggregate_bias": "neutral",
+        "prob_adjustments": {k: 0.0 for k in SCENARIO_KEYS},
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FED TONE SCORING
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _call_groq_tone(communications: list[dict]) -> dict:
+    """
+    Internal: call Groq to score Fed communication tone.
+    Not cached — called by the cached score_fed_tone wrapper.
+    """
+    if not communications:
+        return _neutral_tone_fallback()
+
+    items_text = "\n\n".join(
+        f"[{i+1}] {c['title']} ({c['date']})\n{c['raw_text']}"
+        for i, c in enumerate(communications)
+    )
+
+    prompt = f"""You are a Federal Reserve communication analyst. Score the following Fed statements for monetary policy tone.
+
+Statements:
+{items_text}
+
+Return ONLY valid JSON (no markdown fences) matching this schema:
+{{
+  "items": [
+    {{
+      "title": "<title>",
+      "hawkish_prob": <0.0-1.0>,
+      "neutral_prob": <0.0-1.0>,
+      "dovish_prob": <0.0-1.0>,
+      "adjustment_confidence": <0.0-1.0>
+    }}
+  ],
+  "aggregate_bias": "hawkish" | "neutral" | "dovish",
+  "prob_adjustments": {{
+    "hold": <-0.15 to +0.15>,
+    "cut_25": <-0.15 to +0.15>,
+    "cut_50": <-0.15 to +0.15>,
+    "hike_25": <-0.15 to +0.15>
+  }}
+}}
+
+Rules:
+- hawkish_prob + neutral_prob + dovish_prob must sum to 1.0 per item
+- prob_adjustments must sum to 0 (they are redistributions)
+- Hawkish = signals higher rates or holding; dovish = signals cuts
+- adjustment_confidence is how confident you are in the adjustment (0=none, 1=certain)"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers=_groq_headers(),
+            json={
+                "model": GROQ_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 600,
+                "temperature": 0.2,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        text = _strip_fences(resp.json()["choices"][0]["message"]["content"])
+        return json.loads(text)
+    except Exception:
+        return _neutral_tone_fallback()
+
+
+@st.cache_data(ttl=3600)
+def score_fed_tone(comm_key: str, _communications: list[dict]) -> dict:
+    """
+    Score Fed communications tone via Groq.
+    comm_key: stable hash of [(title, date)] — used as cache discriminator.
+    _communications: leading underscore = Streamlit skips hashing this arg.
+    """
+    return _call_groq_tone(_communications)
