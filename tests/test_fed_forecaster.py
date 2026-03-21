@@ -474,3 +474,86 @@ class TestConstants:
     def test_black_swan_events_has_four_entries(self):
         from services.fed_forecaster import BLACK_SWAN_EVENTS
         assert len(BLACK_SWAN_EVENTS) == 4
+
+
+# ── _call_groq_core_forecast ──────────────────────────────────────────────────
+
+class TestCallGroqCoreForecast:
+    """Tests for _call_groq_core_forecast."""
+
+    def _make_mock_response(self, chain=None):
+        """Build a valid mock Groq response for core forecast."""
+        asset_data = {
+            "near_term": [0.1] * 7,
+            "medium_term": [0.2] * 12,
+            "long_term": [0.3] * 8,
+        }
+        chain = chain if chain is not None else ["step1", "step2", "step3", "step4", "step5"]
+        scenario = {k: asset_data for k in ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]}
+        scenario["causal_chain"] = chain
+        return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
+
+    def _patch_groq(self, monkeypatch, response_data):
+        """Patch requests.post to return response_data as a Groq-style response."""
+        import json as _json
+        import types
+
+        class MockResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"choices": [{"message": {"content": _json.dumps(response_data)}}]}
+
+        monkeypatch.setattr("services.fed_forecaster.requests.post", lambda *a, **kw: MockResp())
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    def test_returns_all_scenarios(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        assert set(result.keys()) == {"hold", "cut_25", "cut_50", "hike_25"}
+
+    def test_returns_required_asset_keys(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        expected = {"spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd", "causal_chain"}
+        assert set(result["hold"].keys()) == expected
+
+    def test_near_term_has_seven_values(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        assert len(result["hold"]["spy"]["near_term"]) == 7
+
+    def test_medium_term_has_twelve_values(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        assert len(result["hold"]["spy"]["medium_term"]) == 12
+
+    def test_long_term_has_eight_values(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        assert len(result["hold"]["spy"]["long_term"]) == 8
+
+    def test_causal_chain_present_and_non_empty(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_core_forecast("{}", "{}")
+        assert len(result["hold"]["causal_chain"]) >= 2
+
+    def test_causal_chain_fallback_when_empty(self, monkeypatch):
+        """When Groq returns empty causal_chain, post-processing injects a 2-step fallback."""
+        from services.fed_forecaster import _call_groq_core_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response(chain=[]))
+        result = _call_groq_core_forecast("{}", "{}")
+        chain = result["hold"]["causal_chain"]
+        assert len(chain) >= 2
+        assert isinstance(chain[0], str)
+
+    def test_raises_without_api_key(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_core_forecast
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+            _call_groq_core_forecast("{}", "{}")

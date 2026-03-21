@@ -563,6 +563,68 @@ Rules:
         return None
 
 
+def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Call Groq for US equities, bonds, USD across all 3 time horizons + causal chains.
+
+    Returns dict keyed by scenario (hold/cut_25/cut_50/hike_25), each containing:
+      - spy, qqq, iwm, dji, bonds_long, bonds_short, usd: each with
+          near_term: list of 7 floats (daily % change, days 1-7)
+          medium_term: list of 12 floats (monthly % change, months 1-12)
+          long_term: list of 8 floats (quarterly % change, Q1-Q8, 2-year horizon)
+      - causal_chain: list of strings (≥2 after post-processing)
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY not set")
+
+    prompt = (
+        "You are a macro-economist. Return ONLY valid json (no commentary).\n\n"
+        f"Given this macro context:\n{context_json}\n\n"
+        f"And these FOMC scenarios:\n{scenarios_json}\n\n"
+        "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
+        "Each scenario maps to an object with keys: spy, qqq, iwm, dji, bonds_long, bonds_short, usd, causal_chain.\n\n"
+        "Each asset (except causal_chain) has:\n"
+        '  "near_term": array of exactly 7 floats (daily % change days 1-7)\n'
+        '  "medium_term": array of exactly 12 floats (monthly % change months 1-12)\n'
+        '  "long_term": array of exactly 8 floats (quarterly % change Q1-Q8, 2-year horizon)\n\n'
+        '"causal_chain" is an array of AT LEAST 5 strings describing the Fed policy transmission mechanism.\n'
+        "Example causal_chain for cut_25:\n"
+        '["Fed cuts 25bp → fed funds target drops","Lower short rates reduce borrowing costs",'
+        '"Credit conditions loosen → business investment rises",'
+        '"Consumer spending picks up on lower mortgage/card rates",'
+        '"Corporate earnings expand → equity multiples re-rate higher"]\n\n'
+        "bonds_long = 30-year Treasury / TLT proxy\n"
+        "bonds_short = 2-year Treasury / SHY proxy\n"
+    )
+
+    headers = _groq_headers()
+    payload = {
+        "model": GROQ_MODEL,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "You are a macro-economist. Return only valid json."},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 4096,
+        "temperature": 0.3,
+    }
+    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    raw = resp.json()["choices"][0]["message"]["content"]
+    data = json.loads(_strip_fences(raw))
+
+    # Post-process: ensure causal chains have ≥2 steps
+    for scenario_key, scenario_label in SCENARIO_LABELS.items():
+        chain = data.get(scenario_key, {}).get("causal_chain", [])
+        if not chain:
+            delta = _SCENARIO_DELTAS.get(scenario_key, 0.0)
+            data.setdefault(scenario_key, {})["causal_chain"] = [
+                f"Fed {scenario_label} → policy rate shifts {delta:+.2f}%",
+                "Rate change transmits to credit markets over 3–6 months",
+            ]
+    return data
+
+
 @st.cache_data(ttl=14400)
 def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
     """
