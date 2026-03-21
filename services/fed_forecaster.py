@@ -143,9 +143,7 @@ def fetch_zq_probabilities() -> list[dict]:
         if df is not None and not df.empty and "Close" in df.columns:
             price = float(df["Close"].dropna().iloc[-1])
             implied = 100.0 - price
-            result = _derive_probabilities_from_implied_rate(implied, current_rate)
-            result[0]["source"] = "yfinance"
-            return result
+            return _derive_probabilities_from_implied_rate(implied, current_rate)
     except Exception:
         pass
 
