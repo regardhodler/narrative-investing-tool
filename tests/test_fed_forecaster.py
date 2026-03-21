@@ -360,3 +360,104 @@ class TestScoreFedTone:
             result = _call_groq_tone([])
         mock_post.assert_not_called()
         assert result["aggregate_bias"] == "neutral"
+
+# ── generate_forecast ─────────────────────────────────────────────────────────
+
+import json as _json
+
+_MINIMAL_FORECAST = {
+    "near_term": {
+        "hold": {
+            "equities":    {"direction": "down", "magnitude_low": -8.0, "magnitude_high": -3.0, "direction_prob": 0.72, "magnitude_confidence": 0.65, "chain": [{"step": "Real yields stay positive", "confidence": 0.72}]},
+            "bonds":       {"direction": "up",   "magnitude_low":  1.0, "magnitude_high":  3.0, "direction_prob": 0.80, "magnitude_confidence": 0.75, "chain": [{"step": "Flight to safety bid", "confidence": 0.80}]},
+            "commodities": {"direction": "up",   "magnitude_low":  2.0, "magnitude_high":  5.0, "direction_prob": 0.65, "magnitude_confidence": 0.60, "chain": [{"step": "Inflation hedge demand", "confidence": 0.65}]},
+            "usd":         {"direction": "up",   "magnitude_low":  0.5, "magnitude_high":  2.0, "direction_prob": 0.74, "magnitude_confidence": 0.70, "chain": [{"step": "Carry advantage persists", "confidence": 0.74}]},
+        },
+        "cut_25": {
+            "equities":    {"direction": "up",   "magnitude_low": 2.0, "magnitude_high": 6.0,  "direction_prob": 0.65, "magnitude_confidence": 0.60, "chain": []},
+            "bonds":       {"direction": "up",   "magnitude_low": 3.0, "magnitude_high": 6.0,  "direction_prob": 0.85, "magnitude_confidence": 0.80, "chain": []},
+            "commodities": {"direction": "up",   "magnitude_low": 1.0, "magnitude_high": 4.0,  "direction_prob": 0.62, "magnitude_confidence": 0.58, "chain": []},
+            "usd":         {"direction": "down", "magnitude_low":-3.0, "magnitude_high": -1.0, "direction_prob": 0.70, "magnitude_confidence": 0.65, "chain": []},
+        },
+        "cut_50": {
+            "equities":    {"direction": "flat", "magnitude_low":-2.0, "magnitude_high": 5.0, "direction_prob": 0.48, "magnitude_confidence": 0.40, "chain": []},
+            "bonds":       {"direction": "up",   "magnitude_low": 4.0, "magnitude_high": 8.0, "direction_prob": 0.82, "magnitude_confidence": 0.75, "chain": []},
+            "commodities": {"direction": "up",   "magnitude_low": 3.0, "magnitude_high": 8.0, "direction_prob": 0.70, "magnitude_confidence": 0.65, "chain": []},
+            "usd":         {"direction": "down", "magnitude_low":-6.0, "magnitude_high":-3.0, "direction_prob": 0.80, "magnitude_confidence": 0.75, "chain": []},
+        },
+        "hike_25": {
+            "equities":    {"direction": "down", "magnitude_low":-15.0,"magnitude_high":-8.0,  "direction_prob": 0.88, "magnitude_confidence": 0.80, "chain": []},
+            "bonds":       {"direction": "down", "magnitude_low":-12.0,"magnitude_high":-5.0,  "direction_prob": 0.90, "magnitude_confidence": 0.85, "chain": []},
+            "commodities": {"direction": "down", "magnitude_low": -6.0,"magnitude_high":-2.0,  "direction_prob": 0.60, "magnitude_confidence": 0.55, "chain": []},
+            "usd":         {"direction": "up",   "magnitude_low":  2.0,"magnitude_high":  5.0, "direction_prob": 0.88, "magnitude_confidence": 0.85, "chain": []},
+        },
+    },
+    "medium_term": {
+        "hold": {
+            "equities":    {"monthly_p25": [-2.0]*12, "monthly_p50": [-1.0]*12, "monthly_p75": [0.0]*12, "narrative": "Equities face headwinds."},
+            "bonds":       {"monthly_p25": [0.5]*12,  "monthly_p50": [1.0]*12,  "monthly_p75": [1.5]*12, "narrative": "Bonds benefit from safety."},
+            "commodities": {"monthly_p25": [1.0]*12,  "monthly_p50": [2.0]*12,  "monthly_p75": [3.0]*12, "narrative": "Commodities supported by inflation."},
+            "usd":         {"monthly_p25": [0.2]*12,  "monthly_p50": [0.5]*12,  "monthly_p75": [0.8]*12, "narrative": "USD supported by carry."},
+        },
+        "cut_25":  {"equities": {"monthly_p25": [0.5]*12, "monthly_p50": [1.0]*12, "monthly_p75": [1.5]*12, "narrative": "..."}, "bonds": {"monthly_p25": [1.0]*12, "monthly_p50": [1.5]*12, "monthly_p75": [2.0]*12, "narrative": "..."}, "commodities": {"monthly_p25": [0.5]*12, "monthly_p50": [1.0]*12, "monthly_p75": [1.5]*12, "narrative": "..."}, "usd": {"monthly_p25": [-0.5]*12, "monthly_p50": [-0.2]*12, "monthly_p75": [0.1]*12, "narrative": "..."}},
+        "cut_50":  {"equities": {"monthly_p25": [-1.0]*12, "monthly_p50": [0.0]*12, "monthly_p75": [1.0]*12, "narrative": "..."}, "bonds": {"monthly_p25": [2.0]*12, "monthly_p50": [2.5]*12, "monthly_p75": [3.0]*12, "narrative": "..."}, "commodities": {"monthly_p25": [1.5]*12, "monthly_p50": [2.5]*12, "monthly_p75": [3.5]*12, "narrative": "..."}, "usd": {"monthly_p25": [-1.5]*12, "monthly_p50": [-1.0]*12, "monthly_p75": [-0.5]*12, "narrative": "..."}},
+        "hike_25": {"equities": {"monthly_p25": [-5.0]*12, "monthly_p50": [-3.0]*12, "monthly_p75": [-1.0]*12, "narrative": "..."}, "bonds": {"monthly_p25": [-3.0]*12, "monthly_p50": [-2.0]*12, "monthly_p75": [-1.0]*12, "narrative": "..."}, "commodities": {"monthly_p25": [-2.0]*12, "monthly_p50": [-1.0]*12, "monthly_p75": [0.0]*12, "narrative": "..."}, "usd": {"monthly_p25": [1.0]*12, "monthly_p50": [1.5]*12, "monthly_p75": [2.0]*12, "narrative": "..."}},
+    },
+    "causal_chains": {
+        "hold":    [{"step": "Fed holds", "confidence": 1.0}, {"step": "Inflation elevated", "confidence": 0.78}],
+        "cut_25":  [{"step": "Fed cuts 25bp", "confidence": 1.0}, {"step": "Credit conditions ease", "confidence": 0.72}],
+        "cut_50":  [{"step": "Fed cuts 50bp", "confidence": 1.0}, {"step": "Panic signal to market", "confidence": 0.68}],
+        "hike_25": [{"step": "Fed hikes 25bp", "confidence": 1.0}, {"step": "Credit tightens sharply", "confidence": 0.82}],
+    },
+}
+
+
+class TestGenerateForecast:
+    def _mock_groq(self, response_dict):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {
+            "choices": [{"message": {"content": _json.dumps(response_dict)}}]
+        }
+        return mock_resp
+
+    def _context_json(self):
+        return _json.dumps({"fed_funds_rate": 5.33, "quadrant": "Stagflation",
+                            "macro_score": 28, "regime": "Risk-Off"})
+
+    def _scenarios_json(self):
+        return _json.dumps([{"scenario": "hold", "prob": 0.52},
+                            {"scenario": "cut_25", "prob": 0.38},
+                            {"scenario": "cut_50", "prob": 0.07},
+                            {"scenario": "hike_25", "prob": 0.03}])
+
+    def test_returns_parsed_forecast_dict(self):
+        from services.fed_forecaster import _call_groq_forecast
+        with patch("services.fed_forecaster.requests.post") as mock_post:
+            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        assert result is not None
+        assert "near_term" in result
+        assert "medium_term" in result
+        assert "causal_chains" in result
+
+    def test_near_term_has_all_four_scenarios(self):
+        from services.fed_forecaster import _call_groq_forecast
+        with patch("services.fed_forecaster.requests.post") as mock_post:
+            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        assert set(result["near_term"].keys()) == {"hold", "cut_25", "cut_50", "hike_25"}
+
+    def test_returns_none_on_api_failure(self):
+        from services.fed_forecaster import _call_groq_forecast
+        with patch("services.fed_forecaster.requests.post", side_effect=Exception("timeout")):
+            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        assert result is None
+
+    def test_monthly_arrays_have_12_elements(self):
+        from services.fed_forecaster import _call_groq_forecast
+        with patch("services.fed_forecaster.requests.post") as mock_post:
+            mock_post.return_value = self._mock_groq(_MINIMAL_FORECAST)
+            result = _call_groq_forecast(self._context_json(), self._scenarios_json())
+        equities_hold = result["medium_term"]["hold"]["equities"]
+        assert len(equities_hold["monthly_p50"]) == 12

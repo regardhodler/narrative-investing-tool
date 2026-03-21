@@ -424,3 +424,95 @@ def score_fed_tone(comm_key: str, _communications: list[dict]) -> dict:
     _communications: leading underscore = Streamlit skips hashing this arg.
     """
     return _call_groq_tone(_communications)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FORECAST GENERATION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _call_groq_forecast(context_json: str, scenarios_json: str) -> dict | None:
+    """
+    Internal: single Groq call covering all 4 scenarios, both time horizons.
+    Not cached — called by the cached generate_forecast wrapper.
+    Returns parsed dict or None on failure.
+    """
+    context = json.loads(context_json)
+    scenarios = json.loads(scenarios_json)
+
+    scenarios_text = "\n".join(
+        f"- {SCENARIO_LABELS[s['scenario']]}: {s['prob']*100:.0f}%"
+        for s in scenarios
+    )
+
+    prompt = f"""You are a senior macro strategist. Given the current economic regime and Fed policy scenarios below, provide a probability-weighted forecast for 4 asset classes.
+
+CURRENT REGIME:
+- Fed Funds Rate: {context.get('fed_funds_rate', 'N/A')}%
+- Core PCE Inflation: {context.get('core_pce', 'N/A')}%
+- Unemployment: {context.get('unemployment', 'N/A')}%
+- Yield Curve (10Y-2Y): {context.get('yield_curve', 'N/A')}%
+- Credit Spread (HY): {context.get('credit_spread', 'N/A')}%
+- Dalio Quadrant: {context.get('quadrant', 'N/A')}
+- Macro Score: {context.get('macro_score', 'N/A')}/100 ({context.get('regime', 'N/A')})
+
+FED POLICY SCENARIOS (market-implied probabilities):
+{scenarios_text}
+
+Return ONLY valid JSON (no markdown fences) with this EXACT structure for all 4 scenarios (hold, cut_25, cut_50, hike_25):
+
+{{
+  "near_term": {{
+    "<scenario_key>": {{
+      "equities":    {{"direction": "up|down|flat", "magnitude_low": <float>, "magnitude_high": <float>, "direction_prob": <0-1>, "magnitude_confidence": <0-1>, "chain": [{{"step": "<text>", "confidence": <0-1>}}]}},
+      "bonds":       {{...same structure...}},
+      "commodities": {{...same structure...}},
+      "usd":         {{...same structure...}}
+    }}
+  }},
+  "medium_term": {{
+    "<scenario_key>": {{
+      "equities":    {{"monthly_p25": [<12 floats>], "monthly_p50": [<12 floats>], "monthly_p75": [<12 floats>], "narrative": "<1-2 sentences>"}},
+      "bonds":       {{...same structure...}},
+      "commodities": {{...same structure...}},
+      "usd":         {{...same structure...}}
+    }}
+  }},
+  "causal_chains": {{
+    "<scenario_key>": [{{"step": "<text>", "confidence": <0-1 cumulative decay>}}]
+  }}
+}}
+
+Rules:
+- magnitude values are percentage returns (e.g. -8.0 means -8%)
+- chain confidence values are CUMULATIVE (each hop lower than the previous)
+- monthly arrays have EXACTLY 12 values (months 1-12 from today), cumulative % returns
+- p25 < p50 < p75 for each month
+- Use scenario keys: hold, cut_25, cut_50, hike_25"""
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers=_groq_headers(),
+            json={
+                "model": GROQ_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 4096,
+                "temperature": 0.3,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        text = _strip_fences(resp.json()["choices"][0]["message"]["content"])
+        return json.loads(text)
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=14400)
+def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
+    """
+    Generate probability-weighted Fed policy forecast via Groq.
+    Both args are JSON strings (hashable by st.cache_data).
+    Returns parsed forecast dict or None on failure.
+    """
+    return _call_groq_forecast(context_json, scenarios_json)
