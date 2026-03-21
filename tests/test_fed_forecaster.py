@@ -614,3 +614,72 @@ class TestCallGroqCommoditiesIntlForecast:
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
             _call_groq_commodities_intl_forecast("{}", "{}")
+
+
+class TestCallGroqBlackSwanForecast:
+    """Tests for _call_groq_black_swan_forecast."""
+
+    def _make_mock_response(self):
+        """Build a valid mock Groq response for black swan forecast."""
+        event_data = {
+            "probability_pct": 5.0,
+            "asset_impacts": {
+                "spy": "bearish",
+                "qqq": "bearish",
+                "iwm": "bearish",
+                "bonds_long": "bullish",
+                "bonds_short": "neutral",
+                "gold": "strongly bullish",
+                "oil": "bullish",
+                "usd": "neutral",
+            },
+            "narrative": "War escalation drives risk-off flows into safe havens.",
+        }
+        return {k: event_data for k in ["war_escalation", "hormuz_closure", "nuclear_event", "hyperinflation"]}
+
+    def _patch_groq(self, monkeypatch, response_data):
+        import json as _json
+
+        class MockResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"choices": [{"message": {"content": _json.dumps(response_data)}}]}
+
+        monkeypatch.setattr("services.fed_forecaster.requests.post", lambda *a, **kw: MockResp())
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    def test_returns_four_events(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_black_swan_forecast, BLACK_SWAN_EVENTS
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_black_swan_forecast("{}")
+        assert set(result.keys()) == set(BLACK_SWAN_EVENTS.keys())
+
+    def test_probabilities_are_floats_in_range(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_black_swan_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_black_swan_forecast("{}")
+        for event in result.values():
+            assert isinstance(event["probability_pct"], (int, float))
+            assert 0 <= event["probability_pct"] <= 100
+
+    def test_narrative_is_non_empty_string(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_black_swan_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_black_swan_forecast("{}")
+        for event in result.values():
+            assert isinstance(event["narrative"], str)
+            assert len(event["narrative"]) > 10
+
+    def test_asset_impacts_has_required_keys(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_black_swan_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_black_swan_forecast("{}")
+        expected_assets = {"spy", "qqq", "iwm", "bonds_long", "bonds_short", "gold", "oil", "usd"}
+        for event in result.values():
+            assert set(event["asset_impacts"].keys()) == expected_assets
+
+    def test_raises_without_api_key(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_black_swan_forecast
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+            _call_groq_black_swan_forecast("{}")

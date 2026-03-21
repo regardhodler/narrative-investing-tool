@@ -672,6 +672,55 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
     return json.loads(_strip_fences(raw))
 
 
+def _call_groq_black_swan_forecast(context_json: str) -> dict:
+    """Call Groq to estimate black swan event probabilities and asset impacts.
+
+    Returns dict keyed by event name (war_escalation/hormuz_closure/nuclear_event/hyperinflation),
+    each containing:
+      probability_pct: float (0-100) — estimated annual probability
+      asset_impacts: dict of asset_key → qualitative label
+        Keys: spy, qqq, iwm, bonds_long, bonds_short, gold, oil, usd
+        Values: one of "strongly bullish"/"bullish"/"neutral"/"bearish"/"strongly bearish"
+      narrative: str — 1-2 sentences on transmission mechanism
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY not set")
+
+    events_desc = "\n".join(
+        f"- {k}: {v}" for k, v in BLACK_SWAN_EVENTS.items()
+    )
+    prompt = (
+        "You are a macro risk analyst. Return ONLY valid json (no commentary).\n\n"
+        f"Macro context:\n{context_json}\n\n"
+        "For each of these tail-risk events, estimate:\n"
+        "1. probability_pct: estimated annual probability (float 0-100)\n"
+        "2. asset_impacts: dict mapping each of "
+        "[spy, qqq, iwm, bonds_long, bonds_short, gold, oil, usd] to one of: "
+        '"strongly bullish", "bullish", "neutral", "bearish", "strongly bearish"\n'
+        "3. narrative: 1-2 sentences on transmission mechanism\n\n"
+        f"Events:\n{events_desc}\n\n"
+        "Return JSON with exactly these top-level keys: "
+        "war_escalation, hormuz_closure, nuclear_event, hyperinflation"
+    )
+
+    headers = _groq_headers()
+    payload = {
+        "model": GROQ_MODEL,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "You are a macro risk analyst. Return only valid json."},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 2048,
+        "temperature": 0.3,
+    }
+    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    raw = resp.json()["choices"][0]["message"]["content"]
+    return json.loads(_strip_fences(raw))
+
+
 @st.cache_data(ttl=14400)
 def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
     """
