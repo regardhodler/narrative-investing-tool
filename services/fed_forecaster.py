@@ -243,3 +243,72 @@ def fetch_fed_communications(max_items: int = 5) -> list[dict]:
     for item in all_items:
         item.pop("_sort_key", None)
     return all_items[:max_items]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ADJUST PROBABILITIES (pure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def adjust_probabilities(base_probs: list[dict], tone_result: dict) -> list[dict]:
+    """
+    Apply tone-derived probability adjustments to base ZQ probabilities.
+    Clamps to [0, 1] then re-normalises to sum to 1.0.
+    Adds a signed `delta` field to each item.
+    """
+    adjustments = tone_result.get("prob_adjustments", {})
+
+    adjusted = []
+    for item in base_probs:
+        key = item["scenario"]
+        raw_adj = adjustments.get(key, 0.0)
+        new_prob = max(0.0, min(1.0, item["prob"] + raw_adj))
+        adjusted.append({**item, "prob": new_prob, "delta": raw_adj})
+
+    # Re-normalise
+    total = sum(r["prob"] for r in adjusted)
+    if total > 0:
+        for r in adjusted:
+            r["prob"] = r["prob"] / total
+
+    return adjusted
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BUILD FED CONTEXT (pure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _safe_last(series) -> float | None:
+    """Extract last non-null float from a pandas Series, or None."""
+    if series is None:
+        return None
+    try:
+        clean = series.dropna()
+        if clean.empty:
+            return None
+        return float(clean.iloc[-1])
+    except Exception:
+        return None
+
+
+def build_fed_context(macro: dict, fred_data: dict) -> dict:
+    """
+    Package current macro regime signals into a serialisable dict for the Groq prompt.
+    Does not make network calls. Falls back gracefully when series are None.
+    """
+    fedfunds_series = fred_data.get("fedfunds")
+    fed_rate = _safe_last(fedfunds_series)
+    if fed_rate is None:
+        # Last-resort: try disk cache directly
+        fallback = fetch_fred_series_safe("FEDFUNDS")
+        fed_rate = _safe_last(fallback)
+
+    return {
+        "fed_funds_rate":  fed_rate,
+        "core_pce":        _safe_last(fred_data.get("core_pce")),
+        "unemployment":    _safe_last(fred_data.get("unrate")),
+        "yield_curve":     _safe_last(fred_data.get("yield_curve")),
+        "credit_spread":   _safe_last(fred_data.get("credit_spread")),
+        "quadrant":        macro.get("quadrant", "Unknown"),
+        "macro_score":     macro.get("macro_score", 50),
+        "regime":          macro.get("macro_regime", "Unknown"),
+    }

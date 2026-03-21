@@ -179,3 +179,100 @@ class TestFetchFedCommunications:
             # Both feeds return the same 2-item RSS → 4 items total before truncation
             items = fetch_fed_communications(max_items=1)
         assert len(items) == 1  # strictly enforced
+
+
+# ── adjust_probabilities ──────────────────────────────────────────────────────
+
+class TestAdjustProbabilities:
+    def _base_probs(self):
+        return [
+            {"scenario": "hold",    "prob": 0.52, "implied_rate": 5.4, "source": "yfinance"},
+            {"scenario": "cut_25",  "prob": 0.38, "implied_rate": 5.4, "source": "yfinance"},
+            {"scenario": "cut_50",  "prob": 0.07, "implied_rate": 5.4, "source": "yfinance"},
+            {"scenario": "hike_25", "prob": 0.03, "implied_rate": 5.4, "source": "yfinance"},
+        ]
+
+    def _tone_result(self):
+        return {
+            "aggregate_bias": "hawkish",
+            "prob_adjustments": {"hold": 0.08, "cut_25": -0.03, "cut_50": -0.05, "hike_25": 0.00},
+        }
+
+    def test_probabilities_still_sum_to_one_after_adjustment(self):
+        from services.fed_forecaster import adjust_probabilities
+        result = adjust_probabilities(self._base_probs(), self._tone_result())
+        total = sum(r["prob"] for r in result)
+        assert abs(total - 1.0) < 1e-9
+
+    def test_adjustment_increases_hold(self):
+        from services.fed_forecaster import adjust_probabilities
+        result = adjust_probabilities(self._base_probs(), self._tone_result())
+        before = 0.52
+        after = next(r["prob"] for r in result if r["scenario"] == "hold")
+        assert after > before
+
+    def test_delta_field_present_and_signed(self):
+        from services.fed_forecaster import adjust_probabilities
+        result = adjust_probabilities(self._base_probs(), self._tone_result())
+        hold = next(r for r in result if r["scenario"] == "hold")
+        assert "delta" in hold
+        assert hold["delta"] > 0  # hawkish → hold went up
+
+    def test_probabilities_clamped_to_zero(self):
+        from services.fed_forecaster import adjust_probabilities
+        # Force a huge negative adjustment
+        tone = {"aggregate_bias": "dovish",
+                "prob_adjustments": {"hold": -2.0, "cut_25": 0.0, "cut_50": 0.0, "hike_25": 0.0}}
+        result = adjust_probabilities(self._base_probs(), tone)
+        assert all(r["prob"] >= 0.0 for r in result)
+
+    def test_zero_adjustment_preserves_base(self):
+        from services.fed_forecaster import adjust_probabilities
+        zero_tone = {"aggregate_bias": "neutral",
+                     "prob_adjustments": {"hold": 0.0, "cut_25": 0.0, "cut_50": 0.0, "hike_25": 0.0}}
+        base = self._base_probs()
+        result = adjust_probabilities(base, zero_tone)
+        for orig, adj in zip(base, result):
+            assert abs(orig["prob"] - adj["prob"]) < 1e-9
+
+
+# ── build_fed_context ─────────────────────────────────────────────────────────
+
+class TestBuildFedContext:
+    def _make_fred_data(self):
+        idx = pd.date_range("2026-01-01", periods=3, freq="MS")
+        return {
+            "fedfunds":     pd.Series([5.33, 5.33, 5.33], index=idx),
+            "core_pce":     pd.Series([3.1, 3.2, 3.3], index=idx),
+            "unrate":       pd.Series([4.0, 4.1, 4.2], index=idx),
+            "yield_curve":  pd.Series([-0.3, -0.2, -0.1], index=idx),
+            "credit_spread": pd.Series([3.2, 3.3, 3.4], index=idx),
+        }
+
+    def _make_macro(self):
+        return {
+            "quadrant": "Stagflation",
+            "macro_score": 28,
+            "macro_regime": "Risk-Off",
+        }
+
+    def test_returns_all_required_keys(self):
+        from services.fed_forecaster import build_fed_context
+        ctx = build_fed_context(self._make_macro(), self._make_fred_data())
+        for key in ("fed_funds_rate", "core_pce", "unemployment",
+                    "yield_curve", "credit_spread", "quadrant",
+                    "macro_score", "regime"):
+            assert key in ctx, f"Missing key: {key}"
+
+    def test_fed_funds_rate_extracted(self):
+        from services.fed_forecaster import build_fed_context
+        ctx = build_fed_context(self._make_macro(), self._make_fred_data())
+        assert abs(ctx["fed_funds_rate"] - 5.33) < 0.01
+
+    def test_missing_fedfunds_does_not_raise(self):
+        from services.fed_forecaster import build_fed_context
+        fred_data = self._make_fred_data()
+        fred_data["fedfunds"] = None
+        ctx = build_fed_context(self._make_macro(), fred_data)
+        # Should not raise; fed_funds_rate may be None or a fallback float
+        assert "fed_funds_rate" in ctx
