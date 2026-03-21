@@ -1803,5 +1803,93 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 
 
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
-    """Sections 4-6 stub."""
-    st.info("Asset matrix — coming in next step")
+    """Sections 4-6: asset matrix, causal chain, fan charts."""
+    from services.fed_forecaster import (
+        build_fed_context, generate_forecast, SCENARIO_KEYS, SCENARIO_LABELS,
+    )
+    import json as _json
+
+    # Build and call forecast
+    context = build_fed_context(macro, fred_data)
+    context_json   = _json.dumps(context)
+    scenarios_json = _json.dumps(adj_probs)
+    forecast = generate_forecast(context_json, scenarios_json)
+
+    if forecast is None:
+        st.error("Fed forecast unavailable — Groq API error or key not set.")
+        return
+
+    near = forecast.get("near_term", {})
+    medium = forecast.get("medium_term", {})
+    chains = forecast.get("causal_chains", {})
+
+    # ── Section 4: Near-Term Asset Impact Matrix ──────────────────────────────
+    _section_header("Near-Term Asset Impact (0–3 months)")
+
+    ASSET_KEYS   = ["equities", "bonds", "commodities", "usd"]
+    ASSET_LABELS = {"equities": "Equities", "bonds": "Bonds",
+                    "commodities": "Commodities", "usd": "USD"}
+
+    DIR_COLORS = {
+        "up":   COLORS.get("green", "#40c080"),
+        "down": COLORS.get("red",   "#e05050"),
+        "flat": COLORS.get("text_dim", "#888"),
+    }
+    DIR_ARROWS = {"up": "▲ UP", "down": "▼ DOWN", "flat": "— FLAT"}
+
+    # Header row
+    header_cols = st.columns([2, 1, 1, 1, 1])
+    header_cols[0].markdown(
+        f'<div style="font-size:11px;color:{COLORS["text_dim"]};'
+        f'font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;'
+        f'letter-spacing:0.06em;">Asset</div>', unsafe_allow_html=True
+    )
+    for i, key in enumerate(SCENARIO_KEYS):
+        prob = next((r["prob"] for r in adj_probs if r["scenario"] == key), 0.25)
+        header_cols[i+1].markdown(
+            f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};'
+            f'font-family:\'JetBrains Mono\',monospace;text-transform:uppercase;'
+            f'letter-spacing:0.06em;">{SCENARIO_LABELS[key]}<br>'
+            f'<span style="color:{COLORS["text"]};">{int(round(prob*100))}%</span></div>',
+            unsafe_allow_html=True
+        )
+
+    # Data rows
+    for asset in ASSET_KEYS:
+        row_cols = st.columns([2, 1, 1, 1, 1])
+        row_cols[0].markdown(
+            f'<div style="font-size:13px;font-weight:600;padding:8px 0;">'
+            f'{ASSET_LABELS[asset]}</div>', unsafe_allow_html=True
+        )
+        for i, scenario_key in enumerate(SCENARIO_KEYS):
+            cell = (near.get(scenario_key) or {}).get(asset, {})
+            if not cell:
+                row_cols[i+1].markdown("—")
+                continue
+            direction  = cell.get("direction", "flat")
+            dir_prob   = int(round(cell.get("direction_prob", 0.5) * 100))
+            mag_low    = cell.get("magnitude_low", 0.0)
+            mag_high   = cell.get("magnitude_high", 0.0)
+            mag_conf   = int(round(cell.get("magnitude_confidence", 0.5) * 100))
+            color = DIR_COLORS.get(direction, COLORS["text_dim"])
+            arrow = DIR_ARROWS.get(direction, "— FLAT")
+            row_cols[i+1].markdown(
+                f'<div style="background:{COLORS["surface"]};border-radius:4px;'
+                f'padding:6px 8px;margin:2px;">'
+                f'<div style="font-size:13px;font-weight:700;color:{color};">'
+                f'{arrow} [{dir_prob}%]</div>'
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};">'
+                f'{mag_low:+.0f}% to {mag_high:+.0f}%</div>'
+                f'<div style="font-size:10px;color:{COLORS["text_dim"]};">'
+                f'[{mag_conf}% CI]</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+    st.markdown("---")
+    _render_fed_causal_chain(chains, adj_probs, medium)
+
+
+def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict):
+    """Section 5 stub."""
+    st.info("Causal chain — coming in next step")
