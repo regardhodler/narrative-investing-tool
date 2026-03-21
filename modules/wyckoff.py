@@ -32,7 +32,7 @@ _PERIOD_MAP: dict[str, list[str]] = {
     "5m":  ["5d", "10d", "20d", "30d", "60d"],
     "15m": ["5d",  "10d", "20d", "30d", "45d", "60d"],
     "30m": ["10d", "20d", "30d", "45d", "60d"],
-    "1h":  ["30d", "60d", "90d", "180d", "365d"],
+    "1h":  ["30d", "60d", "90d", "180d", "365d", "730d"],
     "1d":  ["6mo", "1y",  "2y",  "5y"],
     "1wk": ["2y",  "5y",  "10y", "max"],
     "1mo": ["5y",  "10y", "max"],
@@ -46,6 +46,16 @@ _MTF_HIGHER: dict[str, tuple[str, str]] = {
     "1h":  ("1d",  "1wk"),
     "1d":  ("1wk", "1mo"),
     "1wk": ("1mo", "1mo"),
+}
+
+# Maps each interval to lower timeframes for full-spectrum MTF view (ascending order)
+_MTF_LOWER: dict[str, tuple[str, ...]] = {
+    "15m": ("5m",),
+    "30m": ("5m",),
+    "1h":  ("5m", "30m"),
+    "1d":  ("30m", "1h"),
+    "1wk": ("1h",  "1d"),
+    "1mo": ("1d",  "1wk"),
 }
 
 
@@ -525,30 +535,16 @@ def render():
 
     # ── Controls ──────────────────────────────────────────────────────────────
     st.caption("Phase detection · VSA · Cause & Effect targets · Demand/Supply lines · Groq AI narrative")
-    tk_col, iv_col, lk_col = st.columns([3, 1, 1])
-    with tk_col:
-        raw_ticker = st.text_input(
-            "Ticker Symbol",
-            value=st.session_state["wy_ticker"],
-            placeholder="SPY · GC=F · RY.TO · BTC-USD · ^FTSE · ZN=F",
-            help=(
-                "Any yfinance-compatible symbol. "
-                "Append .TO for TSX, =F for futures, -USD for crypto, ^ for indices. "
-                "Note: some index symbols (^) have no volume — VSA bars will be skipped."
-            ),
-        )
-    with iv_col:
-        interval = st.selectbox(
-            "Interval",
-            ["5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
-            index=4,
-            help="'5m'/'15m'/'30m'/'1h' = intraday  ·  '1d' = daily (default)  ·  '1wk'/'1mo' = macro",
-        )
-    with lk_col:
-        period_choices = _PERIOD_MAP.get(interval, ["2y"])
-        default_idx = len(period_choices) // 2
-        period = st.selectbox("Lookback", period_choices, index=default_idx,
-                              help="Amount of history to fetch")
+    raw_ticker = st.text_input(
+        "Ticker Symbol",
+        value=st.session_state["wy_ticker"],
+        placeholder="SPY · GC=F · RY.TO · BTC-USD · ^FTSE · ZN=F",
+        help=(
+            "Any yfinance-compatible symbol. "
+            "Append .TO for TSX, =F for futures, -USD for crypto, ^ for indices. "
+            "Note: some index symbols (^) have no volume — VSA bars will be skipped."
+        ),
+    )
 
     ticker = raw_ticker.strip().upper() if raw_ticker else ""
     st.session_state["wy_ticker"] = ticker
@@ -599,6 +595,62 @@ def render():
 </div>""",
         unsafe_allow_html=True,
     )
+
+    # ── MTF Snapshot (automatic — no timeframe selection needed) ──────────────
+    _ALL_TFS = ["5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]
+    _TF_LABELS = {"5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h",
+                  "1d": "Daily", "1wk": "Weekly", "1mo": "Monthly"}
+    _pc = lambda p: {"Accumulation": COLORS["green"], "Distribution": COLORS["red"],
+                     "Markup": COLORS["blue"], "Markdown": COLORS["orange"]}.get(p, COLORS["text_dim"])
+
+    st.markdown(
+        f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+        f'color:{COLORS["text_dim"]};margin:4px 0 6px 0;text-transform:uppercase;letter-spacing:0.06em;">'
+        f'Wyckoff Phase — All Timeframes (auto-detected)</div>',
+        unsafe_allow_html=True,
+    )
+    with st.spinner("Detecting Wyckoff phases across all timeframes…"):
+        _mtf_snap = {tf: _fetch_mtf_phase(ticker, tf) for tf in _ALL_TFS}
+    _snap_cols = st.columns(len(_ALL_TFS))
+    for _i, _tf in enumerate(_ALL_TFS):
+        _ph = _mtf_snap[_tf]
+        _snap_cols[_i].markdown(bloomberg_metric(_TF_LABELS[_tf], _ph, _pc(_ph)), unsafe_allow_html=True)
+    _valid_snap = [p for p in _mtf_snap.values() if p not in ("—", "")]
+    _bullish_set = {"Accumulation", "Markup"}
+    _bearish_set = {"Distribution", "Markdown"}
+    if _valid_snap:
+        if all(p in _bullish_set for p in _valid_snap):
+            st.success("✅ Bullish confluence across ALL timeframes — high-conviction long bias.")
+        elif all(p in _bearish_set for p in _valid_snap):
+            st.error("🔴 Bearish confluence across ALL timeframes — high-conviction short bias.")
+        elif sum(p in _bullish_set for p in _valid_snap) >= len(_valid_snap) * 0.75:
+            st.info("ℹ️ Predominantly bullish — majority of timeframes in Accumulation/Markup.")
+        elif sum(p in _bearish_set for p in _valid_snap) >= len(_valid_snap) * 0.75:
+            st.info("ℹ️ Predominantly bearish — majority of timeframes in Distribution/Markdown.")
+        else:
+            st.warning("⚠️ Mixed signals across timeframes — wait for higher-TF alignment before committing.")
+
+    st.markdown(
+        f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+        f'color:{COLORS["text_dim"]};margin:16px 0 6px 0;text-transform:uppercase;letter-spacing:0.06em;">'
+        f'Detail Chart — select interval &amp; lookback below</div>',
+        unsafe_allow_html=True,
+    )
+    _iv_col, _lk_col = st.columns([1, 1])
+    with _iv_col:
+        interval = st.selectbox(
+            "Chart Interval",
+            ["5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+            index=4,
+            help="Drives the detail chart and trade setup below. The MTF snapshot above always shows all TFs.",
+        )
+        if interval == "15m":
+            st.caption("💡 **15m** works well for intraday structure. ⚠️ Limited to last 60 days by data providers; switch to **1h** for longer history.")
+    with _lk_col:
+        period_choices = _PERIOD_MAP.get(interval, ["2y"])
+        default_idx = len(period_choices) // 2
+        period = st.selectbox("Lookback", period_choices, index=default_idx,
+                              help="Amount of history to fetch for the detail chart")
 
     with st.spinner(f"Fetching {ticker} {interval} data and analyzing Wyckoff phases..."):
         ohlcv = _fetch_wyckoff_data(ticker, period=period, interval=interval)
@@ -670,13 +722,23 @@ def render():
         fig.update_yaxes(title_text="Volume", row=2, col=1)
         fig.update_yaxes(title_text="RSI(14)", row=3, col=1, range=[0, 100])
         fig.update_yaxes(title_text="OBV", row=4, col=1)
+        fig.update_layout(dragmode="pan")
         apply_dark_layout(fig, title=f"{ticker} — Wyckoff Phase Detection")
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={
+            "scrollZoom": True,
+            "displayModeBar": True,
+            "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+        })
         return
 
     # Chart with phase overlays
     fig = _make_wyckoff_chart(ohlcv, analysis, rsi_series, obv_series, ticker)
-    st.plotly_chart(fig, use_container_width=True)
+    fig.update_layout(dragmode="pan")
+    st.plotly_chart(fig, use_container_width=True, config={
+        "scrollZoom": True,
+        "displayModeBar": True,
+        "modeBarButtonsToRemove": ["select2d", "lasso2d", "autoScale2d"],
+    })
 
     current = analysis.current_phase
 
@@ -695,42 +757,6 @@ def render():
         ),
         unsafe_allow_html=True,
     )
-
-    # ── Multi-Timeframe Confirmation ──────────────────────────────────────────
-    if interval in _MTF_HIGHER:
-        htf1, htf2 = _MTF_HIGHER[interval]
-        with st.spinner("Loading higher-TF context…"):
-            htf1_phase = _fetch_mtf_phase(ticker, htf1)
-            htf2_phase = _fetch_mtf_phase(ticker, htf2) if htf2 != htf1 else None
-
-        _pc = lambda p: {"Accumulation": COLORS["green"], "Distribution": COLORS["red"],
-                         "Markup": COLORS["blue"], "Markdown": COLORS["orange"]}.get(p, COLORS["text_dim"])
-
-        st.markdown(
-            f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
-            f'color:{COLORS["text_dim"]};margin:12px 0 4px 0;text-transform:uppercase;letter-spacing:0.06em;">'
-            f'Multi-Timeframe Confirmation</div>',
-            unsafe_allow_html=True,
-        )
-        mtf_cols = st.columns(3)
-        mtf_cols[0].markdown(bloomberg_metric(f"{interval.upper()} (selected)", current.phase, phase_color), unsafe_allow_html=True)
-        mtf_cols[1].markdown(bloomberg_metric(f"{htf1.upper()}", htf1_phase, _pc(htf1_phase)), unsafe_allow_html=True)
-        if htf2_phase is not None:
-            mtf_cols[2].markdown(bloomberg_metric(f"{htf2.upper()}", htf2_phase, _pc(htf2_phase)), unsafe_allow_html=True)
-
-        # Confluence note
-        phases_seen = {current.phase, htf1_phase} | ({htf2_phase} if htf2_phase else set())
-        if all(p in ("Accumulation", "Markup") for p in phases_seen if p not in ("—", "")):
-            st.success("✅ Bullish confluence across all timeframes — strengthens long bias.")
-        elif all(p in ("Distribution", "Markdown") for p in phases_seen if p not in ("—", "")):
-            st.error("🔴 Bearish confluence across all timeframes — strengthens short bias.")
-        elif current.phase in ("Accumulation", "Markup") and htf1_phase in ("Markup", "Accumulation"):
-            st.info("ℹ️ Selected TF bullish, higher TF agrees — trade in direction of trend.")
-        elif current.phase in ("Distribution", "Markdown") and htf1_phase in ("Markdown", "Distribution"):
-            st.info("ℹ️ Selected TF bearish, higher TF agrees — trade in direction of trend.")
-        else:
-            st.warning("⚠️ Timeframe divergence — wait for alignment before committing.")
-
 
     support = current.key_levels["support"]
     resistance = current.key_levels["resistance"]

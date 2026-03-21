@@ -15,6 +15,31 @@ _REGIME_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", 
 _SIGNAL_SOURCES = ["Manual", "Insider Buying", "Options Flow", "AI Valuation",
                    "Risk Regime", "Whale Movement", "SMA Crossover", "Scorecard"]
 
+# Canadian exchange suffixes recognised by yfinance
+_CAD_SUFFIXES = (".TO", ".V", ".TSX", ".CN", ".NE", ".VN")
+
+
+def _ticker_currency(ticker: str) -> str:
+    """Return 'CAD' for TSX-listed tickers, 'USD' for everything else."""
+    return "CAD" if ticker.upper().endswith(_CAD_SUFFIXES) else "USD"
+
+
+@st.cache_data(ttl=3600)
+def _get_usdcad() -> float:
+    """Fetch live USD/CAD spot rate (cached 1 hr). Falls back to 1.36 if unavailable."""
+    try:
+        raw = yf.download("USDCAD=X", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if raw is not None and not raw.empty:
+            close = raw["Close"]
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            rate = float(close.dropna().iloc[-1])
+            if 1.0 < rate < 2.0:  # sanity check
+                return rate
+    except Exception:
+        pass
+    return 1.36  # reasonable fallback
+
 
 def _get_latest_regime() -> str:
     """Read latest regime from regime_history.json."""
@@ -365,7 +390,8 @@ def render():
             st.info("Close some trades to see analytics.")
             return
 
-        # Compute P&L for each closed trade
+        # Compute P&L for each closed trade — all values converted to CAD
+        _usdcad_metrics = _get_usdcad()
         pnls = []
         ytd_pnls = []
         signals = []
@@ -378,12 +404,14 @@ def render():
                 pnl = (exit_p - entry) * size
             else:
                 pnl = (entry - exit_p) * size
+            if _ticker_currency(t["ticker"]) == "USD":
+                pnl *= _usdcad_metrics
             pnls.append(pnl)
             signals.append(t["signal_source"])
             if t.get("exit_date", "").startswith(current_year):
                 ytd_pnls.append(pnl)
 
-        # Unrealized P&L from ALL open positions
+        # Unrealized P&L from ALL open positions — converted to CAD
         unrealized_total = 0.0
         if open_trades:
             live_tickers = list({t["ticker"] for t in open_trades})
@@ -394,9 +422,12 @@ def render():
                     continue
                 size = t["position_size"]
                 if t["direction"] == "Long":
-                    unrealized_total += (price - t["entry_price"]) * size
+                    pnl_native = (price - t["entry_price"]) * size
                 else:
-                    unrealized_total += (t["entry_price"] - price) * size
+                    pnl_native = (t["entry_price"] - price) * size
+                if _ticker_currency(t["ticker"]) == "USD":
+                    pnl_native *= _usdcad_metrics
+                unrealized_total += pnl_native
 
         total_pnl = sum(pnls)
         ytd_pnl = sum(ytd_pnls) + unrealized_total
@@ -406,11 +437,20 @@ def render():
         avg_win = sum(wins) / len(wins) if wins else 0
         avg_loss = sum(losses) / len(losses) if losses else 0
 
+        # Total portfolio value (open positions at live price, in CAD)
+        _port_value_cad = 0.0
+        if open_trades:
+            _live_for_val = _get_live_prices(list({t["ticker"] for t in open_trades}))
+            for t in open_trades:
+                _px = (_live_for_val.get(t["ticker"]) or t["entry_price"])
+                _val_native = _px * t["position_size"]
+                _port_value_cad += _val_native * _usdcad_metrics if _ticker_currency(t["ticker"]) == "USD" else _val_native
+
         # Metrics row — shrink font so values aren't clipped
         st.markdown(
             """<style>
             [data-testid="stMetric"] [data-testid="stMetricValue"] {
-                font-size: 14px !important;
+                font-size: 12px !important;
             }
             [data-testid="stMetric"] [data-testid="stMetricLabel"] {
                 font-size: 10px !important;
@@ -418,15 +458,389 @@ def render():
             </style>""",
             unsafe_allow_html=True,
         )
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Total P&L (realized)", f"${total_pnl:+,.2f}")
-        m2.metric("Unrealized P&L", f"${unrealized_total:+,.2f}")
-        m3.metric("YTD P&L (incl. open)", f"${ytd_pnl:+,.2f}")
+        m0, m1, m2, m3, m4, m5 = st.columns(6)
+        m0.metric("Portfolio Value (CAD)", f"C${_port_value_cad:,.2f}")
+        m1.metric("Total P&L (realized, CAD)", f"C${total_pnl:+,.2f}")
+        m2.metric("Unrealized P&L (CAD)", f"C${unrealized_total:+,.2f}")
+        m3.metric("YTD P&L (incl. open, CAD)", f"C${ytd_pnl:+,.2f}")
         m4.metric("Win Rate", f"{win_rate:.0f}%")
-        m5.metric("Avg Win / Loss", f"${avg_win:+,.2f} / ${avg_loss:+,.2f}")
+        m5.metric("Avg Win / Loss", f"C${avg_win:+,.2f} / C${avg_loss:+,.2f}")
 
+        # ── Unrealized P&L Since Entry (open positions history) ───────────────
+        if open_trades:
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin:18px 0 6px 0;">UNREALIZED P&L SINCE ENTRY</div>',
+                unsafe_allow_html=True,
+            )
+
+            @st.cache_data(ttl=3600)
+            def _fetch_open_history(trades_key: tuple, usdcad: float) -> pd.DataFrame:
+                """
+                Returns a daily series of cumulative unrealized P&L in CAD.
+                trades_key is a tuple of (ticker, entry_date, entry_price, size, direction).
+                """
+                import yfinance as _yf
+                if not trades_key:
+                    return pd.DataFrame()
+
+                # Unpack tuples back into dicts
+                trades_list = [
+                    {"ticker": tk, "entry_date": ed, "entry_price": ep, "position_size": sz, "direction": dr}
+                    for tk, ed, ep, sz, dr in trades_key
+                ]
+
+                tickers = [t["ticker"] for t in trades_list]
+                earliest = min(t["entry_date"] for t in trades_list)
+
+                raw = _yf.download(
+                    tickers if len(tickers) > 1 else tickers[0],
+                    start=earliest,
+                    interval="1d",
+                    progress=False,
+                    auto_adjust=True,
+                )
+                if raw is None or raw.empty:
+                    return pd.DataFrame()
+
+                if isinstance(raw.columns, pd.MultiIndex):
+                    prices = raw["Close"]
+                else:
+                    prices = raw[["Close"]].rename(columns={"Close": tickers[0]})
+
+                # Ensure all tickers are present
+                for tk in tickers:
+                    if tk not in prices.columns:
+                        prices[tk] = float("nan")
+
+                # Daily portfolio unrealized P&L in CAD
+                daily_pnl = pd.Series(0.0, index=prices.index)
+                for t in trades_list:
+                    tk = t["ticker"]
+                    entry_date = pd.Timestamp(t["entry_date"])
+                    entry_price = t["entry_price"]
+                    size = t["position_size"]
+                    direction = t["direction"]
+                    ccy = _ticker_currency(tk)
+
+                    col = prices[tk].copy()
+                    col = col[col.index >= entry_date]
+                    if col.empty:
+                        continue
+
+                    if direction == "Long":
+                        pnl_native = (col - entry_price) * size
+                    else:
+                        pnl_native = (entry_price - col) * size
+
+                    if ccy == "USD":
+                        pnl_native = pnl_native * usdcad
+
+                    daily_pnl = daily_pnl.add(pnl_native, fill_value=0.0)
+
+                return daily_pnl.dropna()
+
+            # Build a hashable key from open trades
+            _trades_key = tuple(
+                (t["ticker"], t["entry_date"], t["entry_price"], t["position_size"], t["direction"])
+                for t in sorted(open_trades, key=lambda x: x["entry_date"])
+            )
+            _usdcad_now = _get_usdcad()
+            _daily_upnl = _fetch_open_history(_trades_key, _usdcad_now)
+
+            if not _daily_upnl.empty:
+                _color_line = COLORS.get("positive", "#00e676") if float(_daily_upnl.iloc[-1]) >= 0 else COLORS.get("negative", "#f44336")
+                fig_upnl = go.Figure()
+                fig_upnl.add_trace(go.Scatter(
+                    x=_daily_upnl.index,
+                    y=_daily_upnl.values,
+                    mode="lines",
+                    fill="tozeroy",
+                    fillcolor="rgba(0,200,100,0.08)" if float(_daily_upnl.iloc[-1]) >= 0 else "rgba(244,67,54,0.08)",
+                    line=dict(color=_color_line, width=2),
+                    hovertemplate="<b>%{x|%b %d, %Y}</b><br>C$%{y:+,.2f}<extra></extra>",
+                ))
+                apply_dark_layout(fig_upnl)
+                fig_upnl.update_layout(
+                    height=280,
+                    margin=dict(t=20, b=24, l=24, r=24),
+                    yaxis_title="Unrealized P&L (C$)",
+                    showlegend=False,
+                )
+                fig_upnl.add_hline(y=0, line_dash="dot", line_color="#555")
+                st.plotly_chart(fig_upnl, use_container_width=True, key="jrnl_upnl_chart")
+            else:
+                st.info("Not enough price history to build the chart.")
+
+        # ── Portfolio Allocation Pie ──────────────────────────────────────────
+        st.markdown(
+            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.08em;margin:18px 0 6px 0;">PORTFOLIO ALLOCATION</div>',
+            unsafe_allow_html=True,
+        )
+
+        _all_trades = open_trades + closed_trades
+        if _all_trades:
+            # Use live price for open positions; entry price for closed
+            _live = _get_live_prices(list({t["ticker"] for t in open_trades})) if open_trades else {}
+            _usdcad = _get_usdcad()
+
+            # Build allocation in CAD — USD positions are converted at live spot rate
+            _alloc: dict[str, float] = {}
+            _currencies: dict[str, str] = {}
+            for t in _all_trades:
+                price = (_live.get(t["ticker"]) if t["status"] == "open" else None) or t["entry_price"]
+                val_native = abs(price * t["position_size"])
+                ccy = _ticker_currency(t["ticker"])
+                val_cad = val_native * _usdcad if ccy == "USD" else val_native
+                _alloc[t["ticker"]] = _alloc.get(t["ticker"], 0.0) + val_cad
+                _currencies[t["ticker"]] = ccy
+
+            _total_val = sum(_alloc.values())
+            _labels = list(_alloc.keys())
+            _values = [_alloc[k] for k in _labels]
+            _pcts   = [v / _total_val * 100 for v in _values]
+
+            # Show the rate used
+            st.markdown(
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};margin-bottom:6px;">'
+                f'All values in <b style="color:#fff;">CAD</b> · '
+                f'USD/CAD rate: <b style="color:{COLORS["bloomberg_orange"]};">{_usdcad:.4f}</b> '
+                f'(live, 1hr cache)</div>',
+                unsafe_allow_html=True,
+            )
+
+            _pie_col, _tbl_col = st.columns([3, 2])
+            with _pie_col:
+                fig_pie = go.Figure(go.Pie(
+                    labels=_labels,
+                    values=_values,
+                    texttemplate="%{label}<br>%{percent}",
+                    textposition="outside",
+                    hole=0.45,
+                    marker=dict(
+                        colors=[
+                            "#ff9800", "#2196f3", "#4caf50", "#e91e63",
+                            "#9c27b0", "#00bcd4", "#ff5722", "#8bc34a",
+                            "#ffc107", "#607d8b", "#3f51b5", "#009688",
+                        ][:len(_labels)],
+                        line=dict(color="#1a1a1a", width=2),
+                    ),
+                    hovertemplate="<b>%{label}</b><br>C$%{value:,.0f}<br>%{percent}<extra></extra>",
+                ))
+                apply_dark_layout(fig_pie)
+                fig_pie.update_layout(
+                    height=340,
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    showlegend=False,
+                    annotations=[dict(
+                        text=f"C${_total_val:,.0f}",
+                        x=0.5, y=0.5, showarrow=False,
+                        font=dict(size=14, color="#ccc"),
+                    )],
+                )
+                st.plotly_chart(fig_pie, use_container_width=True, key="jrnl_alloc_pie")
+
+            with _tbl_col:
+                _tbl_rows = sorted(
+                    [
+                        {
+                            "Ticker": k,
+                            "Ccy": _currencies.get(k, "USD"),
+                            "Value (CAD)": f"C${v:,.0f}",
+                            "Weight": f"{p:.1f}%",
+                        }
+                        for k, v, p in zip(_labels, _values, _pcts)
+                    ],
+                    key=lambda r: float(r["Weight"].rstrip("%")),
+                    reverse=True,
+                )
+                st.dataframe(pd.DataFrame(_tbl_rows), use_container_width=True, hide_index=True)
+
+        # ── Portfolio Correlation ─────────────────────────────────────────────
+        # Shown for any journal entries (open OR closed) — does NOT need closed trades
+        st.markdown(
+            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.08em;margin:18px 0 6px 0;">PORTFOLIO CORRELATION</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            '<div style="font-size:11px;color:#888;line-height:1.6;margin-bottom:10px;">'
+            'Pearson correlation (ρ) measures how similarly two assets move day-to-day. '
+            '<b style="color:#ccc;">ρ = +1.0</b> means perfect lockstep (both rise/fall together). '
+            '<b style="color:#ccc;">ρ = 0</b> means no relationship. '
+            '<b style="color:#ccc;">ρ = −1.0</b> means perfect offset (one rises when the other falls). '
+            'For portfolio health, lower average ρ is better — positions with low or negative correlation '
+            'reduce overall volatility without sacrificing expected return. '
+            'The <b style="color:#ccc;">R² = ρ²</b> figure tells you what % of daily variance is shared '
+            '(e.g. ρ = 0.5 → R² = 25% shared, 75% independent).</div>',
+            unsafe_allow_html=True,
+        )
+
+        all_tickers = list({t["ticker"] for t in open_trades + closed_trades})
+
+        if len(all_tickers) < 2:
+            st.info("Need at least 2 tickers in your journal to compute correlations.")
+        else:
+            cr_col1, cr_col2 = st.columns([1, 3])
+            with cr_col1:
+                corr_period = st.selectbox(
+                    "Lookback Period",
+                    options=["3mo", "6mo", "1y", "2y", "5y"],
+                    index=2,
+                    key="jrnl_corr_period",
+                )
+
+            @st.cache_data(ttl=3600)
+            def _fetch_corr_data(tickers: tuple, period: str) -> pd.DataFrame:
+                raw = yf.download(
+                    list(tickers), period=period, interval="1d",
+                    progress=False, auto_adjust=True,
+                )
+                if raw.empty:
+                    return pd.DataFrame()
+                if isinstance(raw.columns, pd.MultiIndex):
+                    close = raw["Close"]
+                else:
+                    close = raw[["Close"]] if "Close" in raw.columns else raw
+                close = close.dropna(how="all")
+                # Keep only tickers that actually downloaded
+                close = close.loc[:, close.notna().sum() > 10]
+                return close.pct_change().dropna(how="all")
+
+            returns = _fetch_corr_data(tuple(sorted(all_tickers)), corr_period)
+
+            if returns.empty or returns.shape[1] < 2:
+                st.warning("Could not fetch enough price history for these tickers.")
+            else:
+                corr = returns.corr()
+                labels = corr.columns.tolist()
+
+                # ── Heatmap ──────────────────────────────────────────────
+                z = corr.values.tolist()
+                text = [[f"{v:.2f}" for v in row] for row in z]
+
+                fig_corr = go.Figure(go.Heatmap(
+                    z=z,
+                    x=labels,
+                    y=labels,
+                    text=text,
+                    texttemplate="%{text}",
+                    colorscale=[
+                        [0.0,  "#1565C0"],   # strong negative = blue
+                        [0.5,  "#212121"],   # zero = near-black
+                        [1.0,  "#C62828"],   # strong positive = red
+                    ],
+                    zmid=0,
+                    zmin=-1,
+                    zmax=1,
+                    showscale=True,
+                    colorbar=dict(
+                        title=dict(text="ρ", font=dict(color="#aaa")),
+                        thickness=14,
+                        len=0.8,
+                        tickfont=dict(color="#aaa", size=11),
+                    ),
+                ))
+                apply_dark_layout(fig_corr)
+                fig_corr.update_layout(
+                    title=f"Return Correlation ({corr_period})",
+                    height=max(320, 80 * len(labels)),
+                    margin=dict(t=40, b=40, l=60, r=20),
+                    xaxis=dict(side="bottom", tickfont=dict(color="#ccc", size=11)),
+                    yaxis=dict(tickfont=dict(color="#ccc", size=11), autorange="reversed"),
+                )
+                st.plotly_chart(fig_corr, use_container_width=True, key="jrnl_corr_heatmap")
+
+                # ── Highly correlated pairs warning ───────────────────────
+                high_pairs = []
+                for i, t1 in enumerate(labels):
+                    for j, t2 in enumerate(labels):
+                        if j <= i:
+                            continue
+                        v = corr.loc[t1, t2]
+                        if abs(v) >= 0.70:
+                            high_pairs.append({
+                                "Pair": f"{t1} / {t2}",
+                                "Correlation": f"{v:+.2f}",
+                                "Type": "⚠ High positive" if v >= 0.70 else "✦ Inverse hedge",
+                            })
+
+                if high_pairs:
+                    st.markdown(
+                        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};'
+                        f'margin:6px 0 4px 0;">Significant Pairs  (|ρ| ≥ 0.70)</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.dataframe(
+                        pd.DataFrame(high_pairs),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+                else:
+                    st.markdown(
+                        '<div style="font-size:12px;color:#4caf50;margin-top:6px;">'
+                        '✓ No highly correlated pairs — portfolio appears well diversified.</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Average pairwise correlation (concentration gauge) ────
+                upper = corr.where(
+                    pd.DataFrame(
+                        [[i < j for j in range(len(labels))] for i in range(len(labels))],
+                        index=labels, columns=labels,
+                    )
+                ).stack()
+                avg_corr = float(upper.mean()) if not upper.empty else 0.0
+                gauge_color = (
+                    COLORS.get("negative", "#f44336") if avg_corr > 0.5
+                    else COLORS.get("bloomberg_orange", "#ff9800") if avg_corr > 0.25
+                    else COLORS.get("positive", "#00e676")
+                )
+                label_text = "Concentrated" if avg_corr > 0.5 else ("Moderate" if avg_corr > 0.25 else "Diversified")
+
+                if avg_corr > 0.5:
+                    _corr_context = (
+                        "Your holdings move together strongly. A market downturn is likely to hit "
+                        "all positions simultaneously — consider adding uncorrelated assets (e.g. bonds, "
+                        "gold, inverse ETFs) or reducing position count."
+                    )
+                elif avg_corr > 0.25:
+                    """Moderate correlation — some diversification benefit but meaningful overlap. """
+                    _corr_context = (
+                        "Some diversification benefit, but your holdings share moderate common exposure. "
+                        "Watch for sector concentration (e.g. all tech) or macro factor overlap "
+                        "(e.g. all rate-sensitive). Consider whether any single macro shock "
+                        "could hit multiple positions at once."
+                    )
+                else:
+                    _r2 = avg_corr ** 2 * 100  # % variance shared
+                    _near_boundary = avg_corr >= 0.20
+                    _boundary_note = (
+                        f" Note: at {avg_corr:+.2f} you are close to the Moderate threshold (0.25) — "
+                        f"adding one more correlated position could push you into that band."
+                        if _near_boundary else ""
+                    )
+                    _corr_context = (
+                        f"Your holdings share only {_r2:.1f}% of their daily return variance on average "
+                        f"(R\u00b2 = \u03c1\u00b2 = {avg_corr:.2f}\u00b2). "
+                        f"In practice this means roughly {100 - _r2:.0f}% of each position's daily move "
+                        f"is driven by its own story, not the rest of your portfolio. "
+                        f"This reduces overall portfolio volatility compared to a concentrated book — "
+                        f"a single bad position is unlikely to drag everything down simultaneously.{_boundary_note}"
+                    )
+
+                st.markdown(
+                    f'<div style="font-size:12px;color:{COLORS["text_dim"]};margin-top:8px;">'
+                    f'Avg pairwise ρ: <b style="color:{gauge_color};">{avg_corr:+.2f}</b>'
+                    f' — <span style="color:{gauge_color};font-weight:700;">{label_text}</span>'
+                    f'<br><span style="font-size:11px;color:#888;">{_corr_context}</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+        # ── Equity Curve + Signal Breakdown (closed trades only) ─────────────
         if not closed_trades:
-            st.info("Close some trades to see full analytics (equity curve, signal breakdown).")
+            st.info("Close some trades to see the equity curve and signal breakdown.")
             return
 
         # Equity curve

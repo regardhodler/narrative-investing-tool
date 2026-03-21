@@ -119,16 +119,10 @@ def detect_trading_ranges(
                 start = i
         else:
             if start is not None and (i - start) >= min_bars:
-                span = float(high.iloc[start:i].max() - low.iloc[start:i].min())
-                atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
-                if atr_val == 0 or span <= atr_val * 2.5:
-                    _add_range(ranges, close, high, low, start, i - 1)
+                _add_range(ranges, close, high, low, start, i - 1)
             start = None
     if start is not None and (len(contracted) - start) >= min_bars:
-        span = float(high.iloc[start:].max() - low.iloc[start:].min())
-        atr_val = float(atr.iloc[start]) if not np.isnan(atr.iloc[start]) else 0.0
-        if atr_val == 0 or span <= atr_val * 2.5:
-            _add_range(ranges, close, high, low, start, len(contracted) - 1)
+        _add_range(ranges, close, high, low, start, len(contracted) - 1)
 
     return ranges
 
@@ -661,8 +655,31 @@ def analyze_wyckoff(
         return None
 
     phases = determine_phases(close, high, low, volume, atr_window=atr_window, min_bars=min_bars)
+
+    # Fallback: if no consolidation phases detected, classify the whole series as a trend phase
     if not phases:
-        return None
+        slope = np.polyfit(range(len(close)), close.values, 1)[0]
+        diffs = close.diff().dropna()
+        consistency = float((diffs > 0).mean())
+        if slope > 0 and consistency > 0.5:
+            trend_name = "Markup"
+        elif slope < 0 and consistency < 0.5:
+            trend_name = "Markdown"
+        else:
+            # Flat but structurally ambiguous — guess based on recent price position
+            recent_half = close.iloc[len(close) // 2:]
+            earlier_half = close.iloc[:len(close) // 2]
+            trend_name = "Markup" if float(recent_half.mean()) >= float(earlier_half.mean()) else "Markdown"
+        trend_conf = 40 + int(min(abs(consistency - 0.5) * 100, 30))
+        fallback_phase = WyckoffPhase(
+            phase=trend_name,
+            confidence=trend_conf,
+            start_date=close.index[0],
+            end_date=close.index[-1],
+            key_levels={"support": float(low.min()), "resistance": float(high.max())},
+            sub_phase="",
+        )
+        phases = [fallback_phase]
 
     phase_history = [(p.start_date, p.end_date, p.phase) for p in phases]
     vsa_bars = analyze_vsa(close, high, low, volume, lookback=30)

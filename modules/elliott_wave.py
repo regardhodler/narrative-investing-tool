@@ -1039,62 +1039,170 @@ def render():
             "Run a historical simulation to test how often Elliott Wave signals "
             "(Waves 3 & 5) hit their Fibonacci targets before invalidation."
         )
-        
-        # Controls
-        b_col1, b_col2 = st.columns([1, 3])
+
+        # ── Controls row ──────────────────────────────────────────────────
+        b_col1, b_col2, b_col3 = st.columns([1, 1, 1])
         with b_col1:
             test_degree = st.selectbox(
                 "Degree to Test",
                 options=["Primary", "Intermediate", "Minor"],
-                index=0
+                index=0,
+                key="bt_ew_degree",
             )
-        
-        if st.button(f"Run Backtest ({test_degree})"):
-            with st.spinner(f"Simulating trades..."):
-                test_len = len(close) - 100 # Leave some buffer
-                if test_len < 100:
-                    st.warning("Insufficient history for backtest.")
+        _today = datetime.today().date()
+        _one_year_ago = _today.replace(year=_today.year - 1)
+        with b_col2:
+            bt_start = st.date_input(
+                "Start Date",
+                value=_one_year_ago,
+                min_value=datetime(2000, 1, 1).date(),
+                max_value=_today,
+                key="bt_ew_start",
+            )
+        with b_col3:
+            bt_end = st.date_input(
+                "End Date",
+                value=_today,
+                min_value=datetime(2000, 1, 1).date(),
+                max_value=_today,
+                key="bt_ew_end",
+            )
+
+        if st.button(f"Run Backtest ({test_degree})", key="bt_ew_run"):
+            if bt_start >= bt_end:
+                st.warning("Start date must be before end date.")
+            else:
+                with st.spinner("Simulating trades..."):
+                    results = backtest_wave_counts(
+                        close,
+                        degree=test_degree,
+                        start_date=str(bt_start),
+                        end_date=str(bt_end),
+                    )
+
+                if not results:
+                    st.warning("No completed wave setups found in the selected date range.")
                 else:
-                    results = backtest_wave_counts(close, degree=test_degree, test_period_bars=test_len)
-            
-                    if not results:
-                        st.warning("No completed wave setups found.")
-                    else:
-                        # Metrics
-                        hits = sum(1 for r in results if r.outcome == "Target Hit")
-                        invalid = sum(1 for r in results if r.outcome == "Invalidated")
-                        total = hits + invalid # Ignore open trades for win rate calculation? Or include?
-                        # Let's include only closed trades for win rate
-                        win_rate = (hits / total * 100) if total > 0 else 0
-                        
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("Total Signals", len(results))
-                        m2.metric("Win Rate", f"{win_rate:.1f}%")
-                        m3.metric("Hits", hits)
-                        m4.metric("Stops", invalid)
-                        
-                        # Detailed Table
-                        st.markdown("### Trade Log")
-                        
-                        # Convert to DataFrame for display
-                        data = []
-                        for r in results:
-                            pnl = f"{r.pnl_pct:+.1f}%" if r.pnl_pct is not None else "—"
-                            outcome_emoji = {
-                                "Target Hit": "✅ Hit",
-                                "Invalidated": "❌ Stop",
-                                "Indeterminate": "⏳ Open"
-                            }.get(r.outcome, r.outcome)
-                            
-                            data.append({
-                                "Date": r.date.strftime("%Y-%m-%d"),
-                                "Wave": r.wave_label,
-                                "Dir": r.direction,
-                                "Entry": f"${r.entry_price:.2f}",
-                                "Target": f"${r.target_price:.2f}",
-                                "Stop": f"${r.invalidation_price:.2f}",
-                                "Outcome": outcome_emoji,
-                                "PnL": pnl
-                            })
-                            
-                        st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+                    st.session_state["bt_ew_results"] = results
+                    st.session_state["bt_ew_range"] = (str(bt_start), str(bt_end))
+
+        results = st.session_state.get("bt_ew_results")
+        if results:
+            date_range = st.session_state.get("bt_ew_range", ("", ""))
+
+            # ── Accuracy metrics ──────────────────────────────────────────
+            hits   = [r for r in results if r.outcome == "Target Hit"]
+            stops  = [r for r in results if r.outcome == "Invalidated"]
+            open_t = [r for r in results if r.outcome == "Indeterminate"]
+            closed = hits + stops
+            win_rate = (len(hits) / len(closed) * 100) if closed else 0.0
+
+            # Per-wave-type accuracy
+            w3 = [r for r in closed if r.wave_label == "Wave 3"]
+            w5 = [r for r in closed if r.wave_label == "Wave 5"]
+            w3_wr = (sum(1 for r in w3 if r.outcome == "Target Hit") / len(w3) * 100) if w3 else None
+            w5_wr = (sum(1 for r in w5 if r.outcome == "Target Hit") / len(w5) * 100) if w5 else None
+
+            avg_win  = (sum(r.pnl_pct for r in hits if r.pnl_pct)  / len(hits)  if hits  else 0.0)
+            avg_loss = (sum(r.pnl_pct for r in stops if r.pnl_pct) / len(stops) if stops else 0.0)
+            rr = abs(avg_win / avg_loss) if avg_loss != 0 else float("inf")
+
+            st.markdown(
+                f'<div style="font-size:11px;color:#888;margin-bottom:6px;">'
+                f'Period: {date_range[0]} → {date_range[1]}</div>',
+                unsafe_allow_html=True,
+            )
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            m1.metric("Signals", len(results))
+            m2.metric("Win Rate", f"{win_rate:.1f}%")
+            m3.metric("Hits / Stops", f"{len(hits)} / {len(stops)}")
+            m4.metric("Open", len(open_t))
+            m5.metric("Avg Win", f"{avg_win:+.1f}%")
+            m6.metric("R:R", f"{rr:.2f}x" if rr != float('inf') else "∞")
+
+            # Wave-type split
+            wt_col1, wt_col2 = st.columns(2)
+            wt_col1.metric("Wave 3 Accuracy", f"{w3_wr:.1f}%" if w3_wr is not None else "N/A",
+                           delta=f"{len(w3)} trades")
+            wt_col2.metric("Wave 5 Accuracy", f"{w5_wr:.1f}%" if w5_wr is not None else "N/A",
+                           delta=f"{len(w5)} trades")
+
+            # ── Outcome distribution chart ────────────────────────────────
+            import plotly.graph_objects as go
+            from utils.theme import apply_dark_layout, COLORS as _C
+
+            outcome_counts = {
+                "Target Hit": len(hits),
+                "Invalidated": len(stops),
+                "Open": len(open_t),
+            }
+            bar_colors = [_C.get("green", "#00c853"), _C.get("red", "#ff1744"), _C.get("bloomberg_orange", "#ff9800")]
+            fig_out = go.Figure(go.Bar(
+                x=list(outcome_counts.keys()),
+                y=list(outcome_counts.values()),
+                marker_color=bar_colors,
+                text=list(outcome_counts.values()),
+                textposition="outside",
+            ))
+            apply_dark_layout(fig_out)
+            fig_out.update_layout(
+                title="Outcome Distribution",
+                height=280,
+                showlegend=False,
+                margin=dict(t=36, b=24, l=24, r=24),
+            )
+            st.plotly_chart(fig_out, use_container_width=True, key="bt_ew_outcome_chart")
+
+            # ── PnL over time (equity-style scatter) ──────────────────────
+            sorted_res = sorted(results, key=lambda r: r.date)
+            cum_pnl, running = [], 0.0
+            for r in sorted_res:
+                if r.pnl_pct is not None:
+                    running += r.pnl_pct
+                cum_pnl.append(running)
+
+            fig_eq = go.Figure(go.Scatter(
+                x=[r.date for r in sorted_res],
+                y=cum_pnl,
+                mode="lines+markers",
+                line=dict(color=_C.get("bloomberg_orange", "#ff9800"), width=2),
+                marker=dict(
+                    color=[
+                        _C.get("green", "#00c853") if r.outcome == "Target Hit"
+                        else (_C.get("red", "#ff1744") if r.outcome == "Invalidated"
+                              else "#888")
+                        for r in sorted_res
+                    ],
+                    size=7,
+                ),
+            ))
+            apply_dark_layout(fig_eq)
+            fig_eq.update_layout(
+                title="Cumulative PnL % (per signal)",
+                height=280,
+                margin=dict(t=36, b=24, l=24, r=24),
+            )
+            fig_eq.add_hline(y=0, line_dash="dot", line_color="#555")
+            st.plotly_chart(fig_eq, use_container_width=True, key="bt_ew_equity_chart")
+
+            # ── Detailed Trade Log ────────────────────────────────────────
+            st.markdown("#### Trade Log")
+            data = []
+            for r in sorted_res:
+                pnl = f"{r.pnl_pct:+.1f}%" if r.pnl_pct is not None else "—"
+                outcome_label = {
+                    "Target Hit": "✅ Hit",
+                    "Invalidated": "❌ Stop",
+                    "Indeterminate": "⏳ Open",
+                }.get(r.outcome, r.outcome)
+                data.append({
+                    "Date": r.date.strftime("%Y-%m-%d"),
+                    "Wave": r.wave_label,
+                    "Dir": r.direction,
+                    "Entry": f"${r.entry_price:.2f}",
+                    "Target": f"${r.target_price:.2f}",
+                    "Stop": f"${r.invalidation_price:.2f}",
+                    "Outcome": outcome_label,
+                    "PnL": pnl,
+                })
+            st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)

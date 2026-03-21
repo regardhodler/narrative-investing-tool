@@ -564,19 +564,41 @@ class BacktestResult:
 def backtest_wave_counts(
     series: pd.Series,
     degree: str,
-    test_period_bars: int = 252
+    test_period_bars: int = 252,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> list[BacktestResult]:
     """
     Run a historical backtest of wave counts for a specific degree.
+
+    If start_date / end_date are provided (YYYY-MM-DD strings), only signals
+    whose bar date falls within [start_date, end_date] are emitted.  The full
+    series is still used for wave-count context.
     """
-    if len(series) < test_period_bars + 100:
+    if len(series) < 150:
         return []
 
     results: list[BacktestResult] = []
-    
-    # Start iterating from `test_period_bars` ago
-    start_idx = len(series) - test_period_bars
-    if start_idx < 100: start_idx = 100
+
+    # Resolve bar-index boundaries from date strings (keep full series for context)
+    ts_start = pd.Timestamp(start_date) if start_date else None
+    ts_end   = pd.Timestamp(end_date)   if end_date   else None
+
+    if ts_start is not None or ts_end is not None:
+        # Find the earliest bar to begin scanning (100-bar minimum warm-up)
+        if ts_start is not None:
+            candidates = series.index.searchsorted(ts_start)
+            start_idx = max(int(candidates), 100)
+        else:
+            start_idx = max(len(series) - test_period_bars, 100)
+
+        if ts_end is not None:
+            end_idx = int(series.index.searchsorted(ts_end, side="right"))
+        else:
+            end_idx = len(series)
+    else:
+        start_idx = max(len(series) - test_period_bars, 100)
+        end_idx = len(series)
     
     # State tracking to avoid duplicate signals on consecutive days
     # We track the pivot date of the active wave start to identify "new" waves
@@ -587,7 +609,7 @@ def backtest_wave_counts(
     # Let's do every 3 days to balance speed/precision
     step = 3
     
-    for i in range(start_idx, len(series) - 5, step):
+    for i in range(start_idx, min(end_idx, len(series) - 5), step):
         # Slice history up to current simulated day i
         history = series.iloc[:i+1]
         current_date = history.index[-1]
