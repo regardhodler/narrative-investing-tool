@@ -729,3 +729,73 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
     Returns parsed forecast dict or None on failure.
     """
     return _call_groq_forecast(context_json, scenarios_json)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXPANDED FORECAST ORCHESTRATOR
+# ─────────────────────────────────────────────────────────────────────────────
+
+@st.cache_data(ttl=14400)
+def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Orchestrate 3 Groq calls and merge into unified expanded forecast dict.
+
+    Returns:
+      near_term: dict[scenario][asset] = list of 7 floats
+      medium_term: dict[scenario][asset] = list of 12 floats
+      long_term: dict[scenario][asset] = list of 8 floats
+      causal_chains: dict[scenario] = list of strings
+      black_swans: dict[event_key] = {probability_pct, asset_impacts, narrative}
+      _call_status: dict with "core", "commodities_intl", "black_swans" → "ok" or "error: ..."
+    """
+    result: dict = {
+        "near_term": {},
+        "medium_term": {},
+        "long_term": {},
+        "causal_chains": {},
+        "black_swans": {},
+        "_call_status": {"core": "ok", "commodities_intl": "ok", "black_swans": "ok"},
+    }
+
+    _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
+    _COMM_ASSETS = ["oil", "natgas", "gold", "silver", "fertilizer"]
+    _INTL_ASSETS = ["china", "india", "japan", "germany", "europe", "hongkong"]
+
+    # Call 1: Core US assets (all 3 horizons + causal chains)
+    try:
+        core = _call_groq_core_forecast(context_json, scenarios_json)
+        for scenario in SCENARIO_KEYS:
+            sc = core.get(scenario, {})
+            result["near_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["near_term"] for k in _CORE_ASSETS if k in sc and "near_term" in sc[k]}
+            )
+            result["medium_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["medium_term"] for k in _CORE_ASSETS if k in sc and "medium_term" in sc[k]}
+            )
+            result["long_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["long_term"] for k in _CORE_ASSETS if k in sc and "long_term" in sc[k]}
+            )
+            result["causal_chains"][scenario] = sc.get("causal_chain", [])
+    except Exception as exc:
+        result["_call_status"]["core"] = f"error: {exc}"
+
+    # Call 2: Commodities + International
+    try:
+        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        for scenario in SCENARIO_KEYS:
+            sc = comm.get(scenario, {})
+            result["near_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["near_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "near_term" in sc[k]}
+            )
+            result["medium_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["medium_term"] for k in _COMM_ASSETS if k in sc and "medium_term" in sc[k]}
+            )
+    except Exception as exc:
+        result["_call_status"]["commodities_intl"] = f"error: {exc}"
+
+    # Call 3: Black Swans
+    try:
+        result["black_swans"] = _call_groq_black_swan_forecast(context_json)
+    except Exception as exc:
+        result["_call_status"]["black_swans"] = f"error: {exc}"
+
+    return result

@@ -683,3 +683,101 @@ class TestCallGroqBlackSwanForecast:
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
             _call_groq_black_swan_forecast("{}")
+
+
+# ── generate_expanded_forecast ────────────────────────────────────────────────
+
+class TestGenerateExpandedForecast:
+    """Tests for generate_expanded_forecast."""
+
+    def _make_core_response(self):
+        asset_data = {
+            "near_term": [0.1] * 7,
+            "medium_term": [0.2] * 12,
+            "long_term": [0.3] * 8,
+        }
+        scenario = {k: asset_data for k in ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]}
+        scenario["causal_chain"] = ["step1", "step2", "step3"]
+        return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
+
+    def _make_comm_response(self):
+        comm_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
+        intl_data = {"near_term": [0.1] * 7}
+        scenario = {}
+        for a in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+            scenario[a] = comm_data
+        for a in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+            scenario[a] = intl_data
+        return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
+
+    def _make_swan_response(self):
+        event = {
+            "probability_pct": 5.0,
+            "asset_impacts": {"spy": "bearish", "qqq": "bearish", "iwm": "bearish",
+                              "bonds_long": "bullish", "bonds_short": "neutral",
+                              "gold": "strongly bullish", "oil": "bullish", "usd": "neutral"},
+            "narrative": "Some narrative here.",
+        }
+        return {k: event for k in ["war_escalation", "hormuz_closure", "nuclear_event", "hyperinflation"]}
+
+    def _patch_all(self, monkeypatch):
+        monkeypatch.setattr("services.fed_forecaster._call_groq_core_forecast",
+                            lambda c, s: self._make_core_response())
+        monkeypatch.setattr("services.fed_forecaster._call_groq_commodities_intl_forecast",
+                            lambda c, s: self._make_comm_response())
+        monkeypatch.setattr("services.fed_forecaster._call_groq_black_swan_forecast",
+                            lambda c: self._make_swan_response())
+
+    def test_returns_all_top_level_keys(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        for key in ["near_term", "medium_term", "long_term", "causal_chains", "black_swans", "_call_status"]:
+            assert key in result
+
+    def test_near_term_has_18_assets_per_scenario(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        assert len(result["near_term"]["hold"]) == 18
+
+    def test_long_term_has_7_assets_per_scenario(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        assert len(result["long_term"]["hold"]) == 7
+
+    def test_causal_chains_present_per_scenario(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        for sk in ["hold", "cut_25", "cut_50", "hike_25"]:
+            assert sk in result["causal_chains"]
+            assert len(result["causal_chains"][sk]) >= 1
+
+    def test_black_swans_present(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        assert len(result["black_swans"]) == 4
+
+    def test_call_status_all_ok_on_success(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        self._patch_all(monkeypatch)
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        assert result["_call_status"]["core"] == "ok"
+        assert result["_call_status"]["commodities_intl"] == "ok"
+        assert result["_call_status"]["black_swans"] == "ok"
+
+    def test_graceful_degradation_when_core_fails(self, monkeypatch):
+        from services.fed_forecaster import generate_expanded_forecast
+        monkeypatch.setattr("services.fed_forecaster._call_groq_core_forecast",
+                            lambda c, s: (_ for _ in ()).throw(RuntimeError("api error")))
+        monkeypatch.setattr("services.fed_forecaster._call_groq_commodities_intl_forecast",
+                            lambda c, s: self._make_comm_response())
+        monkeypatch.setattr("services.fed_forecaster._call_groq_black_swan_forecast",
+                            lambda c: self._make_swan_response())
+        result = generate_expanded_forecast.__wrapped__("{}", "{}")
+        assert "error" in result["_call_status"]["core"]
+        assert result["_call_status"]["commodities_intl"] == "ok"
+        assert result["_call_status"]["black_swans"] == "ok"
