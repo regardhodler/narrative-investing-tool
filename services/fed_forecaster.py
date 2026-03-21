@@ -333,15 +333,28 @@ def _groq_headers() -> dict:
 
 
 def _strip_fences(text: str) -> str:
-    """Remove markdown code fences from Groq response if present."""
+    """Extract JSON from Groq response, handling fences and preamble text."""
     text = text.strip()
+    # Strip markdown code fences
     if text.startswith("```"):
         lines = text.split("\n", 1)
         text = lines[1] if len(lines) > 1 else ""
         text = text.rstrip()
         if text.endswith("```"):
             text = text[:-3]
-    return text.strip()
+    text = text.strip()
+    # If the model added preamble text, find the first { or [ and slice from there
+    for char in ("{", "["):
+        idx = text.find(char)
+        if idx > 0:
+            # Try parsing from that position
+            candidate = text[idx:]
+            try:
+                json.loads(candidate)
+                return candidate
+            except json.JSONDecodeError:
+                pass
+    return text
 
 
 def _neutral_tone_fallback() -> dict:
@@ -409,6 +422,7 @@ Rules:
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 600,
                 "temperature": 0.2,
+                "response_format": {"type": "json_object"},
             },
             timeout=20,
         )
@@ -501,6 +515,7 @@ Rules:
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 4096,
                 "temperature": 0.3,
+                "response_format": {"type": "json_object"},
             },
             timeout=45,
         )
