@@ -206,10 +206,14 @@ class TestAdjustProbabilities:
 
     def test_adjustment_increases_hold(self):
         from services.fed_forecaster import adjust_probabilities
+        zero_tone = {"aggregate_bias": "neutral",
+                     "prob_adjustments": {"hold": 0.0, "cut_25": 0.0, "cut_50": 0.0, "hike_25": 0.0}}
+        baseline = next(r["prob"] for r in adjust_probabilities(self._base_probs(), zero_tone)
+                        if r["scenario"] == "hold")
         result = adjust_probabilities(self._base_probs(), self._tone_result())
-        before = 0.52
         after = next(r["prob"] for r in result if r["scenario"] == "hold")
-        assert after > before
+        # Hawkish tone adds +0.08 to hold — normalised hold should exceed zero-adjustment baseline
+        assert after > baseline
 
     def test_delta_field_present_and_signed(self):
         from services.fed_forecaster import adjust_probabilities
@@ -269,10 +273,21 @@ class TestBuildFedContext:
         ctx = build_fed_context(self._make_macro(), self._make_fred_data())
         assert abs(ctx["fed_funds_rate"] - 5.33) < 0.01
 
-    def test_missing_fedfunds_does_not_raise(self):
+    def test_missing_fedfunds_uses_fred_fallback(self):
+        from services.fed_forecaster import build_fed_context
+        import pandas as pd
+        fred_data = self._make_fred_data()
+        fred_data["fedfunds"] = None
+        idx = pd.date_range("2026-01-01", periods=1, freq="MS")
+        fallback_series = pd.Series([5.25], index=idx)
+        with patch("services.fed_forecaster.fetch_fred_series_safe", return_value=fallback_series):
+            ctx = build_fed_context(self._make_macro(), fred_data)
+        assert abs(ctx["fed_funds_rate"] - 5.25) < 0.01
+
+    def test_missing_fedfunds_fallback_unavailable_returns_none(self):
         from services.fed_forecaster import build_fed_context
         fred_data = self._make_fred_data()
         fred_data["fedfunds"] = None
-        ctx = build_fed_context(self._make_macro(), fred_data)
-        # Should not raise; fed_funds_rate may be None or a fallback float
-        assert "fed_funds_rate" in ctx
+        with patch("services.fed_forecaster.fetch_fred_series_safe", return_value=None):
+            ctx = build_fed_context(self._make_macro(), fred_data)
+        assert ctx["fed_funds_rate"] is None

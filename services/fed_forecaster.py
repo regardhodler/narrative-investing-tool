@@ -293,7 +293,8 @@ def _safe_last(series) -> float | None:
 def build_fed_context(macro: dict, fred_data: dict) -> dict:
     """
     Package current macro regime signals into a serialisable dict for the Groq prompt.
-    Does not make network calls. Falls back gracefully when series are None.
+    Falls back gracefully when series are None. If fred_data["fedfunds"] is None,
+    attempts a last-resort fetch via fetch_fred_series_safe("FEDFUNDS").
     """
     fedfunds_series = fred_data.get("fedfunds")
     fed_rate = _safe_last(fedfunds_series)
