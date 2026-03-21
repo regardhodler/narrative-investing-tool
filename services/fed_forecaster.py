@@ -165,3 +165,81 @@ def fetch_zq_probabilities() -> list[dict]:
 
     # Tier 3 — fallback
     return _equal_weight_fallback()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FED RSS COMMUNICATIONS
+# ─────────────────────────────────────────────────────────────────────────────
+
+_FED_RSS_FEEDS = {
+    "release": "https://www.federalreserve.gov/rss/releases.xml",
+    "speech":  "https://www.federalreserve.gov/rss/speeches.xml",
+}
+
+
+def _parse_rss_feed(xml_text: str, source: str) -> list[dict]:
+    """Parse Federal Reserve RSS XML text into a list of communication dicts."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return []
+
+    items = []
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        description = (item.findtext("description") or "").strip()
+
+        if not title:
+            continue
+
+        # Parse date to sortable datetime
+        try:
+            from email.utils import parsedate_to_datetime
+            dt = parsedate_to_datetime(pub_date)
+            date_str = dt.strftime("%Y-%m-%d")
+            sort_key = dt.timestamp()
+        except Exception:
+            date_str = pub_date
+            sort_key = 0.0
+
+        items.append({
+            "title": title,
+            "date": date_str,
+            "url": link,
+            "source": source,
+            "raw_text": description,
+            "_sort_key": sort_key,
+        })
+
+    # Most recent first
+    items.sort(key=lambda x: x["_sort_key"], reverse=True)
+    for item in items:
+        item.pop("_sort_key", None)
+    return items
+
+
+@st.cache_data(ttl=3600)
+def fetch_fed_communications(max_items: int = 5) -> list[dict]:
+    """
+    Fetch and merge Fed press releases and speeches from official RSS feeds.
+    Returns up to max_items most recent items, sorted by date descending.
+    Falls back to [] on any error.
+    """
+    all_items = []
+    for source, url in _FED_RSS_FEEDS.items():
+        try:
+            resp = requests.get(
+                url,
+                timeout=8,
+                headers={"User-Agent": "NarrativeInvestingTool/1.0"},
+            )
+            resp.raise_for_status()
+            all_items.extend(_parse_rss_feed(resp.text, source=source))
+        except Exception:
+            continue
+
+    # Sort merged list by date descending, return top max_items
+    all_items.sort(key=lambda x: x["date"], reverse=True)
+    return all_items[:max_items]

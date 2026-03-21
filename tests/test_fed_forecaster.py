@@ -115,3 +115,63 @@ class TestFetchZqProbabilitiesIntegration:
                 result = fetch_zq_probabilities()
         assert all(r["source"] == "fallback" for r in result)
         assert len(result) == 4
+
+
+# ── fetch_fed_communications ──────────────────────────────────────────────────
+
+_SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Federal Reserve Speeches</title>
+    <item>
+      <title>Governor Powell: Inflation Outlook</title>
+      <pubDate>Sat, 21 Mar 2026 14:00:00 +0000</pubDate>
+      <link>https://www.federalreserve.gov/newsevents/speech/powell20260321a.htm</link>
+      <description>Chair Powell discussed the inflation outlook, noting that prices remain elevated.</description>
+    </item>
+    <item>
+      <title>Governor Waller: Labor Market Update</title>
+      <pubDate>Wed, 18 Mar 2026 10:00:00 +0000</pubDate>
+      <link>https://www.federalreserve.gov/newsevents/speech/waller20260318a.htm</link>
+      <description>Governor Waller noted continued resilience in the labor market.</description>
+    </item>
+  </channel>
+</rss>"""
+
+
+class TestFetchFedCommunications:
+    def _mock_get(self, text):
+        mock_resp = MagicMock()
+        mock_resp.text = text
+        mock_resp.raise_for_status = MagicMock()
+        return mock_resp
+
+    def test_parses_items(self):
+        from services.fed_forecaster import _parse_rss_feed
+        items = _parse_rss_feed(_SAMPLE_RSS, source="speech")
+        assert len(items) == 2
+        assert items[0]["title"] == "Governor Powell: Inflation Outlook"
+        assert items[0]["source"] == "speech"
+        assert "elevated" in items[0]["raw_text"]
+
+    def test_returns_most_recent_first(self):
+        from services.fed_forecaster import _parse_rss_feed
+        items = _parse_rss_feed(_SAMPLE_RSS, source="speech")
+        # First item has later date
+        assert "Powell" in items[0]["title"]
+
+    def test_returns_empty_on_malformed_xml(self):
+        from services.fed_forecaster import _parse_rss_feed
+        items = _parse_rss_feed("not xml at all", source="speech")
+        assert items == []
+
+    def test_max_items_respected(self):
+        """fetch_fed_communications must truncate to max_items."""
+        from services.fed_forecaster import fetch_fed_communications
+        mock_resp = MagicMock()
+        mock_resp.text = _SAMPLE_RSS  # has 2 items
+        mock_resp.raise_for_status = MagicMock()
+        with patch("services.fed_forecaster.requests.get", return_value=mock_resp):
+            # Both feeds return the same 2-item RSS → 4 items total before truncation
+            items = fetch_fed_communications(max_items=1)
+        assert len(items) == 1  # strictly enforced
