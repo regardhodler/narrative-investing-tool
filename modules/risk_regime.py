@@ -2053,3 +2053,59 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
 
     with tabs[4]:
         _draw_fan_chart("usd")
+
+    st.markdown("---")
+    _render_fed_long_term(expanded, adj_probs)
+
+
+def _render_fed_long_term(expanded: dict, adj_probs: list):
+    """Section 7: 2-year quarterly long-term outlook bar charts."""
+    from services.fed_forecaster import (
+        SCENARIO_KEYS, ASSET_LABELS as SVC_ASSET_LABELS,
+    )
+    import plotly.graph_objects as go
+
+    _section_header("Long-Term Asset Impact — 2-Year Quarterly Outlook")
+    st.caption("Probability-weighted projected quarterly % change (Q1–Q8)")
+
+    long = expanded.get("long_term", {})
+    if not long:
+        st.info("Long-term forecast unavailable.")
+        return
+
+    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
+    assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
+    quarters = [f"Q{i+1}" for i in range(8)]
+
+    cols = st.columns(2)
+    for idx, asset in enumerate(assets):
+        # Probability-weighted average across all 4 scenarios
+        weighted = [0.0] * 8
+        for sk in SCENARIO_KEYS:
+            prob = prob_map.get(sk, 0.25)
+            vals = long.get(sk, {}).get(asset, [0.0] * 8)
+            for q in range(8):
+                weighted[q] += prob * (vals[q] if q < len(vals) else 0.0)
+
+        bar_colors = [
+            COLORS.get("green", "#22c55e") if v >= 0 else COLORS.get("red", "#ef4444")
+            for v in weighted
+        ]
+        fig = go.Figure(go.Bar(
+            x=quarters,
+            y=weighted,
+            marker_color=bar_colors,
+            marker_line_width=0,
+            showlegend=False,
+        ))
+        apply_dark_layout(fig)
+        fig.update_layout(
+            title=dict(text=SVC_ASSET_LABELS.get(asset, asset), font_size=13),
+            height=220,
+            margin=dict(l=0, r=10, t=30, b=20),
+            xaxis_title="Quarter",
+            yaxis_title="% change",
+        )
+        fig.add_hline(y=0, line_dash="dot",
+                      line_color=COLORS.get("border", "#444"), line_width=1)
+        cols[idx % 2].plotly_chart(fig, use_container_width=True)
