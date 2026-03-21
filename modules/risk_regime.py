@@ -1934,95 +1934,122 @@ def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, 
 
 
 def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
-    """Section 6: probability-weighted medium-term fan charts per asset class."""
-    from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
+    """Section 6: probability-weighted medium-term fan charts in tabbed layout."""
+    from services.fed_forecaster import (
+        SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
+    )
     import plotly.graph_objects as go
     import numpy as np
 
     _section_header("Medium-Term Outlook (3–12 months)")
 
+    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
+
+    SCENARIO_COLORS = {
+        "hold":    COLORS.get("yellow", "#f0c040"),
+        "cut_25":  "#22c55e",
+        "cut_50":  "#16a34a",
+        "hike_25": COLORS.get("red", "#ef4444"),
+    }
+
+    def _draw_fan_chart(asset_key: str, col_or_container=None):
+        """Draw a 12-month fan chart for one asset in medium_term."""
+        months = list(range(1, 13))
+        target = col_or_container or st
+
+        fig = go.Figure()
+
+        # Draw one trace per scenario
+        for sk in SCENARIO_KEYS:
+            vals = medium.get(sk, {}).get(asset_key, [])
+            if not vals or len(vals) < 12:
+                continue
+            prob = prob_map.get(sk, 0.25)
+            label = f"{SCENARIO_LABELS[sk]} ({int(round(prob*100))}%)"
+            color = SCENARIO_COLORS.get(sk, "#888")
+            opacity = max(0.3, prob)
+            fig.add_trace(go.Scatter(
+                x=months,
+                y=list(vals),
+                name=label,
+                line=dict(color=color, width=max(1, int(prob * 4))),
+                opacity=opacity,
+                showlegend=True,
+            ))
+
+        fig.add_hline(y=0, line_dash="dot",
+                      line_color=COLORS.get("border", "#444"), line_width=1)
+        apply_dark_layout(fig)
+        fig.update_layout(
+            title=dict(text=SVC_ASSET_LABELS.get(asset_key, asset_key), font_size=13),
+            height=220,
+            margin=dict(l=0, r=10, t=30, b=20),
+            xaxis=dict(title="Month", tickmode="linear", dtick=3),
+            yaxis=dict(title="% change"),
+            legend=dict(font_size=9, orientation="h", y=-0.25),
+        )
+        target.plotly_chart(fig, use_container_width=True)
+
+    def _draw_near_term_bar(asset_key: str, col_or_container=None):
+        """Draw a 7-day bar chart for one asset from near_term data."""
+        near = expanded.get("near_term", {})
+        days = [f"D{i+1}" for i in range(7)]
+        target = col_or_container or st
+
+        fig = go.Figure()
+        for sk in SCENARIO_KEYS:
+            vals = near.get(sk, {}).get(asset_key, [])
+            if not vals or len(vals) < 7:
+                continue
+            prob = prob_map.get(sk, 0.25)
+            label = f"{SCENARIO_LABELS[sk]} ({int(round(prob*100))}%)"
+            color = SCENARIO_COLORS.get(sk, "#888")
+            fig.add_trace(go.Bar(
+                x=days,
+                y=list(vals[:7]),
+                name=label,
+                marker_color=color,
+                opacity=max(0.3, prob),
+                showlegend=True,
+            ))
+
+        apply_dark_layout(fig)
+        fig.update_layout(
+            title=dict(text=SVC_ASSET_LABELS.get(asset_key, asset_key), font_size=13),
+            height=220,
+            margin=dict(l=0, r=10, t=30, b=20),
+            barmode="group",
+            xaxis_title="Day",
+            yaxis_title="% change",
+            legend=dict(font_size=9, orientation="h", y=-0.25),
+        )
+        target.plotly_chart(fig, use_container_width=True)
+
     if not medium:
         st.info("Medium-term forecast unavailable.")
         return
 
-    ASSET_KEYS   = ["equities", "bonds", "commodities", "usd"]
-    ASSET_LABELS = {"equities": "Equities", "bonds": "Bonds",
-                    "commodities": "Commodities", "usd": "USD"}
-    months = list(range(1, 13))
+    tabs = st.tabs(["🇺🇸 US Equities", "🏦 Bonds", "🛢 Commodities", "🌏 International", "💵 Dollar"])
 
-    # Weight scenarios by adjusted probability
-    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
+    with tabs[0]:
+        cols = st.columns(2)
+        for i, asset in enumerate(["spy", "qqq", "iwm", "dji"]):
+            _draw_fan_chart(asset, cols[i % 2])
 
-    col_left, col_right = st.columns(2)
-    col_map = {
-        "equities":    col_left,
-        "bonds":       col_right,
-        "commodities": col_left,
-        "usd":         col_right,
-    }
+    with tabs[1]:
+        cols = st.columns(2)
+        for i, asset in enumerate(["bonds_long", "bonds_short"]):
+            _draw_fan_chart(asset, cols[i])
 
-    for asset in ASSET_KEYS:
-        # Compute probability-weighted p25, p50, p75 across all scenarios
-        w_p25 = np.zeros(12)
-        w_p50 = np.zeros(12)
-        w_p75 = np.zeros(12)
-        total_weight = 0.0
+    with tabs[2]:
+        cols = st.columns(2)
+        for i, asset in enumerate(["oil", "natgas", "gold", "silver", "fertilizer"]):
+            _draw_fan_chart(asset, cols[i % 2])
 
-        for key in SCENARIO_KEYS:
-            sc_data = (medium.get(key) or {}).get(asset, {})
-            p25 = sc_data.get("monthly_p25", [0.0] * 12)
-            p50 = sc_data.get("monthly_p50", [0.0] * 12)
-            p75 = sc_data.get("monthly_p75", [0.0] * 12)
-            w = prob_map.get(key, 0.25)
-            if len(p25) == 12 and len(p50) == 12 and len(p75) == 12:
-                w_p25 += w * np.array(p25)
-                w_p50 += w * np.array(p50)
-                w_p75 += w * np.array(p75)
-                total_weight += w
+    with tabs[3]:
+        cols = st.columns(3)
+        for i, asset in enumerate(["china", "india", "japan", "germany", "europe", "hongkong"]):
+            _draw_near_term_bar(asset, cols[i % 3])
 
-        if total_weight > 0:
-            w_p25 /= total_weight
-            w_p50 /= total_weight
-            w_p75 /= total_weight
-
-        fig = go.Figure()
-
-        # Band fill (p25 to p75)
-        fig.add_trace(go.Scatter(
-            x=months + months[::-1],
-            y=list(w_p75) + list(w_p25[::-1]),
-            fill="toself",
-            fillcolor="rgba(100,149,237,0.15)",
-            line=dict(color="rgba(0,0,0,0)"),
-            name="p25–p75",
-            showlegend=False,
-        ))
-
-        # Median line
-        fig.add_trace(go.Scatter(
-            x=months,
-            y=list(w_p50),
-            line=dict(color=COLORS.get("bloomberg_orange", "#f0a040"), width=2),
-            name="Median",
-            showlegend=False,
-        ))
-
-        # Zero line
-        fig.add_hline(y=0, line_dash="dot", line_color=COLORS.get("border", "#444"), line_width=1)
-
-        apply_dark_layout(fig)
-        fig.update_layout(
-            title=dict(text=ASSET_LABELS[asset], font_size=13),
-            height=220,
-            margin=dict(l=0, r=10, t=30, b=20),
-            xaxis=dict(title="Month", tickmode="linear", dtick=3),
-            yaxis=dict(title="Cumulative return (%)"),
-        )
-
-        col_map[asset].plotly_chart(fig, use_container_width=True)
-
-        # Narrative from dominant scenario
-        dominant_key = max(SCENARIO_KEYS, key=lambda k: prob_map.get(k, 0.0))
-        narrative = (medium.get(dominant_key) or {}).get(asset, {}).get("narrative", "")
-        if narrative and narrative != "...":
-            col_map[asset].caption(narrative)
+    with tabs[4]:
+        _draw_fan_chart("usd")
