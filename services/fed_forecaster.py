@@ -625,6 +625,53 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
     return data
 
 
+def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Call Groq for commodities (near+medium) and international equities (near only).
+
+    Returns dict keyed by scenario (hold/cut_25/cut_50/hike_25), each containing:
+      Commodities (oil, natgas, gold, silver, fertilizer):
+        near_term: list of 7 floats (daily % change)
+        medium_term: list of 12 floats (monthly % change)
+      International (china, india, japan, germany, europe, hongkong):
+        near_term: list of 7 floats (daily % change) — only near_term, no medium_term
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY not set")
+
+    prompt = (
+        "You are a macro-economist. Return ONLY valid json (no commentary).\n\n"
+        f"Given this macro context:\n{context_json}\n\n"
+        f"And these FOMC scenarios:\n{scenarios_json}\n\n"
+        "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
+        "Each scenario maps to an object with these asset keys and structures:\n\n"
+        "COMMODITIES (oil, natgas, gold, silver, fertilizer) — each has:\n"
+        '  "near_term": array of exactly 7 floats (daily % change days 1-7)\n'
+        '  "medium_term": array of exactly 12 floats (monthly % change months 1-12)\n\n'
+        "INTERNATIONAL EQUITIES (china, india, japan, germany, europe, hongkong) — each has:\n"
+        '  "near_term": array of exactly 7 floats (daily % change days 1-7) — near_term ONLY, no medium_term\n\n'
+        "Asset notes:\n"
+        "- fertilizer: no clean ETF; use MOS+CF complex narrative; nat gas drives ~80% of production cost\n"
+        "- china=FXI, india=INDA, japan=EWJ, germany=EWG, europe=VGK, hongkong=EWH\n"
+    )
+
+    headers = _groq_headers()
+    payload = {
+        "model": GROQ_MODEL,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "You are a macro-economist. Return only valid json."},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 4096,
+        "temperature": 0.3,
+    }
+    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp.raise_for_status()
+    raw = resp.json()["choices"][0]["message"]["content"]
+    return json.loads(_strip_fences(raw))
+
+
 @st.cache_data(ttl=14400)
 def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
     """

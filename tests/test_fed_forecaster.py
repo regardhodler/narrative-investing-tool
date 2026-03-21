@@ -557,3 +557,60 @@ class TestCallGroqCoreForecast:
         monkeypatch.delenv("GROQ_API_KEY", raising=False)
         with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
             _call_groq_core_forecast("{}", "{}")
+
+
+class TestCallGroqCommoditiesIntlForecast:
+    """Tests for _call_groq_commodities_intl_forecast."""
+
+    def _make_mock_response(self):
+        """Build a valid mock Groq response."""
+        comm_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
+        intl_data = {"near_term": [0.1] * 7}
+        scenario = {}
+        for asset in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+            scenario[asset] = comm_data
+        for asset in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+            scenario[asset] = intl_data
+        return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
+
+    def _patch_groq(self, monkeypatch, response_data):
+        import json as _json
+
+        class MockResp:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"choices": [{"message": {"content": _json.dumps(response_data)}}]}
+
+        monkeypatch.setattr("services.fed_forecaster.requests.post", lambda *a, **kw: MockResp())
+        monkeypatch.setenv("GROQ_API_KEY", "test-key")
+
+    def test_returns_all_scenarios(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_commodities_intl_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_commodities_intl_forecast("{}", "{}")
+        assert set(result.keys()) == {"hold", "cut_25", "cut_50", "hike_25"}
+
+    def test_commodities_have_near_and_medium(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_commodities_intl_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_commodities_intl_forecast("{}", "{}")
+        for asset in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+            assert "near_term" in result["hold"][asset]
+            assert "medium_term" in result["hold"][asset]
+            assert len(result["hold"][asset]["near_term"]) == 7
+            assert len(result["hold"][asset]["medium_term"]) == 12
+
+    def test_international_have_near_term_only(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_commodities_intl_forecast
+        self._patch_groq(monkeypatch, self._make_mock_response())
+        result = _call_groq_commodities_intl_forecast("{}", "{}")
+        for asset in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+            assert "near_term" in result["hold"][asset]
+            assert "medium_term" not in result["hold"][asset]
+            assert len(result["hold"][asset]["near_term"]) == 7
+
+    def test_raises_without_api_key(self, monkeypatch):
+        from services.fed_forecaster import _call_groq_commodities_intl_forecast
+        monkeypatch.delenv("GROQ_API_KEY", raising=False)
+        with pytest.raises(RuntimeError, match="GROQ_API_KEY"):
+            _call_groq_commodities_intl_forecast("{}", "{}")
