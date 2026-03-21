@@ -75,6 +75,43 @@ _SCENARIO_DELTAS = {
     "hike_25": +0.25,
 }
 
+# Asset groupings for expanded forecast
+ASSET_GROUPS = {
+    "us_equities":   ["spy", "qqq", "iwm", "dji"],
+    "bonds":         ["bonds_long", "bonds_short"],
+    "commodities":   ["oil", "natgas", "gold", "silver", "fertilizer"],
+    "international": ["china", "india", "japan", "germany", "europe", "hongkong"],
+    "usd":           ["usd"],
+}
+
+ASSET_LABELS = {
+    "spy":        "SPY (S&P 500)",
+    "qqq":        "QQQ (Nasdaq)",
+    "iwm":        "IWM (Russell 2K)",
+    "dji":        "DJI (Dow Jones)",
+    "bonds_long": "TLT (30Y Long End)",
+    "bonds_short": "SHY (2Y Short End)",
+    "usd":        "DXY (Dollar Index)",
+    "oil":        "WTI Crude Oil",
+    "natgas":     "Natural Gas",
+    "gold":       "Gold",
+    "silver":     "Silver",
+    "fertilizer": "Fertilizer (MOS/CF)",
+    "china":      "FXI (China)",
+    "india":      "INDA (India)",
+    "japan":      "EWJ (Japan)",
+    "germany":    "EWG (Germany)",
+    "europe":     "VGK (Europe)",
+    "hongkong":   "EWH (Hong Kong)",
+}
+
+BLACK_SWAN_EVENTS = {
+    "war_escalation": "Major War Escalation (NATO/Russia or Taiwan Strait)",
+    "hormuz_closure": "Strait of Hormuz Closure (oil supply shock)",
+    "nuclear_event":  "Nuclear Event (detonation or credible use threat)",
+    "hyperinflation": "Hyperinflation (US CPI > 20% annualized)",
+}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ZQ PROBABILITY DERIVATION (pure, no I/O)

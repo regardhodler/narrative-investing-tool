@@ -463,3 +463,14 @@ class TestGenerateForecast:
                 result = _call_groq_forecast(self._context_json(), self._scenarios_json())
         equities_hold = result["medium_term"]["hold"]["equities"]
         assert len(equities_hold["monthly_p50"]) == 12
+
+
+class TestConstants:
+    def test_asset_groups_covers_all_labels(self):
+        from services.fed_forecaster import ASSET_GROUPS, ASSET_LABELS
+        all_keys = [k for keys in ASSET_GROUPS.values() for k in keys]
+        assert set(all_keys) == set(ASSET_LABELS.keys())
+
+    def test_black_swan_events_has_four_entries(self):
+        from services.fed_forecaster import BLACK_SWAN_EVENTS
+        assert len(BLACK_SWAN_EVENTS) == 4
