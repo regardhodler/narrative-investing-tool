@@ -1891,5 +1891,65 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
 
 
 def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict):
-    """Section 5 stub."""
-    st.info("Causal chain — coming in next step")
+    """Section 5: full causal chain with cumulative confidence decay."""
+    from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
+
+    _section_header("Causal Chain")
+
+    # Dominant scenario = highest adjusted probability
+    dominant_key = max(SCENARIO_KEYS, key=lambda k: next(
+        (r["prob"] for r in adj_probs if r["scenario"] == k), 0.0
+    ))
+
+    for scenario_key in SCENARIO_KEYS:
+        chain_steps = chains.get(scenario_key, [])
+        prob = next((r["prob"] for r in adj_probs if r["scenario"] == scenario_key), 0.25)
+        label = f"{SCENARIO_LABELS[scenario_key]} [{int(round(prob*100))}%]"
+        is_dominant = scenario_key == dominant_key
+
+        with st.expander(label, expanded=is_dominant):
+            if not chain_steps:
+                st.caption("Chain data unavailable.")
+                continue
+
+            start_conf = chain_steps[0]["confidence"]
+            end_conf   = chain_steps[-1]["confidence"]
+
+            # Render chain steps with indented confidence
+            for step_data in chain_steps:
+                step = step_data["step"]
+                conf = step_data["confidence"]
+                conf_pct = int(round(conf * 100))
+                color = (
+                    COLORS.get("green",    "#40c080") if conf >= 0.70 else
+                    COLORS.get("yellow",   "#f0c040") if conf >= 0.55 else
+                    COLORS.get("text_dim", "#888888")
+                )
+                st.markdown(
+                    f'<div style="padding:3px 0 3px 16px;border-left:2px solid {color};">'
+                    f'<span style="font-size:13px;">{step}</span>'
+                    f'<span style="float:right;font-size:11px;color:{color};">'
+                    f'[{conf_pct}%]</span></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Confidence decay bar
+            if start_conf > 0:
+                decay_pct = int(round((end_conf / start_conf) * 100))
+                filled = int(round(decay_pct / 10))
+                bar = "█" * filled + "░" * (10 - filled)
+                st.markdown(
+                    f'<div style="font-size:11px;color:{COLORS["text_dim"]};'
+                    f'font-family:\'JetBrains Mono\',monospace;margin-top:8px;">'
+                    f'Confidence: {bar} {int(round(start_conf*100))}% → '
+                    f'{int(round(end_conf*100))}%</div>',
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("---")
+    _render_fed_fan_charts(medium, adj_probs)
+
+
+def _render_fed_fan_charts(medium: dict, adj_probs: list[dict]):
+    """Section 6 stub."""
+    st.info("Fan charts — coming in next step")
