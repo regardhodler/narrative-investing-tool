@@ -1210,6 +1210,20 @@ def _render_signals_table(signals: list[dict]):
             "font-size": "12px",
         })
     )
+
+    # ── Confidence legend ─────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:11px;color:#888;line-height:1.7;margin-bottom:6px;">'
+        f'<b style="color:#ccc;">Confidence</b> measures how fresh and reliable each signal\'s underlying data is. '
+        f'It is computed from the <i>age of the last data point</i> relative to its expected update frequency:<br>'
+        f'&nbsp;&nbsp;<b style="color:#4caf50;">● High (≥75)</b> — data is current (updated within its normal release window). Weight this signal fully.<br>'
+        f'&nbsp;&nbsp;<b style="color:#ff9800;">● Medium (50–74)</b> — data is slightly stale (e.g. FRED series released monthly and overdue by a few days). '
+        f'Signal is still valid but treat with mild caution — it may not reflect the most recent shift.<br>'
+        f'&nbsp;&nbsp;<b style="color:#f44336;">● Low (&lt;50)</b> — data is significantly lagged or unavailable. '
+        f'This signal\'s vote is down-weighted in the macro score automatically.</div>',
+        unsafe_allow_html=True,
+    )
+
     st.dataframe(styled, use_container_width=True, hide_index=True)
     csv = df.to_csv(index=False)
     st.download_button("Export CSV", csv, "risk_regime_signals.csv", "text/csv", key="dl_risk_signals")
@@ -1311,14 +1325,21 @@ def render():
         for label, ticker in _TICKER_BAR:
             snap = snaps.get(ticker)
             if snap and snap.latest_price:
-                pct = snap.pct_change_1d or 0.0
-                color = COLORS["green"] if pct >= 0 else COLORS["red"]
-                arrow = "▲" if pct >= 0 else "▼"
+                pct_1d = snap.pct_change_1d or 0.0
+                pct_ytd = snap.pct_change_ytd
+                color_1d = COLORS["green"] if pct_1d >= 0 else COLORS["red"]
+                arrow = "▲" if pct_1d >= 0 else "▼"
+                if pct_ytd is not None:
+                    color_ytd = COLORS["green"] if pct_ytd >= 0 else COLORS["red"]
+                    ytd_html = f'<div style="font-size:10px;color:{color_ytd};">YTD {pct_ytd:+.2f}%</div>'
+                else:
+                    ytd_html = '<div style="font-size:10px;color:#555;">YTD —</div>'
                 cells.append(
                     f'<div style="display:inline-block;padding:4px 12px;text-align:center;">'
                     f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};letter-spacing:0.06em;">{label}</div>'
                     f'<div style="font-size:15px;font-weight:700;color:{COLORS["text"]};">${snap.latest_price:,.2f}</div>'
-                    f'<div style="font-size:12px;color:{color};">{arrow} {pct:+.2f}%</div>'
+                    f'<div style="font-size:12px;color:{color_1d};">{arrow} {pct_1d:+.2f}%</div>'
+                    f'{ytd_html}'
                     f'</div>'
                 )
         if cells:
