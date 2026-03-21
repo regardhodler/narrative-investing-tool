@@ -1721,5 +1721,87 @@ def _render_fed_forecaster(macro: dict, fred_data: dict):
 
 
 def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict):
-    """Sections 3-6: placeholder stub."""
-    st.info("Probability bars — coming in next step")
+    """Sections 3–6: probability bars, asset matrix, causal chain, fan charts."""
+    from services.fed_forecaster import (
+        fetch_zq_probabilities, build_fed_context, generate_forecast,
+        adjust_probabilities, SCENARIO_KEYS, SCENARIO_LABELS,
+    )
+    import json as _json
+    from datetime import datetime as _dt
+
+    # ── Section 3: Scenario Probability Bars ─────────────────────────────────
+    _section_header("Scenario Probabilities (Fed Funds Futures)")
+
+    base_probs = fetch_zq_probabilities()
+    futures_updated = _dt.now().strftime("%H:%M")
+
+    # Show fallback warning if data unavailable
+    if any(r.get("data_unavailable") for r in base_probs):
+        st.warning("⚠ Futures data unavailable — showing equal-weight 25% per scenario")
+
+    # Apply tone adjustment
+    adj_probs = adjust_probabilities(base_probs, tone_result)
+
+    # Source label
+    source = (base_probs[0].get("source", "fallback") if base_probs else "fallback")
+    source_label = {"yfinance": "Futures: yfinance ZQ", "fallback": "⚠ Fallback: equal-weight"}.get(source, source)
+    st.caption(f"{source_label}  |  Futures as of {futures_updated}")
+
+    # Horizontal bar chart
+    scenario_colors = {
+        "hold":    COLORS.get("yellow", "#f0c040"),
+        "cut_25":  COLORS.get("green",  "#40c080"),
+        "cut_50":  COLORS.get("green",  "#40c080"),
+        "hike_25": COLORS.get("red",    "#e05050"),
+    }
+
+    import plotly.graph_objects as go
+
+    labels = [SCENARIO_LABELS[k] for k in SCENARIO_KEYS]
+    probs  = [next((r["prob"] for r in adj_probs if r["scenario"] == k), 0.25) for k in SCENARIO_KEYS]
+    deltas = [next((r.get("delta", 0.0) for r in adj_probs if r["scenario"] == k), 0.0) for k in SCENARIO_KEYS]
+    colors = [scenario_colors[k] for k in SCENARIO_KEYS]
+
+    # Build text labels with delta badges
+    text_labels = []
+    for p, d in zip(probs, deltas):
+        pct = int(round(p * 100))
+        if abs(d) > 0.005:
+            sign = "▲" if d > 0 else "▼"
+            pp = int(round(abs(d) * 100))
+            text_labels.append(f"{pct}%  {sign}{pp}pp")
+        else:
+            text_labels.append(f"{pct}%")
+
+    fig = go.Figure(go.Bar(
+        x=probs,
+        y=labels,
+        orientation="h",
+        text=text_labels,
+        textposition="outside",
+        marker_color=colors,
+        marker_line_width=0,
+    ))
+    apply_dark_layout(fig)
+    fig.update_layout(
+        height=180,
+        margin=dict(l=0, r=60, t=10, b=10),
+        xaxis=dict(range=[0, 1], tickformat=".0%", showgrid=False),
+        yaxis=dict(autorange="reversed"),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    if st.button("🔄 Refresh Forecaster", key="refresh_forecaster"):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.markdown("---")
+
+    # ── Sections 4-6 placeholder ─────────────────────────────────────────────
+    _render_fed_asset_matrix(macro, fred_data, adj_probs)
+
+
+def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
+    """Sections 4-6 stub."""
+    st.info("Asset matrix — coming in next step")
