@@ -1814,8 +1814,12 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
+    _status_col, _refresh_col = st.columns([5, 1])
     if status_parts:
-        st.caption("Groq: " + "  |  ".join(status_parts))
+        _status_col.caption("Groq: " + "  |  ".join(status_parts))
+    if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Clear cached forecast and re-fetch from Groq"):
+        generate_expanded_forecast.clear()
+        st.rerun()
 
     medium = expanded.get("medium_term", {})
 
@@ -1824,6 +1828,8 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     )
     if not _medium_has_data:
         st.warning("⚠ Medium-term forecast data unavailable — check Groq API status above.")
+        st.markdown("---")
+        _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, expanded)
         return
 
     # ── Section 4: Asset Impact Matrix with horizon toggle ────────────────────
@@ -1967,6 +1973,10 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     import numpy as np
 
     _section_header("Medium-Term Outlook (3–12 months)")
+    st.caption("Each chart shows a single probability-weighted forecast across all FOMC scenarios — "
+               "weighted by current market-implied odds.  "
+               "🟢 Green area = net positive expected return  ·  🔴 Red area = net negative expected return  ·  "
+               "y-axis = percentage points")
 
     prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
 
