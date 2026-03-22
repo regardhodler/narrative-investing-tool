@@ -1835,6 +1835,14 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                 empty = [k for k, v in assets_dict.items() if not v]
                 st.caption(f"**{horizon}/{scenario}**: {len(filled)} assets with data ({', '.join(filled) or 'none'})"
                            + (f" | empty: {', '.join(empty)}" if empty else ""))
+        # Show raw commodities_intl response structure
+        comm_top = expanded.get("_debug_comm_top_keys")
+        comm_dbg = expanded.get("_debug_comm_response")
+        if comm_top is not None:
+            st.caption(f"**comm_intl top keys**: {comm_top}")
+        if comm_dbg:
+            for sc_key, assets_info in comm_dbg.items():
+                st.caption(f"**comm_intl/{sc_key}**: {assets_info}")
 
     _medium_has_data = any(
         bool(assets) for assets in medium.values()

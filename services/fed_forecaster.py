@@ -780,14 +780,19 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
 
     try:
         comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        # Debug: capture raw response structure
+        _dbg = {}
         for scenario in SCENARIO_KEYS:
             sc = comm.get(scenario, {})
+            _dbg[scenario] = {k: list(v.keys()) if isinstance(v, dict) else type(v).__name__ for k, v in sc.items()}
             result["near_term"].setdefault(scenario, {}).update(
                 {k: sc[k]["near_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "near_term" in sc[k]}
             )
             result["medium_term"].setdefault(scenario, {}).update(
                 {k: sc[k]["medium_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "medium_term" in sc[k]}
             )
+        result["_debug_comm_response"] = _dbg
+        result["_debug_comm_top_keys"] = list(comm.keys())
     except Exception as exc:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"
 
