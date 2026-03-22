@@ -678,7 +678,26 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
     resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(_strip_fences(raw))
+    data = json.loads(_strip_fences(raw))
+
+    # Post-process: flatten category wrappers like "COMMODITIES" / "INTERNATIONAL EQUITIES"
+    # Groq sometimes nests assets under category keys instead of putting them flat
+    _EXPECTED_ASSETS = {"oil", "natgas", "gold", "silver", "china", "india", "japan", "europe"}
+    for scenario_key in list(data.keys()):
+        sc = data[scenario_key]
+        if not isinstance(sc, dict):
+            continue
+        # Check if assets are wrapped in category keys
+        if not any(k in sc for k in _EXPECTED_ASSETS):
+            # Flatten: merge all sub-dicts into the scenario level
+            flattened = {}
+            for category_key, category_val in list(sc.items()):
+                if isinstance(category_val, dict):
+                    flattened.update(category_val)
+            if flattened:
+                data[scenario_key] = flattened
+
+    return data
 
 
 def _call_groq_black_swan_forecast(context_json: str) -> dict:
