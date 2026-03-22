@@ -2109,3 +2109,60 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
         fig.add_hline(y=0, line_dash="dot",
                       line_color=COLORS.get("border", "#444"), line_width=1)
         cols[idx % 2].plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+    _render_fed_black_swans(expanded)
+
+
+def _render_fed_black_swans(expanded: dict):
+    """Section 8: Black swan risk panel with probability badges and asset impact pills."""
+    from services.fed_forecaster import (
+        BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS,
+    )
+
+    _section_header("Black Swan Risk Panel")
+    st.caption("AI-estimated annual probability and asset impact for extreme tail events")
+
+    swans = expanded.get("black_swans", {})
+    if not swans:
+        st.info("Black swan data unavailable.")
+        return
+
+    cols = st.columns(2)
+    for i, (event_key, event_label) in enumerate(BLACK_SWAN_EVENTS.items()):
+        event = swans.get(event_key, {})
+        prob = event.get("probability_pct", 0)
+        narrative = event.get("narrative", "")
+        impacts = event.get("asset_impacts", {})
+
+        if prob > 10:
+            prob_color = COLORS.get("red", "#ef4444")
+        elif prob > 3:
+            prob_color = "#f59e0b"  # amber
+        else:
+            prob_color = COLORS.get("green", "#22c55e")
+
+        # Build impact pills HTML
+        pills_html = "".join(
+            f'<span style="background:{COLORS.get("surface", "#1e293b")};'
+            f'border:1px solid {COLORS.get("border", "#475569")};'
+            f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
+            f'{SVC_ASSET_LABELS.get(k, k)}: {v}</span>'
+            for k, v in impacts.items()
+        )
+
+        with cols[i % 2]:
+            st.markdown(
+                f'<div style="border:1px solid {COLORS.get("border", "#334155")};'
+                f'border-radius:8px;padding:14px;margin-bottom:10px;">'
+                f'<div style="font-weight:700;font-size:14px;margin-bottom:6px;">'
+                f'{event_label}</div>'
+                f'<span style="background:{prob_color};color:white;padding:2px 10px;'
+                f'border-radius:10px;font-size:0.8em;font-weight:600;">'
+                f'{prob:.1f}% annual probability</span>'
+                f'<p style="margin:10px 0 8px 0;font-size:0.85em;'
+                f'color:{COLORS.get("text_dim", "#94a3b8")};">{narrative}</p>'
+                f'<div style="margin-top:6px;">{pills_html}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
