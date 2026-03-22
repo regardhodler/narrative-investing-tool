@@ -581,9 +581,17 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
         "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
         "Each scenario maps to an object with keys: spy, qqq, iwm, dji, bonds_long, bonds_short, usd, causal_chain.\n\n"
         "Each asset (except causal_chain) has:\n"
-        '  "near_term": array of exactly 7 floats (daily % change days 1-7)\n'
-        '  "medium_term": array of exactly 12 floats (monthly % change months 1-12)\n'
-        '  "long_term": array of exactly 8 floats (quarterly % change Q1-Q8, 2-year horizon)\n\n'
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N (day 1-7)\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N (month 1-12)\n'
+        '  "long_term": array of exactly 8 floats — CUMULATIVE % change from today through quarter N (Q1-Q8, 2 years)\n\n'
+        "IMPORTANT magnitude guidance:\n"
+        "- near_term (7 days): typical equity moves are -2% to +2% cumulative\n"
+        "- medium_term (12 months): typical equity moves are -15% to +25% cumulative\n"
+        "- long_term (8 quarters): typical equity moves are -30% to +40% cumulative\n"
+        "- Bonds move less than equities. USD moves less than bonds.\n"
+        "- A 25bp cut is meaningful — SPY might gain +3 to +8% over 6 months.\n"
+        "- A 50bp cut is very stimulative — SPY might gain +8 to +15% over 6 months.\n"
+        "- A hike is contractionary — SPY might lose -5 to -15% over 6 months.\n\n"
         '"causal_chain" is an array of AT LEAST 5 strings describing the Fed policy transmission mechanism.\n'
         "Example causal_chain for cut_25:\n"
         '["Fed cuts 25bp → fed funds target drops","Lower short rates reduce borrowing costs",'
@@ -623,14 +631,13 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
 
 
 def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str) -> dict:
-    """Call Groq for commodities (near+medium) and international equities (near only).
+    """Call Groq for commodities and international equities (near + medium term).
 
-    Returns dict keyed by scenario (hold/cut_25/cut_50/hike_25), each containing:
-      Commodities (oil, natgas, gold, silver, fertilizer):
-        near_term: list of 7 floats (daily % change)
-        medium_term: list of 12 floats (monthly % change)
-      International (china, india, japan, germany, europe, hongkong):
-        near_term: list of 7 floats (daily % change) — only near_term, no medium_term
+    Returns dict keyed by scenario, each containing:
+      Commodities (oil, natgas, gold, silver):
+        near_term: list of 7 floats, medium_term: list of 12 floats
+      International (china, india, japan, europe):
+        near_term: list of 7 floats, medium_term: list of 12 floats
     """
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
@@ -643,10 +650,16 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
         "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
         "Each scenario maps to an object with these asset keys and structures:\n\n"
         "COMMODITIES (oil, natgas, gold, silver) — each has:\n"
-        '  "near_term": array of exactly 7 floats (daily % change days 1-7)\n'
-        '  "medium_term": array of exactly 12 floats (monthly % change months 1-12)\n\n'
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N\n\n'
         "INTERNATIONAL EQUITIES (china, india, japan, europe) — each has:\n"
-        '  "near_term": array of exactly 7 floats (daily % change days 1-7) — near_term ONLY, no medium_term\n\n'
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N\n\n'
+        "IMPORTANT magnitude guidance:\n"
+        "- near_term (7 days): typical moves are -3% to +3% cumulative\n"
+        "- medium_term (12 months): commodities can move -25% to +35%, intl equities -20% to +30%\n"
+        "- Oil and natgas are volatile. Gold is a safe haven (benefits from cuts). Silver follows gold.\n"
+        "- International equities correlate with US but react to USD strength (strong USD hurts EM).\n\n"
         "Asset notes:\n"
         "- china=FXI, india=INDA, japan=EWJ, europe=VGK\n"
     )
@@ -773,7 +786,7 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
                 {k: sc[k]["near_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "near_term" in sc[k]}
             )
             result["medium_term"].setdefault(scenario, {}).update(
-                {k: sc[k]["medium_term"] for k in _COMM_ASSETS if k in sc and "medium_term" in sc[k]}
+                {k: sc[k]["medium_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "medium_term" in sc[k]}
             )
     except Exception as exc:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"
@@ -833,7 +846,7 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
                 {k: sc[k]["near_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "near_term" in sc[k]}
             )
             result["medium_term"].setdefault(scenario, {}).update(
-                {k: sc[k]["medium_term"] for k in _COMM_ASSETS if k in sc and "medium_term" in sc[k]}
+                {k: sc[k]["medium_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "medium_term" in sc[k]}
             )
     except Exception as exc:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"

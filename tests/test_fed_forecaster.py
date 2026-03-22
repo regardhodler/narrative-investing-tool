@@ -565,11 +565,11 @@ class TestCallGroqCommoditiesIntlForecast:
     def _make_mock_response(self):
         """Build a valid mock Groq response."""
         comm_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
-        intl_data = {"near_term": [0.1] * 7}
+        intl_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
         scenario = {}
-        for asset in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+        for asset in ["oil", "natgas", "gold", "silver"]:
             scenario[asset] = comm_data
-        for asset in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+        for asset in ["china", "india", "japan", "europe"]:
             scenario[asset] = intl_data
         return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
 
@@ -594,20 +594,21 @@ class TestCallGroqCommoditiesIntlForecast:
         from services.fed_forecaster import _call_groq_commodities_intl_forecast
         self._patch_groq(monkeypatch, self._make_mock_response())
         result = _call_groq_commodities_intl_forecast("{}", "{}")
-        for asset in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+        for asset in ["oil", "natgas", "gold", "silver"]:
             assert "near_term" in result["hold"][asset]
             assert "medium_term" in result["hold"][asset]
             assert len(result["hold"][asset]["near_term"]) == 7
             assert len(result["hold"][asset]["medium_term"]) == 12
 
-    def test_international_have_near_term_only(self, monkeypatch):
+    def test_international_have_near_and_medium(self, monkeypatch):
         from services.fed_forecaster import _call_groq_commodities_intl_forecast
         self._patch_groq(monkeypatch, self._make_mock_response())
         result = _call_groq_commodities_intl_forecast("{}", "{}")
-        for asset in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+        for asset in ["china", "india", "japan", "europe"]:
             assert "near_term" in result["hold"][asset]
-            assert "medium_term" not in result["hold"][asset]
+            assert "medium_term" in result["hold"][asset]
             assert len(result["hold"][asset]["near_term"]) == 7
+            assert len(result["hold"][asset]["medium_term"]) == 12
 
     def test_raises_without_api_key(self, monkeypatch):
         from services.fed_forecaster import _call_groq_commodities_intl_forecast
@@ -702,7 +703,7 @@ class TestGenerateExpandedForecast:
 
     def _make_comm_response(self):
         comm_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
-        intl_data = {"near_term": [0.1] * 7}
+        intl_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
         scenario = {}
         for a in ["oil", "natgas", "gold", "silver"]:
             scenario[a] = comm_data
