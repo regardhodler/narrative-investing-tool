@@ -1807,19 +1807,23 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     scenarios_json = _json.dumps(adj_probs)
     expanded = generate_expanded_forecast(context_json, scenarios_json)
 
-    # Show call status diagnostics if any errors
     status = expanded.get("_call_status", {})
-    errors = {k: v for k, v in status.items() if v != "ok"}
-    if errors:
-        with st.expander("⚠ Forecast API warnings", expanded=False):
-            for call_name, msg in errors.items():
-                st.caption(f"{call_name}: {msg}")
+    status_parts = []
+    for call_name, msg in status.items():
+        if msg == "ok":
+            status_parts.append(f"✓ {call_name}")
+        else:
+            status_parts.append(f"✗ {call_name}: {msg}")
+    if status_parts:
+        st.caption("Groq: " + "  |  ".join(status_parts))
 
     medium = expanded.get("medium_term", {})
 
-    if not medium:
-        st.error("Fed forecast unavailable — Groq API error or key not set.")
-        _render_fed_causal_chain(expanded.get("causal_chains", {}), adj_probs, expanded.get("medium_term", {}), expanded)
+    _medium_has_data = any(
+        bool(assets) for assets in medium.values()
+    )
+    if not _medium_has_data:
+        st.warning("⚠ Medium-term forecast data unavailable — check Groq API status above.")
         return
 
     # ── Section 4: Asset Impact Matrix with horizon toggle ────────────────────
@@ -1883,6 +1887,12 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             for i, scenario_key in enumerate(SCENARIO_KEYS):
                 vals = medium.get(scenario_key, {}).get(asset, [])
                 cell_val = vals[_horizon_index] if _horizon_index < len(vals) else None
+                is_fallback = False
+                if cell_val is None:
+                    near_vals = expanded.get("near_term", {}).get(scenario_key, {}).get(asset, [])
+                    if near_vals:
+                        cell_val = near_vals[0]
+                        is_fallback = True
                 if cell_val is None:
                     row_cols[i+1].markdown(
                         f'<div style="font-size:13px;color:{COLORS["text_dim"]};padding:6px 0;">—</div>',
@@ -1897,9 +1907,10 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                         color = "#fca5a5"
                     else:
                         color = COLORS.get("red", "#ef4444")
+                    prefix = "~" if is_fallback else ""
                     row_cols[i+1].markdown(
                         f'<div style="font-size:13px;font-weight:600;color:{color};padding:6px 0;">'
-                        f'{cell_val:+.1f}%</div>',
+                        f'{prefix}{cell_val:+.1f}%</div>',
                         unsafe_allow_html=True,
                     )
 
