@@ -980,8 +980,22 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     if len(ranked) > 1:
         summary.append(f"Second strongest: {ranked[1]['Indicator']} at {ranked[1]['Signal']}.")
 
+    # Compact signal summary for LLM context (top 10 most extreme z-scores)
+    top_signals = [
+        {
+            "name": row["Indicator"],
+            "score": round(row["Score"], 2),
+            "value": row.get("Value", "n/a"),
+            "confidence": row.get("Confidence", 50),
+        }
+        for row in signal_rows
+        if abs(row.get("Score", 0.0)) >= 0.3
+    ]
+    top_signals.sort(key=lambda x: abs(x["score"]), reverse=True)
+
     result = {
         "signals": signal_rows,
+        "top_signals": top_signals[:10],
         "macro_score": macro_score,
         "avg_confidence": int(round(float(np.mean(confidence_scores)))) if confidence_scores else 0,
         "macro_regime": macro_regime,
@@ -1732,7 +1746,7 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
         st.warning("⚠ Futures data unavailable — showing equal-weight 25% per scenario")
 
     # Apply tone adjustment
-    adj_probs = adjust_probabilities(base_probs, tone_result)
+    adj_probs = adjust_probabilities(base_probs, tone_result, macro=macro)
 
     # Source label
     source = (base_probs[0].get("source", "fallback") if base_probs else "fallback")
@@ -1802,11 +1816,26 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     )
     import json as _json
 
+    import os as _os
     context = build_fed_context(macro, fred_data)
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
     expanded = generate_matrix_forecast(context_json, scenarios_json)
-    full_expanded = generate_expanded_forecast(context_json, scenarios_json)
+
+    # Claude toggle — only shown when ANTHROPIC_API_KEY is configured
+    _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
+    _use_claude = st.session_state.get("fed_use_claude", False)
+    if _has_claude:
+        _claude_col, _ = st.columns([3, 1])
+        if _claude_col.toggle(
+            "🧠 Use Claude (better causal chains + black swans)",
+            value=_use_claude,
+            key="fed_use_claude",
+            help="Claude Haiku generates richer narratives and causal reasoning. Groq is used for the asset matrix regardless.",
+        ):
+            _use_claude = True
+
+    full_expanded = generate_expanded_forecast(context_json, scenarios_json, use_claude=_use_claude)
 
     status = expanded.get("_call_status", {})
     status_parts = []
@@ -1815,9 +1844,11 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
+    _core_engine = full_expanded.get("_core_engine", "groq")
+    _engine_badge = "🧠 Claude" if _core_engine == "claude" else "⚡ Groq"
     _status_col, _refresh_col = st.columns([5, 1])
     if status_parts:
-        _status_col.caption("Groq: " + "  |  ".join(status_parts))
+        _status_col.caption(f"Matrix: {_engine_badge}  |  " + "  |  ".join(status_parts))
     if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Re-fetch matrix data from Groq (fan charts unaffected)"):
         generate_matrix_forecast.clear()
         st.rerun()

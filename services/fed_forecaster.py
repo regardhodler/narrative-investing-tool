@@ -283,20 +283,65 @@ def fetch_fed_communications(max_items: int = 5) -> list[dict]:
 # ADJUST PROBABILITIES (pure)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def adjust_probabilities(base_probs: list[dict], tone_result: dict) -> list[dict]:
+def _regime_probability_bias(macro: dict) -> dict[str, float]:
+    """Return additive probability deltas (ideally sum near 0) based on macro regime.
+
+    Logic:
+    - Stagflation: Fed constrained — reduce cuts, increase hold/hike
+    - Deflation: Growth + inflation both falling — cuts more likely
+    - Goldilocks: Minimal adjustment (futures well-calibrated)
+    - Severe risk-off stress (high VIX + wide credit): boost cut probability
     """
-    Apply tone-derived probability adjustments to base ZQ probabilities.
+    quadrant = macro.get("quadrant", "Unknown")
+    vix_z = macro.get("vix_z") or 0.0
+    credit_z = macro.get("credit_z") or 0.0
+
+    deltas: dict[str, float] = {"hold": 0.0, "cut_25": 0.0, "cut_50": 0.0, "hike_25": 0.0}
+
+    if quadrant == "Stagflation":
+        deltas["hold"]    += 0.08
+        deltas["hike_25"] += 0.04
+        deltas["cut_25"]  -= 0.07
+        deltas["cut_50"]  -= 0.05
+    elif quadrant == "Deflation":
+        deltas["cut_25"]  += 0.05
+        deltas["cut_50"]  += 0.03
+        deltas["hold"]    -= 0.05
+        deltas["hike_25"] -= 0.03
+    # Goldilocks: no bias — futures already calibrated
+
+    # Severe market stress → Fed more likely to cut emergency-style
+    stress = max(float(vix_z), float(credit_z))
+    if stress > 0.7:
+        boost = min(0.10, stress * 0.12)
+        deltas["cut_50"]  += boost
+        deltas["cut_25"]  += boost * 0.5
+        deltas["hold"]    -= boost * 1.0
+        deltas["hike_25"] -= boost * 0.5
+
+    return deltas
+
+
+def adjust_probabilities(
+    base_probs: list[dict],
+    tone_result: dict,
+    macro: dict | None = None,
+) -> list[dict]:
+    """
+    Apply tone-derived and regime-derived probability adjustments to base ZQ probabilities.
     Clamps to [0, 1] then re-normalises to sum to 1.0.
-    Adds a signed `delta` field to each item.
+    Adds a signed `delta` field to each item (tone-only delta for display).
     """
     adjustments = tone_result.get("prob_adjustments", {})
+    regime_deltas = _regime_probability_bias(macro) if macro else {}
 
     adjusted = []
     for item in base_probs:
         key = item["scenario"]
-        raw_adj = adjustments.get(key, 0.0)
-        new_prob = max(0.0, min(1.0, item["prob"] + raw_adj))
-        adjusted.append({**item, "prob": new_prob, "delta": raw_adj})
+        tone_adj = adjustments.get(key, 0.0)
+        regime_adj = regime_deltas.get(key, 0.0)
+        new_prob = max(0.0, min(1.0, item["prob"] + tone_adj + regime_adj))
+        adjusted.append({**item, "prob": new_prob, "delta": tone_adj})
 
     # Re-normalise
     total = sum(r["prob"] for r in adjusted)
@@ -337,15 +382,34 @@ def build_fed_context(macro: dict, fred_data: dict) -> dict:
         fallback = fetch_fred_series_safe("FEDFUNDS")
         fed_rate = _safe_last(fallback)
 
+    # Extract z-scores from pre-computed top_signals (set by _build_macro_dashboard)
+    top_signals = macro.get("top_signals", [])
+
+    def _find_z(keyword: str) -> float | None:
+        for s in top_signals:
+            if keyword.lower() in s["name"].lower():
+                return s["score"]
+        return None
+
     return {
-        "fed_funds_rate":  fed_rate,
-        "core_pce":        _safe_last(fred_data.get("core_pce")),
-        "unemployment":    _safe_last(fred_data.get("unrate")),
-        "yield_curve":     _safe_last(fred_data.get("yield_curve")),
-        "credit_spread":   _safe_last(fred_data.get("credit_spread")),
-        "quadrant":        macro.get("quadrant", "Unknown"),
-        "macro_score":     macro.get("macro_score", 50),
-        "regime":          macro.get("macro_regime", "Unknown"),
+        "fed_funds_rate":    fed_rate,
+        "core_pce":          _safe_last(fred_data.get("core_pce")),
+        "unemployment":      _safe_last(fred_data.get("unrate")),
+        "yield_curve":       _safe_last(fred_data.get("yield_curve")),
+        "credit_spread":     _safe_last(fred_data.get("credit_spread")),
+        "quadrant":          macro.get("quadrant", "Unknown"),
+        "macro_score":       macro.get("macro_score", 50),
+        "regime":            macro.get("macro_regime", "Unknown"),
+        # Enriched regime signals (z-scores normalized [-1, 1])
+        "vix_z":             _find_z("VIX"),
+        "credit_z":          _find_z("Credit Spreads"),
+        "equity_momentum_z": _find_z("Equity Trend"),
+        "dollar_z":          _find_z("Dollar"),
+        "commodity_z":       _find_z("Commodity Trend"),
+        "leading_index_z":   _find_z("Leading Economic"),
+        "hyg_lqd_z":         _find_z("HYG/LQD"),
+        "copper_gold_z":     _find_z("Copper/Gold"),
+        "top_signals":       {s["name"]: s["score"] for s in top_signals},
     }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -574,9 +638,30 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
     if not api_key:
         raise RuntimeError("GROQ_API_KEY not set")
 
+    # Build regime signal block from enriched context
+    _ctx = json.loads(context_json)
+    _fmt = lambda v: f"{v:+.2f}" if isinstance(v, (int, float)) and v is not None else "n/a"
+    _regime_block = (
+        f"CURRENT MACRO REGIME (z-scores normalized -1 to +1, where ±1 = historically extreme):\n"
+        f"- Quadrant: {_ctx.get('quadrant', 'Unknown')} | Regime: {_ctx.get('regime', 'Unknown')} | Score: {_ctx.get('macro_score', 50)}/100\n"
+        f"- VIX z-score: {_fmt(_ctx.get('vix_z'))}  (positive = elevated fear/risk-off, negative = complacency)\n"
+        f"- Credit spread z-score: {_fmt(_ctx.get('credit_z'))}  (positive = stress/widening, negative = tight)\n"
+        f"- Equity momentum z-score: {_fmt(_ctx.get('equity_momentum_z'))}  (positive = uptrend, negative = downtrend)\n"
+        f"- Dollar z-score: {_fmt(_ctx.get('dollar_z'))}  (positive = strong USD)\n"
+        f"- Commodity trend z-score: {_fmt(_ctx.get('commodity_z'))}\n"
+        f"- Leading indicators z-score: {_fmt(_ctx.get('leading_index_z'))}  (positive = expansion, negative = contraction)\n"
+        f"- HYG/LQD credit appetite z-score: {_fmt(_ctx.get('hyg_lqd_z'))}\n"
+        f"- Copper/Gold ratio z-score: {_fmt(_ctx.get('copper_gold_z'))}  (positive = growth bias, negative = safety bias)\n"
+        "Use these signals to calibrate the DIRECTION and MAGNITUDE of each asset's response per scenario.\n"
+        "Example: If VIX z-score is +0.8 (elevated fear) and credit spreads are +0.6 (widening),\n"
+        "  a rate cut will be more stimulative to equities than in calm conditions.\n"
+        "If quadrant is Stagflation (falling growth, rising inflation), bonds may not rally on cuts.\n\n"
+    )
+
     prompt = (
         "You are a macro-economist. Return ONLY valid json (no commentary).\n\n"
         f"Given this macro context:\n{context_json}\n\n"
+        f"{_regime_block}"
         f"And these FOMC scenarios:\n{scenarios_json}\n\n"
         "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
         "Each scenario maps to an object with keys: spy, qqq, iwm, dji, bonds_long, bonds_short, usd, causal_chain.\n\n"
@@ -616,6 +701,81 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
     resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"]
+    data = json.loads(_strip_fences(raw))
+
+    # Post-process: ensure causal chains have ≥2 steps
+    for scenario_key, scenario_label in SCENARIO_LABELS.items():
+        chain = data.get(scenario_key, {}).get("causal_chain", [])
+        if not chain:
+            delta = _SCENARIO_DELTAS.get(scenario_key, 0.0)
+            data.setdefault(scenario_key, {})["causal_chain"] = [
+                f"Fed {scenario_label} → policy rate shifts {delta:+.2f}%",
+                "Rate change transmits to credit markets over 3–6 months",
+            ]
+    return data
+
+
+def _call_claude_core_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Use Claude Haiku for higher-quality causal chains and asset impact reasoning.
+
+    Same schema as _call_groq_core_forecast. Requires ANTHROPIC_API_KEY in env.
+    Only used when the user explicitly enables Claude mode via session state.
+    """
+    import anthropic
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    # Reuse the same enriched prompt logic as Groq version
+    _ctx = json.loads(context_json)
+    _fmt = lambda v: f"{v:+.2f}" if isinstance(v, (int, float)) and v is not None else "n/a"
+    _regime_block = (
+        f"CURRENT MACRO REGIME (z-scores normalized -1 to +1, where ±1 = historically extreme):\n"
+        f"- Quadrant: {_ctx.get('quadrant', 'Unknown')} | Regime: {_ctx.get('regime', 'Unknown')} | Score: {_ctx.get('macro_score', 50)}/100\n"
+        f"- VIX z-score: {_fmt(_ctx.get('vix_z'))}  (positive = elevated fear/risk-off, negative = complacency)\n"
+        f"- Credit spread z-score: {_fmt(_ctx.get('credit_z'))}  (positive = stress/widening, negative = tight)\n"
+        f"- Equity momentum z-score: {_fmt(_ctx.get('equity_momentum_z'))}  (positive = uptrend, negative = downtrend)\n"
+        f"- Dollar z-score: {_fmt(_ctx.get('dollar_z'))}  (positive = strong USD)\n"
+        f"- Commodity trend z-score: {_fmt(_ctx.get('commodity_z'))}\n"
+        f"- Leading indicators z-score: {_fmt(_ctx.get('leading_index_z'))}  (positive = expansion, negative = contraction)\n"
+        f"- HYG/LQD credit appetite z-score: {_fmt(_ctx.get('hyg_lqd_z'))}\n"
+        f"- Copper/Gold ratio z-score: {_fmt(_ctx.get('copper_gold_z'))}  (positive = growth bias, negative = safety bias)\n"
+        "Use these signals to calibrate the DIRECTION and MAGNITUDE of each asset's response per scenario.\n\n"
+    )
+
+    prompt = (
+        "You are a senior macro-economist and portfolio strategist. Return ONLY valid JSON.\n\n"
+        f"Given this macro context:\n{context_json}\n\n"
+        f"{_regime_block}"
+        f"And these FOMC scenarios:\n{scenarios_json}\n\n"
+        "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
+        "Each scenario maps to an object with keys: spy, qqq, iwm, dji, bonds_long, bonds_short, usd, causal_chain.\n\n"
+        "Each asset (except causal_chain) has:\n"
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N (day 1-7)\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N (month 1-12)\n'
+        '  "long_term": array of exactly 8 floats — CUMULATIVE % change from today through quarter N (Q1-Q8, 2 years)\n\n'
+        "Magnitude guidance:\n"
+        "- near_term (7 days): typical equity moves -2% to +2% cumulative\n"
+        "- medium_term (12 months): typical equity moves -15% to +25% cumulative\n"
+        "- long_term (8 quarters): typical equity moves -30% to +40% cumulative\n"
+        "- Bonds move less than equities. USD moves less than bonds.\n"
+        "- A 25bp cut is meaningful — SPY might gain +3 to +8% over 6 months.\n"
+        "- A 50bp cut is very stimulative — SPY might gain +8 to +15% over 6 months.\n"
+        "- A hike is contractionary — SPY might lose -5 to -15% over 6 months.\n\n"
+        '"causal_chain" is an array of AT LEAST 7 strings describing the full Fed policy transmission mechanism.\n'
+        "Be specific and nuanced. Reference the current macro regime in your reasoning.\n"
+        "bonds_long = 30-year Treasury / TLT proxy\n"
+        "bonds_short = 2-year Treasury / SHY proxy\n"
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=8192,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = message.content[0].text
     data = json.loads(_strip_fences(raw))
 
     # Post-process: ensure causal chains have ≥2 steps
@@ -814,8 +974,11 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
 
 
 @st.cache_data(ttl=14400)
-def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
-    """Orchestrate 3 Groq calls and merge into unified expanded forecast dict.
+def generate_expanded_forecast(context_json: str, scenarios_json: str, use_claude: bool = False) -> dict:
+    """Orchestrate 3 calls and merge into unified expanded forecast dict.
+
+    When use_claude=True and ANTHROPIC_API_KEY is set, uses Claude Haiku for
+    the core forecast (better causal chains + reasoning). Falls back to Groq.
 
     Returns:
       near_term: dict[scenario][asset] = list of 7 floats
@@ -824,6 +987,7 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
       causal_chains: dict[scenario] = list of strings
       black_swans: dict[event_key] = {probability_pct, asset_impacts, narrative}
       _call_status: dict with "core", "commodities_intl", "black_swans" → "ok" or "error: ..."
+      _core_engine: "claude" or "groq" — which LLM was used for core forecast
     """
     result: dict = {
         "near_term": {},
@@ -832,6 +996,7 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
         "causal_chains": {},
         "black_swans": {},
         "_call_status": {"core": "ok", "commodities_intl": "ok", "black_swans": "ok"},
+        "_core_engine": "groq",
     }
 
     _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
@@ -840,7 +1005,11 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
 
     # Call 1: Core US assets (all 3 horizons + causal chains)
     try:
-        core = _call_groq_core_forecast(context_json, scenarios_json)
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            core = _call_claude_core_forecast(context_json, scenarios_json)
+            result["_core_engine"] = "claude"
+        else:
+            core = _call_groq_core_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = core.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(
