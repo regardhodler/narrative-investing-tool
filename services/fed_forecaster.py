@@ -860,6 +860,77 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
     return data
 
 
+def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Use Claude Haiku for commodities and international equities forecast.
+
+    Same schema as _call_groq_commodities_intl_forecast.
+    """
+    import anthropic
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    _ctx = json.loads(context_json)
+    _fmt = lambda v: f"{v:+.2f}" if isinstance(v, (int, float)) and v is not None else "n/a"
+    _regime_block = (
+        f"CURRENT MACRO REGIME:\n"
+        f"- Quadrant: {_ctx.get('quadrant', 'Unknown')} | Regime: {_ctx.get('regime', 'Unknown')} | Score: {_ctx.get('macro_score', 50)}/100\n"
+        f"- Dollar z-score: {_fmt(_ctx.get('dollar_z'))}  (positive = strong USD, hurts EM and commodities)\n"
+        f"- Commodity trend z-score: {_fmt(_ctx.get('commodity_z'))}\n"
+        f"- VIX z-score: {_fmt(_ctx.get('vix_z'))}  (positive = fear/risk-off → gold bullish)\n"
+        f"- Credit spread z-score: {_fmt(_ctx.get('credit_z'))}\n"
+        f"- Copper/Gold ratio z-score: {_fmt(_ctx.get('copper_gold_z'))}  (positive = growth, negative = safety)\n\n"
+    )
+
+    prompt = (
+        "You are a senior macro-economist. Return ONLY valid JSON.\n\n"
+        f"Given this macro context:\n{context_json}\n\n"
+        f"{_regime_block}"
+        f"And these FOMC scenarios:\n{scenarios_json}\n\n"
+        "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
+        "Each scenario maps to an object with these asset keys:\n\n"
+        "COMMODITIES (oil, natgas, gold, silver) — each has:\n"
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N\n\n'
+        "INTERNATIONAL EQUITIES (china, india, japan, europe) — each has:\n"
+        '  "near_term": array of exactly 7 floats — CUMULATIVE % change from today through day N\n'
+        '  "medium_term": array of exactly 12 floats — CUMULATIVE % change from today through month N\n\n'
+        "Magnitude guidance:\n"
+        "- near_term (7 days): typical moves -3% to +3% cumulative\n"
+        "- medium_term (12 months): commodities -25% to +35%, intl equities -20% to +30%\n"
+        "- Oil and natgas are volatile. Gold is a safe haven (benefits from cuts and risk-off).\n"
+        "- Strong USD (positive dollar_z) hurts EM equities and commodity prices.\n"
+        "- china=FXI, india=INDA, japan=EWJ, europe=VGK\n"
+        "Use the macro regime context to calibrate direction and magnitude precisely.\n"
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    raw = message.content[0].text
+    data = json.loads(_strip_fences(raw))
+
+    # Same flattening post-processor as Groq version
+    _EXPECTED_ASSETS = {"oil", "natgas", "gold", "silver", "china", "india", "japan", "europe"}
+    for scenario_key in list(data.keys()):
+        sc = data[scenario_key]
+        if not isinstance(sc, dict):
+            continue
+        if not any(k in sc for k in _EXPECTED_ASSETS):
+            flattened = {}
+            for category_key, category_val in list(sc.items()):
+                if isinstance(category_val, dict):
+                    flattened.update(category_val)
+            if flattened:
+                data[scenario_key] = flattened
+
+    return data
+
+
 def _call_groq_black_swan_forecast(context_json: str) -> dict:
     """Call Groq to estimate black swan event probabilities and asset impacts.
 
@@ -924,17 +995,20 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=14400)
-def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
-    """Run only the 2 Groq calls needed for the asset impact matrix.
+def generate_matrix_forecast(context_json: str, scenarios_json: str, use_claude: bool = False) -> dict:
+    """Run the 2 calls needed for the asset impact matrix + medium-term fan charts.
 
-    Returns same schema subset as generate_expanded_forecast:
-      near_term, medium_term, long_term, _call_status
+    When use_claude=True and ANTHROPIC_API_KEY is set, uses Claude Haiku for
+    both calls — better calibrated numbers from richer macro reasoning.
+
+    Returns: near_term, medium_term, long_term, _call_status, _core_engine
     """
     result: dict = {
         "near_term": {},
         "medium_term": {},
         "long_term": {},
         "_call_status": {"core": "ok", "commodities_intl": "ok"},
+        "_core_engine": "groq",
     }
 
     _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
@@ -942,7 +1016,11 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
     _INTL_ASSETS = ["china", "india", "japan", "europe"]
 
     try:
-        core = _call_groq_core_forecast(context_json, scenarios_json)
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            core = _call_claude_core_forecast(context_json, scenarios_json)
+            result["_core_engine"] = "claude"
+        else:
+            core = _call_groq_core_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = core.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(
@@ -958,7 +1036,10 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
         result["_call_status"]["core"] = f"error: {exc}"
 
     try:
-        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json)
+        else:
+            comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = comm.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(

@@ -1820,21 +1820,26 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     context = build_fed_context(macro, fred_data)
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
-    expanded = generate_matrix_forecast(context_json, scenarios_json)
 
     # Claude toggle — only shown when ANTHROPIC_API_KEY is configured
     _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
     _use_claude = st.session_state.get("fed_use_claude", False)
     if _has_claude:
-        _claude_col, _ = st.columns([3, 1])
-        if _claude_col.toggle(
-            "🧠 Use Claude (better causal chains + black swans)",
+        _prev_claude = st.session_state.get("_fed_use_claude_prev", _use_claude)
+        _use_claude = st.toggle(
+            "🧠 Quality Mode — Claude Haiku (matrix, fan charts, causal chain, black swans)",
             value=_use_claude,
             key="fed_use_claude",
-            help="Claude Haiku generates richer narratives and causal reasoning. Groq is used for the asset matrix regardless.",
-        ):
-            _use_claude = True
+            help="Uses Claude Haiku for all Fed Forecaster sections. More accurate numbers and richer reasoning. Groq is used when off (free, fast).",
+        )
+        # If toggle just changed, clear both caches so new engine takes effect immediately
+        if _use_claude != _prev_claude:
+            generate_matrix_forecast.clear()
+            generate_expanded_forecast.clear()
+            st.session_state["_fed_use_claude_prev"] = _use_claude
+            st.rerun()
 
+    expanded = generate_matrix_forecast(context_json, scenarios_json, use_claude=_use_claude)
     full_expanded = generate_expanded_forecast(context_json, scenarios_json, use_claude=_use_claude)
 
     status = expanded.get("_call_status", {})
@@ -1844,13 +1849,18 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
-    _core_engine = full_expanded.get("_core_engine", "groq")
+    _core_engine = expanded.get("_core_engine", "groq")
     _engine_badge = "🧠 Claude" if _core_engine == "claude" else "⚡ Groq"
+    _exp_status = full_expanded.get("_call_status", {})
+    _exp_core_msg = _exp_status.get("core", "ok")
+    if _exp_core_msg != "ok":
+        st.error(f"Expanded forecast error: {_exp_core_msg}")
     _status_col, _refresh_col = st.columns([5, 1])
     if status_parts:
-        _status_col.caption(f"Matrix: {_engine_badge}  |  " + "  |  ".join(status_parts))
-    if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Re-fetch matrix data from Groq (fan charts unaffected)"):
+        _status_col.caption(f"{_engine_badge}  |  " + "  |  ".join(status_parts))
+    if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Re-fetch all forecast data"):
         generate_matrix_forecast.clear()
+        generate_expanded_forecast.clear()
         st.rerun()
 
     medium = expanded.get("medium_term", {})
