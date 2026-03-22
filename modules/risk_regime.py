@@ -1975,12 +1975,9 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     _section_header("Medium-Term Outlook (3–12 months)")
 
     prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
-    dominant_key = max(prob_map, key=prob_map.get)
-    dominant_prob = int(round(prob_map[dominant_key] * 100))
-    dominant_label = SCENARIO_LABELS[dominant_key]
 
-    st.caption(f"Based on dominant scenario: **{dominant_label} ({dominant_prob}%)** from Fed Funds Futures.  "
-               "🟢 Green area = positive return  ·  🔴 Red area = negative return  ·  "
+    st.caption("Market-implied forecast — weighted by Fed Funds Futures probabilities across all FOMC scenarios.  "
+               "🟢 Green area = positive return expected  ·  🔴 Red area = negative return expected  ·  "
                "y-axis = cumulative % change")
 
     SCENARIO_COLORS = {
@@ -1991,17 +1988,27 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     }
 
     def _draw_fan_chart(asset_key: str, col_or_container=None):
-        """Draw a 12-month area chart for one asset based on dominant scenario."""
+        """Draw a 12-month market-implied area chart for one asset."""
         months = list(range(1, 13))
         target = col_or_container or st
 
-        # Use dominant scenario directly
-        vals = medium.get(dominant_key, {}).get(asset_key, [])
-        if not vals or len(vals) < 12:
+        # Compute probability-weighted line across all scenarios
+        total_w = sum(prob_map.get(sk, 0.25) for sk in SCENARIO_KEYS)
+        weighted = []
+        for m in range(12):
+            w_val = sum(
+                prob_map.get(sk, 0.25) * (
+                    medium.get(sk, {}).get(asset_key, [])[m]
+                    if m < len(medium.get(sk, {}).get(asset_key, []))
+                    else 0.0
+                )
+                for sk in SCENARIO_KEYS
+            )
+            weighted.append(w_val / total_w if total_w > 0 else 0.0)
+
+        if all(v == 0.0 for v in weighted):
             target.caption(f"_{SVC_ASSET_LABELS.get(asset_key, asset_key)}: forecast unavailable_")
             return
-
-        weighted = list(vals[:12])
 
         # Split into positive and negative for two-color fill
         pos_y = [v if v >= 0 else 0.0 for v in weighted]
@@ -2009,7 +2016,6 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
 
         fig = go.Figure()
 
-        # Positive area (green)
         fig.add_trace(go.Scatter(
             x=months, y=pos_y,
             fill="tozeroy",
@@ -2019,7 +2025,6 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             showlegend=False,
         ))
 
-        # Negative area (red)
         fig.add_trace(go.Scatter(
             x=months, y=neg_y,
             fill="tozeroy",
@@ -2116,26 +2121,26 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
     )
     import plotly.graph_objects as go
 
-    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
-    dominant_key = max(prob_map, key=prob_map.get)
-    dominant_prob = int(round(prob_map[dominant_key] * 100))
-    dominant_label = SCENARIO_LABELS[dominant_key]
-
     _section_header("Long-Term Asset Impact — 2-Year Quarterly Outlook")
-    st.caption(f"Based on dominant scenario: **{dominant_label} ({dominant_prob}%)** — cumulative quarterly % change (Q1–Q8)")
+    st.caption("Market-implied forecast — probability-weighted cumulative quarterly % change (Q1–Q8)")
 
     long = expanded.get("long_term", {})
     if not long:
         st.info("Long-term forecast unavailable.")
         return
 
+    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
     assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
     quarters = [f"Q{i+1}" for i in range(8)]
 
     cols = st.columns(2)
     for idx, asset in enumerate(assets):
-        vals = long.get(dominant_key, {}).get(asset, [0.0] * 8)
-        weighted = [vals[q] if q < len(vals) else 0.0 for q in range(8)]
+        weighted = [0.0] * 8
+        for sk in SCENARIO_KEYS:
+            prob = prob_map.get(sk, 0.25)
+            vals = long.get(sk, {}).get(asset, [0.0] * 8)
+            for q in range(8):
+                weighted[q] += prob * (vals[q] if q < len(vals) else 0.0)
 
         bar_colors = [
             COLORS.get("green", "#22c55e") if v >= 0 else COLORS.get("red", "#ef4444")
