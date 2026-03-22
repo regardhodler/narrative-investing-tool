@@ -704,9 +704,9 @@ class TestGenerateExpandedForecast:
         comm_data = {"near_term": [0.1] * 7, "medium_term": [0.2] * 12}
         intl_data = {"near_term": [0.1] * 7}
         scenario = {}
-        for a in ["oil", "natgas", "gold", "silver", "fertilizer"]:
+        for a in ["oil", "natgas", "gold", "silver"]:
             scenario[a] = comm_data
-        for a in ["china", "india", "japan", "germany", "europe", "hongkong"]:
+        for a in ["china", "india", "japan", "europe"]:
             scenario[a] = intl_data
         return {sk: scenario for sk in ["hold", "cut_25", "cut_50", "hike_25"]}
 
@@ -739,7 +739,7 @@ class TestGenerateExpandedForecast:
         from services.fed_forecaster import generate_expanded_forecast
         self._patch_all(monkeypatch)
         result = generate_expanded_forecast.__wrapped__("{}", "{}")
-        assert len(result["near_term"]["hold"]) == 18
+        assert len(result["near_term"]["hold"]) == 15
 
     def test_long_term_has_7_assets_per_scenario(self, monkeypatch):
         from services.fed_forecaster import generate_expanded_forecast

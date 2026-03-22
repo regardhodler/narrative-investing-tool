@@ -79,8 +79,8 @@ _SCENARIO_DELTAS = {
 ASSET_GROUPS = {
     "us_equities":   ["spy", "qqq", "iwm", "dji"],
     "bonds":         ["bonds_long", "bonds_short"],
-    "commodities":   ["oil", "natgas", "gold", "silver", "fertilizer"],
-    "international": ["china", "india", "japan", "germany", "europe", "hongkong"],
+    "commodities":   ["oil", "natgas", "gold", "silver"],
+    "international": ["china", "india", "japan", "europe"],
     "usd":           ["usd"],
 }
 
@@ -96,13 +96,10 @@ ASSET_LABELS = {
     "natgas":     "Natural Gas",
     "gold":       "Gold",
     "silver":     "Silver",
-    "fertilizer": "Fertilizer (MOS/CF)",
     "china":      "FXI (China)",
     "india":      "INDA (India)",
     "japan":      "EWJ (Japan)",
-    "germany":    "EWG (Germany)",
     "europe":     "VGK (Europe)",
-    "hongkong":   "EWH (Hong Kong)",
 }
 
 BLACK_SWAN_EVENTS = {
@@ -645,14 +642,13 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
         f"And these FOMC scenarios:\n{scenarios_json}\n\n"
         "Return a JSON object with keys: hold, cut_25, cut_50, hike_25.\n"
         "Each scenario maps to an object with these asset keys and structures:\n\n"
-        "COMMODITIES (oil, natgas, gold, silver, fertilizer) — each has:\n"
+        "COMMODITIES (oil, natgas, gold, silver) — each has:\n"
         '  "near_term": array of exactly 7 floats (daily % change days 1-7)\n'
         '  "medium_term": array of exactly 12 floats (monthly % change months 1-12)\n\n'
-        "INTERNATIONAL EQUITIES (china, india, japan, germany, europe, hongkong) — each has:\n"
+        "INTERNATIONAL EQUITIES (china, india, japan, europe) — each has:\n"
         '  "near_term": array of exactly 7 floats (daily % change days 1-7) — near_term ONLY, no medium_term\n\n'
         "Asset notes:\n"
-        "- fertilizer: no clean ETF; use MOS+CF complex narrative; nat gas drives ~80% of production cost\n"
-        "- china=FXI, india=INDA, japan=EWJ, germany=EWG, europe=VGK, hongkong=EWH\n"
+        "- china=FXI, india=INDA, japan=EWJ, europe=VGK\n"
     )
 
     headers = _groq_headers()
@@ -736,6 +732,56 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=14400)
+def generate_matrix_forecast(context_json: str, scenarios_json: str) -> dict:
+    """Run only the 2 Groq calls needed for the asset impact matrix.
+
+    Returns same schema subset as generate_expanded_forecast:
+      near_term, medium_term, long_term, _call_status
+    """
+    result: dict = {
+        "near_term": {},
+        "medium_term": {},
+        "long_term": {},
+        "_call_status": {"core": "ok", "commodities_intl": "ok"},
+    }
+
+    _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
+    _COMM_ASSETS = ["oil", "natgas", "gold", "silver"]
+    _INTL_ASSETS = ["china", "india", "japan", "europe"]
+
+    try:
+        core = _call_groq_core_forecast(context_json, scenarios_json)
+        for scenario in SCENARIO_KEYS:
+            sc = core.get(scenario, {})
+            result["near_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["near_term"] for k in _CORE_ASSETS if k in sc and "near_term" in sc[k]}
+            )
+            result["medium_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["medium_term"] for k in _CORE_ASSETS if k in sc and "medium_term" in sc[k]}
+            )
+            result["long_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["long_term"] for k in _CORE_ASSETS if k in sc and "long_term" in sc[k]}
+            )
+    except Exception as exc:
+        result["_call_status"]["core"] = f"error: {exc}"
+
+    try:
+        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        for scenario in SCENARIO_KEYS:
+            sc = comm.get(scenario, {})
+            result["near_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["near_term"] for k in _COMM_ASSETS + _INTL_ASSETS if k in sc and "near_term" in sc[k]}
+            )
+            result["medium_term"].setdefault(scenario, {}).update(
+                {k: sc[k]["medium_term"] for k in _COMM_ASSETS if k in sc and "medium_term" in sc[k]}
+            )
+    except Exception as exc:
+        result["_call_status"]["commodities_intl"] = f"error: {exc}"
+
+    return result
+
+
+@st.cache_data(ttl=14400)
 def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
     """Orchestrate 3 Groq calls and merge into unified expanded forecast dict.
 
@@ -757,8 +803,8 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str) -> dict:
     }
 
     _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
-    _COMM_ASSETS = ["oil", "natgas", "gold", "silver", "fertilizer"]
-    _INTL_ASSETS = ["china", "india", "japan", "germany", "europe", "hongkong"]
+    _COMM_ASSETS = ["oil", "natgas", "gold", "silver"]
+    _INTL_ASSETS = ["china", "india", "japan", "europe"]
 
     # Call 1: Core US assets (all 3 horizons + causal chains)
     try:
