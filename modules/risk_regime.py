@@ -1797,7 +1797,7 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
     """Section 4: grouped 18-asset near-term impact matrix."""
     from services.fed_forecaster import (
-        build_fed_context, generate_expanded_forecast,
+        build_fed_context, generate_matrix_forecast,
         SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
     import json as _json
@@ -1805,7 +1805,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     context = build_fed_context(macro, fred_data)
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
-    expanded = generate_expanded_forecast(context_json, scenarios_json)
+    expanded = generate_matrix_forecast(context_json, scenarios_json)
 
     status = expanded.get("_call_status", {})
     status_parts = []
@@ -1817,8 +1817,8 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     _status_col, _refresh_col = st.columns([5, 1])
     if status_parts:
         _status_col.caption("Groq: " + "  |  ".join(status_parts))
-    if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Clear cached forecast and re-fetch from Groq"):
-        generate_expanded_forecast.clear()
+    if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Re-fetch matrix data from Groq (fan charts unaffected)"):
+        generate_matrix_forecast.clear()
         st.rerun()
 
     medium = expanded.get("medium_term", {})
@@ -1854,8 +1854,8 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     GROUP_ORDER = [
         ("🇺🇸 US Equities",    ["spy", "qqq", "iwm", "dji"]),
         ("🏦 Bonds",            ["bonds_long", "bonds_short"]),
-        ("🛢 Commodities",      ["oil", "natgas", "gold", "silver", "fertilizer"]),
-        ("🌏 International",    ["china", "india", "japan", "germany", "europe", "hongkong"]),
+        ("🛢 Commodities",      ["oil", "natgas", "gold", "silver"]),
+        ("🌏 International",    ["china", "india", "japan", "europe"]),
         ("💵 Dollar",           ["usd"]),
     ]
 
@@ -2006,6 +2006,10 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             )
             weighted.append(w_val / total_w if total_w > 0 else 0.0)
 
+        if all(v == 0.0 for v in weighted):
+            target.caption(f"_{SVC_ASSET_LABELS.get(asset_key, asset_key)}: forecast unavailable_")
+            return
+
         # Split into positive and negative for two-color fill
         pos_y = [v if v >= 0 else 0.0 for v in weighted]
         neg_y = [v if v < 0 else 0.0 for v in weighted]
@@ -2097,13 +2101,13 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
 
     with tabs[2]:
         cols = st.columns(2)
-        for i, asset in enumerate(["oil", "natgas", "gold", "silver", "fertilizer"]):
+        for i, asset in enumerate(["oil", "natgas", "gold", "silver"]):
             _draw_fan_chart(asset, cols[i % 2])
 
     with tabs[3]:
-        cols = st.columns(3)
-        for i, asset in enumerate(["china", "india", "japan", "germany", "europe", "hongkong"]):
-            _draw_near_term_bar(asset, cols[i % 3])
+        cols = st.columns(2)
+        for i, asset in enumerate(["china", "india", "japan", "europe"]):
+            _draw_near_term_bar(asset, cols[i % 2])
 
     with tabs[4]:
         _draw_fan_chart("usd")
