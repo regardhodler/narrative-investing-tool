@@ -1915,7 +1915,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                     )
 
     st.markdown("---")
-    _render_fed_causal_chain(expanded.get("causal_chains", {}), adj_probs, expanded.get("medium_term", {}), expanded)
+    _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, expanded)
 
 
 def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, expanded: dict):
@@ -1956,8 +1956,6 @@ def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, 
                     unsafe_allow_html=True,
                 )
 
-    st.markdown("---")
-    _render_fed_fan_charts(medium, adj_probs, expanded)
 
 
 def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
@@ -2157,10 +2155,10 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
         cols[idx % 2].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-    _render_fed_black_swans(expanded)
+    _render_fed_black_swans(expanded, adj_probs)
 
 
-def _render_fed_black_swans(expanded: dict):
+def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
     """Section 8: Black swan risk panel with probability badges and asset impact pills."""
     from services.fed_forecaster import (
         BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS,
@@ -2212,3 +2210,11 @@ def _render_fed_black_swans(expanded: dict):
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+    st.markdown("---")
+    _render_fed_causal_chain(
+        expanded.get("causal_chains", {}),
+        adj_probs,
+        expanded.get("medium_term", {}),
+        expanded,
+    )
