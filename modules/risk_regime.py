@@ -1823,6 +1823,19 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
 
     medium = expanded.get("medium_term", {})
 
+    # Debug: show what data we actually received from Groq
+    with st.expander("🔍 Debug: forecast data structure", expanded=False):
+        for horizon in ("near_term", "medium_term", "long_term"):
+            h_data = expanded.get(horizon, {})
+            if not h_data:
+                st.caption(f"**{horizon}**: empty")
+                continue
+            for scenario, assets_dict in h_data.items():
+                filled = [k for k, v in assets_dict.items() if v]
+                empty = [k for k, v in assets_dict.items() if not v]
+                st.caption(f"**{horizon}/{scenario}**: {len(filled)} assets with data ({', '.join(filled) or 'none'})"
+                           + (f" | empty: {', '.join(empty)}" if empty else ""))
+
     _medium_has_data = any(
         bool(assets) for assets in medium.values()
     )
