@@ -610,7 +610,7 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
             {"role": "system", "content": "You are a macro-economist. Return only valid json."},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 4096,
+        "max_tokens": 8192,
         "temperature": 0.3,
     }
     resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
@@ -672,7 +672,7 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
             {"role": "system", "content": "You are a macro-economist. Return only valid json."},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 4096,
+        "max_tokens": 8192,
         "temperature": 0.3,
     }
     resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
