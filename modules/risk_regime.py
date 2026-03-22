@@ -1797,7 +1797,7 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
     """Section 4: grouped 18-asset near-term impact matrix."""
     from services.fed_forecaster import (
-        build_fed_context, generate_matrix_forecast,
+        build_fed_context, generate_matrix_forecast, generate_expanded_forecast,
         SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
     import json as _json
@@ -1806,6 +1806,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
     expanded = generate_matrix_forecast(context_json, scenarios_json)
+    full_expanded = generate_expanded_forecast(context_json, scenarios_json)
 
     status = expanded.get("_call_status", {})
     status_parts = []
@@ -1823,34 +1824,13 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
 
     medium = expanded.get("medium_term", {})
 
-    # Debug: show what data we actually received from Groq
-    with st.expander("🔍 Debug: forecast data structure", expanded=False):
-        for horizon in ("near_term", "medium_term", "long_term"):
-            h_data = expanded.get(horizon, {})
-            if not h_data:
-                st.caption(f"**{horizon}**: empty")
-                continue
-            for scenario, assets_dict in h_data.items():
-                filled = [k for k, v in assets_dict.items() if v]
-                empty = [k for k, v in assets_dict.items() if not v]
-                st.caption(f"**{horizon}/{scenario}**: {len(filled)} assets with data ({', '.join(filled) or 'none'})"
-                           + (f" | empty: {', '.join(empty)}" if empty else ""))
-        # Show raw commodities_intl response structure
-        comm_top = expanded.get("_debug_comm_top_keys")
-        comm_dbg = expanded.get("_debug_comm_response")
-        if comm_top is not None:
-            st.caption(f"**comm_intl top keys**: {comm_top}")
-        if comm_dbg:
-            for sc_key, assets_info in comm_dbg.items():
-                st.caption(f"**comm_intl/{sc_key}**: {assets_info}")
-
     _medium_has_data = any(
         bool(assets) for assets in medium.values()
     )
     if not _medium_has_data:
         st.warning("⚠ Medium-term forecast data unavailable — check Groq API status above.")
         st.markdown("---")
-        _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, expanded)
+        _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded)
         return
 
     # ── Section 4: Asset Impact Matrix with horizon toggle ────────────────────
@@ -1942,44 +1922,54 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                     )
 
     st.markdown("---")
-    _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, expanded)
+    _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded)
 
 
 def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, expanded: dict):
-    """Section 5: full causal chain with cumulative confidence decay."""
+    """Section: full causal chain with cumulative confidence decay."""
     from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
 
-    _section_header("Causal Chain")
+    _section_header("Causal Chain — Policy Transmission Path")
+    st.caption("How each Fed scenario propagates through the economy — confidence decays with each link")
 
-    # Dominant scenario = highest adjusted probability
     dominant_key = max(SCENARIO_KEYS, key=lambda k: next(
         (r["prob"] for r in adj_probs if r["scenario"] == k), 0.0
     ))
 
-    for scenario_key in SCENARIO_KEYS:
+    # Reorder: dominant first
+    ordered_keys = [dominant_key] + [k for k in SCENARIO_KEYS if k != dominant_key]
+
+    for scenario_key in ordered_keys:
         chain_steps = chains.get(scenario_key, [])
         prob = next((r["prob"] for r in adj_probs if r["scenario"] == scenario_key), 0.25)
         label = f"{SCENARIO_LABELS[scenario_key]} [{int(round(prob*100))}%]"
         is_dominant = scenario_key == dominant_key
 
-        with st.expander(label, expanded=is_dominant):
+        with st.expander(("⭐ " if is_dominant else "") + label, expanded=is_dominant):
             if not chain_steps:
                 st.caption("Chain data unavailable.")
                 continue
 
+            # Summary line
+            start_conf = 95
+            end_conf = max(50, start_conf - (len(chain_steps) - 1) * 5)
+            st.caption(f"{len(chain_steps)} steps · confidence {start_conf}% → {end_conf}%")
+
             for idx, step_text in enumerate(chain_steps):
-                # Fade confidence: start at 95%, decay 5% per step, floor at 50%
                 conf_pct = max(50, 95 - idx * 5)
                 color = (
                     COLORS.get("green",    "#40c080") if conf_pct >= 70 else
                     COLORS.get("yellow",   "#f0c040") if conf_pct >= 55 else
                     COLORS.get("text_dim", "#888888")
                 )
+                arrow = "→ " if idx > 0 else "● "
                 st.markdown(
-                    f'<div style="padding:3px 0 3px 16px;border-left:2px solid {color};">'
-                    f'<span style="font-size:13px;">{step_text}</span>'
-                    f'<span style="float:right;font-size:11px;color:{color};">'
-                    f'[{conf_pct}%]</span></div>',
+                    f'<div style="padding:4px 0 4px 16px;border-left:3px solid {color};margin-bottom:2px;">'
+                    f'<span style="font-size:11px;color:{COLORS.get("text_dim", "#888")};font-weight:600;">'
+                    f'Step {idx+1}</span>&nbsp;&nbsp;'
+                    f'<span style="font-size:13px;">{arrow}{step_text}</span>'
+                    f'<span style="float:right;font-size:11px;color:{color};font-weight:600;">'
+                    f'{conf_pct}%</span></div>',
                     unsafe_allow_html=True,
                 )
 
@@ -2000,6 +1990,51 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     st.caption("Market-implied forecast — weighted by Fed Funds Futures probabilities across all FOMC scenarios.  "
                "🟢 Green area = positive return expected  ·  🔴 Red area = negative return expected  ·  "
                "y-axis = cumulative % change")
+
+    # ── Gainers / Losers summary ──
+    _ALL_MEDIUM_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short",
+                          "oil", "natgas", "gold", "silver", "china", "india", "japan", "europe", "usd"]
+    _total_w = sum(prob_map.get(sk, 0.25) for sk in SCENARIO_KEYS)
+    _asset_returns = {}
+    for _asset in _ALL_MEDIUM_ASSETS:
+        _w_vals = []
+        for _m in range(12):
+            _wv = sum(
+                prob_map.get(sk, 0.25) * (
+                    medium.get(sk, {}).get(_asset, [])[_m]
+                    if _m < len(medium.get(sk, {}).get(_asset, []))
+                    else 0.0
+                )
+                for sk in SCENARIO_KEYS
+            )
+            _w_vals.append(_wv / _total_w if _total_w > 0 else 0.0)
+        _final = _w_vals[-1] if _w_vals else 0.0
+        if _final != 0.0:
+            _asset_returns[_asset] = _final
+
+    if _asset_returns:
+        _sorted = sorted(_asset_returns.items(), key=lambda x: x[1], reverse=True)
+        _gainers = [(k, v) for k, v in _sorted if v > 0][:3]
+        _losers = [(k, v) for k, v in _sorted if v < 0][-3:]
+        _losers.reverse()
+
+        _gain_str = "  ".join(
+            f'<span style="color:#22c55e;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
+            for k, v in _gainers
+        ) if _gainers else '<span style="color:#888;">none</span>'
+        _loss_str = "  ".join(
+            f'<span style="color:#ef4444;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
+            for k, v in _losers
+        ) if _losers else '<span style="color:#888;">none</span>'
+
+        st.markdown(
+            f'<div style="background:{COLORS.get("surface", "#1e293b")};border:1px solid {COLORS.get("border", "#334155")};'
+            f'border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">'
+            f'<b>12-Month Outlook:</b>&nbsp;&nbsp;'
+            f'▲ {_gain_str}&nbsp;&nbsp;&nbsp;▼ {_loss_str}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     SCENARIO_COLORS = {
         "hold":    COLORS.get("yellow", "#f0c040"),
@@ -2150,6 +2185,46 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
         st.info("Long-term forecast unavailable.")
         return
 
+    # ── Gainers / Losers summary (2-year) ──
+    _lt_assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
+    _lt_prob = {r["scenario"]: r["prob"] for r in adj_probs}
+    _lt_returns = {}
+    for _asset in _lt_assets:
+        _wf = sum(
+            _lt_prob.get(sk, 0.25) * (
+                long.get(sk, {}).get(_asset, [0.0]*8)[-1]
+                if long.get(sk, {}).get(_asset)
+                else 0.0
+            )
+            for sk in SCENARIO_KEYS
+        )
+        if _wf != 0.0:
+            _lt_returns[_asset] = _wf
+
+    if _lt_returns:
+        _sorted_lt = sorted(_lt_returns.items(), key=lambda x: x[1], reverse=True)
+        _gainers = [(k, v) for k, v in _sorted_lt if v > 0][:3]
+        _losers = [(k, v) for k, v in _sorted_lt if v < 0][-3:]
+        _losers.reverse()
+
+        _gain_str = "  ".join(
+            f'<span style="color:#22c55e;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
+            for k, v in _gainers
+        ) if _gainers else '<span style="color:#888;">none</span>'
+        _loss_str = "  ".join(
+            f'<span style="color:#ef4444;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
+            for k, v in _losers
+        ) if _losers else '<span style="color:#888;">none</span>'
+
+        st.markdown(
+            f'<div style="background:{COLORS.get("surface", "#1e293b")};border:1px solid {COLORS.get("border", "#334155")};'
+            f'border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">'
+            f'<b>2-Year Outlook:</b>&nbsp;&nbsp;'
+            f'▲ {_gain_str}&nbsp;&nbsp;&nbsp;▼ {_loss_str}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
     assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
     quarters = [f"Q{i+1}" for i in range(8)]
@@ -2191,21 +2266,50 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
 
 
 def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
-    """Section 8: Black swan risk panel with probability badges and asset impact pills."""
+    """Section: Black swan risk panel with severity ranking and directional impact."""
     from services.fed_forecaster import (
         BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
 
     _section_header("Black Swan Risk Panel")
-    st.caption("AI-estimated annual probability and asset impact for extreme tail events")
 
     swans = expanded.get("black_swans", {})
     if not swans:
         st.info("Black swan data unavailable.")
+        st.markdown("---")
+        _render_fed_causal_chain(
+            expanded.get("causal_chains", {}), adj_probs,
+            expanded.get("medium_term", {}), expanded,
+        )
         return
 
+    # Sort by probability descending
+    sorted_events = sorted(
+        BLACK_SWAN_EVENTS.items(),
+        key=lambda x: swans.get(x[0], {}).get("probability_pct", 0),
+        reverse=True,
+    )
+
+    # Aggregate threat level
+    avg_prob = sum(swans.get(k, {}).get("probability_pct", 0) for k in BLACK_SWAN_EVENTS) / max(len(BLACK_SWAN_EVENTS), 1)
+    if avg_prob > 8:
+        threat_color, threat_label = COLORS.get("red", "#ef4444"), "ELEVATED"
+    elif avg_prob > 3:
+        threat_color, threat_label = "#f59e0b", "MODERATE"
+    else:
+        threat_color, threat_label = COLORS.get("green", "#22c55e"), "LOW"
+
+    st.markdown(
+        f'<div style="font-size:13px;margin-bottom:8px;">'
+        f'Aggregate tail risk: '
+        f'<span style="color:{threat_color};font-weight:700;">{threat_label}</span>'
+        f' (avg {avg_prob:.1f}% annual probability)</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("AI-estimated probability and directional asset impact for extreme tail events")
+
     cols = st.columns(2)
-    for i, (event_key, event_label) in enumerate(BLACK_SWAN_EVENTS.items()):
+    for i, (event_key, event_label) in enumerate(sorted_events):
         event = swans.get(event_key, {})
         prob = event.get("probability_pct", 0)
         narrative = event.get("narrative", "")
@@ -2213,26 +2317,37 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
 
         if prob > 10:
             prob_color = COLORS.get("red", "#ef4444")
+            severity_icon = "🔴"
         elif prob > 3:
-            prob_color = "#f59e0b"  # amber
+            prob_color = "#f59e0b"
+            severity_icon = "🟡"
         else:
             prob_color = COLORS.get("green", "#22c55e")
+            severity_icon = "🟢"
 
-        # Build impact pills HTML
-        pills_html = "".join(
-            f'<span style="background:{COLORS.get("surface", "#1e293b")};'
-            f'border:1px solid {COLORS.get("border", "#475569")};'
-            f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
-            f'{SVC_ASSET_LABELS.get(k, k)}: {v}</span>'
-            for k, v in impacts.items()
-        )
+        # Color-code impact pills by direction
+        pills_html = ""
+        for k, v in impacts.items():
+            v_str = str(v)
+            if any(neg in v_str.lower() for neg in ["-", "negative", "down", "drop", "fall", "decline"]):
+                pill_color = COLORS.get("red", "#ef4444")
+            elif any(pos in v_str.lower() for pos in ["+", "positive", "up", "rise", "gain", "rally"]):
+                pill_color = COLORS.get("green", "#22c55e")
+            else:
+                pill_color = COLORS.get("text_dim", "#888")
+            pills_html += (
+                f'<span style="background:{COLORS.get("surface", "#1e293b")};'
+                f'border:1px solid {pill_color};color:{pill_color};'
+                f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
+                f'{SVC_ASSET_LABELS.get(k, k)}: {v}</span>'
+            )
 
         with cols[i % 2]:
             st.markdown(
                 f'<div style="border:1px solid {COLORS.get("border", "#334155")};'
                 f'border-radius:8px;padding:14px;margin-bottom:10px;">'
                 f'<div style="font-weight:700;font-size:14px;margin-bottom:6px;">'
-                f'{event_label}</div>'
+                f'{severity_icon} {event_label}</div>'
                 f'<span style="background:{prob_color};color:white;padding:2px 10px;'
                 f'border-radius:10px;font-size:0.8em;font-weight:600;">'
                 f'{prob:.1f}% annual probability</span>'
@@ -2245,8 +2360,6 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
 
     st.markdown("---")
     _render_fed_causal_chain(
-        expanded.get("causal_chains", {}),
-        adj_probs,
-        expanded.get("medium_term", {}),
-        expanded,
+        expanded.get("causal_chains", {}), adj_probs,
+        expanded.get("medium_term", {}), expanded,
     )
