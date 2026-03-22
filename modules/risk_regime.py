@@ -1980,29 +1980,49 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     }
 
     def _draw_fan_chart(asset_key: str, col_or_container=None):
-        """Draw a 12-month fan chart for one asset in medium_term."""
+        """Draw a 12-month probability-weighted area chart for one asset."""
         months = list(range(1, 13))
         target = col_or_container or st
 
+        # Compute probability-weighted line
+        total_w = sum(prob_map.get(sk, 0.25) for sk in SCENARIO_KEYS)
+        weighted = []
+        for m in range(12):
+            w_val = sum(
+                prob_map.get(sk, 0.25) * (
+                    medium.get(sk, {}).get(asset_key, [])[m]
+                    if m < len(medium.get(sk, {}).get(asset_key, []))
+                    else 0.0
+                )
+                for sk in SCENARIO_KEYS
+            )
+            weighted.append(w_val / total_w if total_w > 0 else 0.0)
+
+        # Split into positive and negative for two-color fill
+        pos_y = [v if v >= 0 else 0.0 for v in weighted]
+        neg_y = [v if v < 0 else 0.0 for v in weighted]
+
         fig = go.Figure()
 
-        # Draw one trace per scenario
-        for sk in SCENARIO_KEYS:
-            vals = medium.get(sk, {}).get(asset_key, [])
-            if not vals or len(vals) < 12:
-                continue
-            prob = prob_map.get(sk, 0.25)
-            label = f"{SCENARIO_LABELS[sk]} ({int(round(prob*100))}%)"
-            color = SCENARIO_COLORS.get(sk, "#888")
-            opacity = max(0.3, prob)
-            fig.add_trace(go.Scatter(
-                x=months,
-                y=list(vals),
-                name=label,
-                line=dict(color=color, width=max(1, int(prob * 4))),
-                opacity=opacity,
-                showlegend=True,
-            ))
+        # Positive area (green)
+        fig.add_trace(go.Scatter(
+            x=months, y=pos_y,
+            fill="tozeroy",
+            fillcolor="rgba(34,197,94,0.25)",
+            line=dict(color="rgba(34,197,94,0.9)", width=2),
+            name="Weighted (up)",
+            showlegend=False,
+        ))
+
+        # Negative area (red)
+        fig.add_trace(go.Scatter(
+            x=months, y=neg_y,
+            fill="tozeroy",
+            fillcolor="rgba(239,68,68,0.25)",
+            line=dict(color="rgba(239,68,68,0.9)", width=2),
+            name="Weighted (down)",
+            showlegend=False,
+        ))
 
         fig.add_hline(y=0, line_dash="dot",
                       line_color=COLORS.get("border", "#444"), line_width=1)
@@ -2012,8 +2032,7 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             height=220,
             margin=dict(l=0, r=10, t=30, b=20),
             xaxis=dict(title="Month", tickmode="linear", dtick=3),
-            yaxis=dict(title="% change"),
-            legend=dict(font_size=9, orientation="h", y=-0.25),
+            yaxis=dict(title="% pts"),
         )
         target.plotly_chart(fig, use_container_width=True)
 
