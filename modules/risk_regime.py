@@ -1973,12 +1973,15 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     import numpy as np
 
     _section_header("Medium-Term Outlook (3–12 months)")
-    st.caption("Each chart shows a single probability-weighted forecast across all FOMC scenarios — "
-               "weighted by current market-implied odds.  "
-               "🟢 Green area = net positive expected return  ·  🔴 Red area = net negative expected return  ·  "
-               "y-axis = percentage points")
 
     prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
+    dominant_key = max(prob_map, key=prob_map.get)
+    dominant_prob = int(round(prob_map[dominant_key] * 100))
+    dominant_label = SCENARIO_LABELS[dominant_key]
+
+    st.caption(f"Based on dominant scenario: **{dominant_label} ({dominant_prob}%)** from Fed Funds Futures.  "
+               "🟢 Green area = positive return  ·  🔴 Red area = negative return  ·  "
+               "y-axis = cumulative % change")
 
     SCENARIO_COLORS = {
         "hold":    COLORS.get("yellow", "#f0c040"),
@@ -1988,27 +1991,17 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     }
 
     def _draw_fan_chart(asset_key: str, col_or_container=None):
-        """Draw a 12-month probability-weighted area chart for one asset."""
+        """Draw a 12-month area chart for one asset based on dominant scenario."""
         months = list(range(1, 13))
         target = col_or_container or st
 
-        # Compute probability-weighted line
-        total_w = sum(prob_map.get(sk, 0.25) for sk in SCENARIO_KEYS)
-        weighted = []
-        for m in range(12):
-            w_val = sum(
-                prob_map.get(sk, 0.25) * (
-                    medium.get(sk, {}).get(asset_key, [])[m]
-                    if m < len(medium.get(sk, {}).get(asset_key, []))
-                    else 0.0
-                )
-                for sk in SCENARIO_KEYS
-            )
-            weighted.append(w_val / total_w if total_w > 0 else 0.0)
-
-        if all(v == 0.0 for v in weighted):
+        # Use dominant scenario directly
+        vals = medium.get(dominant_key, {}).get(asset_key, [])
+        if not vals or len(vals) < 12:
             target.caption(f"_{SVC_ASSET_LABELS.get(asset_key, asset_key)}: forecast unavailable_")
             return
+
+        weighted = list(vals[:12])
 
         # Split into positive and negative for two-color fill
         pos_y = [v if v >= 0 else 0.0 for v in weighted]
@@ -2022,7 +2015,7 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             fill="tozeroy",
             fillcolor="rgba(34,197,94,0.25)",
             line=dict(color="rgba(34,197,94,0.9)", width=2),
-            name="Weighted (up)",
+            name="Positive",
             showlegend=False,
         ))
 
@@ -2032,7 +2025,7 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             fill="tozeroy",
             fillcolor="rgba(239,68,68,0.25)",
             line=dict(color="rgba(239,68,68,0.9)", width=2),
-            name="Weighted (down)",
+            name="Negative",
             showlegend=False,
         ))
 
@@ -2044,7 +2037,7 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
             height=220,
             margin=dict(l=0, r=10, t=30, b=20),
             xaxis=dict(title="Month", tickmode="linear", dtick=3),
-            yaxis=dict(title="% pts"),
+            yaxis=dict(title="% cum."),
         )
         target.plotly_chart(fig, use_container_width=True)
 
@@ -2107,7 +2100,7 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     with tabs[3]:
         cols = st.columns(2)
         for i, asset in enumerate(["china", "india", "japan", "europe"]):
-            _draw_near_term_bar(asset, cols[i % 2])
+            _draw_fan_chart(asset, cols[i % 2])
 
     with tabs[4]:
         _draw_fan_chart("usd")
