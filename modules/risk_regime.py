@@ -1815,15 +1815,31 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             for call_name, msg in errors.items():
                 st.caption(f"{call_name}: {msg}")
 
-    near = expanded.get("near_term", {})
+    medium = expanded.get("medium_term", {})
 
-    if not near:
+    if not medium:
         st.error("Fed forecast unavailable — Groq API error or key not set.")
         _render_fed_causal_chain(expanded.get("causal_chains", {}), adj_probs, expanded.get("medium_term", {}), expanded)
         return
 
-    # ── Section 4: Near-Term Asset Impact Matrix ──────────────────────────────
-    _section_header("Near-Term Asset Impact (0–7 Days)")
+    # ── Section 4: Asset Impact Matrix with horizon toggle ────────────────────
+    _h_col, _t_col = st.columns([3, 1])
+    _h_col.markdown(
+        f'<div style="font-size:16px;font-weight:700;letter-spacing:0.04em;'
+        f'padding:4px 0;">Asset Impact Matrix</div>',
+        unsafe_allow_html=True,
+    )
+    horizon = _t_col.radio(
+        "Horizon",
+        options=["3M", "6M", "1Y"],
+        index=1,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="asset_matrix_horizon",
+    )
+    _horizon_index = {"3M": 2, "6M": 5, "1Y": 11}[horizon]
+    _horizon_label = {"3M": "3-Month", "6M": "6-Month", "1Y": "1-Year"}[horizon]
+    st.caption(f"{_horizon_label} cumulative % change per scenario")
 
     GROUP_ORDER = [
         ("🇺🇸 US Equities",    ["spy", "qqq", "iwm", "dji"]),
@@ -1865,25 +1881,25 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                 unsafe_allow_html=True,
             )
             for i, scenario_key in enumerate(SCENARIO_KEYS):
-                vals = near.get(scenario_key, {}).get(asset, [])
-                day1 = vals[0] if vals else None
-                if day1 is None:
+                vals = medium.get(scenario_key, {}).get(asset, [])
+                cell_val = vals[_horizon_index] if _horizon_index < len(vals) else None
+                if cell_val is None:
                     row_cols[i+1].markdown(
                         f'<div style="font-size:13px;color:{COLORS["text_dim"]};padding:6px 0;">—</div>',
                         unsafe_allow_html=True,
                     )
                 else:
-                    if day1 > 2:
+                    if cell_val > 2:
                         color = COLORS.get("green", "#22c55e")
-                    elif day1 > 0:
+                    elif cell_val > 0:
                         color = "#86efac"
-                    elif day1 > -2:
+                    elif cell_val > -2:
                         color = "#fca5a5"
                     else:
                         color = COLORS.get("red", "#ef4444")
                     row_cols[i+1].markdown(
                         f'<div style="font-size:13px;font-weight:600;color:{color};padding:6px 0;">'
-                        f'{day1:+.1f}%</div>',
+                        f'{cell_val:+.1f}%</div>',
                         unsafe_allow_html=True,
                     )
 
