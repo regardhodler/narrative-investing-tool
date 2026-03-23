@@ -381,15 +381,16 @@ Return ONLY valid JSON (no markdown fences) with these keys:
 Be selective with 3-star (strong buy) ratings — only give them to picks that are the best fit for this exact regime. Most picks should be 1 or 2 stars."""
 
     def _parse(text: str) -> dict:
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
+        import re as _re
+        m = _re.search(r"\{.*\}", text, _re.DOTALL)
+        if not m:
+            return _empty
         try:
-            return json.loads(text)
+            return json.loads(m.group())
         except json.JSONDecodeError:
             return _empty
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
 
     if use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
@@ -397,8 +398,9 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
                 model=model or "claude-haiku-4-5-20251001",
-                max_tokens=800,
+                max_tokens=1200,
                 temperature=0.3,
+                system=_system,
                 messages=[{"role": "user", "content": prompt}],
             )
             return _parse(message.content[0].text.strip())
@@ -419,8 +421,11 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
             },
             json={
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 800,
+                "messages": [
+                    {"role": "system", "content": _system},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": 1200,
                 "temperature": 0.3,
             },
             timeout=20,
@@ -477,15 +482,16 @@ Return ONLY valid JSON (no markdown fences) with these keys:
 3 stars = immediate strong buy specifically because of this scenario. Include both "buy" and "avoid" lists."""
 
     def _parse(text: str) -> dict:
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            if text.endswith("```"):
-                text = text[:-3]
-            text = text.strip()
+        import re as _re
+        m = _re.search(r"\{.*\}", text, _re.DOTALL)
+        if not m:
+            return _empty
         try:
-            return json.loads(text)
+            return json.loads(m.group())
         except json.JSONDecodeError:
             return _empty
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
 
     if use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
@@ -493,8 +499,9 @@ Return ONLY valid JSON (no markdown fences) with these keys:
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
                 model=model or "claude-haiku-4-5-20251001",
-                max_tokens=1024,
+                max_tokens=1200,
                 temperature=0.3,
+                system=_system,
                 messages=[{"role": "user", "content": prompt}],
             )
             return _parse(message.content[0].text.strip())
@@ -512,15 +519,19 @@ Return ONLY valid JSON (no markdown fences) with these keys:
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
                 "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 1024,
+                "messages": [
+                    {"role": "system", "content": _system},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": 1200,
                 "temperature": 0.3,
             },
             timeout=20,
         )
         resp.raise_for_status()
         return _parse(resp.json()["choices"][0]["message"]["content"].strip())
-    except Exception:
+    except Exception as _e:
+        st.error(f"Groq API error (Scenario Plays): {_e}")
         return _empty
 
 
