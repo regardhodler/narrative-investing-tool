@@ -1177,14 +1177,20 @@ def _make_category_radar(signals: list[dict]) -> go.Figure | None:
 # UI HELPERS
 # ─────────────────────────────────────────────
 
-def _section_header(title: str):
-    """Render a Bloomberg-styled section header."""
+def _section_header(title: str, badge: str = ""):
+    """Render a Bloomberg-styled section header with optional engine badge."""
+    badge_html = (
+        f' <span style="font-size:10px;background:{COLORS["bloomberg_orange"]};'
+        f'color:#000;padding:1px 6px;border-radius:3px;vertical-align:middle;'
+        f'font-weight:700;letter-spacing:0.04em;">{badge}</span>'
+        if badge else ""
+    )
     st.markdown(
         f'<div style="border-left:3px solid {COLORS["bloomberg_orange"]};'
         f'background:{COLORS["surface"]};padding:8px 14px;margin:20px 0 10px 0;'
         f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:14px;'
         f'font-weight:600;color:{COLORS["bloomberg_orange"]};letter-spacing:0.08em;'
-        f'text-transform:uppercase;">{title}</div>',
+        f'text-transform:uppercase;">{title}{badge_html}</div>',
         unsafe_allow_html=True,
     )
 
@@ -1562,6 +1568,83 @@ def render():
         else:
             st.markdown("Sector rotation data unavailable.")
 
+        # ── AI Regime Plays ──────────────────────────────────────────────────
+        _rp_has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+        _rp_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _rp_has_anthropic else ["⚡ Groq"]
+        _rp_tier_map  = {
+            "⚡ Groq":                (False, None),
+            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+        }
+        _prev_rp_tier = st.session_state.get("_rp_tier_prev")
+        _sel_rp_tier = st.radio(
+            "Engine", _rp_tier_opts, horizontal=True, key="regime_plays_engine_radio",
+            help="Sonnet gives the most nuanced regime play synthesis"
+        )
+        _use_cl_rp, _cl_rp_model = _rp_tier_map[_sel_rp_tier]
+        st.session_state["_rp_tier_prev"] = _sel_rp_tier
+
+        _gen_rp = st.button("Generate Regime Plays", type="primary", key="gen_regime_plays_btn")
+        if _gen_rp or st.session_state.get("_rp_plays_result"):
+            if _gen_rp:
+                from services.claude_client import suggest_regime_plays
+                _top_sigs = macro.get("top_signals", [])[:5]
+                _sig_lines = [f"- {s['name']}: z={s['score']:+.2f}" for s in _top_sigs]
+                _signal_summary = "\n".join(_sig_lines) if _sig_lines else "No signal data available."
+                _score_norm = (macro.get("macro_score", 50) - 50) / 50
+                with st.spinner("Generating AI regime plays..."):
+                    _plays = suggest_regime_plays(
+                        macro.get("macro_regime", "Unknown"),
+                        _score_norm,
+                        _signal_summary,
+                        use_claude=_use_cl_rp,
+                        model=_cl_rp_model,
+                    )
+                st.session_state["_rp_plays_result"] = _plays
+                st.session_state["_rp_plays_last_tier"] = _sel_rp_tier
+            else:
+                _plays = st.session_state["_rp_plays_result"]
+
+            _section_header("AI Regime Plays", badge=st.session_state.get("_rp_plays_last_tier", _sel_rp_tier))
+            if _plays.get("rationale"):
+                st.markdown(
+                    f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
+                    f'padding:10px 14px;margin-bottom:12px;font-size:13px;color:{COLORS["text"]};">'
+                    f'{_plays["rationale"]}</div>',
+                    unsafe_allow_html=True,
+                )
+            _col_s, _col_st, _col_b = st.columns(3)
+            with _col_s:
+                st.markdown(
+                    f'<div style="color:{COLORS["bloomberg_orange"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Sectors</div>',
+                    unsafe_allow_html=True,
+                )
+                for item in (_plays.get("sectors") or []):
+                    _conv = item.get("conviction", 1)
+                    _stars = "★" * _conv + "☆" * (3 - _conv)
+                    st.markdown(f"`{_stars}` {item['name']}")
+            with _col_st:
+                st.markdown(
+                    f'<div style="color:{COLORS["bloomberg_orange"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Stocks</div>',
+                    unsafe_allow_html=True,
+                )
+                for item in (_plays.get("stocks") or []):
+                    _conv = item.get("conviction", 1)
+                    _stars = "★" * _conv + "☆" * (3 - _conv)
+                    st.markdown(f"`{_stars}` **{item['ticker']}** — {item.get('reason', '')}")
+            with _col_b:
+                st.markdown(
+                    f'<div style="color:{COLORS["bloomberg_orange"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">Bonds</div>',
+                    unsafe_allow_html=True,
+                )
+                for item in (_plays.get("bonds") or []):
+                    _conv = item.get("conviction", 1)
+                    _stars = "★" * _conv + "☆" * (3 - _conv)
+                    st.markdown(f"`{_stars}` **{item['ticker']}** — {item.get('reason', '')}")
+
         # ── Risk Management Alerts ──
         _section_header("Risk Management Alerts")
         for alert in macro.get("risk_alerts", ["No elevated risk signals detected."]):
@@ -1727,6 +1810,266 @@ def _render_fed_forecaster(macro: dict, fred_data: dict):
     _render_fed_probability_bars(macro, fred_data, tone_result)
 
 
+def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
+    """Rate Path → Sector Rotation + Dalio Quadrant Cross-Check + AI Regime Plays."""
+    import os
+    from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
+
+    _section_header("Rate Path → Sector Rotation & Regime Plays")
+
+    # ── 1. Dominant rate scenario ─────────────────────────────────────────
+    dominant_key = max(SCENARIO_KEYS, key=lambda k: next(
+        (r["prob"] for r in adj_probs if r["scenario"] == k), 0.0
+    ))
+    dominant_prob = next((r["prob"] for r in adj_probs if r["scenario"] == dominant_key), 0.25)
+    dominant_label = SCENARIO_LABELS[dominant_key]
+
+    rate_dir = (
+        "cuts" if dominant_key in ("cut_25", "cut_50")
+        else "hikes" if dominant_key == "hike_25"
+        else "hold"
+    )
+
+    # ── 2. Macro context ──────────────────────────────────────────────────
+    quadrant    = macro.get("quadrant", "Goldilocks")
+    regime      = macro.get("macro_regime", "Neutral")
+    growth_dir  = macro.get("growth_dir", "")
+    infl_dir    = macro.get("inflation_dir", "")
+    macro_score = macro.get("macro_score", 50)
+
+    # ── 3. Quadrant cross-check ───────────────────────────────────────────
+    _xcheck = {
+        ("cuts",  "Deflation"):   ("CONFIRMED", COLORS["green"],  "Cuts match falling growth + deflation — classic easing"),
+        ("cuts",  "Goldilocks"):  ("CONFIRMED", COLORS["green"],  "Dovish pivot sustains soft landing — growth continues"),
+        ("cuts",  "Stagflation"): ("CAUTION",   COLORS["yellow"], "Cutting into stagflation — unusual; watch gold & real assets"),
+        ("cuts",  "Reflation"):   ("CONFLICT",  COLORS["red"],    "Cutting while inflation rising — risk of re-acceleration"),
+        ("hikes", "Reflation"):   ("CONFIRMED", COLORS["green"],  "Tightening to fight inflation — textbook response"),
+        ("hikes", "Stagflation"): ("CONFIRMED", COLORS["yellow"], "Hiking despite weak growth — painful but necessary"),
+        ("hikes", "Goldilocks"):  ("CAUTION",   COLORS["yellow"], "Preemptive hike in soft landing — watch for policy error"),
+        ("hikes", "Deflation"):   ("CONFLICT",  COLORS["red"],    "Hiking into deflation — policy error risk; avoid risk assets"),
+        ("hold",  "Goldilocks"):  ("CONFIRMED", COLORS["green"],  "Hold reflects balanced growth + stable inflation"),
+        ("hold",  "Reflation"):   ("CAUTION",   COLORS["yellow"], "Holding while inflation rises — falling behind the curve"),
+        ("hold",  "Deflation"):   ("CAUTION",   COLORS["yellow"], "Holding while growth falls — watch for forced cuts"),
+        ("hold",  "Stagflation"): ("CAUTION",   COLORS["yellow"], "Trapped: can't cut (inflation) or hike (weak growth)"),
+    }
+    verdict, v_color, v_msg = _xcheck.get(
+        (rate_dir, quadrant), ("NEUTRAL", COLORS["yellow"], "Rate path and quadrant are ambiguous")
+    )
+    v_icon = {"CONFIRMED": "✅", "CONFLICT": "⚡", "CAUTION": "⚠", "NEUTRAL": "—"}.get(verdict, "—")
+
+    # ── 4. Static sector rotation ─────────────────────────────────────────
+    _rotation = {
+        "cuts": {
+            "favor": [
+                ("REITs",        "Lower cap rates → higher property valuations"),
+                ("Utilities",    "Bond proxy re-rates higher as yields fall"),
+                ("Growth Tech",  "Long-duration assets benefit from lower discount rate"),
+                ("Small Cap",    "Rate-sensitive balance sheets get relief"),
+                ("EM",           "Dollar weakening opens EM carry trade"),
+                ("HY Bonds",     "Risk-on: spreads compress with easier conditions"),
+            ],
+            "avoid": [
+                ("USD",          "Dollar weakens on rate differential compression"),
+                ("Financials",   "NIM compression on deep cuts"),
+                ("Short Bills",  "Yield cliff as rates reset lower"),
+            ],
+        },
+        "hikes": {
+            "favor": [
+                ("Financials",   "NIM expansion: borrow short, lend long"),
+                ("Energy",       "Inflation proxy — hike cycles often coincide"),
+                ("USD",          "Rate differential attracts capital flows"),
+                ("Short Bills",  "T-bills/CDs yield rises with Fed Funds"),
+                ("Value/Div.",   "Duration risk penalizes growth; value outperforms"),
+            ],
+            "avoid": [
+                ("REITs",        "Cap rate expansion compresses valuations"),
+                ("Utilities",    "Bond proxy sells off as rate alternative improves"),
+                ("Growth Tech",  "High-multiple stocks penalized by higher discount rate"),
+                ("EM",           "Dollar strength + capital outflows"),
+                ("Long Bonds",   "Duration risk: prices fall as yields rise"),
+            ],
+        },
+        "hold": {
+            "favor": [
+                ("Quality GARP", "Growth at reasonable price — stable rate environment"),
+                ("Div. Growth",  "Compounders shine when rates are stable"),
+                ("Sector Neutral","Market-cap weighted: no directional rate bet"),
+            ],
+            "avoid": [
+                ("High Leverage","No rate relief; refinancing risk persists"),
+                ("Rate Plays",   "Avoid pure rate-direction bets when Fed is on hold"),
+            ],
+        },
+    }
+    rotation = _rotation.get(rate_dir, _rotation["hold"])
+    _pill_color = (
+        COLORS["green"] if rate_dir == "cuts"
+        else COLORS["red"] if rate_dir == "hikes"
+        else COLORS["yellow"]
+    )
+
+    # ── 5. Header: dominant scenario + quadrant verdict ───────────────────
+    _h1, _h2 = st.columns(2)
+    with _h1:
+        st.markdown(
+            f'<div style="padding:10px 14px;background:{_pill_color}22;'
+            f'border:1px solid {_pill_color}55;border-radius:6px;height:90px;">'
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};font-weight:700;'
+            f'letter-spacing:0.08em;text-transform:uppercase;">Dominant Rate Path</div>'
+            f'<div style="font-size:20px;font-weight:700;color:{_pill_color};margin:4px 0;">'
+            f'{dominant_label}</div>'
+            f'<div style="font-size:12px;color:{COLORS["text_dim"]};">'
+            f'{int(round(dominant_prob * 100))}% market probability</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with _h2:
+        st.markdown(
+            f'<div style="padding:10px 14px;background:{v_color}22;'
+            f'border:1px solid {v_color}55;border-radius:6px;height:90px;">'
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};font-weight:700;'
+            f'letter-spacing:0.08em;text-transform:uppercase;">Dalio Quadrant: {quadrant}</div>'
+            f'<div style="font-size:17px;font-weight:700;color:{v_color};margin:4px 0;">'
+            f'{v_icon} {verdict}</div>'
+            f'<div style="font-size:11px;color:{COLORS["text_dim"]};line-height:1.4;">{v_msg}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='margin-top:12px;'></div>", unsafe_allow_html=True)
+
+    # ── 6. Sector rotation grid ───────────────────────────────────────────
+    _r1, _r2 = st.columns(2)
+    with _r1:
+        st.markdown(
+            f'<div style="font-size:10px;font-weight:700;color:{COLORS["green"]};'
+            f'letter-spacing:0.08em;margin-bottom:6px;text-transform:uppercase;">Favor</div>',
+            unsafe_allow_html=True,
+        )
+        for name, reason in rotation["favor"]:
+            st.markdown(
+                f'<div style="padding:5px 0;border-bottom:1px solid {COLORS["grid"]};">'
+                f'<span style="font-size:13px;font-weight:600;color:{COLORS["text"]};">{name}</span>'
+                f'<span style="font-size:11px;color:{COLORS["text_dim"]};"> — {reason}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    with _r2:
+        st.markdown(
+            f'<div style="font-size:10px;font-weight:700;color:{COLORS["red"]};'
+            f'letter-spacing:0.08em;margin-bottom:6px;text-transform:uppercase;">Avoid / Underweight</div>',
+            unsafe_allow_html=True,
+        )
+        for name, reason in rotation["avoid"]:
+            st.markdown(
+                f'<div style="padding:5px 0;border-bottom:1px solid {COLORS["grid"]};">'
+                f'<span style="font-size:13px;font-weight:600;color:{COLORS["text"]};">{name}</span>'
+                f'<span style="font-size:11px;color:{COLORS["text_dim"]};"> — {reason}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
+
+    # ── 7. AI Regime Plays ────────────────────────────────────────────────
+    _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_anthropic else ["⚡ Groq"]
+    _tier_map  = {
+        "⚡ Groq":                (False, None),
+        "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+    }
+
+    _prev_fp_tier = st.session_state.get("_fed_plays_tier_prev")
+    _sel_tier = st.radio(
+        "Engine", _tier_opts, horizontal=True, key="fed_plays_engine_radio",
+        help="Sonnet gives the deepest sector/stock synthesis from the rate path"
+    )
+    _use_cl, _cl_model = _tier_map[_sel_tier]
+
+    if _prev_fp_tier and _prev_fp_tier != _sel_tier:
+        for _k in ("_fed_plays_result", "_fed_plays_engine"):
+            st.session_state.pop(_k, None)
+    st.session_state["_fed_plays_tier_prev"] = _sel_tier
+
+    _gen = st.button("Generate Rate-Path Plays", type="primary", key="gen_fed_plays_btn")
+
+    if _gen or st.session_state.get("_fed_plays_result"):
+        if _gen:
+            _sig = (
+                f"Dalio Quadrant: {quadrant}, Regime: {regime}, "
+                f"Rate Path: {dominant_label} ({int(round(dominant_prob*100))}% probability), "
+                f"Rate Direction: {rate_dir}, Quadrant Signal: {verdict} — {v_msg}, "
+                f"Growth: {growth_dir}, Inflation: {infl_dir}"
+            )
+            _norm_score = (macro_score - 50) / 50
+            from services.claude_client import suggest_regime_plays
+            with st.spinner("Generating rate-path plays..."):
+                _plays = suggest_regime_plays(
+                    regime, _norm_score, _sig,
+                    use_claude=_use_cl, model=_cl_model,
+                )
+            st.session_state["_fed_plays_result"] = _plays
+            st.session_state["_fed_plays_result_ts"] = __import__("datetime").datetime.now()
+            st.session_state["_fed_plays_engine"] = _sel_tier
+            st.session_state["_fed_plays_tier"] = _sel_tier
+            # Stamp readiness context for Valuation pre-warm
+            st.session_state["_regime_plays_tier"] = _sel_tier
+            st.session_state["_regime_context"] = {
+                "regime": regime,
+                "score": _norm_score,
+                "signal_summary": _sig,
+            }
+            st.session_state["_regime_context_ts"] = __import__("datetime").datetime.now()
+        else:
+            _plays = st.session_state["_fed_plays_result"]
+
+        _eng_label = st.session_state.get("_fed_plays_engine", "⚡ Groq")
+        st.caption(f"*{_eng_label} · Rate Path: {dominant_label} · Quadrant: {quadrant}*")
+
+        if _plays and (_plays.get("sectors") or _plays.get("stocks") or _plays.get("bonds")):
+            _oc = COLORS["orange"]
+            _sc, _stc, _bc = st.columns(3)
+
+            def _play_items(col, header, items, show_reason=False):
+                with col:
+                    st.markdown(
+                        f'<div style="font-size:10px;font-weight:700;color:{COLORS["text_dim"]};'
+                        f'letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">{header}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    for item in (items or []):
+                        _stars = "★" * item.get("conviction", 1) + "☆" * (3 - item.get("conviction", 1))
+                        _name = item.get("name") or item.get("ticker", "")
+                        _reason = f'<br><span style="font-size:11px;color:{COLORS["text_dim"]};">{item.get("reason","")}</span>' if show_reason else ""
+                        st.markdown(
+                            f'<div style="padding:4px 0;border-bottom:1px solid {COLORS["grid"]};">'
+                            f'<span style="font-size:13px;font-weight:600;">{_name}</span> '
+                            f'<span style="font-size:11px;color:{_oc};">{_stars}</span>{_reason}'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+            _play_items(_sc,  "Sectors",     _plays.get("sectors", []))
+            _play_items(_stc, "Stocks",      _plays.get("stocks",  []), show_reason=True)
+            _play_items(_bc,  "Bonds/Macro", _plays.get("bonds",   []), show_reason=True)
+
+            if _plays.get("rationale"):
+                st.markdown(
+                    f'<div style="margin-top:10px;padding:10px 14px;'
+                    f'border-left:3px solid {COLORS["orange"]};background:{COLORS["surface"]}88;'
+                    f'border-radius:0 4px 4px 0;">'
+                    f'<div style="font-size:10px;font-weight:700;color:{COLORS["text_dim"]};'
+                    f'letter-spacing:0.08em;text-transform:uppercase;margin-bottom:4px;">Rationale</div>'
+                    f'<div style="font-size:13px;color:{COLORS["text"]};line-height:1.5;">'
+                    f'{_plays["rationale"]}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown("---")
+
+
 def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict):
     """Sections 3–6: probability bars, asset matrix, causal chain, fan charts."""
     from services.fed_forecaster import (
@@ -1747,6 +2090,17 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 
     # Apply tone adjustment
     adj_probs = adjust_probabilities(base_probs, tone_result, macro=macro)
+
+    # Stamp rate path context in session state for downstream modules
+    if adj_probs:
+        _dp = max(adj_probs, key=lambda r: r.get("prob", 0))
+        st.session_state["_rate_path_probs"] = adj_probs
+        st.session_state["_rate_path_probs_ts"] = __import__("datetime").datetime.now()
+        st.session_state["_dominant_rate_path"] = {
+            "scenario": _dp.get("scenario", ""),
+            "prob_pct": round(_dp.get("prob", 0) * 100, 1),
+        }
+        st.session_state["_fed_funds_rate"] = macro.get("fed_funds_rate")
 
     # Source label
     source = (base_probs[0].get("source", "fallback") if base_probs else "fallback")
@@ -1804,7 +2158,10 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 
     st.markdown("---")
 
-    # ── Sections 4-6 placeholder ─────────────────────────────────────────────
+    # ── Section 3b: Rate Path → Sector Rotation & Regime Plays ──────────────
+    _render_fed_sector_rotation_panel(macro, adj_probs)
+
+    # ── Sections 4-6: Asset matrix, causal chain, fan charts ─────────────────
     _render_fed_asset_matrix(macro, fred_data, adj_probs)
 
 
@@ -1821,26 +2178,41 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
 
-    # Claude toggle — only shown when ANTHROPIC_API_KEY is configured
+    # Fed Forecaster engine selector — radio shown when API key is available
     _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _use_claude = st.session_state.get("fed_use_claude", False)
+    _tier_options = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _tier_hints   = {"⚡ Groq": "", "🧠 Regard Mode": "Haiku", "👑 Highly Regarded Mode": "Sonnet"}
+    _tier_map     = {"⚡ Groq": "groq", "🧠 Regard Mode": "haiku", "👑 Highly Regarded Mode": "sonnet"}
+
     if _has_claude:
-        _prev_claude = st.session_state.get("_fed_use_claude_prev", _use_claude)
-        _use_claude = st.toggle(
-            "🧠 Quality Mode — Claude Haiku (matrix, fan charts, causal chain, black swans)",
-            value=_use_claude,
-            key="fed_use_claude",
-            help="Uses Claude Haiku for all Fed Forecaster sections. More accurate numbers and richer reasoning. Groq is used when off (free, fast).",
-        )
-        # If toggle just changed, clear both caches so new engine takes effect immediately
-        if _use_claude != _prev_claude:
+        _prev_tier = st.session_state.get("_fed_tier", "⚡ Groq")
+        _tier_cols = st.columns([4, 1])
+        with _tier_cols[0]:
+            _selected_tier = st.radio(
+                "Fed Forecaster Engine",
+                _tier_options,
+                index=_tier_options.index(_prev_tier) if _prev_tier in _tier_options else 0,
+                horizontal=True,
+                key="fed_engine_radio",
+                help="Groq = free/fast. Regard Mode = Claude Haiku (~$0.03). Highly Regarded Mode = Claude Sonnet (~$0.12, most accurate).",
+            )
+        _hint = _tier_hints[_selected_tier]
+        if _hint:
+            st.caption(f"*{_hint}*")
+        if _selected_tier != _prev_tier:
             generate_matrix_forecast.clear()
             generate_expanded_forecast.clear()
-            st.session_state["_fed_use_claude_prev"] = _use_claude
+            st.session_state["_fed_tier"] = _selected_tier
             st.rerun()
+        _model_tier = _tier_map[_selected_tier]
+    else:
+        _selected_tier = "⚡ Groq"
+        _model_tier = "groq"
 
-    expanded = generate_matrix_forecast(context_json, scenarios_json, use_claude=_use_claude)
-    full_expanded = generate_expanded_forecast(context_json, scenarios_json, use_claude=_use_claude)
+    _use_claude = _model_tier != "groq"
+
+    expanded = generate_matrix_forecast(context_json, scenarios_json, model_tier=_model_tier)
+    full_expanded = generate_expanded_forecast(context_json, scenarios_json, model_tier=_model_tier)
 
     status = expanded.get("_call_status", {})
     status_parts = []
@@ -1849,8 +2221,8 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
-    _core_engine = expanded.get("_core_engine", "groq")
-    _engine_badge = "🧠 Claude" if _core_engine == "claude" else "⚡ Groq"
+    _engine_badge_map = {"groq": "⚡ Groq", "haiku": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
+    _engine_badge = _engine_badge_map.get(expanded.get("_core_engine", "groq"), "⚡ Groq")
     _exp_status = full_expanded.get("_call_status", {})
     _exp_core_msg = _exp_status.get("core", "ok")
     if _exp_core_msg != "ok":
@@ -1871,7 +2243,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     if not _medium_has_data:
         st.warning("⚠ Medium-term forecast data unavailable — check Groq API status above.")
         st.markdown("---")
-        _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded)
+        _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded, use_claude=_use_claude, engine=_selected_tier)
         return
 
     # ── Section 4: Asset Impact Matrix with horizon toggle ────────────────────
@@ -1963,14 +2335,15 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                     )
 
     st.markdown("---")
-    _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded)
+    _render_fed_fan_charts(expanded.get("medium_term", {}), adj_probs, full_expanded, use_claude=_use_claude, engine=_selected_tier)
 
 
-def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, expanded: dict):
+def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, expanded: dict, use_claude: bool = False, engine: str = ""):
     """Section: full causal chain with cumulative confidence decay."""
     from services.fed_forecaster import SCENARIO_KEYS, SCENARIO_LABELS
 
-    _section_header("Causal Chain — Policy Transmission Path")
+    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
+    _section_header("Causal Chain — Policy Transmission Path", badge=_badge)
     st.caption("How each Fed scenario propagates through the economy — confidence decays with each link")
 
     dominant_key = max(SCENARIO_KEYS, key=lambda k: next(
@@ -2014,9 +2387,59 @@ def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, 
                     unsafe_allow_html=True,
                 )
 
+    _render_fed_causal_chain_narration(chains, adj_probs)
 
 
-def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
+def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
+    """AI narration panel appended to the causal chain section."""
+    import json as _json
+    st.markdown("---")
+    _cc_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _cc_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _cc_has_claude else ["⚡ Groq"]
+    _cc_tier_map = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+    _sel_cc = st.radio("Transmission Engine", _cc_tier_opts, horizontal=True, key="causal_chain_engine")
+    _use_cl_cc, _cc_model = _cc_tier_map[_sel_cc]
+
+    _prev_cc_tier = st.session_state.get("_cc_tier_prev")
+    if _prev_cc_tier and _prev_cc_tier != _sel_cc:
+        st.session_state.pop("_chain_narration", None)
+    st.session_state["_cc_tier_prev"] = _sel_cc
+
+    if st.button("Narrate Transmission Path", key="narrate_chain_btn", type="primary"):
+        from services.claude_client import narrate_policy_transmission
+        try:
+            _chains_json = _json.dumps({k: v for k, v in chains.items()}, default=str)
+            _probs_json  = _json.dumps([{"scenario": r.get("scenario"), "prob": r.get("prob")} for r in adj_probs])
+        except Exception:
+            _chains_json = str(chains)
+            _probs_json  = str(adj_probs)
+        with st.spinner("Analyzing transmission path..."):
+            _narration = narrate_policy_transmission(_chains_json, _probs_json, use_claude=_use_cl_cc, model=_cc_model)
+        st.session_state["_chain_narration"] = _narration
+        st.session_state["_chain_narration_engine"] = _sel_cc
+
+    if st.session_state.get("_chain_narration"):
+        _eng = st.session_state.get("_chain_narration_engine", "")
+        _border = "2px solid #FF8811" if "👑" in _eng else "1px solid #334155"
+        st.markdown(
+            f'<div style="border:{_border};border-left-width:4px;border-radius:6px;'
+            f'padding:14px 18px;background:#1A1F2E;margin-top:8px;">'
+            f'<div style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
+            f'text-transform:uppercase;margin-bottom:8px;">Transmission Narrative · {_eng}</div>'
+            f'<div style="font-size:13px;line-height:1.7;">{st.session_state["_chain_narration"]}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        if st.button("Clear Narration", key="clear_chain_narration"):
+            st.session_state.pop("_chain_narration", None)
+            st.rerun()
+
+
+def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict, use_claude: bool = False, engine: str = ""):
     """Section 6: probability-weighted medium-term fan charts in tabbed layout."""
     from services.fed_forecaster import (
         SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
@@ -2024,7 +2447,8 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
     import plotly.graph_objects as go
     import numpy as np
 
-    _section_header("Medium-Term Outlook (3–12 months)")
+    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
+    _section_header("Medium-Term Outlook (3–12 months)", badge=_badge)
 
     prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
 
@@ -2208,17 +2632,18 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict):
         _draw_fan_chart("usd")
 
     st.markdown("---")
-    _render_fed_long_term(expanded, adj_probs)
+    _render_fed_long_term(expanded, adj_probs, use_claude=use_claude, engine=engine)
 
 
-def _render_fed_long_term(expanded: dict, adj_probs: list):
+def _render_fed_long_term(expanded: dict, adj_probs: list, use_claude: bool = False, engine: str = ""):
     """Section 7: 2-year quarterly long-term outlook bar charts."""
     from services.fed_forecaster import (
         SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
     import plotly.graph_objects as go
 
-    _section_header("Long-Term Asset Impact — 2-Year Quarterly Outlook")
+    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
+    _section_header("Long-Term Asset Impact — 2-Year Quarterly Outlook", badge=_badge)
     st.caption("Market-implied forecast — probability-weighted cumulative quarterly % change (Q1–Q8)")
 
     long = expanded.get("long_term", {})
@@ -2303,16 +2728,17 @@ def _render_fed_long_term(expanded: dict, adj_probs: list):
         cols[idx % 2].plotly_chart(fig, use_container_width=True)
 
     st.markdown("---")
-    _render_fed_black_swans(expanded, adj_probs)
+    _render_fed_black_swans(expanded, adj_probs, use_claude=use_claude, engine=engine)
 
 
-def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
+def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: bool = False, engine: str = ""):
     """Section: Black swan risk panel with severity ranking and directional impact."""
     from services.fed_forecaster import (
         BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
 
-    _section_header("Black Swan Risk Panel")
+    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
+    _section_header("Black Swan Risk Panel", badge=_badge)
 
     swans = expanded.get("black_swans", {})
     if not swans:
@@ -2321,6 +2747,7 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
         _render_fed_causal_chain(
             expanded.get("causal_chains", {}), adj_probs,
             expanded.get("medium_term", {}), expanded,
+            use_claude=use_claude, engine=engine,
         )
         return
 
@@ -2399,8 +2826,144 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict]):
                 unsafe_allow_html=True,
             )
 
+    # ── Custom Black Swan Event Input ─────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("**🔭 Add Custom Black Swan Event**")
+    st.caption("Type any tail-risk scenario to get AI probability + asset impact analysis")
+
+    _bs_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _bs_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _bs_has_claude else ["⚡ Groq"]
+    _bs_tier_map = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+    _sel_bs_tier = st.radio("Black Swan Engine", _bs_tier_opts, horizontal=True, key="black_swan_engine")
+    _use_claude_bs, _bs_model = _bs_tier_map[_sel_bs_tier]
+
+    _prev_fed_tier = st.session_state.get("_fed_plays_tier_prev", "")
+    if _prev_fed_tier and _prev_fed_tier in _bs_tier_opts and _prev_fed_tier != _sel_bs_tier:
+        _sync_icon = _prev_fed_tier.split()[0]
+        if st.button(
+            f"Sync to Fed Forecaster ({_sync_icon})",
+            key="sync_bs_engine_btn",
+            help=f"Fed Forecaster is on {_prev_fed_tier} — click to match Black Swan engine",
+        ):
+            st.session_state["black_swan_engine"] = _prev_fed_tier
+            st.rerun()
+    elif _prev_fed_tier and _prev_fed_tier == _sel_bs_tier:
+        st.caption(f"✓ Synced with Fed Forecaster ({_sel_bs_tier.split()[0]})")
+
+    with st.form("custom_swan_form", clear_on_submit=True):
+        _custom_label = st.text_input(
+            "Describe the event",
+            placeholder="e.g. Reverse yen carry trade unwind, China credit crisis, US debt ceiling breach",
+        )
+        _submitted = st.form_submit_button("Analyze Event", type="primary")
+
+    if _submitted and _custom_label.strip():
+        _ctx_json = expanded.get("_context_json", "{}")
+
+        # Enrich black swan context with rate path probabilities + cached regime context
+        import json as _json
+        _base_ctx = {}
+        try:
+            _base_ctx = _json.loads(_ctx_json) if _ctx_json else {}
+        except Exception:
+            pass
+
+        _adj_probs = st.session_state.get("_rate_path_probs", [])
+        if _adj_probs:
+            _dp = max(_adj_probs, key=lambda r: r.get("prob", 0))
+            _base_ctx["dominant_rate_path"] = _dp.get("scenario", "")
+            _base_ctx["dominant_rate_prob_pct"] = round(_dp.get("prob", 0) * 100, 1)
+            _base_ctx["rate_path_scenarios"] = [
+                {"scenario": r.get("scenario"), "prob_pct": round(r.get("prob", 0) * 100, 1)}
+                for r in sorted(_adj_probs, key=lambda r: r.get("prob", 0), reverse=True)
+            ]
+
+        _cached_regime = st.session_state.get("_regime_context", {})
+        if _cached_regime.get("signal_summary"):
+            _base_ctx["regime_ai_context"] = _cached_regime["signal_summary"]
+
+        _enriched_ctx_json = _json.dumps(_base_ctx)
+
+        with st.spinner(f"Analyzing: {_custom_label}..."):
+            if _use_claude_bs:
+                from services.fed_forecaster import _call_claude_custom_event_forecast as _claude_swan_fn
+                _custom_result = _claude_swan_fn(_custom_label.strip(), _enriched_ctx_json, _bs_model)
+            else:
+                from services.fed_forecaster import _call_groq_custom_event_forecast as _groq_swan_fn
+                _custom_result = _groq_swan_fn(_custom_label.strip(), _enriched_ctx_json)
+        if _custom_result:
+            _custom_result["_engine_tier"] = _sel_bs_tier
+            _stored = st.session_state.get("_custom_swans", {})
+            _stored[_custom_label.strip()] = _custom_result
+            st.session_state["_custom_swans"] = _stored
+            st.session_state["_custom_swans_ts"] = __import__("datetime").datetime.now()
+            st.rerun()
+        else:
+            st.error("Could not analyze event — check API status.")
+
+    _custom_swans = st.session_state.get("_custom_swans", {})
+    if _custom_swans:
+        st.markdown("#### Custom Events")
+        _ccols = st.columns(2)
+        for _ci, (_clabel, _cdata) in enumerate(_custom_swans.items()):
+            _cprob = _cdata.get("probability_pct", 0)
+            _cnarrative = _cdata.get("narrative", "")
+            _cimpacts = _cdata.get("asset_impacts", {})
+            if _cprob > 10:
+                _cprob_color, _csev_icon = COLORS.get("red", "#ef4444"), "🔴"
+            elif _cprob > 3:
+                _cprob_color, _csev_icon = "#f59e0b", "🟡"
+            else:
+                _cprob_color, _csev_icon = COLORS.get("green", "#22c55e"), "🟢"
+            _cpills_html = ""
+            for _ck, _cv in _cimpacts.items():
+                _cv_str = str(_cv).lower()
+                if "bearish" in _cv_str or "negative" in _cv_str or "down" in _cv_str or "drop" in _cv_str:
+                    _cpill_color = COLORS.get("red", "#ef4444")
+                elif "bullish" in _cv_str or "positive" in _cv_str or "up" in _cv_str or "rise" in _cv_str:
+                    _cpill_color = COLORS.get("green", "#22c55e")
+                else:
+                    _cpill_color = COLORS.get("text_dim", "#888")
+                _cpills_html += (
+                    f'<span style="background:{COLORS.get("surface", "#1e293b")};'
+                    f'border:1px solid {_cpill_color};color:{_cpill_color};'
+                    f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
+                    f'{SVC_ASSET_LABELS.get(_ck, _ck)}: {_cv}</span>'
+                )
+            _cengine = _cdata.get("_engine_tier", "")
+            _cengine_badge = (
+                f'<span style="font-size:10px;background:#1a2040;color:#FF8811;'
+                f'padding:1px 6px;border-radius:3px;margin-left:4px;">{_cengine}</span>'
+                if _cengine else ""
+            )
+            with _ccols[_ci % 2]:
+                st.markdown(
+                    f'<div style="border:1px solid #4B5EAA;border-radius:8px;padding:14px;margin-bottom:10px;">'
+                    f'<div style="font-weight:700;font-size:14px;margin-bottom:6px;">'
+                    f'{_csev_icon} {_clabel}'
+                    f'<span style="font-size:10px;background:#2A3565;color:#8899CC;'
+                    f'padding:1px 6px;border-radius:3px;margin-left:6px;">CUSTOM</span>'
+                    f'{_cengine_badge}</div>'
+                    f'<span style="background:{_cprob_color};color:white;padding:2px 10px;'
+                    f'border-radius:10px;font-size:0.8em;font-weight:600;">'
+                    f'{_cprob:.1f}% annual probability</span>'
+                    f'<p style="margin:10px 0 8px 0;font-size:0.85em;'
+                    f'color:{COLORS.get("text_dim", "#94a3b8")};">{_cnarrative}</p>'
+                    f'<div style="margin-top:6px;">{_cpills_html}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        if st.button("Clear Custom Events", key="clear_custom_swans"):
+            st.session_state["_custom_swans"] = {}
+            st.rerun()
+
     st.markdown("---")
     _render_fed_causal_chain(
         expanded.get("causal_chains", {}), adj_probs,
         expanded.get("medium_term", {}), expanded,
+        use_claude=use_claude, engine=engine,
     )

@@ -885,21 +885,40 @@ def render():
 
     stress_text = "\n".join(stress_text_parts)
 
+    import os
     from services.claude_client import generate_doom_briefing
 
+    _doom_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _doom_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _doom_has_claude else ["⚡ Groq"]
+    _doom_tier_map = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+    _sel_doom_tier = st.radio(
+        "Briefing Engine", _doom_tier_opts, horizontal=True, key="doom_briefing_engine",
+        help="Standard = Groq · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
+    )
+    _use_claude, _doom_model = _doom_tier_map[_sel_doom_tier]
     with st.spinner("Generating risk intelligence briefing..."):
         try:
-            briefing = generate_doom_briefing(stress_text)
+            briefing = generate_doom_briefing(stress_text, use_claude=_use_claude, model=_doom_model)
         except Exception as e:
             briefing = f"Unable to generate briefing: {e}"
 
+    _doom_border = COLORS["bloomberg_orange"] if _use_claude else DOOM_RED
+    _regard_badge = (
+        f' &nbsp;<span style="font-size:10px;background:#FF8811;color:#000;'
+        f'padding:1px 5px;border-radius:3px;font-weight:700;">{_sel_doom_tier}</span>'
+        if _use_claude else ""
+    )
     st.markdown(
         f"""
-        <div style="background:{DOOM_BG};border:2px solid {DOOM_RED};border-radius:8px;
+        <div style="background:{DOOM_BG};border:2px solid {_doom_border};border-radius:8px;
                     padding:20px 24px;margin-bottom:16px;">
-            <div style="font-size:11px;color:{DOOM_RED};letter-spacing:2px;margin-bottom:12px;
+            <div style="font-size:11px;color:{_doom_border};letter-spacing:2px;margin-bottom:12px;
                         border-bottom:1px solid {DOOM_BORDER};padding-bottom:8px;">
-                &#9760; CLASSIFIED &mdash; AI RISK INTELLIGENCE BRIEFING &mdash; {datetime.now().strftime('%Y-%m-%d %H:%M')}
+                &#9760; CLASSIFIED &mdash; AI RISK INTELLIGENCE BRIEFING &mdash; {datetime.now().strftime('%Y-%m-%d %H:%M')}{_regard_badge}
             </div>
             <div style="color:{COLORS['text']};font-size:13px;line-height:1.7;white-space:pre-wrap;">
 {briefing}

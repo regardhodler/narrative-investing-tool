@@ -38,8 +38,9 @@ html, body, [class*="css"] {{
     text-transform: uppercase;
     letter-spacing: 0.05em;
     font-family: 'JetBrains Mono', Consolas, monospace;
-    font-size: 13px;
-    padding: 4px 8px;
+    font-size: 15px;
+    font-weight: 600;
+    padding: 5px 8px;
     border-radius: 4px;
     transition: background-color 0.15s;
 }}
@@ -256,20 +257,78 @@ with st.sidebar:
 
     top_level = st.radio(
         "Module",
-        ["Discovery", "Risk Regime", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
+        ["Risk Regime", "Discovery", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
          "Signal Scorecard", "Backtesting", "Trade Journal", "Alerts"],
         key="top_module",
     )
 
+
     sub_module = None
     if top_level == "Discovery":
+        # ── Discovery sub-nav: scoped via :has(#disc-sub-anchor) ─────────────
+        # Using :has() to scope CSS to ONLY the sub-radio, leaving the main
+        # nav radio styled by the global CSS (15px, bold, uppercase).
+        _oc = COLORS["bloomberg_orange"]
+        st.markdown(f"""<style>
+/* Sub-radio container: indented with connecting line */
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] {{
+    border-left: 2px solid {_oc}55;
+    margin-left: 18px !important;
+    padding-left: 8px !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+}}
+/* Sub-item labels: smaller, dimmed, not uppercase */
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label {{
+    font-size: 11px !important;
+    font-weight: 400 !important;
+    text-transform: none !important;
+    letter-spacing: 0.02em !important;
+    padding: 2px 6px 2px 0 !important;
+    border-radius: 0 4px 4px 0 !important;
+    margin: 1px 0 !important;
+    color: {COLORS["text_dim"]} !important;
+    display: flex !important;
+    align-items: center !important;
+    transition: color 0.1s, background 0.1s;
+}}
+/* Tree connector prefix */
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label::before {{
+    content: '├·';
+    margin-right: 6px;
+    color: {_oc};
+    opacity: 0.4;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    flex-shrink: 0;
+}}
+/* Active sub-item */
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label:has(input:checked) {{
+    color: {_oc} !important;
+    background: {_oc}18 !important;
+}}
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label:has(input:checked)::before {{
+    opacity: 1 !important;
+    content: '├●';
+}}
+/* Hover */
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label:hover {{
+    background: {_oc}0D !important;
+    color: {_oc}BB !important;
+}}
+section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="stRadio"] label:hover::before {{
+    opacity: 0.7 !important;
+}}
+</style>""", unsafe_allow_html=True)
+
+        # Slim connector stub bridging Discovery item → sub-items
         st.markdown(
-            f'<style>[data-testid="stSidebar"] .discovery-indent label {{'
-            f'padding-left: 20px !important; font-size: 12px !important;'
-            f'}}</style>',
+            f'<div style="margin:0 0 0 20px;border-left:2px solid {_oc}55;height:6px;"></div>',
             unsafe_allow_html=True,
         )
-        st.markdown(f'<div style="margin-left:12px;border-left:2px solid {COLORS["bloomberg_orange"]}33;padding-left:0px;">', unsafe_allow_html=True)
+
+        # Anchor div — CSS :has(#disc-sub-anchor) ~ div targets the sub-radio
+        st.markdown('<div id="disc-sub-anchor" style="height:0;overflow:hidden;margin:0;padding:0;"></div>', unsafe_allow_html=True)
+
         sub_module = st.radio(
             "Discovery Modules",
             [
@@ -284,7 +343,6 @@ with st.sidebar:
             label_visibility="collapsed",
             key="sub_module",
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # Route to module
 if top_level == "Risk Regime":
@@ -303,6 +361,30 @@ elif top_level == "Stress Signals":
     from modules.stress_signals import render
     render()
 elif top_level == "Discovery":
+    # ── Option B: Content area breadcrumb connector ────────────────
+    _sub_icons = {
+        "Narrative Discovery": "📡", "Options Activity": "📊",
+        "Price Action": "📈", "EDGAR Scanner": "📋",
+        "Institutional (13F)": "🐋", "Insider & Congress": "🏛",
+        "Valuation": "💹",
+    }
+    _icon = _sub_icons.get(sub_module, "›")
+    st.markdown(
+        f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+        f'font-size:11px;letter-spacing:0.06em;margin-bottom:2px;'
+        f'display:flex;align-items:center;gap:6px;">'
+        f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">◉</span>'
+        f'<span style="color:{COLORS["text_dim"]}">DISCOVERY</span>'
+        f'<span style="color:{COLORS["bloomberg_orange"]}">›</span>'
+        f'<span style="color:{COLORS["text"]};font-weight:700;">'
+        f'{_icon} {(sub_module or "").upper()}</span>'
+        f'</div>'
+        f'<div style="height:2px;margin-bottom:14px;'
+        f'background:linear-gradient(90deg,{COLORS["bloomberg_orange"]},'
+        f'{COLORS["bloomberg_orange"]}44,transparent);border-radius:1px;"></div>',
+        unsafe_allow_html=True,
+    )
+
     _ticker = get_ticker()
     if _ticker:
         st.markdown(

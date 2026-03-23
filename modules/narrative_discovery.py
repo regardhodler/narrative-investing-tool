@@ -57,8 +57,493 @@ _NON_FINANCIAL_KEYWORDS = {
 }
 
 
+@st.cache_data(ttl=3600)
+def _get_macro_context_for_plays() -> dict:
+    """Collect enriched macro regime + stress + credit signals for the sector plays expander."""
+    from services.market_data import fetch_fred_series_safe, fetch_batch_safe
+
+    # HY credit spread
+    try:
+        hy_s = fetch_fred_series_safe("BAMLH0A0HYM2")
+        hy_v = float(hy_s.iloc[-1]) if hy_s is not None and len(hy_s) else 0.0
+    except Exception:
+        hy_v = 0.0
+
+    # Yield curve (10Y-2Y)
+    try:
+        yc_s = fetch_fred_series_safe("T10Y2Y")
+        yc_v = float(yc_s.iloc[-1]) if yc_s is not None and len(yc_s) else 0.0
+    except Exception:
+        yc_v = 0.0
+
+    # NFCI — National Financial Conditions Index
+    try:
+        nfci_s = fetch_fred_series_safe("NFCI")
+        nfci_v = float(nfci_s.iloc[-1]) if nfci_s is not None and len(nfci_s) else 0.0
+    except Exception:
+        nfci_v = 0.0
+
+    # Core PCE — for inflation direction (3-month trend)
+    try:
+        pce_s = fetch_fred_series_safe("PCEPILFE")
+        if pce_s is not None and len(pce_s) >= 4:
+            pce_3m = float(pce_s.iloc[-1]) - float(pce_s.iloc[-4])
+        else:
+            pce_3m = 0.0
+    except Exception:
+        pce_3m = 0.0
+
+    # VIX, SPY, HYG (HY bond ETF), LQD (IG bond ETF)
+    try:
+        snaps = fetch_batch_safe({"^VIX": "VIX", "SPY": "S&P 500", "HYG": "HY Bond", "LQD": "IG Bond"}, "5d", "1d")
+        vix_v = snaps["^VIX"].latest_price or 20.0
+        spy_1d = snaps["SPY"].pct_change_1d or 0.0
+        hyg_price = snaps["HYG"].latest_price
+        lqd_price = snaps["LQD"].latest_price
+        hyg_lqd = round(hyg_price / lqd_price, 4) if hyg_price and lqd_price and lqd_price > 0 else None
+    except Exception:
+        vix_v, spy_1d, hyg_lqd = 20.0, 0.0, None
+
+    # Derived labels
+    stress = "HIGH" if (hy_v > 500 or vix_v > 35) else "ELEVATED" if (hy_v > 300 or vix_v > 25) else "CALM"
+    regime = (
+        "Risk-On" if (yc_v > 0 and vix_v < 20 and hy_v < 300) else
+        "Risk-Off" if (vix_v > 25 or hy_v > 400) else "Neutral"
+    )
+    score = round(max(-1.0, min(1.0,
+        (1 - vix_v / 40) * 0.5 + (yc_v / 2) * 0.3 + (1 - hy_v / 600) * 0.2
+    )), 2)
+
+    # Dalio quadrant: growth direction × inflation direction
+    growth_dir = "Rising" if (yc_v > 0.2 and vix_v < 22) else "Falling"
+    inflation_dir = "Rising" if pce_3m > 0 else "Falling"
+    if growth_dir == "Rising" and inflation_dir == "Falling":
+        quadrant = "Goldilocks"
+    elif growth_dir == "Rising" and inflation_dir == "Rising":
+        quadrant = "Reflation"
+    elif growth_dir == "Falling" and inflation_dir == "Rising":
+        quadrant = "Stagflation"
+    else:
+        quadrant = "Deflation"
+
+    # Credit risk composite
+    hyg_lqd_low = hyg_lqd is not None and hyg_lqd < 0.95
+    credit_risk = (
+        "HIGH" if (hy_v > 400 or nfci_v > 0.5 or hyg_lqd_low) else
+        "MODERATE" if (hy_v > 300 or nfci_v > 0.0) else "LOW"
+    )
+
+    return {
+        "regime": regime, "score": score, "stress": stress,
+        "quadrant": quadrant, "credit_risk": credit_risk,
+        "vix": round(vix_v, 1), "hy_spread": round(hy_v, 1),
+        "yield_curve": round(yc_v, 2), "spy_1d": round(spy_1d, 2),
+        "nfci": round(nfci_v, 2), "hyg_lqd": hyg_lqd,
+        "pce_3m": round(pce_3m, 4),
+    }
+
+
+def _conviction_stars(n: int) -> str:
+    n = max(1, min(3, int(n)))
+    return "★" * n + "☆" * (3 - n)
+
+
 def render():
     st.header("NARRATIVE DISCOVERY")
+
+    # ── Cross-Signal Macro Plays ───────────────────────────────────────────
+    import os
+    _has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _PLAY_MODEL_OPTIONS = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_api_key else ["⚡ Groq"]
+    _PLAY_MODEL_MAP = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+
+    with st.expander("📡 Cross-Signal Macro Plays", expanded=False):
+        _macro_ctx = _get_macro_context_for_plays()
+        _regime = _macro_ctx["regime"]
+        _stress = _macro_ctx["stress"]
+        _quadrant = _macro_ctx["quadrant"]
+        _credit_risk = _macro_ctx["credit_risk"]
+        _vix = _macro_ctx["vix"]
+        _hy = _macro_ctx["hy_spread"]
+        _yc = _macro_ctx["yield_curve"]
+        _nfci = _macro_ctx["nfci"]
+        _hyg_lqd = _macro_ctx["hyg_lqd"]
+
+        # Macro snapshot bar — enriched with quadrant + credit risk + rate path + fed rate
+        _stress_color = {"HIGH": "#ef4444", "ELEVATED": "#f59e0b", "CALM": "#22c55e"}.get(_stress, "#888")
+        _regime_color = {"Risk-On": "#22c55e", "Risk-Off": "#ef4444"}.get(_regime, "#f59e0b")
+        _quadrant_color = {
+            "Goldilocks": "#22c55e", "Reflation": "#f59e0b",
+            "Stagflation": "#ef4444", "Deflation": "#60a5fa",
+        }.get(_quadrant, "#888")
+        _credit_color = {"HIGH": "#ef4444", "MODERATE": "#f59e0b", "LOW": "#22c55e"}.get(_credit_risk, "#888")
+        _hyg_lqd_str = f"{_hyg_lqd:.3f}" if _hyg_lqd is not None else "N/A"
+
+        # Rate path + Fed rate from session state (populated when Fed Forecaster runs)
+        _dom_rp = st.session_state.get("_dominant_rate_path", {})
+        _fed_rate_snap = st.session_state.get("_fed_funds_rate")
+        _snap_pill_labels = {
+            "cut_25": "25bp cut", "cut_50": "50bp cut",
+            "hold": "Hold", "hike_25": "25bp hike",
+        }
+        _rp_scenario_snap = _dom_rp.get("scenario", "")
+        _rp_prob_snap = _dom_rp.get("prob_pct", 0)
+        _rp_display_snap = f"{_snap_pill_labels.get(_rp_scenario_snap, _rp_scenario_snap)} {_rp_prob_snap:.0f}%" if _rp_scenario_snap else "—"
+        _rp_color_snap = {"cut_25": "#22c55e", "cut_50": "#22c55e", "hold": "#f59e0b", "hike_25": "#ef4444"}.get(_rp_scenario_snap, "#888")
+        _fed_rate_display = f"{_fed_rate_snap:.2f}%" if _fed_rate_snap is not None else "—"
+
+        st.markdown(
+            f'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px;font-size:13px;">'
+            f'<span>Regime: <b style="color:{_regime_color}">{_regime}</b></span>'
+            f'<span>Quadrant: <b style="color:{_quadrant_color}">{_quadrant}</b></span>'
+            f'<span>Stress: <b style="color:{_stress_color}">{_stress}</b></span>'
+            f'<span>Credit Risk: <b style="color:{_credit_color}">{_credit_risk}</b></span>'
+            f'<span>Rate Path: <b style="color:{_rp_color_snap}">{_rp_display_snap}</b></span>'
+            f'</div>'
+            f'<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:#94a3b8;">'
+            f'<span>VIX: <b style="color:#e2e8f0">{_vix}</b></span>'
+            f'<span>HY Spread: <b style="color:#e2e8f0">{_hy}bps</b></span>'
+            f'<span>Yield Curve: <b style="color:#e2e8f0">{_yc:+.2f}%</b></span>'
+            f'<span>NFCI: <b style="color:#e2e8f0">{_nfci:+.2f}</b></span>'
+            f'<span>HYG/LQD: <b style="color:#e2e8f0">{_hyg_lqd_str}</b></span>'
+            f'<span>Fed Rate: <b style="color:#e2e8f0">{_fed_rate_display}</b></span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Engine selector
+        _selected_play_model = st.radio(
+            "Engine", _PLAY_MODEL_OPTIONS, horizontal=True, key="play_engine_radio"
+        )
+
+        # ── Stress-Test Overlay (optional scenario input) ─────────────────
+        st.markdown(
+            '<p style="font-size:13px;font-weight:600;margin:8px 0 2px 0;">🎯 Stress-Test Overlay</p>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Optional — layer a macro shock on current signals to stress-test your plays")
+        _overlay_scenario = st.text_input(
+            "Stress-Test Overlay",
+            placeholder="e.g. Reverse yen carry trade, Strait of Hormuz closure, US credit downgrade",
+            label_visibility="collapsed",
+            key="overlay_scenario_input",
+        )
+        _pre_swans = st.session_state.get("_custom_swans", {})
+        if _pre_swans:
+            st.caption("Quick-fill from analyzed Black Swan events:")
+            _qs_cols = st.columns(min(len(_pre_swans), 3))
+            for _qsi, _qslabel in enumerate(list(_pre_swans.keys())[:3]):
+                with _qs_cols[_qsi]:
+                    _short = (_qslabel[:26] + "…") if len(_qslabel) > 26 else _qslabel
+                    _qsprob = _pre_swans[_qslabel].get("probability_pct", 0)
+                    if st.button(f"{_short} ({_qsprob:.0f}%)", key=f"qs_swan_{_qsi}"):
+                        st.session_state["overlay_scenario_input"] = _qslabel
+                        st.rerun()
+
+        # ── Upstream context status ───────────────────────────────────────
+        _has_regime_ctx  = bool(st.session_state.get("_regime_context"))
+        _has_fed_plays   = bool(st.session_state.get("_fed_plays_result"))
+        _has_rate_path   = bool(st.session_state.get("_dominant_rate_path"))
+        _has_black_swans = bool(st.session_state.get("_custom_swans"))
+        _bs_count        = len(st.session_state.get("_custom_swans", {}))
+        _rp_tier_label   = st.session_state.get("_regime_plays_tier", "")
+        _fed_plays_tier  = st.session_state.get("_fed_plays_tier", "")
+        _dom_rp_scenario = st.session_state.get("_dominant_rate_path", {}).get("scenario", "")
+        _scenario_labels_disc = {
+            "cut_25": "25bp cut", "cut_50": "50bp cut",
+            "hold": "Hold", "hike_25": "25bp hike",
+        }
+        _dom_rp_label = _scenario_labels_disc.get(_dom_rp_scenario, _dom_rp_scenario)
+        _fed_tier_suffix = f" ({_fed_plays_tier})" if _fed_plays_tier else ""
+
+        def _age_label(ts_key: str) -> str:
+            from datetime import datetime as _dt
+            _ts = st.session_state.get(ts_key)
+            if not _ts:
+                return ""
+            _mins = int((_dt.now() - _ts).total_seconds() / 60)
+            if _mins < 1:
+                return " — just now"
+            if _mins < 60:
+                return f" — {_mins}m ago"
+            _hrs = _mins // 60
+            return f" — {_hrs}h ago"
+
+        _regime_dot  = f'<span style="color:#22c55e;font-weight:700;">✓</span> Regime AI ({_rp_tier_label}){_age_label("_regime_context_ts")}' if _has_regime_ctx else '<span style="color:#ef4444;">✗</span> Regime AI'
+        _fed_dot     = f'<span style="color:#22c55e;font-weight:700;">✓</span> Rate-Path Plays{_fed_tier_suffix}{_age_label("_fed_plays_result_ts")}' if _has_fed_plays else '<span style="color:#ef4444;">✗</span> Rate-Path Plays'
+        _rp_dot      = f'<span style="color:#22c55e;font-weight:700;">✓</span> Rate Path ({_dom_rp_label}){_age_label("_rate_path_probs_ts")}' if _has_rate_path else '<span style="color:#ef4444;">✗</span> Rate Path'
+        _bs_dot      = f'<span style="color:#22c55e;font-weight:700;">✓</span> Black Swan ({_bs_count}){_age_label("_custom_swans_ts")}' if _has_black_swans else '<span style="color:#ef4444;">✗</span> Black Swan'
+        _any_enriched = _has_regime_ctx or _has_fed_plays or _has_rate_path or _has_black_swans
+        st.markdown(
+            f'<div style="font-size:11px;color:#94a3b8;border:1px solid #334155;border-radius:6px;'
+            f'padding:8px 12px;margin-bottom:8px;">'
+            f'<span style="font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Upstream Context: </span>'
+            f'{_regime_dot} &nbsp;·&nbsp; {_fed_dot} &nbsp;·&nbsp; {_rp_dot} &nbsp;·&nbsp; {_bs_dot}'
+            f'{"&nbsp;&nbsp;<span style=\'color:#FF8811;font-size:10px;\'>↑ enriching prompt</span>" if _any_enriched else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Generate Plays ────────────────────────────────────────────────
+        _gen_plays = st.button("Generate Plays", type="primary", key="gen_plays_btn")
+
+        if _gen_plays or st.session_state.get("_plays_result"):
+            if _gen_plays:
+                _use_cl, _cl_model = _PLAY_MODEL_MAP[_selected_play_model]
+                _signal_summary = (
+                    f"VIX: {_vix}, HY Spread: {_hy}bps, Yield Curve: {_yc:+.2f}%, "
+                    f"System Stress: {_stress}, SPY 1-day: {_macro_ctx['spy_1d']:+.2f}%, "
+                    f"Dalio Quadrant: {_quadrant}, Credit Risk: {_credit_risk}, "
+                    f"NFCI: {_nfci:+.2f}"
+                    + (f", HYG/LQD Ratio: {_hyg_lqd:.3f}" if _hyg_lqd else "")
+                )
+
+                # ── Enrich with cached Regime + Fed Forecaster context ────────
+                _cached_regime_ctx  = st.session_state.get("_regime_context")
+                _cached_fed_plays   = st.session_state.get("_fed_plays_result")
+                _cached_rp_tier     = st.session_state.get("_regime_plays_tier", "")
+                _enrichment_parts   = []
+
+                if _cached_regime_ctx:
+                    _enrichment_parts.append(
+                        f"[Regime AI ({_cached_rp_tier}): "
+                        f"regime={_cached_regime_ctx['regime']}, "
+                        f"score={_cached_regime_ctx['score']:+.2f}, "
+                        f"context={_cached_regime_ctx['signal_summary']}]"
+                    )
+
+                if _cached_fed_plays:
+                    _fp_sectors   = ", ".join(s.get("name", "") for s in _cached_fed_plays.get("sectors", [])[:4])
+                    _fp_stocks    = ", ".join(s.get("ticker", "") for s in _cached_fed_plays.get("stocks", [])[:4])
+                    _fp_bonds     = ", ".join(s.get("ticker", "") for s in _cached_fed_plays.get("bonds", [])[:3])
+                    _fp_rationale = _cached_fed_plays.get("rationale", "")
+                    _enrichment_parts.append(
+                        f"[Rate-Path AI Plays: "
+                        f"Favored sectors: {_fp_sectors}; "
+                        f"Stocks: {_fp_stocks}; "
+                        f"Bonds/Macro: {_fp_bonds}; "
+                        f"Rationale: {_fp_rationale}]"
+                    )
+
+                _rp_cached = st.session_state.get("_dominant_rate_path")
+                _rp_all_cached = st.session_state.get("_rate_path_probs", [])
+                if _rp_cached and _rp_cached.get("scenario"):
+                    _scenario_labels_enrich = {
+                        "cut_25": "25bp cut", "cut_50": "50bp cut",
+                        "hold": "Hold", "hike_25": "25bp hike",
+                    }
+                    _rp_str = _scenario_labels_enrich.get(_rp_cached["scenario"], _rp_cached["scenario"])
+                    _rp_prob = _rp_cached.get("prob_pct", 0)
+                    _rp_all_str = ", ".join(
+                        f"{_scenario_labels_enrich.get(r['scenario'], r['scenario'])} {round(r.get('prob', 0) * 100)}%"
+                        for r in sorted(_rp_all_cached, key=lambda r: r.get("prob", 0), reverse=True)
+                    )
+                    _enrichment_parts.append(
+                        f"[Fed Rate Path: dominant={_rp_str} ({_rp_prob:.0f}% prob) | all scenarios: {_rp_all_str}]"
+                    )
+
+                _custom_swans_cached = st.session_state.get("_custom_swans", {})
+                if _custom_swans_cached:
+                    _swan_parts = []
+                    for _slabel, _sdata in list(_custom_swans_cached.items())[:3]:
+                        _sprob = _sdata.get("probability_pct", 0)
+                        _simpacts = _sdata.get("asset_impacts", {})
+                        _simpact_str = ", ".join(
+                            f"{k}={v}" for k, v in list(_simpacts.items())[:4]
+                        )
+                        _swan_parts.append(f"{_slabel} ({_sprob:.0f}% prob): {_simpact_str}")
+                    _enrichment_parts.append(
+                        f"[Black Swan Tail Risks: {'; '.join(_swan_parts)}]"
+                    )
+
+                if _enrichment_parts:
+                    _signal_summary += " || UPSTREAM AI CONTEXT: " + " | ".join(_enrichment_parts)
+                _scenario_text = _overlay_scenario.strip()
+                if _scenario_text:
+                    # Overlay active — run scenario-aware play generation
+                    from services.claude_client import suggest_scenario_plays
+                    with st.spinner(f"Generating plays + stress-testing '{_scenario_text}'..."):
+                        _plays = suggest_scenario_plays(
+                            scenario=_scenario_text,
+                            regime=_regime,
+                            quadrant=_quadrant,
+                            signal_summary=_signal_summary,
+                            use_claude=_use_cl,
+                            model=_cl_model,
+                        )
+                else:
+                    # Base play — no overlay
+                    from services.claude_client import suggest_regime_plays
+                    with st.spinner("Generating macro plays..."):
+                        _plays = suggest_regime_plays(
+                            _regime, _macro_ctx["score"], _signal_summary,
+                            use_claude=_use_cl, model=_cl_model,
+                        )
+                st.session_state["_plays_result"] = _plays
+                st.session_state["_plays_engine"] = _selected_play_model
+                st.session_state["_plays_overlay_text"] = _scenario_text
+                st.session_state["_discovery_tier"] = _selected_play_model
+            else:
+                _plays = st.session_state["_plays_result"]
+                _cached_plays_engine = st.session_state.get("_plays_engine", "⚡ Groq")
+
+            if _plays and (_plays.get("sectors") or _plays.get("stocks") or _plays.get("bonds")):
+                _display_engine = _cached_plays_engine if not _gen_plays else _selected_play_model
+                _overlay_used = st.session_state.get("_plays_overlay_text", "")
+                if _overlay_used:
+                    st.caption(f"*{_display_engine} · Stress-Test: \"{_overlay_used}\"*")
+                else:
+                    st.caption(f"*{_display_engine} · Base Macro Regime*")
+
+                _s_col, _st_col, _b_col = st.columns(3)
+
+                with _s_col:
+                    st.markdown("**Sectors**")
+                    for _item in _plays.get("sectors", []):
+                        _stars = _conviction_stars(_item.get("conviction", 1))
+                        st.markdown(f"{_stars} {_item.get('name', '')}")
+
+                with _st_col:
+                    st.markdown("**Stocks**")
+                    for _item in _plays.get("stocks", []):
+                        _stars = _conviction_stars(_item.get("conviction", 1))
+                        _reason = _item.get("reason", "")
+                        st.markdown(f"{_stars} **{_item.get('ticker', '')}** — {_reason}")
+
+                with _b_col:
+                    st.markdown("**Bonds**")
+                    for _item in _plays.get("bonds", []):
+                        _stars = _conviction_stars(_item.get("conviction", 1))
+                        _reason = _item.get("reason", "")
+                        st.markdown(f"{_stars} **{_item.get('ticker', '')}** — {_reason}")
+
+                if _plays.get("avoid"):
+                    _avoid_str = ", ".join(_plays["avoid"]) if isinstance(_plays["avoid"], list) else str(_plays["avoid"])
+                    st.markdown(f"🚫 **Avoid:** {_avoid_str}")
+
+                if _plays.get("rationale"):
+                    st.caption(_plays["rationale"])
+
+        # ── Macro Fit Check ───────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown("**🎯 Macro Fit Check** — analyze any ticker against current regime")
+        _fit_cols = st.columns([3, 1, 1])
+        with _fit_cols[0]:
+            _fit_ticker = st.text_input(
+                "Ticker", placeholder="e.g. AAPL, XLE, TLT",
+                label_visibility="collapsed", key="macro_fit_ticker_input",
+            )
+        with _fit_cols[1]:
+            _fit_engine = st.selectbox("Engine", _PLAY_MODEL_OPTIONS, key="macro_fit_engine")
+        with _fit_cols[2]:
+            st.markdown("<div style='margin-top:28px'></div>", unsafe_allow_html=True)
+            _run_fit = st.button("Assess Fit", type="primary", key="run_macro_fit_btn")
+
+        # ── Ticker preview (fires on Enter / focus-out, no button needed) ──
+        _fit_t_input = _fit_ticker.strip().upper() if _fit_ticker.strip() else ""
+        _prev_preview_t = st.session_state.get("_fit_preview_ticker", "")
+        if _fit_t_input and _fit_t_input != _prev_preview_t:
+            import yfinance as _yf_prev
+            _prev_raw = _yf_prev.Ticker(_fit_t_input).info or {}
+            st.session_state["_fit_preview_info"] = {
+                "ticker": _fit_t_input,
+                "name": _prev_raw.get("longName", _fit_t_input),
+                "sector": _prev_raw.get("sector", _prev_raw.get("industry", "")),
+                "price": _prev_raw.get("currentPrice") or _prev_raw.get("regularMarketPrice"),
+                "summary": (_prev_raw.get("longBusinessSummary") or "")[:220],
+            }
+            st.session_state["_fit_preview_ticker"] = _fit_t_input
+
+        _preview_info = st.session_state.get("_fit_preview_info")
+        if _preview_info and _preview_info.get("ticker") == _fit_t_input and _fit_t_input:
+            _pv_price = f" · ${_preview_info['price']:.2f}" if _preview_info.get("price") else ""
+            _pv_sector = f" · {_preview_info['sector']}" if _preview_info.get("sector") else ""
+            st.markdown(
+                f'<div style="font-size:11px;color:#94a3b8;border:1px solid #1e293b;border-radius:6px;'
+                f'padding:8px 12px;margin:4px 0 8px 0;">'
+                f'<span style="font-weight:700;color:#cbd5e1;">{_preview_info["name"]}</span>'
+                f'<span style="color:#64748b;">{_pv_sector}{_pv_price}</span>'
+                + (f'<br><span style="color:#64748b;">{_preview_info["summary"]}…</span>' if _preview_info.get("summary") else "")
+                + f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        if _run_fit and _fit_t_input:
+            _fit_use_cl, _fit_model = _PLAY_MODEL_MAP[_fit_engine]
+            # Reuse preview info if available (avoids double yfinance fetch)
+            if _preview_info and _preview_info.get("ticker") == _fit_t_input:
+                _fit_name = _preview_info["name"]
+                _fit_sector = _preview_info.get("sector", "")
+                _fit_price_str = f"Current ${_preview_info['price']:.2f}" if _preview_info.get("price") else ""
+            else:
+                import yfinance as _yf_fit
+                _fit_info = _yf_fit.Ticker(_fit_t_input).info or {}
+                _fit_name = _fit_info.get("longName", _fit_t_input)
+                _fit_sector = _fit_info.get("sector", _fit_info.get("industry", ""))
+                _fit_price = _fit_info.get("currentPrice") or _fit_info.get("regularMarketPrice")
+                _fit_price_str = f"Current ${_fit_price:.2f}" if _fit_price else ""
+
+            _fit_regime_ctx = st.session_state.get("_regime_context", {}).get("signal_summary", "Not loaded")
+            _fit_rp_all = st.session_state.get("_rate_path_probs", [])
+            _fit_rp_labels = {"cut_25": "25bp cut", "cut_50": "50bp cut", "hold": "Hold", "hike_25": "25bp hike"}
+            _fit_rp_str = ", ".join(
+                f"{_fit_rp_labels.get(r['scenario'], r['scenario'])} {round(r.get('prob', 0) * 100)}%"
+                for r in sorted(_fit_rp_all, key=lambda r: r.get("prob", 0), reverse=True)
+            ) if _fit_rp_all else "Not loaded"
+            _fit_swans = st.session_state.get("_custom_swans", {})
+            _fit_swan_str = "; ".join(
+                f"{k} ({v.get('probability_pct', 0):.0f}%): " +
+                ", ".join(f"{a}={b}" for a, b in list(v.get("asset_impacts", {}).items())[:3])
+                for k, v in list(_fit_swans.items())[:2]
+            ) if _fit_swans else ""
+
+            from services.claude_client import assess_macro_fit as _assess_macro_fit
+            with st.spinner(f"Assessing macro fit for {_fit_t_input}..."):
+                _fit_result = _assess_macro_fit(
+                    ticker=_fit_t_input, company_name=_fit_name, sector=_fit_sector,
+                    price_summary=_fit_price_str,
+                    regime_context=_fit_regime_ctx,
+                    rate_path_context=_fit_rp_str,
+                    black_swan_context=_fit_swan_str,
+                    use_claude=_fit_use_cl, model=_fit_model,
+                )
+            if _fit_result and "_error" in _fit_result:
+                st.session_state["_macro_fit_error"] = _fit_result["_error"]
+                _fit_result = None
+            else:
+                st.session_state.pop("_macro_fit_error", None)
+            st.session_state["_macro_fit_result"] = _fit_result
+            st.session_state["_macro_fit_ticker"] = _fit_t_input
+
+        _fit_err = st.session_state.get("_macro_fit_error")
+        if _fit_err:
+            st.error(f"Macro Fit failed: {_fit_err}")
+
+        _cached_fit = st.session_state.get("_macro_fit_result")
+        _cached_fit_t = st.session_state.get("_macro_fit_ticker", "")
+        if _cached_fit and _cached_fit_t:
+            _fit_stars_n = _cached_fit.get("fit_stars", 0)
+            _fit_stars_str = "★" * _fit_stars_n + "☆" * (5 - _fit_stars_n)
+            _fit_verdict = _cached_fit.get("verdict", "")
+            _fit_verdict_color = {
+                "Strong Fit": "#22c55e", "Moderate Fit": "#86efac",
+                "Neutral": "#f59e0b", "Caution": "#f97316", "Avoid": "#ef4444",
+            }.get(_fit_verdict, "#94a3b8")
+            st.markdown(
+                f'<div style="border:1px solid #1e293b;border-radius:8px;padding:12px 16px;margin-top:8px;">'
+                f'<span style="font-size:13px;font-weight:700;color:#e2e8f0;">{_cached_fit_t}</span>'
+                f'&nbsp;&nbsp;<span style="color:#f59e0b;font-size:14px;">{_fit_stars_str}</span>'
+                f'&nbsp;&nbsp;<span style="font-size:12px;font-weight:700;color:{_fit_verdict_color};">{_fit_verdict}</span>'
+                f'<p style="font-size:12px;color:#94a3b8;margin:8px 0 6px 0;">{_cached_fit.get("rationale", "")}</p>'
+                + "".join(f'<span style="font-size:11px;color:#22c55e;">↑ {t}&nbsp;&nbsp;</span>' for t in _cached_fit.get("tailwinds", []))
+                + "".join(f'<span style="font-size:11px;color:#ef4444;">↓ {h}&nbsp;&nbsp;</span>' for h in _cached_fit.get("headwinds", []))
+                + '</div>',
+                unsafe_allow_html=True,
+            )
 
     mode = st.radio("Mode", ["Manual", "Auto — Trending"], horizontal=True)
 

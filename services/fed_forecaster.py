@@ -715,11 +715,11 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
     return data
 
 
-def _call_claude_core_forecast(context_json: str, scenarios_json: str) -> dict:
-    """Use Claude Haiku for higher-quality causal chains and asset impact reasoning.
+def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: str = "claude-haiku-4-5-20251001") -> dict:
+    """Use Claude for higher-quality causal chains and asset impact reasoning.
 
     Same schema as _call_groq_core_forecast. Requires ANTHROPIC_API_KEY in env.
-    Only used when the user explicitly enables Claude mode via session state.
+    model: claude-haiku-4-5-20251001 (fast/cheap) or claude-sonnet-4-6 (most accurate).
     """
     import anthropic
 
@@ -771,7 +771,7 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str) -> dict:
 
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=model,
         max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -860,10 +860,11 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
     return data
 
 
-def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: str) -> dict:
-    """Use Claude Haiku for commodities and international equities forecast.
+def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: str, model: str = "claude-haiku-4-5-20251001") -> dict:
+    """Use Claude for commodities and international equities forecast.
 
     Same schema as _call_groq_commodities_intl_forecast.
+    model: claude-haiku-4-5-20251001 or claude-sonnet-4-6.
     """
     import anthropic
 
@@ -907,7 +908,7 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
 
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
-        model="claude-haiku-4-5-20251001",
+        model=model,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -980,6 +981,84 @@ def _call_groq_black_swan_forecast(context_json: str) -> dict:
     return json.loads(_strip_fences(raw))
 
 
+def _call_groq_custom_event_forecast(event_label: str, context_json: str) -> dict | None:
+    """Forecast probability and asset impacts for a single user-defined black swan event.
+
+    Returns dict with: probability_pct, narrative, asset_impacts (same schema as built-in events).
+    """
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return None
+
+    prompt = (
+        "You are a macro tail-risk analyst. Return ONLY valid json (no commentary).\n\n"
+        f"Macro context:\n{context_json}\n\n"
+        f"Custom black swan event: {event_label}\n\n"
+        "Estimate:\n"
+        "1. probability_pct: estimated annual probability (float 0-100)\n"
+        "2. asset_impacts: dict mapping each of "
+        "[spy, qqq, iwm, bonds_long, bonds_short, gold, oil, usd] to one of: "
+        '"strongly bullish", "bullish", "neutral", "bearish", "strongly bearish"\n'
+        "3. narrative: 1-2 sentences on transmission mechanism and how it impacts markets\n\n"
+        'Return JSON with exactly these keys: "probability_pct", "narrative", "asset_impacts"'
+    )
+
+    headers = _groq_headers()
+    payload = {
+        "model": GROQ_MODEL,
+        "response_format": {"type": "json_object"},
+        "messages": [
+            {"role": "system", "content": "You are a macro tail-risk analyst. Return only valid json."},
+            {"role": "user", "content": prompt},
+        ],
+        "max_tokens": 512,
+        "temperature": 0.3,
+    }
+    try:
+        resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"]
+        return json.loads(_strip_fences(raw))
+    except Exception:
+        return None
+
+
+def _call_claude_custom_event_forecast(event_label: str, context_json: str, model: str) -> dict | None:
+    """Claude version of custom black swan forecast. Same return schema as Groq version."""
+    import anthropic
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return None
+    prompt = (
+        "You are a macro tail-risk analyst. Return ONLY valid JSON (no commentary).\n\n"
+        f"Macro context:\n{context_json}\n\n"
+        f"Custom black swan event: {event_label}\n\n"
+        "Estimate:\n"
+        "1. probability_pct: estimated annual probability (float 0-100)\n"
+        "2. asset_impacts: dict mapping each of "
+        "[spy, qqq, iwm, bonds_long, bonds_short, gold, oil, usd] to one of: "
+        '"strongly bullish", "bullish", "neutral", "bearish", "strongly bearish"\n'
+        "3. narrative: 2-3 sentences on transmission mechanism and how it impacts markets\n\n"
+        'Return JSON with exactly these keys: "probability_pct", "narrative", "asset_impacts"'
+    )
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=600,
+            temperature=0.2,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        return json.loads(raw.strip())
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=14400)
 def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
     """
@@ -994,12 +1073,17 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 # EXPANDED FORECAST ORCHESTRATOR
 # ─────────────────────────────────────────────────────────────────────────────
 
+_CLAUDE_MODEL_MAP = {
+    "haiku": "claude-haiku-4-5-20251001",
+    "sonnet": "claude-sonnet-4-6",
+}
+
+
 @st.cache_data(ttl=14400)
-def generate_matrix_forecast(context_json: str, scenarios_json: str, use_claude: bool = False) -> dict:
+def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Run the 2 calls needed for the asset impact matrix + medium-term fan charts.
 
-    When use_claude=True and ANTHROPIC_API_KEY is set, uses Claude Haiku for
-    both calls — better calibrated numbers from richer macro reasoning.
+    model_tier: "groq" (free/fast), "haiku" (Claude Haiku), "sonnet" (Claude Sonnet, most accurate).
 
     Returns: near_term, medium_term, long_term, _call_status, _core_engine
     """
@@ -1008,17 +1092,17 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, use_claude:
         "medium_term": {},
         "long_term": {},
         "_call_status": {"core": "ok", "commodities_intl": "ok"},
-        "_core_engine": "groq",
+        "_core_engine": model_tier,
     }
 
     _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
     _COMM_ASSETS = ["oil", "natgas", "gold", "silver"]
     _INTL_ASSETS = ["china", "india", "japan", "europe"]
+    _claude_model = _CLAUDE_MODEL_MAP.get(model_tier)
 
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
-            core = _call_claude_core_forecast(context_json, scenarios_json)
-            result["_core_engine"] = "claude"
+        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+            core = _call_claude_core_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             core = _call_groq_core_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
@@ -1036,8 +1120,8 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, use_claude:
         result["_call_status"]["core"] = f"error: {exc}"
 
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
-            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json)
+        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
@@ -1055,11 +1139,10 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, use_claude:
 
 
 @st.cache_data(ttl=14400)
-def generate_expanded_forecast(context_json: str, scenarios_json: str, use_claude: bool = False) -> dict:
+def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Orchestrate 3 calls and merge into unified expanded forecast dict.
 
-    When use_claude=True and ANTHROPIC_API_KEY is set, uses Claude Haiku for
-    the core forecast (better causal chains + reasoning). Falls back to Groq.
+    model_tier: "groq" (free/fast), "haiku" (Claude Haiku), "sonnet" (Claude Sonnet, most accurate).
 
     Returns:
       near_term: dict[scenario][asset] = list of 7 floats
@@ -1077,18 +1160,18 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, use_claud
         "causal_chains": {},
         "black_swans": {},
         "_call_status": {"core": "ok", "commodities_intl": "ok", "black_swans": "ok"},
-        "_core_engine": "groq",
+        "_core_engine": model_tier,
     }
 
     _CORE_ASSETS = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
     _COMM_ASSETS = ["oil", "natgas", "gold", "silver"]
     _INTL_ASSETS = ["china", "india", "japan", "europe"]
+    _claude_model = _CLAUDE_MODEL_MAP.get(model_tier)
 
     # Call 1: Core US assets (all 3 horizons + causal chains)
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
-            core = _call_claude_core_forecast(context_json, scenarios_json)
-            result["_core_engine"] = "claude"
+        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+            core = _call_claude_core_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             core = _call_groq_core_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
@@ -1108,7 +1191,10 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, use_claud
 
     # Call 2: Commodities + International
     try:
-        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
+        else:
+            comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = comm.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(
@@ -1125,5 +1211,8 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, use_claud
         result["black_swans"] = _call_groq_black_swan_forecast(context_json)
     except Exception as exc:
         result["_call_status"]["black_swans"] = f"error: {exc}"
+
+    # Store context for custom event analysis
+    result["_context_json"] = context_json
 
     return result

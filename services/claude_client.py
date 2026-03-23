@@ -116,16 +116,12 @@ Return ONLY valid JSON (no markdown fences) with these keys:
         return {"description": "", "narrative": "", "sector": sic_description}
 
 
-@st.cache_data(ttl=3600)
-def summarize_filing(filing_text: str, form_type: str, company: str) -> str:
-    """Summarize a SEC filing's text content via Groq.
+@st.cache_data(ttl=86400)
+def summarize_filing(filing_text: str, form_type: str, company: str, use_claude: bool = False, model: str = None) -> str:
+    """Summarize a SEC filing's text content via Groq or Claude.
 
     Returns a markdown-formatted summary string.
     """
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        return "GROQ_API_KEY not set — cannot generate summary."
-
     prompt = f"""You are a financial analyst. Summarize this SEC {form_type} filing from {company}.
 
 Focus on:
@@ -138,6 +134,24 @@ Keep the summary to 4-6 bullet points. Be specific with numbers and dates where 
 
 Filing text:
 {filing_text}"""
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=600,
+                temperature=0.1,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+        except Exception as e:
+            return f"Error generating summary: {e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate summary."
 
     try:
         resp = requests.post(
@@ -237,17 +251,13 @@ Rules:
         return []
 
 
-@st.cache_data(ttl=3600)
-def generate_valuation(ticker: str, signals_text: str) -> dict | None:
-    """Generate an AI valuation and recommendation for a ticker via Groq.
+def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None) -> dict | None:
+    """Generate an AI valuation and recommendation for a ticker via Groq or Claude.
 
     Returns dict with keys: rating, confidence, summary, bullish_factors,
     bearish_factors, key_levels, recommendation
     """
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        st.error("GROQ_API_KEY environment variable not set.")
-        return None
+    import re
 
     prompt = f"""You are an expert equity research analyst. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
 
@@ -263,6 +273,46 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
   "key_levels": {{"support": 123.45, "resistance": 234.56}},
   "recommendation": "2-3 sentence guidance"
 }}"""
+
+    def _parse_valuation_json(text: str) -> dict | None:
+        if "```" in text:
+            match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
+            if match:
+                text = match.group(1).strip()
+        if not text.startswith("{"):
+            start = text.find("{")
+            if start != -1:
+                text = text[start:]
+        if not text.endswith("}"):
+            end = text.rfind("}")
+            if end != -1:
+                text = text[:end + 1]
+        try:
+            result = json.loads(text)
+            return result if "rating" in result else None
+        except json.JSONDecodeError:
+            return None
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                temperature=0.1,
+                system="You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation.",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _parse_valuation_json(message.content[0].text.strip())
+        except Exception as e:
+            st.error(f"Claude API error: {e}")
+            return None
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        st.error("GROQ_API_KEY environment variable not set.")
+        return None
 
     try:
         resp = requests.post(
@@ -288,57 +338,77 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
         st.error(f"Groq API error: {e}")
         return None
 
-    # Strip markdown fences if present
-    if "```" in text:
-        import re
-        match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
-        if match:
-            text = match.group(1).strip()
-
-    # Try to extract JSON object even if there's surrounding text
-    if not text.startswith("{"):
-        start = text.find("{")
-        if start != -1:
-            text = text[start:]
-    if not text.endswith("}"):
-        end = text.rfind("}")
-        if end != -1:
-            text = text[:end + 1]
-
-    try:
-        result = json.loads(text)
-        # Validate required keys exist
-        if "rating" not in result:
-            return None
-        return result
-    except json.JSONDecodeError:
-        return None
+    return _parse_valuation_json(text)
 
 
-@st.cache_data(ttl=3600)
-def suggest_regime_plays(regime: str, score: float, signal_summary: str) -> dict:
-    """Suggest sectors, stocks, and bonds based on the current risk regime.
+def suggest_regime_plays(regime: str, score: float, signal_summary: str, use_claude: bool = False, model: str = None) -> dict:
+    """Suggest sectors, stocks, and bonds based on the current risk regime via Groq or Claude.
 
     Returns dict with keys: sectors, stocks, bonds, rationale
     """
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+    _empty = {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+
+    # Extract quadrant from signal_summary if present
+    _quadrant = ""
+    if "Dalio Quadrant:" in signal_summary:
+        try:
+            _quadrant = signal_summary.split("Dalio Quadrant:")[1].split(",")[0].strip()
+        except Exception:
+            pass
+
+    _quadrant_guidance = {
+        "Stagflation": "STAGFLATION regime (falling growth + rising inflation): prioritize real assets (GLD, TIP, XLE, UUP, MCD, PG). Avoid growth tech (QQQ, IWM) and HY bonds.",
+        "Deflation": "DEFLATION regime (falling growth + falling inflation): prioritize long-duration bonds (TLT, IEF), gold (GLD), investment-grade bonds (LQD). Avoid energy (XLE) and EM (EEM).",
+        "Reflation": "REFLATION regime (rising growth + rising inflation): prioritize commodities (XLE, CPER, GLD), cyclicals, emerging markets (EEM). Avoid long-duration bonds (TLT).",
+        "Goldilocks": "GOLDILOCKS regime (rising growth + stable inflation): prioritize equities broadly (QQQ, SPY, IWM), growth sectors, EM. Avoid defensive gold and long bonds.",
+    }.get(_quadrant, "")
 
     prompt = f"""You are a macro strategist. The market risk regime is currently **{regime}** with an aggregate score of {score:+.2f} (scale: -1 risk-off to +1 risk-on).
 
 Key signal summary:
 {signal_summary}
 
-Based on this regime, suggest what to buy right now.
+{_quadrant_guidance}
+
+Based on this regime and signals, suggest what to buy right now.
 
 Return ONLY valid JSON (no markdown fences) with these keys:
 - "sectors": list of 3-5 objects, each with "name" (sector name) and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
 - "stocks": list of 4-6 objects, each with "ticker", "reason" (1 sentence), and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
 - "bonds": list of 2-3 objects, each with "ticker", "reason", and "conviction" (integer 1-3, where 3 = strong buy, 2 = moderate buy, 1 = buy)
-- "rationale": 2-3 sentence macro rationale for these picks given the current regime
+- "rationale": 2-3 sentence macro rationale for these picks given the current regime and quadrant
 
 Be selective with 3-star (strong buy) ratings — only give them to picks that are the best fit for this exact regime. Most picks should be 1 or 2 stars."""
+
+    def _parse(text: str) -> dict:
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return _empty
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=800,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _parse(message.content[0].text.strip())
+        except Exception as _e:
+            st.error(f"Claude API error (Regime Plays): {_e}")
+            return _empty
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return _empty
 
     try:
         resp = requests.post(
@@ -356,20 +426,102 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
             timeout=20,
         )
         resp.raise_for_status()
-        text = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+        return _parse(resp.json()["choices"][0]["message"]["content"].strip())
+    except Exception as _e:
+        st.error(f"Groq API error (Regime Plays): {_e}")
+        return _empty
 
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1]
-        if text.endswith("```"):
-            text = text[:-3]
-        text = text.strip()
+
+def suggest_scenario_plays(
+    scenario: str,
+    regime: str,
+    quadrant: str,
+    signal_summary: str,
+    use_claude: bool = False,
+    model: str = None,
+) -> dict:
+    """Generate sector/stock/bond plays for a user-defined macro scenario.
+
+    Returns dict with keys: sectors, stocks, bonds, rationale, avoid
+    """
+    _empty = {"sectors": [], "stocks": [], "bonds": [], "rationale": "", "avoid": []}
+
+    _quadrant_hints = {
+        "Stagflation": "Stagflation = falling growth + rising inflation. Prioritize: GLD, TIP, XLE, UUP, MCD, PG. Avoid: QQQ, IWM, HYG, growth tech.",
+        "Deflation": "Deflation = falling growth + falling inflation. Prioritize: TLT, IEF, GLD, LQD, defensive equities. Avoid: XLE, HYG, EEM.",
+        "Reflation": "Reflation = rising growth + rising inflation. Prioritize: XLE, CPER, EEM, cyclicals, commodities. Avoid: TLT, long-duration bonds.",
+        "Goldilocks": "Goldilocks = rising growth + stable inflation. Prioritize: QQQ, SPY, IWM, EEM, growth tech. Avoid: GLD, TLT.",
+    }
+    _hint = _quadrant_hints.get(quadrant, "")
+
+    prompt = f"""You are a macro strategist. A specific market scenario is unfolding:
+
+Scenario: {scenario}
+
+Current macro backdrop:
+- Regime: {regime}
+- Dalio Quadrant: {quadrant}
+- {signal_summary}
+
+Quadrant context: {_hint}
+
+Given this specific scenario occurring on top of the current macro backdrop, what should an investor do RIGHT NOW?
+
+Return ONLY valid JSON (no markdown fences) with these keys:
+- "sectors": list of 3-5 objects, each with "name" and "conviction" (integer 1-3, where 3 = strong buy)
+- "stocks": list of 4-6 objects, each with "ticker", "reason" (1 sentence), and "conviction" (1-3)
+- "bonds": list of 2-3 objects, each with "ticker", "reason", and "conviction" (1-3)
+- "rationale": 2-3 sentence explanation of why this scenario drives these specific plays
+- "avoid": list of 2-4 ticker strings to explicitly exit or avoid in this scenario
+
+3 stars = immediate strong buy specifically because of this scenario. Include both "buy" and "avoid" lists."""
+
+    def _parse(text: str) -> dict:
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return _empty
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _parse(message.content[0].text.strip())
+        except Exception as _e:
+            st.error(f"Claude API error (Scenario Plays): {_e}")
+            return _empty
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return _empty
 
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1024,
+                "temperature": 0.3,
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        return _parse(resp.json()["choices"][0]["message"]["content"].strip())
+    except Exception:
+        return _empty
 
 
 @st.cache_data(ttl=3600)
@@ -425,16 +577,11 @@ Whale activity data:
     return text
 
 
-@st.cache_data(ttl=3600)
-def generate_doom_briefing(stress_data: str) -> str:
-    """Generate an ominous risk intelligence briefing from stress signal data via Groq.
+def generate_doom_briefing(stress_data: str, use_claude: bool = False, model: str = None) -> str:
+    """Generate an ominous risk intelligence briefing from stress signal data via Groq or Claude.
 
     Returns a markdown-formatted doom briefing string.
     """
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        return "GROQ_API_KEY not set — cannot generate doom briefing."
-
     prompt = f"""You are a doomsday-focused financial risk analyst. Your job is to be the canary in the coal mine — flagging systemic risks that mainstream analysts ignore.
 
 Analyze the following stress signal data and write a dramatic but data-driven risk assessment briefing.
@@ -449,6 +596,24 @@ Rules:
 
 Stress Signal Data:
 {stress_data}"""
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=1000,
+                temperature=0.4,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+        except Exception as e:
+            return f"Error generating doom briefing: {e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate doom briefing."
 
     try:
         resp = requests.post(
@@ -478,6 +643,181 @@ Stress Signal Data:
         text = text.strip()
 
     return text
+
+
+def narrate_policy_transmission(chains_json: str, adj_probs_json: str, use_claude: bool = False, model: str = None) -> str:
+    """Narrative interpretation of the Fed policy transmission path.
+
+    chains_json and adj_probs_json are JSON strings (hashable for @st.cache_data).
+    Returns 3-4 sentence narrative string.
+    """
+    prompt = (
+        "You are a macro policy analyst. Based on these Fed policy probability scenarios and "
+        "causal transmission chains, write exactly 3-4 sentences explaining: "
+        "(1) the most likely rate path and its probability, "
+        "(2) how that path transmits through credit markets, housing, and employment, "
+        "(3) which specific asset classes benefit and which face headwinds — name tickers or sectors. "
+        "Be precise and specific. No vague generalities.\n\n"
+        f"Rate path probabilities: {adj_probs_json}\n"
+        f"Transmission chains: {chains_json}"
+    )
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            msg = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=400,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return msg.content[0].text.strip()
+        except Exception as e:
+            return f"Error generating narration: {e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set."
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 400,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating narration: {e}"
+
+
+def assess_macro_fit(
+    ticker: str,
+    company_name: str,
+    sector: str,
+    price_summary: str,
+    regime_context: str,
+    rate_path_context: str,
+    black_swan_context: str,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict | None:
+    """Evaluate how well a ticker fits the current macro regime environment."""
+    prompt = f"""You are a macro-regime portfolio analyst. Evaluate how well {ticker} ({company_name}, {sector}) fits the CURRENT macro environment.
+
+CURRENT MACRO ENVIRONMENT:
+- Regime Context: {regime_context}
+- Fed Rate Path: {rate_path_context}
+- Black Swan Tail Risks: {black_swan_context if black_swan_context else "None analyzed"}
+- Stock Technical: {price_summary}
+
+Rate the macro fit from 1-5 and explain. Consider:
+1. Does this sector historically outperform in this regime/quadrant?
+2. Is this stock rate-sensitive? Does the dominant rate path help or hurt?
+3. Does this stock have exposure to the analyzed black swan risks?
+4. Any regime-specific catalysts or headwinds?
+
+Respond ONLY with valid JSON:
+{{
+  "fit_stars": <1-5 integer>,
+  "verdict": "<Strong Fit|Moderate Fit|Neutral|Caution|Avoid>",
+  "rationale": "<2-3 sentences explaining the fit score>",
+  "tailwinds": ["<macro tailwind for this ticker>"],
+  "headwinds": ["<macro headwind for this ticker>"]
+}}"""
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
+    try:
+        if use_claude and model:
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=model, max_tokens=700, temperature=0.2,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [
+                          {"role": "system", "content": _system},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": 600, "temperature": 0.2},
+                timeout=30,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+        import json as _json, re as _re
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        return _json.loads(m.group()) if m else {"_error": f"No JSON in response: {raw[:200]}"}
+    except Exception as _e:
+        return {"_error": str(_e)}
+
+
+@st.cache_data(ttl=1800)
+def fetch_news_sentiment(ticker: str, company_name: str) -> dict | None:
+    """Fetch top-5 headlines from NewsAPI and score sentiment with Groq.
+
+    Returns None gracefully if NEWSAPI_KEY is absent or any step fails.
+    """
+    api_key = os.getenv("NEWSAPI_KEY")
+    if not api_key:
+        return None
+    try:
+        r = requests.get(
+            "https://newsapi.org/v2/everything",
+            params={
+                "q": f'"{ticker}" OR "{company_name}"',
+                "language": "en",
+                "sortBy": "publishedAt",
+                "pageSize": 5,
+                "apiKey": api_key,
+            },
+            timeout=10,
+        )
+        articles = r.json().get("articles", [])
+        if not articles:
+            return None
+        headlines = [a["title"] for a in articles if a.get("title")]
+        if not headlines:
+            return None
+
+        prompt = (
+            f"Score these {ticker} headlines as bullish/bearish/neutral. "
+            "Return JSON only — no markdown:\n"
+            '{"overall":"bullish|bearish|neutral","score":<-1.0 to 1.0>,'
+            '"headlines":[{"title":"...","sentiment":"bullish|bearish|neutral"}]}\n\n'
+            "Headlines:\n" + "\n".join(f"- {h}" for h in headlines)
+        )
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={
+                "Authorization": f"Bearer {os.getenv('GROQ_API_KEY', '')}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 400,
+                "temperature": 0.1,
+            },
+            timeout=20,
+        )
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        import re as _re
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        return json.loads(m.group()) if m else None
+    except Exception:
+        return None
 
 
 def _empty_result() -> dict:

@@ -81,8 +81,22 @@ def render():
     )
 
     # --- Filing Summary ---
+    import os as _os
+    _edgar_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
+    _edgar_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _edgar_has_claude else ["⚡ Groq"]
+    _edgar_tier_map = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
     st.markdown("---")
-    st.subheader("AI Filing Summary")
+    _sel_edgar_tier = st.radio(
+        "Summary Engine", _edgar_tier_opts, horizontal=True, key="edgar_summary_engine",
+        help="Standard = Groq (fast) · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
+    )
+    _use_claude_edgar, _edgar_model = _edgar_tier_map[_sel_edgar_tier]
+    _edgar_badge = f" {_sel_edgar_tier.split()[0]}"
+    st.subheader(f"AI Filing Summary{_edgar_badge}")
 
     summarizable = filtered[filtered["form_type"].isin(["8-K", "8-K/A", "10-K", "10-Q"])].reset_index(drop=True)
 
@@ -118,8 +132,14 @@ def render():
             return
 
         with st.spinner("Generating AI summary..."):
-            summary = summarize_filing(text, row["form_type"], company_info["name"])
+            summary = summarize_filing(text, row["form_type"], company_info["name"], use_claude=_use_claude_edgar, model=_edgar_model)
 
-        with st.container(border=True):
-            st.markdown(f"**{row['form_type']}** — {row['date']}")
-            st.markdown(summary)
+        _border = "2px solid #FF8811" if _use_claude_edgar else "1px solid #2A3040"
+        st.markdown(
+            f'<div style="border:{_border};border-left-width:4px;border-radius:6px;'
+            f'padding:14px 18px;background:#1A1F2E;margin-bottom:8px;">'
+            f'<strong>{row["form_type"]}</strong> — {row["date"]}'
+            f'<div style="margin-top:10px;font-size:13px;line-height:1.6;">{summary}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )

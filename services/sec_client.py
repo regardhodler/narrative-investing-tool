@@ -1,4 +1,5 @@
 import time
+import threading
 import requests
 import pandas as pd
 import streamlit as st
@@ -9,15 +10,17 @@ SEC_HEADERS = {
 }
 
 _last_request_time = 0.0
+_rate_limit_lock = threading.Lock()
 
 
 def _rate_limit():
-    """Enforce 10 req/sec rate limit for SEC."""
+    """Enforce 10 req/sec rate limit for SEC (thread-safe)."""
     global _last_request_time
-    elapsed = time.time() - _last_request_time
-    if elapsed < 0.1:
-        time.sleep(0.1 - elapsed)
-    _last_request_time = time.time()
+    with _rate_limit_lock:
+        elapsed = time.time() - _last_request_time
+        if elapsed < 0.1:
+            time.sleep(0.1 - elapsed)
+        _last_request_time = time.time()
 
 
 @st.cache_data(ttl=86400)
@@ -397,7 +400,11 @@ def get_insider_trades(ticker: str) -> pd.DataFrame:
                 txn_price = float(price_el.text) if price_el is not None and price_el.text else 0
                 acq_disp = acq_disp_el.text if acq_disp_el is not None and acq_disp_el.text else ""
 
-                code_map = {"P": "Purchase", "S": "Sale", "M": "Exercise", "A": "Grant"}
+                code_map = {
+                    "P": "Purchase", "S": "Sale", "M": "Exercise", "A": "Grant",
+                    "D": "Disposition", "J": "Other Acquisition", "G": "Gift", "C": "Conversion",
+                    "F": "Tax Withholding", "X": "Option Exercise",
+                }
                 txn_type = code_map.get(txn_code, txn_code)
                 if not txn_type and acq_disp:
                     txn_type = "Purchase" if acq_disp == "A" else "Sale"
