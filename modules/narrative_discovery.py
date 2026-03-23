@@ -226,11 +226,14 @@ def render():
             unsafe_allow_html=True,
         )
         st.caption("Optional — layer a macro shock on current signals to stress-test your plays")
+        # Pick up any quick-fill value BEFORE the widget is instantiated
+        _qs_pending = st.session_state.pop("_pending_overlay_input", None)
         _overlay_scenario = st.text_input(
             "Stress-Test Overlay",
             placeholder="e.g. Reverse yen carry trade, Strait of Hormuz closure, US credit downgrade",
             label_visibility="collapsed",
             key="overlay_scenario_input",
+            value=_qs_pending if _qs_pending is not None else st.session_state.get("overlay_scenario_input", ""),
         )
         _pre_swans = st.session_state.get("_custom_swans", {})
         if _pre_swans:
@@ -241,7 +244,7 @@ def render():
                     _short = (_qslabel[:26] + "…") if len(_qslabel) > 26 else _qslabel
                     _qsprob = _pre_swans[_qslabel].get("probability_pct", 0)
                     if st.button(f"{_short} ({_qsprob:.0f}%)", key=f"qs_swan_{_qsi}"):
-                        st.session_state["overlay_scenario_input"] = _qslabel
+                        st.session_state["_pending_overlay_input"] = _qslabel
                         st.rerun()
 
         # ── Upstream context status ───────────────────────────────────────
