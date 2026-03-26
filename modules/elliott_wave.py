@@ -140,6 +140,91 @@ def _fetch_ticker_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None
 
 
 @st.cache_data(ttl=3600)
+def _build_claude_narrative(prompt: str, model: str) -> str:
+    """Call Claude to generate a narrative."""
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return "_ANTHROPIC_API_KEY not set — Claude narrative unavailable._"
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=600,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text.strip()
+    except Exception as e:
+        return f"_Claude narrative failed: {e}_"
+
+
+@st.cache_data(ttl=3600)
+def _claude_wave_analysis(
+    ticker: str,
+    close_t: tuple,
+    high_t: tuple,
+    low_t: tuple,
+    dates_t: tuple,
+    degree_summary: tuple,
+    algo_wave: str,
+    algo_confidence: int,
+    algo_invalidation: float,
+    model: str,
+) -> dict:
+    """Ask Claude to independently perform Elliott Wave count and return structured JSON."""
+    import json
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {}
+    # Compact OHLCV — last 30 bars for token efficiency
+    n = min(30, len(close_t))
+    ohlcv_lines = [
+        f"{dates_t[-(n-i)]}: H={high_t[-(n-i)]:.2f} L={low_t[-(n-i)]:.2f} C={close_t[-(n-i)]:.2f}"
+        for i in range(n)
+    ]
+    ohlcv_text = "\n".join(ohlcv_lines)
+    degree_text = "\n".join(f"  - {deg}: Wave {lbl} ({conf}%)" for deg, lbl, conf in degree_summary)
+    prompt = f"""You are an expert Elliott Wave analyst performing an independent wave count on {ticker}.
+
+OHLCV Data (last {n} bars, oldest first):
+{ohlcv_text}
+
+Algorithm preliminary count (use as a starting reference only):
+- Primary wave label: {algo_wave}
+- Algorithm confidence: {algo_confidence}/100
+- Algorithm invalidation: ${algo_invalidation:.2f}
+
+Multi-degree structure from algorithm:
+{degree_text}
+
+Independently evaluate the wave structure. Return ONLY valid JSON, no other text:
+{{
+  "primary_count": "wave label e.g. [3] or C or (5)",
+  "confidence": integer 0-100,
+  "alternative_count": "alt wave label",
+  "alt_confidence": integer 0-100,
+  "invalidation": price level as float where this count is invalidated,
+  "next_target": nearest price target as float,
+  "rationale": "1-2 sentence explanation"
+}}"""
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = msg.content[0].text.strip()
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text)
+    except Exception:
+        return {}
+
+
 def _build_groq_narrative(
     primary_position: str,
     primary_label: str,
@@ -734,6 +819,25 @@ def render():
                         st.session_state["ew_ticker"] = _t
                         st.rerun()
 
+    # ── AI Engine Tier (top-level — controls wave count override + narrative) ──
+    _has_anthropic_ew = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _ew_tier_options_top = ["⚡ Standard", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _ew_default_idx = 0
+    _ew_saved = st.session_state.get("ew_narrative_tier", "⚡ Standard")
+    if _ew_saved in _ew_tier_options_top:
+        _ew_default_idx = _ew_tier_options_top.index(_ew_saved)
+    st.radio(
+        "AI Engine",
+        _ew_tier_options_top,
+        index=_ew_default_idx,
+        horizontal=True,
+        key="ew_narrative_tier",
+        disabled=not _has_anthropic_ew,
+        help="Standard = Groq LLaMA  ·  Regard = Claude Haiku (overrides wave count)  ·  Highly Regarded = Claude Sonnet",
+    )
+    if not _has_anthropic_ew:
+        st.caption("Set ANTHROPIC_API_KEY to unlock Regard modes.")
+
     # ── Guard: nothing entered yet ────────────────────────────────────────────
     if not ticker:
         st.info("Enter a ticker symbol above or pick one from ⚡ Quick Pick to begin analysis.")
@@ -810,6 +914,34 @@ def render():
     _fc_src = degree_counts.get("Primary") or corrective_counts.get("Primary")
     if _fc_src:
         forecast = build_wave_forecast(_fc_src, float(close.iloc[-1]))
+
+    # ── Claude AI wave count override (Regard / Highly Regarded) ──────────────
+    _ew_tier_now = st.session_state.get("ew_narrative_tier", "⚡ Standard")
+    _claude_wa = {}
+    if _ew_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and bool(os.getenv("ANTHROPIC_API_KEY")):
+        _ca_model = "claude-haiku-4-5-20251001" if _ew_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+        _primary_for_ca = degree_counts.get("Primary") or corrective_counts.get("Primary")
+        if _primary_for_ca:
+            _deg_sum = tuple((deg, cnt.current_wave_label, cnt.confidence) for deg, cnt in degree_counts.items())
+            _ew_high = ohlcv["High"]
+            if isinstance(_ew_high, pd.DataFrame):
+                _ew_high = _ew_high.iloc[:, 0]
+            _ew_low = ohlcv["Low"]
+            if isinstance(_ew_low, pd.DataFrame):
+                _ew_low = _ew_low.iloc[:, 0]
+            with st.spinner(f"✦ Claude ({_ca_model.split('-')[1].capitalize()}) analyzing wave structure..."):
+                _claude_wa = _claude_wave_analysis(
+                    ticker,
+                    tuple(close.iloc[-60:].round(2).tolist()),
+                    tuple(_ew_high.dropna().iloc[-60:].round(2).tolist()),
+                    tuple(_ew_low.dropna().iloc[-60:].round(2).tolist()),
+                    tuple(str(d)[:10] for d in ohlcv.index[-60:]),
+                    _deg_sum,
+                    _primary_for_ca.current_wave_label,
+                    _primary_for_ca.confidence,
+                    _primary_for_ca.invalidation_level,
+                    _ca_model,
+                )
 
     rsi_series = rsi(close)
 
@@ -893,24 +1025,70 @@ def render():
     # ── Primary degree metrics ────────────────────────────────────────────────
     primary = degree_counts.get("Primary")
     if primary:
-        if primary.confidence < 35:
+        if primary.confidence < 35 and not _claude_wa:
             st.warning(
                 f"Primary degree count is low-confidence ({primary.confidence}/100) — "
                 "structural rules pass but Fibonacci confirmation is weak."
             )
-        m1, m2, m3 = st.columns(3)
+
+        # Use Claude's override when available, otherwise fall back to algorithm
+        _wave_label = _claude_wa.get("primary_count", primary.current_wave_label)
+        _confidence = _claude_wa.get("confidence", primary.confidence)
+        _invalidation = _claude_wa.get("invalidation", primary.invalidation_level)
+        _next_target = _claude_wa.get("next_target")
+        _alt_count = _claude_wa.get("alternative_count")
+        _alt_conf = _claude_wa.get("alt_confidence")
+
+        if _claude_wa:
+            st.markdown(
+                '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;'
+                'font-size:10px;font-weight:700;letter-spacing:0.06em;padding:2px 10px;'
+                'border-radius:3px;margin-bottom:10px;display:inline-block;">'
+                '✦ CLAUDE WAVE OVERRIDE</span>',
+                unsafe_allow_html=True,
+            )
+
+        if _claude_wa and _next_target:
+            m1, m2, m3, m4, m5 = st.columns(5)
+        else:
+            m1, m2, m3 = st.columns(3)
+
         m1.markdown(
-            bloomberg_metric("Primary Wave", primary.current_wave_label, DEGREE_COLOR["Primary"]),
+            bloomberg_metric("Primary Wave", _wave_label, DEGREE_COLOR["Primary"]),
             unsafe_allow_html=True,
         )
         m2.markdown(
-            bloomberg_metric("Confidence", f"{primary.confidence}/100"),
+            bloomberg_metric("Confidence", f"{_confidence}/100"),
             unsafe_allow_html=True,
         )
         m3.markdown(
-            bloomberg_metric("Invalidation", f"${primary.invalidation_level:.2f}", COLORS["red"]),
+            bloomberg_metric("Invalidation", f"${_invalidation:.2f}", COLORS["red"]),
             unsafe_allow_html=True,
         )
+        if _claude_wa and _next_target:
+            m4.markdown(
+                bloomberg_metric("Next Target", f"${_next_target:.2f}", COLORS["green"]),
+                unsafe_allow_html=True,
+            )
+            m5.markdown(
+                bloomberg_metric("Alt Count", f"{_alt_count} ({_alt_conf}%)" if _alt_count else "—", COLORS["yellow"]),
+                unsafe_allow_html=True,
+            )
+
+        if _claude_wa:
+            _rationale = _claude_wa.get("rationale", "")
+            if _rationale:
+                st.markdown(
+                    f'<div style="margin:8px 0 4px 0;font-size:13px;color:#C8D8E8;">💬 {_rationale}</div>',
+                    unsafe_allow_html=True,
+                )
+            # Show algorithm's original count as reference
+            st.markdown(
+                f'<div style="font-size:11px;color:#5A7A8A;margin-top:4px;">'
+                f'Algorithm count: Wave {primary.current_wave_label} · {primary.confidence}% · '
+                f'Invalidation ${primary.invalidation_level:.2f}</div>',
+                unsafe_allow_html=True,
+            )
 
     # ── All-degree confidence table ───────────────────────────────────────────
     st.markdown(
@@ -997,6 +1175,17 @@ def render():
 
     # ── AI Narrative ──────────────────────────────────────────────────────────
     with st.expander("Elliott Wave AI Narrative", expanded=False):
+        _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+        _ew_tier_map = {
+            "⚡ Standard":            (False, None),
+            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+        }
+        # Tier is set at top of page — show status here
+        _ew_tier = st.session_state.get("ew_narrative_tier", "⚡ Standard")
+        st.caption(f"Engine: {_ew_tier} — change at top of page")
+        _ew_use_claude, _ew_model = _ew_tier_map.get(_ew_tier, (False, None))
+
         if primary is None:
             st.warning("Primary degree count unavailable — AI narrative requires Primary degree data.")
         else:
@@ -1005,27 +1194,74 @@ def render():
                 (deg, cnt.current_wave_label, cnt.confidence)
                 for deg, cnt in degree_counts.items()
             )
+
+            # Build prompt (shared between Groq and Claude)
+            fib_text = "\n".join(f"  - {h}" for h in primary.fibonacci_hits) if primary.fibonacci_hits else "  None detected"
+            degree_text = "\n".join(
+                f"  - {deg}: Wave {lbl} ({conf}% confidence)"
+                for deg, lbl, conf in degree_summary
+            )
+            dist = current_price - primary.invalidation_level
+            dist_pct = (dist / primary.invalidation_level * 100) if primary.invalidation_level else 0
+            _ew_prompt = f"""You are an expert Elliott Wave analyst. Interpret the following automated multi-degree wave count for {ticker} and write a concise 4-6 sentence market commentary.
+
+Primary Degree (most actionable):
+- Position: {primary.wave_position}
+- Active Wave: {primary.current_wave_label}
+- Confidence: {primary.confidence}/100
+- Invalidation Level: ${primary.invalidation_level:.2f}
+- Current {ticker} Price: ${current_price:.2f}
+- Distance to Primary Invalidation: ${dist:+.2f} ({dist_pct:+.1f}%)
+
+Multi-Degree Structure:
+{degree_text}
+
+Fibonacci Confirmations (Primary):
+{fib_text}
+
+Write your commentary covering:
+1. What the Primary degree wave position means for near-term price action
+2. How the larger-degree counts (Cycle, Supercycle) provide context and direction
+3. The key invalidation level and what a breach would signal
+4. What the fractal wave structure suggests about the current market phase
+
+Be direct and specific. Reference degree notation properly ([[I]] for Grand Supercycle, (I) for Supercycle, I for Cycle, [1] for Primary, (1) for Intermediate, 1 for Minor, i for Minute). Do not hedge excessively."""
+
             try:
-                narrative = _build_groq_narrative(
-                    primary.wave_position,
-                    primary.current_wave_label,
-                    primary.confidence,
-                    primary.invalidation_level,
-                    tuple(primary.fibonacci_hits),
-                    degree_summary,
-                    current_price,
-                    ticker_label=ticker,
-                )
-                if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ"):
+                if _ew_use_claude and _has_anthropic:
+                    narrative = _build_claude_narrative(_ew_prompt, _ew_model)
+                    _model_label = _ew_model
+                else:
+                    narrative = _build_groq_narrative(
+                        primary.wave_position,
+                        primary.current_wave_label,
+                        primary.confidence,
+                        primary.invalidation_level,
+                        tuple(primary.fibonacci_hits),
+                        degree_summary,
+                        current_price,
+                        ticker_label=ticker,
+                    )
+                    _model_label = GROQ_MODEL
+
+                if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ") or narrative.startswith("_Claude") or narrative.startswith("_ANTHROPIC"):
                     st.warning("AI narrative unavailable.")
                     if st.button("Retry Narrative", key="retry_narrative"):
                         _build_groq_narrative.clear()
                         st.rerun()
                 else:
+                    if _ew_use_claude and _has_anthropic:
+                        st.markdown(
+                            '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
+                            'color:#fff;font-size:10px;font-weight:700;letter-spacing:0.06em;'
+                            'padding:2px 8px;border-radius:3px;margin-bottom:8px;display:inline-block;">'
+                            '✦ POWERED BY CLAUDE</span>',
+                            unsafe_allow_html=True,
+                        )
                     st.markdown(narrative)
                     st.caption(
                         f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} · "
-                        f"Model: {GROQ_MODEL}"
+                        f"Model: {_model_label}"
                     )
             except Exception:
                 st.warning("AI narrative unavailable.")

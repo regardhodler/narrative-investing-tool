@@ -1,0 +1,505 @@
+{
+  "_regime_context": {
+    "regime": "Neutral \u2014 Leaning Risk-Off",
+    "score": -0.06,
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-0.93 ()\n- Consumer Sentiment (Michigan): z=-0.83 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.63 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- HYG/LQD Ratio (Credit Risk Appetite): z=+0.53 ()\n- Commodity Trend (Oil + Copper): z=+0.49 ()\n- Core Inflation (PCE): z=-0.40 ()",
+    "quadrant": "Stagflation"
+  },
+  "_regime_context_ts": {
+    "__datetime__": "2026-03-25T21:54:06.550466"
+  },
+  "_rp_plays_result": {
+    "sectors": [
+      {
+        "name": "Utilities",
+        "conviction": 3
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 2
+      },
+      {
+        "name": "Financials",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "NEE",
+        "reason": "Utilities with stable cash flows and dividend yield appeal in risk-off environment with elevated term premium.",
+        "conviction": 3
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Defensive healthcare with pricing power and resilience during consumer sentiment weakness.",
+        "conviction": 2
+      },
+      {
+        "ticker": "PG",
+        "reason": "Consumer staples with inelastic demand and margin protection as inflation moderates.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JPM",
+        "reason": "Large-cap bank with strong capital position to benefit from elevated term premium and credit spreads.",
+        "conviction": 1
+      },
+      {
+        "ticker": "XOM",
+        "reason": "Energy exposure to positive commodity trend with strong free cash flow and dividend support.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "Long-duration Treasury benefits from risk-off tilt and elevated term premium creating attractive entry point.",
+        "conviction": 3
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade credit with positive CAPEX/liquidity signal and modest spread cushion in neutral regime.",
+        "conviction": 2
+      }
+    ],
+    "rationale": "The regime is risk-off with conflicting signals: elevated term premium and credit appetite support risk assets, but weak equity trends, low VIX, and poor consumer sentiment argue for defensive positioning. Prioritize high-quality, dividend-paying equities (utilities, healthcare, staples) and long-duration bonds that benefit from the term premium expansion while hedging against further equity weakness. Avoid cyclicals until equity trend and sentiment stabilize."
+  },
+  "_rp_plays_last_tier": "\ud83e\udde0 Regard Mode",
+  "_fed_funds_rate": 3.64,
+  "_dominant_rate_path": {
+    "scenario": "hold",
+    "prob_pct": 64.3
+  },
+  "_rate_path_probs": [
+    {
+      "scenario": "hold",
+      "prob": 0.6432373383022949,
+      "implied_rate": 3.69000244140625,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "cut_25",
+      "prob": 0.06371116901919961,
+      "implied_rate": 3.69000244140625,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "cut_50",
+      "prob": 0.0006236122589416571,
+      "implied_rate": 3.69000244140625,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "hike_25",
+      "prob": 0.2924278804195638,
+      "implied_rate": 3.69000244140625,
+      "source": "yfinance",
+      "delta": 0.0
+    }
+  ],
+  "_rate_path_probs_ts": {
+    "__datetime__": "2026-03-25T21:54:16.625424"
+  },
+  "_fed_plays_result": {
+    "sectors": [
+      {
+        "name": "Utilities",
+        "conviction": 3
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 2
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      },
+      {
+        "name": "Financials",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "NEE",
+        "reason": "Defensive utility with stable cash flows and dividend yield resilient in stagflation scenarios.",
+        "conviction": 3
+      },
+      {
+        "ticker": "PG",
+        "reason": "Consumer staple with pricing power and essential product mix that outperforms during risk-off periods.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Defensive healthcare with strong balance sheet and non-cyclical earnings insulated from growth concerns.",
+        "conviction": 2
+      },
+      {
+        "ticker": "KO",
+        "reason": "Stable consumer staple with global diversification and modest valuation in neutral-risk-off environment.",
+        "conviction": 1
+      },
+      {
+        "ticker": "UPS",
+        "reason": "Essential logistics provider with pricing discipline that benefits from hold-rate scenario avoiding aggressive cuts.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "Long-duration Treasury ETF benefits from risk-off sentiment and potential flight-to-quality in stagflation regime.",
+        "conviction": 2
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade corporate bonds offer yield pickup with lower duration risk than Treasuries in hold-rate environment.",
+        "conviction": 2
+      },
+      {
+        "ticker": "VCIT",
+        "reason": "Intermediate corporate bonds balance yield and stability for neutral regime with modest risk-off tilt.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "In a stagflation quadrant with rates held steady, defensive sectors (utilities, staples, healthcare) provide stable cash flows and dividend yields while equity volatility remains elevated. Bond positioning favors quality duration (Treasuries) and investment-grade corporates that benefit from risk-off flows without aggressive rate-cut expectations. Avoid cyclicals and growth until risk regime shifts decisively toward risk-on."
+  },
+  "_fed_plays_result_ts": {
+    "__datetime__": "2026-03-25T21:54:23.524084"
+  },
+  "_fed_plays_engine": "\ud83e\udde0 Regard Mode",
+  "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
+  "_chain_narration": "**The most likely outcome is a Fed hold at 3.64% (68.5% probability), with a non-trivial 19.2% tail risk of a 25bp hike to 3.89% \u2014 meaning the market-weighted rate path skews hawkish, not dovish, with the 12.2% cut probability insufficient to anchor easing expectations.** In credit markets, the hold sustains elevated term premium (+1.0 z-score), keeping 30Y mortgage rates sticky above 7% and suppressing housing starts and refis; corporate loan growth stagnates as HYG/LQD spreads neither tighten nor widen materially, while the 19% hike tail keeps leveraged loan spreads 20\u201340bp wider than they would otherwise price, and labor markets soften gradually as CAPEX hesitation translates into hiring freezes within 2\u20133 quarters. **Asset classes that benefit in this hold-dominant, hike-tail regime:** short-duration instruments (SHY, 2Y Treasuries), defensive equity sectors (XLU, XLP, healthcare via XLV) that are less sensitive to earnings multiple compression, and the USD (UUP) which stabilizes at elevated levels given no cut signal and a live hike probability; commodity trend (DJP, copper via COPX) drifts sideways with no easing catalyst but no demand collapse either. **Asset classes facing headwinds:** long-duration bonds (TLT faces -1.4% to -5.4% downside if the hike tail materializes), growth/momentum equities (QQQ, ARKK) where negative equity momentum (-0.75 z-score) and compressed consumer sentiment (-0.83) remove any multiple-expansion catalyst, small-caps (I",
+  "_chain_narration_engine": "\ud83d\udc51 Highly Regarded Mode",
+  "_custom_swans": {
+    "reverse yen carry trade": {
+      "probability_pct": 8.5,
+      "narrative": "A rapid unwinding of yen carry trades would trigger forced deleveraging as investors liquidate long positions to cover yen funding costs, creating a liquidity shock that cascades across global equities and risk assets. The sharp yen appreciation and dollar weakness would amplify volatility, compress credit spreads further, and force risk-off positioning precisely when the macro regime is already leaning risk-off with weak growth and sticky inflation.",
+      "asset_impacts": {
+        "spy": "strongly bearish",
+        "qqq": "strongly bearish",
+        "iwm": "bearish",
+        "bonds_long": "bullish",
+        "bonds_short": "strongly bearish",
+        "gold": "bullish",
+        "oil": "bearish",
+        "usd": "bearish"
+      },
+      "_engine_tier": "\ud83e\udde0 Regard Mode"
+    },
+    "reverse yen carry trade, closure straight of hormuz": {
+      "probability_pct": 8.5,
+      "narrative": "A reverse yen carry unwind (rapid JPY appreciation) combined with Strait of Hormuz closure creates a dual shock: forced deleveraging of yen-funded positions globally triggers equity liquidation and flight-to-safety, while Hormuz blockade spikes oil prices and disrupts trade flows, amplifying stagflationary pressures. The Fed remains trapped (can't cut into rising inflation, can't hike into weakening growth), leaving policy impotent as credit spreads widen and risk assets collapse.",
+      "asset_impacts": {
+        "spy": "strongly bearish",
+        "qqq": "strongly bearish",
+        "iwm": "strongly bearish",
+        "bonds_long": "bullish",
+        "bonds_short": "strongly bearish",
+        "gold": "strongly bullish",
+        "oil": "strongly bullish",
+        "usd": "bullish"
+      },
+      "_engine_tier": "\ud83e\udde0 Regard Mode"
+    }
+  },
+  "_custom_swans_ts": {
+    "__datetime__": "2026-03-24T20:34:37.003823"
+  },
+  "_doom_briefing": "# RISK ASSESSMENT BRIEFING\n\n---\n\n## STRESS LEVEL: 5/10 (MODERATE, WITH ELEVATED SECTOR CONCENTRATION RISK)\n\n---\n\n## KEY STRESS SIGNALS\n\n\u2022 **Credit spreads remain contained but bifurcated.** HY OAS at 3.19 and IG OAS at 0.87 indicate orderly pricing with no acute credit panic; however, the 2.32-point differential reflects meaningful risk repricing between quality tiers. The 10Y-2Y spread at +0.49 suggests modest term premium and absence of inversion, consistent with a functioning yield curve.\n\n\u2022 **Regional banking sector under material stress.** The -13.7% average 1-month return and -18.9% drawdown in regional banks represents the most acute canary signal in the dataset. This 5.2-point underperformance versus high-yield instruments (-0.7% return) indicates concentrated vulnerability in deposit-sensitive institutions, though system-wide contagion signals remain absent given stable IG spreads.\n\n\u2022 **Private equity and consumer credit showing significant drawdowns despite modest negative returns.** PE positions down -38.7% from peak, consumer credit down -31.9%, while 1-month returns are only -8.0% and -5.4% respectively. This volatility profile suggests forced liquidations or mark-to-market pressure in illiquid holdings rather than fundamental deterioration, increasing tail-risk exposure.\n\n\u2022 **Distress filings at 404 over 30 days represent elevated but not crisis-level bankruptcy activity.** Without historical baseline, this cannot be contextualized as acceleration or normalization; however, combined with whale exits totaling $129.9B in closed/reduced positions, it signals institutional risk-off positioning and potential early-stage deleveraging.\n\n\u2022 **Your portfolio exhibits acute concentration in commodity/inflation hedges with correlated drawdown risk.** Three PSLV.TO positions (silver), one FCX (copper), and two PHYS.TO (gold) represent 60% of stated holdings\u2014all vulnerable to synchronized liquidation if risk-off sentiment accelerates. XTLH.TO (yen carry unwind) would amplify losses in a volatility spike, creating negative convexity across 70% of positions.\n\n\u2022 **Defensive positioning insufficient to offset tail exposure.** UNH.TO healthcare holdings (2 positions) and FMKT deregulation thesis (2 positions) represent only ~25% of portfolio and lack negative correlation to commodity/inflation trades during acute stress. The +19.1% volatility/fear index return indicates hedging instruments are working, but your portfolio lacks explicit volatility long or put protection.\n\n---\n\n## FORWARD ASSESSMENT\n\nThe composite stress score of 26.8/100 and contained credit spreads indicate the financial system remains in a managed stress state rather than acute crisis phase. However, the 13.7-point underperformance of regional banks, combined with $129.9B in institutional position reductions and 38.7% PE drawdowns, suggests liquidity conditions are tightening in less-liquid asset classes. Your portfolio's 60% concentration in commodity hedges creates significant drawdown risk if the current risk-off cycle accelerates beyond the current -1.0% to -8.0% monthly return range observed in your canary positions.",
+  "_doom_briefing_ts": {
+    "__datetime__": "2026-03-25T20:33:46.170995"
+  },
+  "_doom_briefing_engine": "\u26a1 Groq",
+  "_whale_summary": "# Institutional Whale Position Analysis\n\n\u2022 **AI Infrastructure Dominance with Selective Caution**: The \"Magnificent Seven\" tech giants show bifurcated conviction. BlackRock aggressively accumulated NVIDIA (+$62.2B, +37.6%) and MSFT (+$17.8B), while Vanguard and State Street *reduced* MSFT (-$16.4B and -$11.8B respectively). This suggests mega-cap whales are rotating within AI plays\u2014favoring pure-play chip exposure (NVIDIA, Broadcom +$9.1B) over software/cloud infrastructure, signaling potential valuation concerns in MSFT despite its AI narrative.\n\n\u2022 **Alphabet Emerges as Consensus Mega-Cap Buy**: Google received synchronized accumulation across all three institutions (Vanguard +$71.6B combined, BlackRock +$24.9B, State Street +$16.6B). This represents the strongest multi-whale convergence signal in the dataset and suggests institutional confidence in Alphabet's AI monetization and search resilience despite regulatory headwinds.\n\n\u2022 **Healthcare/Biotech Conviction Play**: Eli Lilly saw aggressive buying from both Vanguard (+$26.3B, +42.6%) and State Street (+$9.2B, +49.9%), indicating institutional belief in GLP-1 drug tailwinds and valuation support despite recent run-up. This is the only non-tech sector showing meaningful whale accumulation.\n\n\u2022 **Meta and Netflix Exits Signal Streaming/Social Skepticism**: State Street and Vanguard both reduced META (-$24.2B combined) and Netflix (-$9.6B), suggesting whales are losing conviction on consumer discretionary digital platforms amid margin pressure and AI uncertainty. These are notable *closures* rather than trims.\n\n\u2022 **Memory Chip Bet Amid Semiconductor Consolidation**: Vanguard's +73.8% increase in Micron (+$12.9B) alongside NVIDIA and Broadcom accumulation points to institutional positioning for AI-driven semiconductor demand, with diversification beyond NVIDIA into the supply chain.",
+  "_whale_summary_ts": {
+    "__datetime__": "2026-03-25T21:36:07.893283"
+  },
+  "_whale_summary_engine": "\ud83e\udde0 Regard Mode",
+  "_plays_result": {
+    "sectors": [
+      {
+        "name": "Utilities",
+        "conviction": 3
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 3
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      },
+      {
+        "name": "Energy",
+        "conviction": 2
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "NEE",
+        "reason": "Utility leader with stable dividend yield and inflation-hedged cash flows; defensive positioning in stagflation with geopolitical oil premium tailwind.",
+        "conviction": 3
+      },
+      {
+        "ticker": "PG",
+        "reason": "Consumer staples with pricing power to navigate stagflation; dividend stability and real-asset hedge against deflation spiral risk.",
+        "conviction": 3
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Healthcare defensive with non-cyclical revenue streams; benefits from risk-off flows and elevated term premium supporting dividend yields.",
+        "conviction": 2
+      },
+      {
+        "ticker": "KO",
+        "reason": "Staples with global pricing power and inflation resilience; lower volatility in risk-off regime with geopolitical energy premium supporting margins.",
+        "conviction": 2
+      },
+      {
+        "ticker": "XLE",
+        "reason": "Energy sector ETF capturing 30% tail risk of Strait of Hormuz disruption and $70-90/bbl oil scenario; stagflation real-asset hedge.",
+        "conviction": 2
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "Long-duration Treasury benefits from elevated term premium (+1.0 z-score), safe-haven flows in risk-off regime, and yen-carry unwind tail risk.",
+        "conviction": 3
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade corporate bonds offer quality duration with contained spreads (0.87 OAS); defensive positioning without high-yield credit risk.",
+        "conviction": 2
+      },
+      {
+        "ticker": "TIP",
+        "reason": "TIPS hedge stagflation and deflation spiral tail risks; real-asset protection with carry-unwind safe-haven demand in yen-reversal scenario.",
+        "conviction": 2
+      }
+    ],
+    "rationale": "Stagflation regime with elevated system stress, high credit risk, and 30% geopolitical tail risk (Strait of Hormuz) demands defensive real-asset positioning: utilities and staples provide stable cash flows and pricing power, while long-duration Treasuries and TIPS capture both term-premium support and safe-haven flows from potential yen-carry unwind or energy disruption. Energy exposure via XLE captures the embedded oil premium without cyclical equity risk; avoid growth tech and high-yield credit until risk regime decisively shifts risk-on."
+  },
+  "_plays_engine": "\ud83e\udde0 Regard Mode",
+  "_calibrated_rate_probs": [
+    {
+      "scenario": "hold",
+      "label": "Fed Holds",
+      "market_pct": 62.7,
+      "structural_pct": 61.3,
+      "posterior_pct": 63.1,
+      "posterior": 0.6305932548872605,
+      "band_pct": 3.0,
+      "rationale": "PCE sticky at 128.4% with contained unemployment limits Fed's ability to cut."
+    },
+    {
+      "scenario": "cut_25",
+      "label": "Cut 25bp",
+      "market_pct": 8.5,
+      "structural_pct": 5.9,
+      "posterior_pct": 6.0,
+      "posterior": 0.06040290684756615,
+      "band_pct": 4.0,
+      "rationale": "Softening growth indicators provide basis for a 25bp cut if inflation cooperates."
+    },
+    {
+      "scenario": "cut_50",
+      "label": "Cut 50bp",
+      "market_pct": 0.1,
+      "structural_pct": 0.1,
+      "posterior_pct": 0.1,
+      "posterior": 0.0006089237670886619,
+      "band_pct": 3.0,
+      "rationale": "Softening growth indicators provide basis for a 50bp emergency cut if inflation cooperates."
+    },
+    {
+      "scenario": "hike_25",
+      "label": "Hike 25bp",
+      "market_pct": 28.8,
+      "structural_pct": 32.7,
+      "posterior_pct": 30.8,
+      "posterior": 0.30839491449808465,
+      "band_pct": 6.0,
+      "rationale": "Core PCE at 128.4% \u2014 well above target \u2014 keeps re-acceleration risk on the table."
+    }
+  ],
+  "_portfolio_analysis": {
+    "verdict": "HOLD_ALL",
+    "risk_score": 6,
+    "narrative": "Portfolio is defensively positioned with meaningful inflation/geopolitical hedges via gold, silver, and energy. Stagflation regime broadly supports commodity and defensive holdings. Key risk is FCX and FMKT misalignment in risk-off environment.",
+    "positions": [
+      {
+        "ticker": "XTLH.TO",
+        "entry": "$36.81",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Direct yen carry unwind hedge; black swan exposure is the thesis, not the risk.",
+        "risk_factors": [
+          "Low liquidity if carry unwind is orderly",
+          "CAD FX drag"
+        ]
+      },
+      {
+        "ticker": "XTLH.TO",
+        "entry": "$32.75",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Lower cost basis strengthens conviction; hold as tail risk insurance.",
+        "risk_factors": [
+          "Carry unwind timing uncertain",
+          "Position sizing elevated at 12.4% combined"
+        ]
+      },
+      {
+        "ticker": "FCX",
+        "entry": "$59.92",
+        "action": "REDUCE",
+        "alignment": "misaligned",
+        "rationale": "Copper is cyclical; stagflation + risk-off regime pressures industrial metals demand.",
+        "risk_factors": [
+          "Stagflation kills growth demand",
+          "Hawkish Fed strengthens USD, pressures commodities"
+        ]
+      },
+      {
+        "ticker": "PSLV.TO",
+        "entry": "$15.44",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Silver shortage thesis intact; inflation factor exposure supports position.",
+        "risk_factors": [
+          "Industrial silver demand softens in stagflation",
+          "Spread across 3 entries creates tracking complexity"
+        ]
+      },
+      {
+        "ticker": "PSLV.TO",
+        "entry": "$15.90",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Near identical to $15.44 entry; combined PSLV weight at 19.2% is concentrated.",
+        "risk_factors": [
+          "Concentration risk across three lots",
+          "Silver underperforms gold in pure risk-off"
+        ]
+      },
+      {
+        "ticker": "PSLV.TO",
+        "entry": "$22.20",
+        "action": "REDUCE",
+        "alignment": "neutral",
+        "rationale": "Highest cost basis lot; trim to reduce concentration and lock partial gains.",
+        "risk_factors": [
+          "Largest unrealized loss risk if silver corrects",
+          "19.2% combined weight excessive"
+        ]
+      },
+      {
+        "ticker": "FMKT",
+        "entry": "$20.69",
+        "action": "HOLD",
+        "alignment": "misaligned",
+        "rationale": "Deregulation thesis is policy-dependent; stagflation and geopolitical risk-off headwinds persist.",
+        "risk_factors": [
+          "Regime fit score 45 is lowest in portfolio",
+          "Policy reversal risk if inflation re-accelerates"
+        ]
+      },
+      {
+        "ticker": "FMKT",
+        "entry": "$23.00",
+        "action": "REDUCE",
+        "alignment": "misaligned",
+        "rationale": "Higher cost basis on weakest regime-fit position; reduce first on any risk-off escalation.",
+        "risk_factors": [
+          "Underwater entry most vulnerable to drawdown",
+          "Deregulation timeline uncertain"
+        ]
+      },
+      {
+        "ticker": "UNH.TO",
+        "entry": "$14.35",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Healthcare defensive aligns with AI-favored sectors and stagflation regime.",
+        "risk_factors": [
+          "US healthcare policy uncertainty",
+          "Small weight limits impact"
+        ]
+      },
+      {
+        "ticker": "UNH.TO",
+        "entry": "$16.65",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Defensive healthcare fits risk-off lean; combined 6% weight appropriate.",
+        "risk_factors": [
+          "Regulatory headline risk",
+          "CAD-listed exposure adds FX layer"
+        ]
+      },
+      {
+        "ticker": "PHYS.TO",
+        "entry": "$26.38",
+        "action": "ADD",
+        "alignment": "aligned",
+        "rationale": "Gold is optimal stagflation + debt hedge; best regime fit in portfolio at 64/61.",
+        "risk_factors": [
+          "USD strength on hike tail risk",
+          "Combined 12% weight approaching ceiling"
+        ]
+      },
+      {
+        "ticker": "PHYS.TO",
+        "entry": "$43.42",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Core inflation and debt hedge; stagflation quadrant strongly supports gold.",
+        "risk_factors": [
+          "Hawkish hike tail could briefly pressure gold",
+          "Three-lot structure adds cost basis confusion"
+        ]
+      },
+      {
+        "ticker": "PHYS.TO",
+        "entry": "$50.00",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Highest cost basis but thesis remains intact given $39T debt and inflation regime.",
+        "risk_factors": [
+          "Most vulnerable lot to short-term gold correction",
+          "Fed hike tail risk 19.2%"
+        ]
+      },
+      {
+        "ticker": "CHEV.TO",
+        "entry": "$20.34",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Largest position; Hormuz/Iran tail risk and energy cross-signal discovery support thesis.",
+        "risk_factors": [
+          "Venezuela sanctions reversal risk",
+          "11.3% weight amplifies geopolitical binary"
+        ]
+      }
+    ],
+    "priority_actions": [
+      "REDUCE PSLV.TO $22.20 lot and FMKT $23.00 lot to cut concentration and weakest regime-fit exposure",
+      "MONITOR CHEV.TO closely around April 1 Israeli action binary; set stop or hedge if geopolitical risk resolves",
+      "CONSIDER trimming FCX on any relief rally given stagflation/risk-off misalignment at 8.1% weight"
+    ]
+  },
+  "_portfolio_analysis_ts": {
+    "__datetime__": "2026-03-25T22:00:45.237677"
+  },
+  "_portfolio_analysis_engine": "\ud83d\udc51 Highly Regarded Mode"
+}

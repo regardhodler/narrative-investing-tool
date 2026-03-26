@@ -347,6 +347,7 @@ def _render_convergence(df: pd.DataFrame):
 
 def _render_ai_summary(df: pd.DataFrame):
     """AI narrative summary of whale activity."""
+    import os as _os
     with st.container(border=True):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
@@ -354,6 +355,20 @@ def _render_ai_summary(df: pd.DataFrame):
             "AI WHALE ACTIVITY SUMMARY</span></div>",
             unsafe_allow_html=True,
         )
+
+        # Engine selector
+        _has_anthropic = bool(_os.getenv("ANTHROPIC_API_KEY"))
+        _whale_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_anthropic else ["⚡ Groq"]
+        _whale_tier_map = {
+            "⚡ Groq":                (False, None),
+            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+        }
+        _sel_whale_tier = st.radio(
+            "Engine", _whale_tier_opts, horizontal=True, key="whale_summary_engine"
+        )
+        st.caption("💡 🧠 Haiku sufficient — summarisation task, not multi-factor synthesis")
+        _use_cl_whale, _whale_model = _whale_tier_map[_sel_whale_tier]
 
         # Build text summary of top 20 changes for the AI
         df_sorted = df.copy()
@@ -373,12 +388,27 @@ def _render_ai_summary(df: pd.DataFrame):
 
         activity_text = "\n".join(lines)
 
-        with st.spinner("Generating AI analysis..."):
-            try:
-                summary = summarize_whale_activity(activity_text)
-                st.info(summary)
-            except Exception as e:
-                st.warning(f"AI summary unavailable: {e}")
+        if st.button("Generate Whale Summary", key="gen_whale_summary_btn", type="primary"):
+            with st.spinner("Generating AI analysis..."):
+                try:
+                    summary = summarize_whale_activity(activity_text, use_claude=_use_cl_whale, model=_whale_model)
+                    st.session_state["_whale_summary"] = summary
+                    st.session_state["_whale_summary_ts"] = __import__("datetime").datetime.now()
+                    st.session_state["_whale_summary_engine"] = _sel_whale_tier
+                    from services.play_log import append_play as _append_play
+                    _append_play("Whale Summary", _sel_whale_tier, {"summary": summary})
+                except Exception as e:
+                    st.warning(f"AI summary unavailable: {e}")
+
+        _cached_summary = st.session_state.get("_whale_summary")
+        if _cached_summary:
+            _eng = st.session_state.get("_whale_summary_engine", "")
+            _border = "2px solid #FF8811" if "👑" in _eng else ("1px solid #22c55e" if "🧠" in _eng else "1px solid #334155")
+            st.markdown(
+                f'<div style="border:{_border};border-radius:6px;padding:12px 16px;'
+                f'background:#1A1F2E;margin-top:8px;">{_cached_summary}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _render_treemap(df: pd.DataFrame):

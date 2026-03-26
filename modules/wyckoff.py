@@ -35,7 +35,7 @@ _PERIOD_MAP: dict[str, list[str]] = {
     "1h":  ["30d", "60d", "90d", "180d", "365d", "730d"],
     "1d":  ["6mo", "1y",  "2y",  "5y"],
     "1wk": ["2y",  "5y",  "10y", "max"],
-    "1mo": ["5y",  "10y", "max"],
+    "1mo": ["3y",  "5y",  "10y", "max"],
 }
 
 # Maps each interval to the next-higher timeframe for MTF confirmation
@@ -101,6 +101,99 @@ def _fetch_wyckoff_data(ticker: str, period: str, interval: str) -> pd.DataFrame
 
 
 @st.cache_data(ttl=3600)
+def _build_claude_narrative(prompt: str, model: str) -> str:
+    """Call Claude to generate a narrative."""
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return "_ANTHROPIC_API_KEY not set — Claude narrative unavailable._"
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=500,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return msg.content[0].text.strip()
+    except Exception as e:
+        return f"_Claude narrative failed: {e}_"
+
+
+@st.cache_data(ttl=3600)
+def _claude_wyckoff_analysis(
+    ticker: str,
+    close_t: tuple,
+    high_t: tuple,
+    low_t: tuple,
+    volume_t: tuple,
+    dates_t: tuple,
+    algo_phase: str,
+    algo_sub_phase: str,
+    algo_confidence: int,
+    algo_support: float,
+    algo_resistance: float,
+    algo_cause_target: float,
+    event_strs: tuple,
+    interval: str,
+    model: str,
+) -> dict:
+    """Ask Claude to independently detect Wyckoff phase and return structured JSON."""
+    import json
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {}
+    n = min(30, len(close_t))
+    ohlcv_lines = [
+        f"{dates_t[-(n-i)]}: H={high_t[-(n-i)]:.2f} L={low_t[-(n-i)]:.2f} C={close_t[-(n-i)]:.2f} V={volume_t[-(n-i)]:.0f}"
+        for i in range(n)
+    ]
+    ohlcv_text = "\n".join(ohlcv_lines)
+    events_text = "\n".join(f"  - {e}" for e in event_strs) if event_strs else "  None"
+    prompt = f"""You are an expert Wyckoff Method analyst performing independent phase detection on {ticker} ({interval} timeframe).
+
+OHLCV + Volume Data (last {n} bars, oldest first):
+{ohlcv_text}
+
+Algorithm preliminary detection (use as reference only):
+- Phase: {algo_phase}
+- Sub-phase: {algo_sub_phase}
+- Confidence: {algo_confidence}/100
+- Support: ${algo_support:.2f}
+- Resistance: ${algo_resistance:.2f}
+- Cause & Effect Target: ${algo_cause_target:.2f}
+- Detected events:
+{events_text}
+
+Independently evaluate the Wyckoff phase using price, volume, and spread analysis.
+Return ONLY valid JSON, no other text:
+{{
+  "phase": "Accumulation or Distribution or Markup or Markdown",
+  "sub_phase": "A, B, C, D, or E",
+  "confidence": integer 0-100,
+  "support": price level as float,
+  "resistance": price level as float,
+  "cause_target": price target as float based on Wyckoff Point & Figure cause,
+  "next_expected": "1-sentence description of what should happen next",
+  "rationale": "1-2 sentence explanation referencing specific price/volume evidence"
+}}"""
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        text = msg.content[0].text.strip()
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+        return json.loads(text)
+    except Exception:
+        return {}
+
+
 def _build_groq_narrative(
     phase: str,
     confidence: int,
@@ -567,6 +660,23 @@ def render():
         st.cache_data.clear()
         st.rerun()
 
+    # ── AI Engine tier selector (top-level) ───────────────────────────────────
+    _has_anthropic_wy = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _wy_tier_options_top = ["⚡ Standard", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _wy_default_idx = 0
+    _wy_saved = st.session_state.get("wy_narrative_tier", "⚡ Standard")
+    if _wy_saved in _wy_tier_options_top:
+        _wy_default_idx = _wy_tier_options_top.index(_wy_saved)
+    st.radio(
+        "AI Engine",
+        _wy_tier_options_top,
+        index=_wy_default_idx,
+        horizontal=True,
+        key="wy_narrative_tier",
+        disabled=not _has_anthropic_wy,
+        help="Standard = Groq LLaMA  ·  Regard = Claude Haiku (overrides Wyckoff phase)  ·  Highly Regarded = Claude Sonnet",
+    )
+
     # ── Guard: nothing entered ────────────────────────────────────────────────
     if not ticker:
         st.info("Enter a ticker symbol above or pick one from ⚡ Quick Pick to begin analysis.")
@@ -686,6 +796,32 @@ def render():
 
     analysis = analyze_wyckoff(close, high, low, volume, interval=interval)
 
+    # ── Claude AI Wyckoff override (Regard / Highly Regarded) ─────────────────
+    _wy_tier_now = st.session_state.get("wy_narrative_tier", "⚡ Standard")
+    _claude_wa = {}
+    if _wy_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and bool(os.getenv("ANTHROPIC_API_KEY")) and analysis is not None:
+        _ca_model = "claude-haiku-4-5-20251001" if _wy_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+        _cur = analysis.current_phase
+        _event_strs = tuple(f"{e.event_type}: {e.description}" for e in _cur.events)
+        with st.spinner(f"✦ Claude ({_ca_model.split('-')[1].capitalize()}) analyzing Wyckoff structure..."):
+            _claude_wa = _claude_wyckoff_analysis(
+                ticker,
+                tuple(close.iloc[-60:].round(2).tolist()),
+                tuple(high.iloc[-60:].round(2).tolist()),
+                tuple(low.iloc[-60:].round(2).tolist()),
+                tuple(volume.iloc[-60:].round(0).tolist()),
+                tuple(str(d)[:10] for d in ohlcv.index[-60:]),
+                _cur.phase,
+                _cur.sub_phase or "",
+                _cur.confidence,
+                _cur.key_levels.get("support", 0.0),
+                _cur.key_levels.get("resistance", 0.0),
+                _cur.cause_target or 0.0,
+                _event_strs,
+                interval,
+                _ca_model,
+            )
+
     # Compute indicators
     rsi_series = rsi(close)
     obv_series = obv(close, volume)
@@ -742,29 +878,68 @@ def render():
 
     current = analysis.current_phase
 
+    # Use Claude overrides if available, otherwise fall back to algorithm
+    _phase = _claude_wa.get("phase", current.phase)
+    _sub_phase = _claude_wa.get("sub_phase", current.sub_phase or "")
+    _confidence = _claude_wa.get("confidence", current.confidence)
+    _support = _claude_wa.get("support", current.key_levels["support"])
+    _resistance = _claude_wa.get("resistance", current.key_levels["resistance"])
+    _cause_target = _claude_wa.get("cause_target", current.cause_target)
+    _next_expected = _claude_wa.get("next_expected")
+    _rationale = _claude_wa.get("rationale")
+
     # Metrics Row
-    m1, m2, m3 = st.columns(3)
+    if _claude_wa:
+        st.markdown(
+            '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);color:#fff;'
+            'font-size:10px;font-weight:700;letter-spacing:0.06em;padding:2px 10px;'
+            'border-radius:3px;margin-bottom:10px;display:inline-block;">'
+            '✦ CLAUDE WYCKOFF OVERRIDE</span>',
+            unsafe_allow_html=True,
+        )
+
     phase_color = {
         "Accumulation": COLORS["green"], "Distribution": COLORS["red"],
         "Markup": COLORS["blue"], "Markdown": COLORS["orange"],
-    }.get(current.phase, COLORS["text"])
-    m1.markdown(bloomberg_metric("Current Phase", current.phase, phase_color), unsafe_allow_html=True)
-    m2.markdown(bloomberg_metric("Confidence", f"{current.confidence}/100"), unsafe_allow_html=True)
+    }.get(_phase, COLORS["text"])
+
+    _phase_label = f"{_phase} · {_sub_phase}" if _sub_phase else _phase
+    m1, m2, m3 = st.columns(3)
+    m1.markdown(bloomberg_metric("Current Phase", _phase_label, phase_color), unsafe_allow_html=True)
+    m2.markdown(bloomberg_metric("Confidence", f"{_confidence}/100"), unsafe_allow_html=True)
     m3.markdown(
         bloomberg_metric(
             "Key Levels",
-            f"S: ${current.key_levels['support']:.2f}  R: ${current.key_levels['resistance']:.2f}",
+            f"S: ${_support:.2f}  R: ${_resistance:.2f}",
         ),
         unsafe_allow_html=True,
     )
 
-    support = current.key_levels["support"]
-    resistance = current.key_levels["resistance"]
+    if _claude_wa:
+        if _next_expected:
+            st.markdown(
+                f'<div style="margin:8px 0 2px 0;font-size:13px;color:#C8D8E8;">⤷ {_next_expected}</div>',
+                unsafe_allow_html=True,
+            )
+        if _rationale:
+            st.markdown(
+                f'<div style="font-size:13px;color:#C8D8E8;margin-top:4px;">💬 {_rationale}</div>',
+                unsafe_allow_html=True,
+            )
+        st.markdown(
+            f'<div style="font-size:11px;color:#5A7A8A;margin-top:4px;">'
+            f'Algorithm: {current.phase} · {current.confidence}% · '
+            f'S: ${current.key_levels["support"]:.2f}  R: ${current.key_levels["resistance"]:.2f}</div>',
+            unsafe_allow_html=True,
+        )
+
+    support = _support
+    resistance = _resistance
     current_price_val = float(close.iloc[-1])
 
-    if current.cause_target:
+    if _cause_target:
         st.markdown("### 🎯 Trade Setup")
-        is_long = current.phase in ("Accumulation", "Markup")
+        is_long = _phase in ("Accumulation", "Markup")
         setup_color = COLORS["green"] if is_long else COLORS["red"]
         direction_label = "LONG" if is_long else "SHORT"
 
@@ -772,12 +947,12 @@ def render():
             entry_zone_low = support * 1.005
             entry_zone_high = support * 1.02
             stop = support * 0.985
-            target = current.cause_target
+            target = _cause_target
         else:
             entry_zone_low = resistance * 0.98
             entry_zone_high = resistance * 0.995
             stop = resistance * 1.015
-            target = current.cause_target
+            target = _cause_target
 
         risk = abs(current_price_val - stop)
         reward = abs(target - current_price_val)
@@ -853,27 +1028,79 @@ def render():
 
     # AI Narrative
     with st.expander("Wyckoff AI Narrative", expanded=False):
+        _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+        _wy_tier_map = {
+            "⚡ Standard":            (False, None),
+            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+        }
+        _wy_tier = st.session_state.get("wy_narrative_tier", "⚡ Standard")
+        st.caption(f"Engine: {_wy_tier} — change at top of page")
+        _wy_use_claude, _wy_model = _wy_tier_map.get(_wy_tier, (False, None))
+        if not _has_anthropic and _wy_tier != "⚡ Standard":
+            st.caption("Set ANTHROPIC_API_KEY to unlock Regard Mode.")
+
         current_price = float(close.iloc[-1])
         event_strs = tuple(f"{e.event_type}: {e.description}" for e in current.events)
+
+        # Build shared prompt
+        events_text = "\n".join(f"  - {e}" for e in event_strs) if event_strs else "  None detected"
+        dist_s = current_price - current.key_levels["support"]
+        dist_r = current.key_levels["resistance"] - current_price
+        _wy_prompt = f"""You are an expert Wyckoff Method analyst. Interpret the following automated phase detection for {ticker} on the {interval} timeframe and write a concise 3-5 sentence market commentary.
+
+Current Wyckoff Phase:
+- Phase: {current.phase}
+- Confidence: {current.confidence}/100
+- Support Level: ${current.key_levels["support"]:.2f}
+- Resistance Level: ${current.key_levels["resistance"]:.2f}
+- Current {ticker} Price: ${current_price:.2f}
+- Distance to Support: ${dist_s:+.2f}
+- Distance to Resistance: ${dist_r:+.2f}
+- Detected Events:
+{events_text}
+
+Write your commentary covering:
+1. What the current Wyckoff phase means for market structure
+2. Key events detected and their significance
+3. What the Wyckoff Method predicts should happen next
+4. Critical support/resistance levels to watch
+
+Be direct and specific. Do not hedge excessively. Do not repeat the input data verbatim."""
+
         try:
-            narrative = _build_groq_narrative(
-                current.phase,
-                current.confidence,
-                current.key_levels["support"],
-                current.key_levels["resistance"],
-                event_strs,
-                current_price,
-                ticker=ticker,
-                interval=interval,
-            )
-            if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ"):
+            if _wy_use_claude and _has_anthropic:
+                narrative = _build_claude_narrative(_wy_prompt, _wy_model)
+                _model_label = _wy_model
+            else:
+                narrative = _build_groq_narrative(
+                    current.phase,
+                    current.confidence,
+                    current.key_levels["support"],
+                    current.key_levels["resistance"],
+                    event_strs,
+                    current_price,
+                    ticker=ticker,
+                    interval=interval,
+                )
+                _model_label = GROQ_MODEL
+
+            if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ") or narrative.startswith("_Claude") or narrative.startswith("_ANTHROPIC"):
                 st.warning("AI narrative unavailable.")
                 if st.button("Retry Narrative", key="retry_narrative"):
                     _build_groq_narrative.clear()
                     st.rerun()
             else:
+                if _wy_use_claude and _has_anthropic:
+                    st.markdown(
+                        '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
+                        'color:#fff;font-size:10px;font-weight:700;letter-spacing:0.06em;'
+                        'padding:2px 8px;border-radius:3px;margin-bottom:8px;display:inline-block;">'
+                        '✦ POWERED BY CLAUDE</span>',
+                        unsafe_allow_html=True,
+                    )
                 st.markdown(narrative)
-                st.caption(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} · Model: {GROQ_MODEL}")
+                st.caption(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} · Model: {_model_label}")
         except Exception:
             st.warning("AI narrative unavailable.")
             if st.button("Retry Narrative", key="retry_narrative_err"):

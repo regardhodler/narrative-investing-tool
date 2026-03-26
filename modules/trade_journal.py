@@ -65,10 +65,290 @@ def _get_live_prices(tickers: list[str]) -> dict[str, float]:
     return {t: s.latest_price for t, s in snaps.items() if s.latest_price}
 
 
+@st.cache_data(ttl=3600)
+def _fetch_risk_prices(tickers: tuple, period: str = "1y") -> pd.DataFrame:
+    """Fetch daily close prices for risk calculations."""
+    import yfinance as yf
+    if not tickers:
+        return pd.DataFrame()
+    try:
+        raw = yf.download(list(tickers), period=period, interval="1d",
+                          progress=False, auto_adjust=True, threads=True)
+        if raw is None or raw.empty:
+            return pd.DataFrame()
+        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw[["Close"]]
+        closes.index = pd.to_datetime(closes.index).normalize()
+        return closes.ffill().dropna(how="all")
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=86400)
+def _fetch_sector(ticker: str) -> str:
+    """Fetch sector from yfinance .info. Returns 'Unknown' on failure."""
+    import yfinance as yf
+    try:
+        info = yf.Ticker(ticker).info
+        return info.get("sector") or info.get("industryDisp") or "Unknown"
+    except Exception:
+        return "Unknown"
+
+
+def _render_risk_matrix(open_trades: list):
+    """Render the portfolio risk matrix tab."""
+    import numpy as np
+    import plotly.graph_objects as go
+    from utils.theme import apply_dark_layout
+
+    if not open_trades:
+        st.info("No open positions. Add trades in the Open Positions tab.")
+        return
+
+    tickers = tuple(sorted({t["ticker"].upper() for t in open_trades}))
+    bench = "SPY"
+
+    with st.spinner("Loading risk data…"):
+        prices = _fetch_risk_prices(tickers + (bench,), period="1y")
+
+    if prices.empty:
+        st.warning("Could not fetch price history for risk calculations.")
+        return
+
+    # ── Daily returns ────────────────────────────────────────────────────────
+    returns = prices.pct_change().dropna(how="all")
+    port_tickers = [t for t in tickers if t in returns.columns]
+    if not port_tickers:
+        st.warning("No return data available for open positions.")
+        return
+
+    # ── Position weights by market value ────────────────────────────────────
+    prices_latest = {
+        t: float(prices[t].dropna().iloc[-1]) if t in prices.columns else 0
+        for t in port_tickers
+    }
+    position_values = {}
+    for trade in open_trades:
+        tk = trade["ticker"].upper()
+        if tk in port_tickers:
+            px = prices_latest.get(tk, trade.get("entry_price", 0))
+            position_values[tk] = position_values.get(tk, 0) + px * trade.get("position_size", 0)
+
+    total_val = sum(position_values.values())
+    weights = {tk: v / total_val for tk, v in position_values.items()} if total_val > 0 else {tk: 1/len(port_tickers) for tk in port_tickers}
+
+    # ── Portfolio daily return ────────────────────────────────────────────────
+    port_ret = sum(
+        returns[tk] * weights.get(tk, 0)
+        for tk in port_tickers if tk in returns.columns
+    )
+
+    # ── VaR (95% and 99% — historical simulation) ───────────────────────────
+    port_ret_clean = port_ret.dropna()
+    var_95 = float(np.percentile(port_ret_clean, 5)) * 100 if len(port_ret_clean) > 20 else None
+    var_99 = float(np.percentile(port_ret_clean, 1)) * 100 if len(port_ret_clean) > 20 else None
+    var_95_dollar = var_95 / 100 * total_val if var_95 and total_val else None
+    cvar_95 = float(port_ret_clean[port_ret_clean <= np.percentile(port_ret_clean, 5)].mean()) * 100 if len(port_ret_clean) > 20 else None
+
+    # ── Beta per position ─────────────────────────────────────────────────────
+    spy_ret = returns[bench].dropna() if bench in returns.columns else None
+    betas = {}
+    if spy_ret is not None:
+        for tk in port_tickers:
+            if tk in returns.columns:
+                aligned = pd.concat([returns[tk], spy_ret], axis=1).dropna()
+                if len(aligned) > 20:
+                    cov = np.cov(aligned.iloc[:, 0], aligned.iloc[:, 1])
+                    betas[tk] = round(cov[0, 1] / cov[1, 1], 2) if cov[1, 1] != 0 else 1.0
+    port_beta = sum(betas.get(tk, 1.0) * weights.get(tk, 0) for tk in port_tickers)
+
+    # ── Sector concentration ──────────────────────────────────────────────────
+    sectors = {tk: _fetch_sector(tk) for tk in port_tickers}
+    sector_weights: dict[str, float] = {}
+    for tk, w in weights.items():
+        s = sectors.get(tk, "Unknown")
+        sector_weights[s] = sector_weights.get(s, 0) + w
+
+    # ── Correlation matrix ────────────────────────────────────────────────────
+    ret_df = returns[[t for t in port_tickers if t in returns.columns]].dropna()
+    corr = ret_df.corr() if len(ret_df.columns) > 1 else None
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # DISPLAY
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # ── Risk summary metrics ──────────────────────────────────────────────────
+    m_cols = st.columns(5)
+    def _risk_metric(col, label, val, color="#ccc", sub=""):
+        col.markdown(
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+            f'border-radius:6px;padding:10px 14px;text-align:center;">'
+            f'<div style="font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:4px;">{label}</div>'
+            f'<div style="font-size:18px;font-weight:700;color:{color};">{val}</div>'
+            f'{"<div style=font-size:11px;color:#64748b;margin-top:2px;>" + sub + "</div>" if sub else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    beta_color = "#ef4444" if port_beta > 1.5 else ("#f59e0b" if port_beta > 1.1 else "#22c55e")
+    var_color  = "#ef4444" if var_95 and var_95 < -3 else ("#f59e0b" if var_95 and var_95 < -1.5 else "#22c55e")
+    max_wt     = max(weights.values()) * 100 if weights else 0
+    conc_color = "#ef4444" if max_wt > 40 else ("#f59e0b" if max_wt > 25 else "#22c55e")
+
+    _risk_metric(m_cols[0], "Portfolio Beta", f"{port_beta:.2f}", beta_color, f"vs {bench}")
+    _risk_metric(m_cols[1], "VaR 95% (1-day)", f"{var_95:.1f}%" if var_95 else "—", var_color,
+                 f"${var_95_dollar:,.0f}" if var_95_dollar else "")
+    _risk_metric(m_cols[2], "CVaR 95%", f"{cvar_95:.1f}%" if cvar_95 else "—", "#ef4444", "expected tail loss")
+    _risk_metric(m_cols[3], "Max Position Wt", f"{max_wt:.0f}%", conc_color,
+                 max(weights, key=weights.get) if weights else "")
+    _risk_metric(m_cols[4], "Positions", str(len(port_tickers)), "#94a3b8",
+                 f"${total_val:,.0f} total" if total_val else "")
+
+    st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+    # ── Correlation heatmap + Sector pie ─────────────────────────────────────
+    col_corr, col_sector = st.columns([2, 1])
+
+    with col_corr:
+        if corr is not None and len(corr) > 1:
+            fig_corr = go.Figure(go.Heatmap(
+                z=corr.values,
+                x=corr.columns.tolist(),
+                y=corr.index.tolist(),
+                colorscale=[
+                    [0.0,  "#1a4a8a"],
+                    [0.5,  "#1e293b"],
+                    [1.0,  "#8a1a1a"],
+                ],
+                zmin=-1, zmax=1,
+                text=[[f"{v:.2f}" for v in row] for row in corr.values],
+                texttemplate="%{text}",
+                textfont={"size": 11},
+                showscale=True,
+                colorbar=dict(thickness=12, len=0.8),
+            ))
+            apply_dark_layout(fig_corr, title="Position Correlation Matrix", height=320)
+            fig_corr.update_layout(margin=dict(l=40, r=20, t=40, b=40))
+            st.plotly_chart(fig_corr, use_container_width=True)
+        elif len(port_tickers) == 1:
+            st.info("Add more positions to see a correlation matrix.")
+        else:
+            st.warning("Not enough price history for correlation matrix.")
+
+    with col_sector:
+        if sector_weights:
+            sorted_sectors = dict(sorted(sector_weights.items(), key=lambda x: x[1], reverse=True))
+            sector_colors = [
+                "#FF8811", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7",
+                "#ef4444", "#06b6d4", "#84cc16", "#f97316", "#64748b",
+            ]
+            fig_pie = go.Figure(go.Pie(
+                labels=list(sorted_sectors.keys()),
+                values=[v * 100 for v in sorted_sectors.values()],
+                marker_colors=sector_colors[:len(sorted_sectors)],
+                textinfo="label+percent",
+                textfont=dict(size=11),
+                hole=0.4,
+            ))
+            apply_dark_layout(fig_pie, title="Sector Concentration", height=320)
+            fig_pie.update_layout(showlegend=False, margin=dict(l=10, r=10, t=40, b=10))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+    # ── Per-position risk table ───────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.08em;margin:8px 0 6px 0;">PER-POSITION RISK BREAKDOWN</div>',
+        unsafe_allow_html=True,
+    )
+
+    rows_html = ""
+    for tk in sorted(port_tickers, key=lambda t: weights.get(t, 0), reverse=True):
+        w     = weights.get(tk, 0) * 100
+        beta  = betas.get(tk, None)
+        sec   = sectors.get(tk, "—")
+        val   = position_values.get(tk, 0)
+        tk_ret = returns[tk].dropna() if tk in returns.columns else pd.Series()
+        tk_var = float(np.percentile(tk_ret, 5)) * 100 if len(tk_ret) > 20 else None
+        w_color = "#ef4444" if w > 40 else ("#f59e0b" if w > 25 else "#22c55e")
+        b_color = "#ef4444" if beta and beta > 1.5 else ("#f59e0b" if beta and beta > 1.1 else "#22c55e")
+
+        # Direction of each trade
+        dirs = [t["direction"].upper() for t in open_trades if t["ticker"].upper() == tk]
+        dir_str = "/".join(sorted(set(dirs)))
+
+        rows_html += (
+            f'<tr style="border-bottom:1px solid {COLORS["border"]}22;">'
+            f'<td style="padding:6px 10px;color:{COLORS["bloomberg_orange"]};font-weight:700;">{tk}</td>'
+            f'<td style="padding:6px 10px;color:#888;font-size:11px;">{dir_str}</td>'
+            f'<td style="padding:6px 10px;color:{w_color};font-weight:600;">{w:.1f}%</td>'
+            f'<td style="padding:6px 10px;color:#ccc;">${val:,.0f}</td>'
+            f'<td style="padding:6px 10px;color:{b_color};">{f"{beta:.2f}" if beta is not None else "—"}</td>'
+            f'<td style="padding:6px 10px;color:#ef4444;">{f"{tk_var:.1f}%" if tk_var else "—"}</td>'
+            f'<td style="padding:6px 10px;color:#64748b;font-size:11px;">{sec}</td>'
+            f'</tr>'
+        )
+
+    st.markdown(
+        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+        f'border-radius:6px;overflow:auto;">'
+        f'<table style="width:100%;border-collapse:collapse;">'
+        f'<thead><tr style="border-bottom:1px solid {COLORS["border"]};">'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">TICKER</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">DIR</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">PORT WT</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">MKT VALUE</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">BETA</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">VaR 95%</th>'
+        f'<th style="padding:6px 10px;font-size:10px;color:#64748b;text-align:left;">SECTOR</th>'
+        f'</tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Risk flags ────────────────────────────────────────────────────────────
+    flags = []
+    if port_beta > 1.4:
+        flags.append(f"⚠ High portfolio beta ({port_beta:.2f}) — amplified SPY moves in both directions")
+    if max_wt > 40:
+        top_tk = max(weights, key=weights.get)
+        flags.append(f"⚠ Concentration risk: {top_tk} is {max_wt:.0f}% of portfolio")
+    if corr is not None and len(corr) > 1:
+        upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+        high_corr_pairs = [(c, r) for c in corr.columns for r in corr.index
+                           if r != c and upper.loc[r, c] > 0.75 if pd.notna(upper.loc[r, c] if hasattr(upper, 'loc') else 0)]
+        if high_corr_pairs[:1]:
+            pair = high_corr_pairs[0]
+            v = corr.loc[pair[1], pair[0]]
+            flags.append(f"⚠ High correlation: {pair[0]} / {pair[1]} ({v:.2f}) — limited diversification benefit")
+    if len(sector_weights) == 1:
+        flags.append(f"⚠ All positions in one sector ({list(sector_weights.keys())[0]}) — zero sector diversification")
+
+    if flags:
+        st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+        for flag in flags:
+            st.markdown(
+                f'<div style="background:#2d1a0a;border-left:3px solid #f59e0b;'
+                f'border-radius:0 4px 4px 0;padding:8px 14px;margin-bottom:6px;'
+                f'font-size:12px;color:#fbbf24;">{flag}</div>',
+                unsafe_allow_html=True,
+            )
+
+
+def _regime_badge(direction: str, regime: str) -> tuple:
+    """Return (badge_text, color) for a position direction × current regime."""
+    if not regime:
+        return "⚪ No Regime", "#64748b"
+    is_risk_off = "Risk-Off" in regime
+    if direction.lower() == "long":
+        return ("❌ Misaligned", "#ef4444") if is_risk_off else ("✅ Aligned", "#22c55e")
+    else:
+        return ("✅ Aligned", "#22c55e") if is_risk_off else ("❌ Misaligned", "#ef4444")
+
+
 def render():
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'letter-spacing:0.1em;margin-bottom:12px;">TRADE JOURNAL</div>',
+        f'letter-spacing:0.1em;margin-bottom:12px;">MY REGARDED PORTFOLIO</div>',
         unsafe_allow_html=True,
     )
 
@@ -146,7 +426,7 @@ def render():
     )
 
     # --- Tabs ---
-    tab_open, tab_closed, tab_analytics = st.tabs(["OPEN POSITIONS", "CLOSED TRADES", "ANALYTICS"])
+    tab_open, tab_intel, tab_risk, tab_closed, tab_analytics, tab_perf, tab_playlog = st.tabs(["OPEN POSITIONS", "🧠 PORTFOLIO INTELLIGENCE", "⚠ RISK MATRIX", "CLOSED TRADES", "ANALYTICS", "📈 PERFORMANCE", "📋 AI PLAY LOG"])
 
     # --- Open Positions ---
     with tab_open:
@@ -161,6 +441,8 @@ def render():
             for trade in open_trades:
                 cur = prices.get(trade["ticker"]) or trade["entry_price"]
                 total_portfolio_val += cur * trade["position_size"]
+
+            _cur_regime = st.session_state.get("_regime_context", {}).get("regime", "")
 
             for trade in open_trades:
                 tid = trade["id"]
@@ -187,13 +469,32 @@ def render():
                 port_pct = (pos_val / total_portfolio_val * 100) if total_portfolio_val > 0 else 0
 
                 col1, col2, col3, col4, col5, col6 = st.columns([2, 1.5, 1.2, 1, 1.2, 1.2])
+                _badge_text, _badge_color = _regime_badge(direction, _cur_regime)
                 with col1:
+                    _earn_badge = ""
+                    try:
+                        from services.market_data import fetch_earnings_date
+                        _earn_info = fetch_earnings_date(trade["ticker"])
+                        if _earn_info:
+                            _ed = _earn_info["days_away"]
+                            _ec = "#ef4444" if _ed <= 3 else ("#f59e0b" if _ed <= 14 else "#64748b")
+                            _earn_badge = (
+                                f' <span style="background:#1e293b;border:1px solid {_ec};border-radius:3px;'
+                                f'padding:1px 6px;font-size:10px;color:{_ec};">'
+                                f'{"⚠" if _ed <= 7 else "📅"} {_earn_info["date"]} ({_ed}d)</span>'
+                            )
+                    except Exception:
+                        pass
                     st.markdown(
                         f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{trade["ticker"]}</span>'
                         f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{direction} · {trade["signal_source"]}'
-                        f' · {trade["entry_date"]}</span>',
+                        f' · {trade["entry_date"]}</span>'
+                        f' <span style="color:{_badge_color};font-size:11px;font-weight:600;margin-left:6px;">{_badge_text}</span>'
+                        f'{_earn_badge}',
                         unsafe_allow_html=True,
                     )
+                    if trade.get("regime_at_entry") and _cur_regime and trade["regime_at_entry"] != _cur_regime:
+                        st.caption(f"⚠ Entered in {trade['regime_at_entry']} · now {_cur_regime}")
                 with col2:
                     st.markdown(f'Entry: **${entry:.2f}** × {size}')
                 with col3:
@@ -270,6 +571,1108 @@ def render():
 
                 st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:4px 0;"></div>',
                             unsafe_allow_html=True)
+
+    # --- Portfolio Intelligence ---
+    with tab_intel:
+        from datetime import datetime as _dt
+        from services.claude_client import analyze_portfolio
+        from services.play_log import append_play
+
+        # ── Regime Strip (always visible) ─────────────────────────────────────
+        import json as _json_ri, os as _os_ri
+        _rc_pi = st.session_state.get("_regime_context") or {}
+        _quadrant_pi = _rc_pi.get("quadrant", "")
+        _raw_score_pi = _rc_pi.get("score", 0)
+        if isinstance(_raw_score_pi, float) and -1.0 <= _raw_score_pi <= 1.0:
+            _score100_pi = int((_raw_score_pi + 1.0) * 50.0)
+        else:
+            _score100_pi = int(_raw_score_pi)
+        _REGIME_HIST_PI = _os_ri.path.join(
+            _os_ri.path.dirname(_os_ri.path.dirname(__file__)), "data", "regime_history.json"
+        )
+        _stability_pi = 0
+        try:
+            with open(_REGIME_HIST_PI) as _f_ri:
+                _hist_pi = _json_ri.load(_f_ri)
+            if _hist_pi:
+                _hist_pi = sorted(_hist_pi, key=lambda r: r.get("date", ""))
+                _cur_q_pi = _hist_pi[-1].get("quadrant", _hist_pi[-1].get("regime", ""))
+                for _hr_pi in reversed(_hist_pi):
+                    _hq_pi = _hr_pi.get("quadrant", _hr_pi.get("regime", ""))
+                    if _hq_pi == _cur_q_pi:
+                        _stability_pi += 1
+                    else:
+                        break
+        except Exception:
+            pass
+        _qcolors_pi = {
+            "Stagflation": "#a855f7", "Goldilocks": "#22c55e",
+            "Reflation": "#f59e0b",   "Deflation":  "#3b82f6",
+        }
+        _qc_pi = _qcolors_pi.get(_quadrant_pi, "#888")
+        _stab_c_pi = "#22c55e" if _stability_pi >= 10 else ("#f59e0b" if _stability_pi >= 5 else "#94a3b8")
+        if _quadrant_pi or _rc_pi:
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;'
+                f'background:#0A1520;border:1px solid #1E3A4A;border-radius:6px;'
+                f'padding:8px 16px;margin-bottom:12px;">'
+                f'<span style="font-size:10px;color:{COLORS["bloomberg_orange"]};'
+                f'font-weight:700;letter-spacing:0.08em;">MACRO REGIME</span>'
+                f'<span style="color:{_qc_pi};font-weight:700;font-size:13px;">'
+                f'{_quadrant_pi or "—"}</span>'
+                f'<span style="color:#888;font-size:11px;">Score {_score100_pi}/100</span>'
+                f'<span style="color:{_stab_c_pi};font-size:11px;">'
+                f'· Stable {_stability_pi} session{"s" if _stability_pi != 1 else ""}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Run Risk Regime → Regime Overview to load macro context, then return here for sizing guidance.")
+
+        # Section A — Context freshness panel
+        st.markdown(
+            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.08em;margin-bottom:8px;">CONTEXT FRESHNESS</div>',
+            unsafe_allow_html=True,
+        )
+        _ctx_items = [
+            ("Regime", "_regime_context_ts"),
+            ("Rate Path", "_rate_path_probs_ts"),
+            ("Doom Briefing", "_doom_briefing_ts"),
+            ("Black Swans", "_custom_swans_ts"),
+            ("Whale Summary", "_whale_summary_ts"),
+            ("Fed Plays", "_fed_plays_result_ts"),
+        ]
+        _ctx_cols = st.columns(len(_ctx_items))
+        _now = _dt.now()
+        _missing_critical = []
+        for _ci, (_label, _ts_key) in enumerate(_ctx_items):
+            _ts = st.session_state.get(_ts_key)
+            if _ts is None:
+                _icon = "✗"
+                _color = "#ef4444"
+                _age_str = "missing"
+                if _label in ("Regime", "Rate Path"):
+                    _missing_critical.append(_label)
+            else:
+                _age_min = (_now - _ts).total_seconds() / 60
+                if _age_min < 120:
+                    _icon = "✅"
+                    _color = "#22c55e"
+                    _age_str = f"{int(_age_min)}m ago"
+                elif _age_min < 360:
+                    _icon = "⚠"
+                    _color = "#f59e0b"
+                    _age_str = f"{int(_age_min // 60)}h ago"
+                else:
+                    _icon = "✗"
+                    _color = "#ef4444"
+                    _age_str = f"{int(_age_min // 60)}h ago"
+                    if _label in ("Regime", "Rate Path"):
+                        _missing_critical.append(_label)
+            _ctx_cols[_ci].markdown(
+                f'<div style="text-align:center;font-size:11px;">'
+                f'<div style="color:{_color};font-size:16px;">{_icon}</div>'
+                f'<div style="color:#ccc;font-weight:600;">{_label}</div>'
+                f'<div style="color:#888;">{_age_str}</div></div>',
+                unsafe_allow_html=True,
+            )
+        if _missing_critical:
+            st.warning(f"⚠ Critical signals missing: {', '.join(_missing_critical)} — run Risk Regime first for best results.")
+
+        st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
+
+        # Section B — Engine selector + Run button
+        st.markdown(
+            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.08em;margin-bottom:8px;">PORTFOLIO ANALYSIS ENGINE</div>',
+            unsafe_allow_html=True,
+        )
+        _pi_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        _sel_pi_tier = st.radio("Analysis Engine", _pi_tier_opts, horizontal=True, key="portfolio_intel_engine")
+        st.caption("💡 👑 Highly Regarded Mode strongly recommended — this is the highest-stakes synthesis task (actual position decisions)")
+
+        if not open_trades:
+            st.info("No open positions to analyze.")
+        else:
+            if st.button("🧠 Run Portfolio Analysis", type="primary", key="run_portfolio_intel"):
+                # Assemble upstream context from session_state
+                _rc = st.session_state.get("_regime_context") or {}
+                _rp_probs = st.session_state.get("_rate_path_probs") or []
+                # Find dominant rate path (list of {scenario, prob} dicts)
+                _dominant_rp = {}
+                if _rp_probs:
+                    _dom = max(_rp_probs, key=lambda r: r.get("prob", 0), default=None)
+                    if _dom:
+                        _dominant_rp = {
+                            "scenario": _dom.get("scenario", ""),
+                            "prob_pct": round(_dom.get("prob", 0) * 100),
+                        }
+                _rp_plays = st.session_state.get("_rp_plays_result") or {}
+                _fed_plays = st.session_state.get("_fed_plays_result") or {}
+                # Compute factor/sizing context to enrich AI prompt
+                _up_factor_exposure = {}
+                _up_sizing_scores = {}
+                try:
+                    from services.portfolio_sizing import score_portfolio as _sp_up, aggregate_factor_exposure as _afe_up
+                    _up_live = _get_live_prices([t["ticker"] for t in open_trades])
+                    _up_pv = sum(
+                        (_up_live.get(t["ticker"], t["entry_price"]) * t["position_size"])
+                        for t in open_trades
+                    )
+                    if _up_pv > 0:
+                        _up_sz = _sp_up(open_trades, _rc, _up_pv, _up_live)
+                        _up_sz_map = {p["ticker"]: p for p in _up_sz["positions"]}
+                        _up_fe = _afe_up(_up_sz_map.values())
+                        _up_factor_exposure = _up_fe.get("factors", {})
+                        _up_sizing_scores = {
+                            tk: {
+                                "score": p.get("composite_score"),
+                                "regime_fit": p.get("regime_fit"),
+                                "weight": round(p.get("current_weight", 0), 1),
+                            }
+                            for tk, p in _up_sz_map.items()
+                        }
+                except Exception:
+                    pass  # enrichment is additive — skip silently if sizing unavailable
+                _upstream = {
+                    "regime": _rc.get("regime", ""),
+                    "score": _rc.get("score", 0.0),
+                    "quadrant": _rc.get("quadrant", ""),
+                    "signal_summary": _rc.get("signal_summary", ""),
+                    "dominant_rate_path": _dominant_rp,
+                    "rate_path_probs": _rp_probs,
+                    "fed_funds_rate": st.session_state.get("_fed_funds_rate", "Unknown"),
+                    "chain_narration": st.session_state.get("_chain_narration", ""),
+                    "custom_swans": st.session_state.get("_custom_swans") or {},
+                    "doom_briefing": st.session_state.get("_doom_briefing", ""),
+                    "whale_summary": st.session_state.get("_whale_summary", ""),
+                    "regime_plays": _rp_plays,
+                    "fed_plays": _fed_plays,
+                    "discovery_plays": st.session_state.get("_plays_result") or {},
+                    "factor_exposure": _up_factor_exposure,
+                    "sizing_scores": _up_sizing_scores,
+                    "current_events": (
+                        st.session_state.get("_current_events_digest", "") or
+                        ""
+                    ),
+                }
+                _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+                _pi_model = None
+                if _sel_pi_tier == "🧠 Regard Mode":
+                    _pi_model = "claude-haiku-4-5-20251001"
+                elif _sel_pi_tier == "👑 Highly Regarded Mode":
+                    _pi_model = "claude-sonnet-4-6"
+                with st.spinner("Analyzing portfolio against macro conditions..."):
+                    _pi_result = analyze_portfolio(open_trades, _upstream, use_claude=_use_claude, model=_pi_model)
+                if _pi_result and "_error" not in _pi_result:
+                    st.session_state["_portfolio_analysis"] = _pi_result
+                    st.session_state["_portfolio_analysis_ts"] = _dt.now()
+                    st.session_state["_portfolio_analysis_engine"] = _sel_pi_tier
+                    append_play("Portfolio Analysis", _sel_pi_tier, _pi_result,
+                                meta={"n_positions": len(open_trades), "verdict": _pi_result.get("verdict")})
+                    st.rerun()
+                else:
+                    _err = (_pi_result or {}).get("_error", "Unknown error")
+                    st.error(f"Analysis failed: {_err}")
+
+        # Section C — Portfolio Verdict card
+        _pa = st.session_state.get("_portfolio_analysis")
+        _pa_ts = st.session_state.get("_portfolio_analysis_ts")
+        _pa_engine = st.session_state.get("_portfolio_analysis_engine", "")
+        if _pa and "_error" not in _pa:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
+            _verdict = _pa.get("verdict", "UNKNOWN")
+            _risk_score = _pa.get("risk_score", 0)
+            _narrative = _pa.get("narrative", "")
+            _verdict_colors = {
+                "HOLD_ALL": "#22c55e",
+                "REDUCE_RISK": "#f59e0b",
+                "DEFENSIVE": "#FF8811",
+                "EXIT_REVIEW": "#ef4444",
+            }
+            _verdict_color = _verdict_colors.get(_verdict, "#888")
+            _verdict_labels = {
+                "HOLD_ALL": "✅ HOLD ALL",
+                "REDUCE_RISK": "⚠ REDUCE RISK",
+                "DEFENSIVE": "🛡 DEFENSIVE",
+                "EXIT_REVIEW": "🚨 EXIT REVIEW",
+            }
+            _verdict_label = _verdict_labels.get(_verdict, _verdict)
+            _age_str = ""
+            if _pa_ts:
+                _age_m = int((_dt.now() - _pa_ts).total_seconds() / 60)
+                _age_str = f"{_age_m}m ago"
+            _is_claude_engine = _pa_engine in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+            _claude_badge_html = (
+                f'<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
+                f'color:#fff;font-size:10px;font-weight:700;letter-spacing:0.06em;'
+                f'padding:2px 8px;border-radius:3px;margin-left:8px;">✦ POWERED BY CLAUDE</span>'
+            ) if _is_claude_engine else ""
+            st.markdown(
+                f'<div style="background:#1a1a1a;border:1px solid {COLORS["border"]};border-radius:6px;padding:14px 18px;margin-bottom:10px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:13px;letter-spacing:0.08em;">'
+                f'PORTFOLIO RISK ASSESSMENT{_claude_badge_html}</span>'
+                f'<span style="color:#888;font-size:11px;">{_pa_engine} · {_age_str}</span>'
+                f'</div>'
+                f'<div style="display:flex;align-items:center;gap:24px;margin-bottom:8px;">'
+                f'<span style="color:{_verdict_color};font-size:18px;font-weight:700;">{_verdict_label}</span>'
+                f'<span style="color:#ccc;font-size:14px;">Risk Score: <b style="color:{_verdict_color};">{_risk_score}/10</b></span>'
+                f'</div>'
+                f'<div style="color:#bbb;font-size:12px;line-height:1.6;">{_narrative}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Section D — Per-position intelligence cards
+            _pa_positions = {p["ticker"].upper(): p for p in _pa.get("positions", [])}
+            if open_trades:
+                st.markdown(
+                    f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                    f'letter-spacing:0.08em;margin:12px 0 8px 0;">PER-POSITION INTELLIGENCE</div>',
+                    unsafe_allow_html=True,
+                )
+                if not _pa_positions:
+                    st.warning("⚠ Per-position data missing — AI response may have been truncated. Re-run the analysis.", icon="⚠")
+                _action_colors = {"HOLD": "#22c55e", "ADD": "#22c55e", "REDUCE": "#f59e0b", "EXIT": "#ef4444"}
+                # Get live prices for P&L display
+                _pi_live = prices if open_trades else {}
+
+                # ── Institutional sizing scores ────────────────────────────────
+                _rc_for_sz = st.session_state.get("_regime_context") or {}
+                _sz_result = {}
+                _sz_summary = None
+                try:
+                    from services.portfolio_sizing import score_portfolio as _score_portfolio
+                    _total_pv = sum(
+                        (_pi_live.get(t["ticker"], t["entry_price"]) * t["position_size"])
+                        for t in open_trades
+                    )
+                    if _total_pv > 0:
+                        _sz = _score_portfolio(open_trades, _rc_for_sz, _total_pv, _pi_live)
+                        _sz_result  = {p["ticker"]: p for p in _sz["positions"]}
+                        _sz_summary = _sz
+                except Exception as _sz_err:
+                    pass  # sizing is additive — silently skip if unavailable
+
+                for _trade in open_trades:
+                    _tk = _trade["ticker"]
+                    _pos_data = _pa_positions.get(_tk.upper(), {})
+                    _action = _pos_data.get("action", "—")
+                    _rationale = _pos_data.get("rationale", "")
+                    _risk_factors = _pos_data.get("risk_factors", [])
+                    _ac = _action_colors.get(_action, "#888")
+                    _cur_px = _pi_live.get(_tk, _trade["entry_price"])
+                    _ep = _trade["entry_price"]
+                    _pnl_pct = ((_cur_px / _ep) - 1) * 100 if _ep > 0 and _trade["direction"].lower() == "long" else ((_ep / _cur_px) - 1) * 100 if _cur_px > 0 else 0
+                    _pnl_color = COLORS["positive"] if _pnl_pct >= 0 else COLORS["negative"]
+                    _badge_t, _badge_c = _regime_badge(_trade["direction"], _cur_regime)
+                    _rf_html = "".join(f'<span style="background:#333;border-radius:3px;padding:1px 6px;margin-right:4px;font-size:10px;color:#ccc;">• {rf}</span>' for rf in _risk_factors)
+                    # Macro Fit badge
+                    _mf_all = st.session_state.get("_macro_fit_results", {})
+                    _mf = _mf_all.get(_tk.upper())
+                    _mf_html = ""
+                    if _mf:
+                        _mf_stars = "★" * _mf["fit_stars"] + "☆" * (5 - _mf["fit_stars"])
+                        _mf_vc = {
+                            "Strong Fit": "#22c55e", "Moderate Fit": "#86efac",
+                            "Neutral": "#f59e0b", "Caution": "#f97316", "Avoid": "#ef4444",
+                        }.get(_mf["verdict"], "#888")
+                        _mf_html = (
+                            f'<div style="font-size:11px;color:#888;margin-top:4px;">'
+                            f'Macro Fit: <span style="color:#f59e0b;">{_mf_stars}</span>'
+                            f' <span style="color:{_mf_vc};font-weight:600;">{_mf["verdict"]}</span>'
+                            f'</div>'
+                        )
+                    # Earnings countdown badge
+                    _earn_html = ""
+                    try:
+                        from services.market_data import fetch_earnings_date
+                        _earn = fetch_earnings_date(_tk)
+                        if _earn:
+                            _ed = _earn["days_away"]
+                            _ec = "#ef4444" if _ed <= 3 else ("#f59e0b" if _ed <= 14 else "#64748b")
+                            _ebg = "#2d1010" if _ed <= 3 else ("#2d2010" if _ed <= 14 else "#1e293b")
+                            _elabel = f"⚠ Earnings in {_ed}d" if _ed <= 7 else f"📅 Earnings {_earn['date']} ({_ed}d)"
+                            _earn_html = (
+                                f'<span style="background:{_ebg};border:1px solid {_ec};border-radius:3px;'
+                                f'padding:1px 8px;font-size:10px;color:{_ec};font-weight:600;">{_elabel}</span>'
+                            )
+                    except Exception:
+                        pass
+
+                    # ── Sizing overlay ─────────────────────────────────────────
+                    _sz_pos = _sz_result.get(_tk.upper(), {})
+                    _sz_action  = _sz_pos.get("action", "")
+                    _sz_score   = _sz_pos.get("composite_score")
+                    _sz_cw      = _sz_pos.get("current_weight")
+                    _sz_tw      = _sz_pos.get("target_weight")
+                    _sz_stop    = _sz_pos.get("atr_stop")
+                    _sz_add     = _sz_pos.get("add_amount")
+                    _sz_add_pct = _sz_pos.get("add_pct")
+                    _sz_red     = _sz_pos.get("reduce_amount")
+                    _sz_red_pct = _sz_pos.get("reduce_to_pct")
+                    _sz_hold    = _sz_pos.get("hold_condition")
+                    _sz_rf      = _sz_pos.get("regime_fit")
+                    _sz_cv      = _sz_pos.get("conviction")
+
+                    # Build action detail string with $ amounts
+                    _action_detail = ""
+                    if _sz_action == "ADD" and _sz_add:
+                        _action_detail = f'<b style="color:#22c55e;">ADD ${_sz_add:,} (+{_sz_add_pct:.1f}%)</b>'
+                    elif _sz_action == "REDUCE" and _sz_red:
+                        _action_detail = f'<b style="color:#f59e0b;">REDUCE by ${_sz_red:,} → {_sz_red_pct:.1f}% weight</b>'
+                    elif _sz_action == "EXIT":
+                        _action_detail = f'<b style="color:#ef4444;">EXIT — composite score too low</b>'
+                    elif _sz_action == "HOLD" and _sz_hold:
+                        _action_detail = f'<b style="color:#22c55e;">HOLD</b> <span style="color:#888;font-size:10px;">· {_sz_hold}</span>'
+
+                    _sizing_html = ""
+                    if _sz_pos:
+                        _sc_color = "#22c55e" if (_sz_score or 0) >= 65 else ("#f59e0b" if (_sz_score or 0) >= 40 else "#ef4444")
+                        _wdelta = (_sz_tw or 0) - (_sz_cw or 0)
+                        _wdc = "#22c55e" if _wdelta > 0 else ("#ef4444" if _wdelta < 0 else "#888")
+                        _sizing_html = (
+                            f'<div style="margin-top:8px;padding-top:8px;border-top:1px solid #2a2a2a;">'
+                            f'<div style="font-size:10px;color:#444;margin-bottom:4px;letter-spacing:0.06em;">SIZING MODEL (regime fit · ATR · conviction)</div>'
+                            f'<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:4px;">'
+                            f'<span style="background:{_sc_color}22;border:1px solid {_sc_color}55;'
+                            f'border-radius:3px;padding:1px 7px;font-size:10px;color:{_sc_color};font-weight:700;">'
+                            f'Score {_sz_score}</span>'
+                            + (f'<span style="color:#64748b;font-size:10px;">RegimeFit {_sz_rf} · Conviction {_sz_cv}</span>' if _sz_rf is not None else '')
+                            + (f'<span style="color:#555;font-size:10px;">|</span>'
+                               f'<span style="color:#888;font-size:10px;">Wt: {_sz_cw:.1f}% → '
+                               f'<span style="color:{_wdc};">{_sz_tw:.1f}%</span></span>'
+                               if _sz_cw is not None else '')
+                            + (f'<span style="color:#94a3b8;font-size:10px;">· Stop ${_sz_stop:.2f}</span>' if _sz_stop else '')
+                            + f'</div>'
+                            + (f'<div style="font-size:12px;margin-top:2px;">{_action_detail}</div>' if _action_detail else '')
+                            + f'</div>'
+                        )
+
+                    st.markdown(
+                        f'<div style="background:#1a1a1a;border:1px solid {COLORS["border"]};border-radius:6px;padding:12px 16px;margin-bottom:8px;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                        f'<span>'
+                        f'<b style="color:{COLORS["bloomberg_orange"]};font-size:14px;">{_tk}</b>'
+                        f' <span style="color:#888;font-size:11px;">{_trade["direction"].upper()} @ ${_ep:.2f}</span>'
+                        f' <span style="color:{_pnl_color};font-size:11px;">({_pnl_pct:+.1f}%)</span>'
+                        f'</span>'
+                        f'<span style="color:{_badge_c};font-size:11px;font-weight:600;">{_badge_t}</span>'
+                        f'</div>'
+                        f'<div style="margin-bottom:6px;">'
+                        f'<span style="font-size:12px;color:#888;">AI View: <b style="color:{_ac};">{_action}</b></span>'
+                        f'<span style="font-size:10px;color:#444;margin-left:8px;">(narrative + macro)</span>'
+                        f'</div>'
+                        f'<div style="font-size:12px;color:#bbb;margin-bottom:6px;">{_rationale}</div>'
+                        f'<div>{_rf_html}</div>'
+                        f'{_mf_html}'
+                        f'{"<div style=margin-top:6px;>" + _earn_html + "</div>" if _earn_html else ""}'
+                        f'{_sizing_html}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Rebalance Summary ──────────────────────────────────────────
+                if _sz_summary:
+                    _tot_add = _sz_summary.get("total_add", 0)
+                    _tot_red = _sz_summary.get("total_reduce", 0)
+                    _exits   = _sz_summary.get("exits", [])
+                    _rb_sum  = _sz_summary.get("rebalance_summary", "")
+                    _rb_color = "#ef4444" if _exits else ("#f59e0b" if _tot_red > 0 else "#22c55e")
+                    st.markdown(
+                        f'<div style="background:#0A1520;border:1px solid {_rb_color}44;border-radius:6px;'
+                        f'padding:10px 16px;margin-top:4px;">'
+                        f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;'
+                        f'letter-spacing:0.08em;">REBALANCE SUMMARY</span>'
+                        f'<span style="color:#555;margin:0 8px;">·</span>'
+                        f'<span style="color:#ccc;font-size:12px;">{_rb_sum}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # Section E — Priority actions
+            _priority = _pa.get("priority_actions", [])
+            if _priority:
+                st.markdown(
+                    f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                    f'letter-spacing:0.08em;margin:12px 0 8px 0;">📋 PRIORITY ACTIONS</div>',
+                    unsafe_allow_html=True,
+                )
+                for _i, _action_str in enumerate(_priority, 1):
+                    st.markdown(
+                        f'<div style="font-size:12px;color:#ccc;padding:4px 0;">'
+                        f'<b style="color:{COLORS["bloomberg_orange"]};">{_i}.</b> {_action_str}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        # Section F — Black Swan Stress Test (pure data, no AI)
+        _custom_swans = st.session_state.get("_custom_swans") or {}
+        if _custom_swans and open_trades:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">BLACK SWAN POSITION STRESS TEST</div>',
+                unsafe_allow_html=True,
+            )
+            _open_tickers = [t["ticker"] for t in open_trades]
+            _long_tickers = {t["ticker"] for t in open_trades if t["direction"].lower() == "long"}
+            _short_tickers = {t["ticker"] for t in open_trades if t["direction"].lower() == "short"}
+            for _swan_label, _swan_data in _custom_swans.items():
+                _prob = _swan_data.get("probability_pct", "?")
+                _impacts = _swan_data.get("asset_impacts", {})
+                _eq_impact = (_impacts.get("equities") or "").lower()
+                _bd_impact = (_impacts.get("bonds") or "").lower()
+                # Expose: equity bearish → flag longs; equity bullish → flag shorts
+                _exposed = []
+                _safe = []
+                for _tk in _open_tickers:
+                    _is_long = _tk in _long_tickers
+                    if ("bearish" in _eq_impact or "negative" in _eq_impact or "crash" in _eq_impact or "decline" in _eq_impact):
+                        if _is_long:
+                            _exposed.append(_tk)
+                        else:
+                            _safe.append(_tk)
+                    elif ("bullish" in _eq_impact or "positive" in _eq_impact or "rally" in _eq_impact):
+                        if not _is_long:
+                            _exposed.append(_tk)
+                        else:
+                            _safe.append(_tk)
+                    else:
+                        _safe.append(_tk)
+                _exp_html = " ".join(f'<span style="color:#ef4444;font-weight:600;">{t}</span>' for t in _exposed) if _exposed else '<span style="color:#888;">none</span>'
+                _safe_html = " ".join(f'<span style="color:#22c55e;">{t}</span>' for t in _safe) if _safe else '<span style="color:#888;">none</span>'
+                st.markdown(
+                    f'<div style="background:#1a1a1a;border:1px solid {COLORS["border"]};border-radius:4px;'
+                    f'padding:8px 12px;margin-bottom:6px;font-size:12px;">'
+                    f'<b style="color:#f59e0b;">{_swan_label}</b> <span style="color:#888;">({_prob}%)</span>'
+                    f' — <span style="color:#888;">equities: {_eq_impact or "unknown"}</span><br>'
+                    f'At risk: {_exp_html} &nbsp;|&nbsp; Safe: {_safe_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+        elif not _custom_swans:
+            st.caption("Run Black Swans in Risk Regime to enable position stress testing.")
+
+        # Section G1 — Correlation Matrix + Factor Exposure
+        if open_trades and len(open_trades) >= 2:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:4px;">PORTFOLIO CONSTRUCTION LAYER</div>',
+                unsafe_allow_html=True,
+            )
+            _corr_col, _factor_col = st.columns([1, 1])
+
+            # ── Correlation Matrix ─────────────────────────────────────────────
+            with _corr_col:
+                st.markdown(
+                    '<div style="font-size:11px;color:#64748b;letter-spacing:0.06em;'
+                    'margin-bottom:6px;">90-DAY RETURN CORRELATION</div>',
+                    unsafe_allow_html=True,
+                )
+                try:
+                    from services.market_data import fetch_correlation_matrix as _fetch_corr
+                    _corr_tickers = tuple(sorted({t["ticker"].upper() for t in open_trades}))
+                    _corr_df = _fetch_corr(_corr_tickers, period="6mo")
+                    if _corr_df is not None and not _corr_df.empty:
+                        import plotly.graph_objects as _go
+                        _z = _corr_df.values.tolist()
+                        _labels = list(_corr_df.columns)
+                        _fig_corr = _go.Figure(data=_go.Heatmap(
+                            z=_z, x=_labels, y=_labels,
+                            colorscale=[
+                                [0.0, "#1e3a5f"], [0.5, "#1a1a2e"], [1.0, "#7f1d1d"],
+                            ],
+                            zmin=-1, zmax=1,
+                            text=[[f"{v:.2f}" for v in row] for row in _z],
+                            texttemplate="%{text}",
+                            textfont={"size": 10},
+                            showscale=True,
+                            colorbar=dict(thickness=10, len=0.8, tickfont=dict(size=9, color="#64748b")),
+                        ))
+                        apply_dark_layout(_fig_corr)
+                        _fig_corr.update_layout(
+                            height=220,
+                            margin=dict(l=0, r=0, t=10, b=0),
+                            xaxis=dict(tickfont=dict(size=10, color="#94a3b8")),
+                            yaxis=dict(tickfont=dict(size=10, color="#94a3b8"), autorange="reversed"),
+                        )
+                        st.plotly_chart(_fig_corr, use_container_width=True, config={"displayModeBar": False})
+                        # Flag high-correlation pairs
+                        _high_corr = []
+                        for _i, _ti in enumerate(_labels):
+                            for _j, _tj in enumerate(_labels):
+                                if _j > _i and _corr_df.iloc[_i, _j] > 0.75:
+                                    _high_corr.append(f"{_ti}↔{_tj} ({_corr_df.iloc[_i, _j]:.2f})")
+                        if _high_corr:
+                            st.markdown(
+                                f'<div style="font-size:10px;color:#f59e0b;margin-top:2px;">'
+                                f'⚠ High correlation: {" · ".join(_high_corr)}</div>',
+                                unsafe_allow_html=True,
+                            )
+                        else:
+                            st.markdown(
+                                '<div style="font-size:10px;color:#22c55e;margin-top:2px;">'
+                                '✓ No pairs above 0.75 — good diversification</div>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        st.caption("Correlation data unavailable.")
+                except Exception as _ce:
+                    st.caption(f"Correlation unavailable: {_ce}")
+
+            # ── Aggregate Factor Exposure ──────────────────────────────────────
+            with _factor_col:
+                st.markdown(
+                    '<div style="font-size:11px;color:#64748b;letter-spacing:0.06em;'
+                    'margin-bottom:6px;">AGGREGATE FACTOR EXPOSURE</div>',
+                    unsafe_allow_html=True,
+                )
+                try:
+                    from services.portfolio_sizing import aggregate_factor_exposure as _agg_factors
+                    _fe = _agg_factors(_sz_result.values() if _sz_result else [])
+                    _fvals = _fe.get("factors", {})
+                    if _fvals:
+                        import plotly.graph_objects as _go2
+                        _f_labels = ["Growth", "Inflation", "Liquidity", "Credit"]
+                        _f_keys   = ["growth", "inflation", "liquidity", "credit"]
+                        _f_vals   = [_fvals.get(k, 0) for k in _f_keys]
+                        _f_colors = ["#22c55e" if v >= 0 else "#ef4444" for v in _f_vals]
+                        _fig_fe = _go2.Figure(data=_go2.Bar(
+                            x=_f_vals, y=_f_labels,
+                            orientation="h",
+                            marker_color=_f_colors,
+                            text=[f"{v:+.2f}x" for v in _f_vals],
+                            textposition="outside",
+                            textfont=dict(size=10, color="#94a3b8"),
+                        ))
+                        apply_dark_layout(_fig_fe)
+                        _fig_fe.update_layout(
+                            height=220,
+                            margin=dict(l=0, r=40, t=10, b=0),
+                            xaxis=dict(range=[-1.5, 1.5], tickfont=dict(size=9, color="#64748b"), zeroline=True, zerolinecolor="#333"),
+                            yaxis=dict(tickfont=dict(size=10, color="#94a3b8")),
+                            showlegend=False,
+                        )
+                        st.plotly_chart(_fig_fe, use_container_width=True, config={"displayModeBar": False})
+                        if _fe.get("warnings"):
+                            for _fw in _fe["warnings"]:
+                                st.markdown(
+                                    f'<div style="font-size:10px;color:#f59e0b;">⚠ {_fw}</div>',
+                                    unsafe_allow_html=True,
+                                )
+                        else:
+                            st.markdown(
+                                '<div style="font-size:10px;color:#22c55e;">✓ Balanced factor exposure</div>',
+                                unsafe_allow_html=True,
+                            )
+                    else:
+                        st.caption("Factor data unavailable — run sizing engine above.")
+                except Exception as _fe_err:
+                    st.caption(f"Factor exposure unavailable: {_fe_err}")
+
+        # Section G1b — Per-stock factor mapping table (static)
+        if open_trades and _sz_result:
+            try:
+                from services.portfolio_sizing import _SENSITIVITY as _SENS
+                _ftable_rows = ""
+                _factor_keys = ["growth", "inflation", "liquidity", "credit"]
+                for _p in _sz_result.values():
+                    _ptk = _p.get("ticker", "").upper()
+                    _pw  = _p.get("current_weight", 0)
+                    _sv  = _SENS.get(_ptk, [0.0, 0.0, 0.0, 0.0])
+                    _dom_idx = max(range(4), key=lambda i: abs(_sv[i]))
+                    _dom_label = _factor_keys[_dom_idx].capitalize()
+                    def _fc(v):
+                        if abs(v) < 0.1: return "#64748b"
+                        return "#22c55e" if v > 0 else "#ef4444"
+                    _ftable_rows += (
+                        f'<tr style="border-bottom:1px solid #1a1a1a;">'
+                        f'<td style="padding:4px 10px;color:{COLORS["bloomberg_orange"]};font-weight:700;">{_ptk}</td>'
+                        f'<td style="padding:4px 10px;color:#888;">{_pw:.1f}%</td>'
+                        + "".join(
+                            f'<td style="padding:4px 10px;color:{_fc(_sv[i])};font-weight:600;">{_sv[i]:+.1f}</td>'
+                            for i in range(4)
+                        )
+                        + f'<td style="padding:4px 10px;color:#94a3b8;font-size:10px;">{_dom_label}</td>'
+                        f'</tr>'
+                    )
+                if _ftable_rows:
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#64748b;letter-spacing:0.06em;margin:12px 0 6px 0;">POSITION FACTOR SENSITIVITIES</div>'
+                        f'<table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;">'
+                        f'<thead><tr style="background:#1a1a1a;color:#555;font-size:10px;letter-spacing:0.05em;">'
+                        f'<th style="padding:4px 10px;text-align:left;">Ticker</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Wt%</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Growth</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Inflation</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Liquidity</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Credit</th>'
+                        f'<th style="padding:4px 10px;text-align:left;">Dominant</th>'
+                        f'</tr></thead><tbody>{_ftable_rows}</tbody></table>',
+                        unsafe_allow_html=True,
+                    )
+            except Exception:
+                pass
+
+        # Section G1c — Factor Exposure AI Analysis
+        if open_trades and _sz_result:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px 0;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">FACTOR AI ANALYSIS</div>',
+                unsafe_allow_html=True,
+            )
+
+            # Change B — Quadrant reference expander
+            with st.expander("📊 Quadrant Reference", expanded=False):
+                _cur_q = _rc_for_sz.get("quadrant", "")
+                def _qrow(name, cond, favored, avoid):
+                    _active = "border-left:3px solid #FF8811;" if name == _cur_q else "border-left:3px solid transparent;"
+                    _nc = COLORS["bloomberg_orange"] if name == _cur_q else "#94a3b8"
+                    return (
+                        f'<tr style="border-bottom:1px solid #1a1a1a;{_active}">'
+                        f'<td style="padding:5px 10px;color:{_nc};font-weight:700;">{name}</td>'
+                        f'<td style="padding:5px 10px;color:#64748b;font-size:11px;">{cond}</td>'
+                        f'<td style="padding:5px 10px;color:#22c55e;font-size:11px;">{favored}</td>'
+                        f'<td style="padding:5px 10px;color:#ef4444;font-size:11px;">{avoid}</td>'
+                        f'</tr>'
+                    )
+                st.markdown(
+                    f'<table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;">'
+                    f'<thead><tr style="background:#1a1a1a;color:#555;font-size:10px;letter-spacing:0.05em;">'
+                    f'<th style="padding:4px 10px;text-align:left;">Quadrant</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Condition</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Favored Factors</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Avoid</th>'
+                    f'</tr></thead><tbody>'
+                    + _qrow("Goldilocks",  "Growth ↑, Inflation ↓", "Growth, Liquidity",           "—")
+                    + _qrow("Reflation",   "Growth ↑, Inflation ↑", "Inflation, Credit",            "Long duration")
+                    + _qrow("Stagflation", "Growth ↓, Inflation ↑", "Inflation (real assets)",      "Growth, Liquidity")
+                    + _qrow("Deflation",   "Growth ↓, Inflation ↓", "Long duration (TLT/IEF)",      "Credit, Equities")
+                    + f'</tbody></table>'
+                    + (f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};margin-top:4px;">▶ Current regime: {_cur_q}</div>' if _cur_q else ''),
+                    unsafe_allow_html=True,
+                )
+
+            _fa_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+            _fa_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _fa_has_claude else ["⚡ Groq"]
+            _fa_col1, _fa_col2 = st.columns([4, 2])
+            with _fa_col1:
+                _fa_tier = st.radio(
+                    "Factor Engine", _fa_tier_opts, horizontal=True,
+                    key="factor_analysis_engine",
+                    help="Regard = Haiku (fast, concise) · Highly Regarded = Sonnet (richer, specific)",
+                )
+            # Change A — engine recommendation caption
+            st.caption("💡 **Regard** for daily checks · **👑 Highly Regarded** for rebalancing decisions (position-specific suggestions)")
+            with _fa_col2:
+                _fa_run = st.button("🧠 Analyze Factors", key="run_factor_analysis", type="primary")
+
+            if _fa_run:
+                _fa_use_claude = _fa_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+                _fa_model = None
+                if _fa_tier == "🧠 Regard Mode":
+                    _fa_model = "claude-haiku-4-5-20251001"
+                elif _fa_tier == "👑 Highly Regarded Mode":
+                    _fa_model = "claude-sonnet-4-6"
+                try:
+                    from services.portfolio_sizing import aggregate_factor_exposure as _agg_fa
+                    _fe_for_ai = _agg_fa(_sz_result.values())
+                except Exception:
+                    _fe_for_ai = {"factors": {}, "dominant": "", "warnings": []}
+                from services.claude_client import analyze_factor_exposure as _analyze_fe
+                with st.spinner("Analyzing factor exposure…"):
+                    _fa_result = _analyze_fe(
+                        factor_exposure=_fe_for_ai,
+                        regime_ctx=_rc_for_sz,
+                        open_trades=open_trades,
+                        use_claude=_fa_use_claude,
+                        model=_fa_model,
+                    )
+                if _fa_result and "_error" not in _fa_result:
+                    st.session_state["_factor_analysis"] = _fa_result
+                    st.session_state["_factor_analysis_ts"] = _dt.now()
+                    st.session_state["_factor_analysis_engine"] = _fa_tier
+                else:
+                    st.error(f"Factor analysis failed: {(_fa_result or {}).get('_error', 'Unknown error')}")
+
+            _fa = st.session_state.get("_factor_analysis")
+            _fa_engine = st.session_state.get("_factor_analysis_engine", "")
+            _fa_ts = st.session_state.get("_factor_analysis_ts")
+            if _fa and "_error" not in _fa:
+                _fa_age = f"{int((_dt.now() - _fa_ts).total_seconds() / 60)}m ago" if _fa_ts else ""
+                _fa_is_claude = _fa_engine in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+                _fa_badge = (
+                    '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
+                    'color:#fff;font-size:10px;font-weight:700;padding:1px 7px;'
+                    'border-radius:3px;margin-left:6px;">✦ CLAUDE</span>'
+                ) if _fa_is_claude else ""
+
+                # Headline
+                st.markdown(
+                    f'<div style="background:#0E1E2E;border:1px solid #1E3A4A;border-radius:6px;'
+                    f'padding:12px 16px;margin:8px 0;">'
+                    f'<div style="font-size:11px;color:#64748b;margin-bottom:4px;">'
+                    f'{_fa_engine}{_fa_badge} · {_fa_age}</div>'
+                    f'<div style="font-size:13px;color:#C8D8E8;font-weight:600;">'
+                    f'{_fa.get("headline","")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # Per-factor verdict table
+                _fit_colors = {"aligned": "#22c55e", "caution": "#f59e0b", "avoid": "#ef4444"}
+                _fit_icons  = {"aligned": "✅", "caution": "⚠", "avoid": "✗"}
+                _verdict_colors = {
+                    "Overweight": "#f59e0b", "Moderate": "#94a3b8",
+                    "Neutral": "#64748b", "Underweight": "#3b82f6",
+                }
+                _fv_rows = ""
+                for _fv in _fa.get("factor_verdicts", []):
+                    _fc = _fit_colors.get(_fv.get("regime_fit", ""), "#888")
+                    _fi = _fit_icons.get(_fv.get("regime_fit", ""), "—")
+                    _vc = _verdict_colors.get(_fv.get("verdict", ""), "#888")
+                    _fv_rows += (
+                        f'<tr style="border-bottom:1px solid #1e1e1e;">'
+                        f'<td style="padding:5px 10px;color:#94a3b8;font-weight:600;text-transform:capitalize;">{_fv.get("factor","")}</td>'
+                        f'<td style="padding:5px 10px;color:{_vc};font-weight:700;">{_fv.get("exposure",0):+.2f}x</td>'
+                        f'<td style="padding:5px 10px;color:{_vc};">{_fv.get("verdict","")}</td>'
+                        f'<td style="padding:5px 10px;color:{_fc};">{_fi} {_fv.get("regime_fit","").capitalize()}</td>'
+                        f'<td style="padding:5px 10px;color:#64748b;font-size:11px;">{_fv.get("comment","")}</td>'
+                        f'</tr>'
+                    )
+                st.markdown(
+                    f'<table style="width:100%;border-collapse:collapse;font-family:monospace;font-size:12px;">'
+                    f'<thead><tr style="background:#1a1a1a;color:#555;font-size:10px;letter-spacing:0.06em;">'
+                    f'<th style="padding:4px 10px;text-align:left;">Factor</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Exposure</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Weight</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Regime Fit</th>'
+                    f'<th style="padding:4px 10px;text-align:left;">Comment</th>'
+                    f'</tr></thead><tbody>{_fv_rows}</tbody></table>',
+                    unsafe_allow_html=True,
+                )
+
+                # Top risk
+                if _fa.get("top_risk"):
+                    st.markdown(
+                        f'<div style="background:#1a0e0e;border-left:3px solid #ef4444;'
+                        f'border-radius:0 4px 4px 0;padding:8px 12px;margin:8px 0;">'
+                        f'<span style="font-size:10px;color:#ef4444;font-weight:700;letter-spacing:0.06em;">TOP RISK · </span>'
+                        f'<span style="font-size:12px;color:#fca5a5;">{_fa["top_risk"]}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                # Suggestions
+                if _fa.get("suggestions"):
+                    st.markdown(
+                        f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};'
+                        f'font-weight:700;letter-spacing:0.06em;margin:8px 0 4px 0;">SUGGESTIONS</div>',
+                        unsafe_allow_html=True,
+                    )
+                    for _sug in _fa["suggestions"]:
+                        st.markdown(
+                            f'<div style="font-size:12px;color:#bbb;padding:3px 0;">'
+                            f'<span style="color:{COLORS["bloomberg_orange"]};">›</span> {_sug}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+        # Section G2 — Pre-Trade Simulator
+        if open_trades:
+            with st.expander("🔬 Pre-Trade Simulator — What-If Analysis", expanded=False):
+                st.markdown(
+                    '<div style="font-size:11px;color:#64748b;margin-bottom:10px;">'
+                    'Simulate adding a new position. See correlation impact, factor shift, and sizing score before pulling the trigger.</div>',
+                    unsafe_allow_html=True,
+                )
+                _sim_col1, _sim_col2 = st.columns([1, 1])
+                with _sim_col1:
+                    _sim_ticker = st.text_input("Ticker", placeholder="e.g. GLD", key="sim_ticker").strip().upper()
+                    if _sim_ticker:
+                        try:
+                            _sim_info = yf.Ticker(_sim_ticker).info
+                            _sim_name = _sim_info.get("shortName") or _sim_info.get("longName") or ""
+                            _sim_sector = _sim_info.get("sector") or _sim_info.get("industryDisp") or ""
+                            _sim_summary = (_sim_info.get("longBusinessSummary") or "")[:200]
+                            if _sim_name:
+                                st.caption(f":green[✓ {_sim_name}]" + (f" · {_sim_sector}" if _sim_sector else ""))
+                            if _sim_summary:
+                                st.markdown(
+                                    f'<div style="font-size:10px;color:#64748b;line-height:1.4;margin-top:2px;">'
+                                    f'{_sim_summary}{"…" if len(_sim_info.get("longBusinessSummary","")) > 200 else ""}</div>',
+                                    unsafe_allow_html=True,
+                                )
+                        except Exception:
+                            pass
+                with _sim_col2:
+                    _sim_amount = st.number_input("Dollar Amount ($)", min_value=100, max_value=500000, value=5000, step=500, key="sim_amount")
+
+                if st.button("Simulate Trade", key="sim_run") and _sim_ticker:
+                    with st.spinner(f"Analyzing {_sim_ticker} impact on portfolio..."):
+                        try:
+                            from services.portfolio_sizing import simulate_add as _simulate_add
+                            _sim_result = _simulate_add(
+                                ticker=_sim_ticker,
+                                dollar_amount=float(_sim_amount),
+                                existing_positions=open_trades,
+                                regime_ctx=_rc_for_sz,
+                                portfolio_value=_total_pv if _total_pv > 0 else float(_sim_amount),
+                                live_prices=_pi_live,
+                            )
+                            st.session_state["_sim_result"] = _sim_result
+                            st.session_state["_sim_ticker"] = _sim_ticker
+                            st.session_state["_sim_amount"] = float(_sim_amount)
+                            st.session_state.pop("_sim_verdict", None)  # clear stale verdict
+                        except Exception as _sim_err:
+                            st.error(f"Simulation error: {_sim_err}")
+
+                _sim_result = st.session_state.get("_sim_result")
+                _sim_ticker_saved = st.session_state.get("_sim_ticker", "")
+                _sim_amount_saved = st.session_state.get("_sim_amount", 0)
+
+                if _sim_result and _sim_ticker_saved == _sim_ticker:
+                    _sc = _sim_result["sizing_score"]
+                    _sc_val = _sc.get("composite_score")
+                    _sc_color = "#22c55e" if (_sc_val or 0) >= 65 else ("#f59e0b" if (_sc_val or 0) >= 40 else "#ef4444")
+                    _fd = _sim_result["factor_delta"]
+                    _corr = _sim_result.get("corr_to_portfolio")
+
+                    st.markdown(
+                        f'<div style="background:#0E1E2E;border:1px solid #1E3A4A;border-radius:6px;padding:14px 18px;margin-top:8px;">'
+                        f'<div style="font-size:13px;font-weight:700;color:#C8D8E8;margin-bottom:10px;">'
+                        f'Adding <span style="color:{COLORS["bloomberg_orange"]};">{_sim_ticker_saved}</span> · '
+                        f'${_sim_amount_saved:,.0f} · {_sim_result["proposed_weight"]:.1f}% of portfolio</div>'
+                        f'<div style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:10px;">'
+                        + (f'<span style="font-size:11px;background:{_sc_color}22;border:1px solid {_sc_color}55;'
+                           f'border-radius:3px;padding:2px 8px;color:{_sc_color};">Sizing Score {_sc_val}</span>'
+                           if _sc_val is not None else '')
+                        + (f'<span style="font-size:11px;color:#888;">Regime Fit {_sc.get("regime_fit")}</span>'
+                           if _sc.get("regime_fit") is not None else '')
+                        + (f'<span style="font-size:11px;color:#888;">Avg Corr {_corr:+.2f}</span>'
+                           if _corr is not None else '')
+                        + (f'<span style="font-size:11px;color:#94a3b8;">ATR Stop ${_sc["atr_stop"]:.2f}</span>'
+                           if _sc.get("atr_stop") else '')
+                        + f'</div>'
+                        f'<div style="font-size:11px;color:#64748b;margin-bottom:4px;letter-spacing:0.05em;">FACTOR IMPACT</div>'
+                        f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+                        + "".join(
+                            f'<span style="font-size:11px;color:{"#22c55e" if _fd.get(f, 0) >= 0 else "#ef4444"};">'
+                            f'{f.capitalize()} {_fd.get(f, 0):+.2f}x</span>'
+                            for f in ["growth", "inflation", "liquidity", "credit"]
+                        )
+                        + f'</div>'
+                        + ("".join(
+                            f'<div style="font-size:11px;color:#f59e0b;margin-top:6px;">⚠ {w}</div>'
+                            for w in _sim_result["warnings"]
+                        ) if _sim_result["warnings"] else
+                        '<div style="font-size:11px;color:#22c55e;margin-top:6px;">✓ No concentration warnings</div>')
+                        + f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                    # ── AI Verdict Engine ──────────────────────────────────────
+                    st.markdown(f'<div style="margin-top:12px;border-top:1px solid #1E3A4A;padding-top:10px;"></div>', unsafe_allow_html=True)
+                    _sv_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+                    _sv_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _sv_has_claude else ["⚡ Groq"]
+                    _sv_col1, _sv_col2 = st.columns([4, 2])
+                    with _sv_col1:
+                        _sv_tier = st.radio(
+                            "Verdict Engine", _sv_tier_opts, horizontal=True,
+                            key="sim_verdict_engine",
+                            help="Regard = Haiku (fast) · Highly Regarded = Sonnet (deeper regime reasoning)",
+                        )
+                    st.caption("💡 **Regard** sufficient · **👑 Highly Regarded** for high-conviction sizing decisions")
+                    with _sv_col2:
+                        _sv_run = st.button("🧠 Get AI Verdict", key="sim_verdict_run", type="primary")
+
+                    if _sv_run:
+                        _sv_use_claude = _sv_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+                        _sv_model = None
+                        if _sv_tier == "🧠 Regard Mode":
+                            _sv_model = "claude-haiku-4-5-20251001"
+                        elif _sv_tier == "👑 Highly Regarded Mode":
+                            _sv_model = "claude-sonnet-4-6"
+                        from services.claude_client import analyze_sim_verdict as _asv
+                        with st.spinner("Getting AI verdict…"):
+                            _sv_result = _asv(
+                                ticker=_sim_ticker_saved,
+                                dollar_amount=_sim_amount_saved,
+                                sim_result=_sim_result,
+                                regime_ctx=_rc_for_sz,
+                                open_trades=open_trades,
+                                use_claude=_sv_use_claude,
+                                model=_sv_model,
+                            )
+                        if _sv_result and "_error" not in _sv_result:
+                            st.session_state["_sim_verdict"] = _sv_result
+                            st.session_state["_sim_verdict_engine"] = _sv_tier
+                        else:
+                            st.error(f"Verdict error: {(_sv_result or {}).get('_error', 'Unknown')}")
+
+                    _sv = st.session_state.get("_sim_verdict")
+                    _sv_engine = st.session_state.get("_sim_verdict_engine", "")
+                    if _sv and "_error" not in _sv:
+                        _verdict_str = _sv.get("verdict", "CAUTION")
+                        _verdict_cfg = {
+                            "GO":      ("#22c55e", "#052e16", "✅"),
+                            "CAUTION": ("#f59e0b", "#1c1400", "⚠"),
+                            "PASS":    ("#ef4444", "#1a0a0a", "✗"),
+                        }
+                        _vc, _vbg, _vi = _verdict_cfg.get(_verdict_str, ("#888", "#111", "—"))
+                        _sv_is_claude = _sv_engine in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
+                        _sv_badge = (
+                            '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
+                            'color:#fff;font-size:10px;font-weight:700;padding:1px 7px;'
+                            'border-radius:3px;margin-left:6px;">✦ CLAUDE</span>'
+                        ) if _sv_is_claude else ""
+                        _thesis_colors = {"Diversifying": "#22c55e", "Concentrating": "#f59e0b", "Hedging": "#3b82f6"}
+                        _tc = _thesis_colors.get(_sv.get("thesis_check", ""), "#888")
+
+                        st.markdown(
+                            f'<div style="background:{_vbg};border:1px solid {_vc}44;border-radius:6px;'
+                            f'padding:14px 18px;margin-top:8px;">'
+                            f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">'
+                            f'<span style="font-size:22px;font-weight:700;color:{_vc};">{_vi} {_verdict_str}</span>'
+                            f'<span style="font-size:11px;color:{_tc};background:{_tc}22;border:1px solid {_tc}44;'
+                            f'border-radius:3px;padding:1px 8px;">{_sv.get("thesis_check","")}</span>'
+                            f'{_sv_badge}'
+                            f'</div>'
+                            f'<div style="font-size:13px;color:#C8D8E8;margin-bottom:8px;font-weight:600;">'
+                            f'{_sv.get("verdict_reason","")}</div>'
+                            + (f'<div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">'
+                               f'<span style="color:#64748b;">Regime:</span> {_sv["regime_fit_comment"]}</div>'
+                               if _sv.get("regime_fit_comment") else '')
+                            + (f'<div style="font-size:11px;color:#f59e0b;margin-bottom:4px;">'
+                               f'⚠ Overlap: {_sv["overlap_warning"]}</div>'
+                               if _sv.get("overlap_warning") else '')
+                            + (f'<div style="font-size:11px;color:#94a3b8;">'
+                               f'<span style="color:#64748b;">Size:</span> {_sv["sizing_suggestion"]}</div>'
+                               if _sv.get("sizing_suggestion") else '')
+                            + f'</div>',
+                            unsafe_allow_html=True,
+                        )
+
+        # Section G — Regime-Aligned Opportunities
+        _rp_plays = st.session_state.get("_rp_plays_result") or {}
+        _fp_plays = st.session_state.get("_fed_plays_result") or {}
+        if _rp_plays or _fp_plays:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:8px;">REGIME-ALIGNED OPPORTUNITIES</div>',
+                unsafe_allow_html=True,
+            )
+
+            _held_tickers = {t["ticker"].upper() for t in open_trades}
+
+            # Helper: render a plays block (sectors + stocks)
+            def _render_plays_block(plays: dict, label: str, color: str):
+                sectors = plays.get("sectors", [])
+                stocks = plays.get("stocks", [])
+                bonds = plays.get("bonds", [])
+                rationale = plays.get("rationale", "")
+                if not (sectors or stocks or bonds):
+                    return
+                st.markdown(
+                    f'<div style="color:{color};font-size:11px;font-weight:700;'
+                    f'letter-spacing:0.06em;margin:8px 0 4px 0;">{label}</div>',
+                    unsafe_allow_html=True,
+                )
+                # Sectors
+                if sectors:
+                    sector_pills = ""
+                    for s in sectors:
+                        name = s.get("name", "") if isinstance(s, dict) else str(s)
+                        sector_pills += (
+                            f'<span style="background:#1e293b;border:1px solid #334155;'
+                            f'border-radius:3px;padding:2px 8px;margin-right:4px;'
+                            f'font-size:11px;color:#94a3b8;">{name}</span>'
+                        )
+                    st.markdown(
+                        f'<div style="margin-bottom:4px;">'
+                        f'<span style="font-size:11px;color:#555;margin-right:6px;">Sectors:</span>'
+                        f'{sector_pills}</div>',
+                        unsafe_allow_html=True,
+                    )
+                # Stocks — highlight if already held
+                if stocks:
+                    stock_pills = ""
+                    new_ideas = []
+                    for s in stocks:
+                        tk = s.get("ticker", "") if isinstance(s, dict) else str(s)
+                        name = s.get("name", tk) if isinstance(s, dict) else tk
+                        already_held = tk.upper() in _held_tickers
+                        if already_held:
+                            pill_style = (
+                                f'background:#052e16;border:1px solid #22c55e;'
+                                f'border-radius:3px;padding:2px 8px;margin-right:4px;'
+                                f'font-size:11px;color:#22c55e;font-weight:600;'
+                            )
+                            stock_pills += f'<span style="{pill_style}">{tk} ✓</span>'
+                        else:
+                            new_ideas.append((tk, name))
+                            pill_style = (
+                                f'background:#1e293b;border:1px solid #334155;'
+                                f'border-radius:3px;padding:2px 8px;margin-right:4px;'
+                                f'font-size:11px;color:#e2e8f0;'
+                            )
+                            stock_pills += f'<span style="{pill_style}">{tk}</span>'
+                    st.markdown(
+                        f'<div style="margin-bottom:4px;">'
+                        f'<span style="font-size:11px;color:#555;margin-right:6px;">Stocks:</span>'
+                        f'{stock_pills}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if new_ideas:
+                        st.caption(
+                            "💡 Not in portfolio: " +
+                            ", ".join(f"{tk} ({name})" for tk, name in new_ideas[:5])
+                        )
+                # Bonds
+                if bonds:
+                    bond_pills = ""
+                    for s in bonds:
+                        tk = s.get("ticker", "") if isinstance(s, dict) else str(s)
+                        already_held = tk.upper() in _held_tickers
+                        pill_style = (
+                            f'background:#{"052e16" if already_held else "1e293b"};'
+                            f'border:1px solid #{"22c55e" if already_held else "334155"};'
+                            f'border-radius:3px;padding:2px 8px;margin-right:4px;'
+                            f'font-size:11px;color:#{"22c55e" if already_held else "94a3b8"};'
+                            f'{"font-weight:600;" if already_held else ""}'
+                        )
+                        bond_pills += f'<span style="{pill_style}">{tk}{"  ✓" if already_held else ""}</span>'
+                    st.markdown(
+                        f'<div style="margin-bottom:4px;">'
+                        f'<span style="font-size:11px;color:#555;margin-right:6px;">Bonds/Macro:</span>'
+                        f'{bond_pills}</div>',
+                        unsafe_allow_html=True,
+                    )
+                if rationale:
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#666;margin-top:2px;font-style:italic;">'
+                        f'{rationale[:180]}{"…" if len(rationale) > 180 else ""}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            if _rp_plays:
+                _render_plays_block(_rp_plays, "▸ AI REGIME PLAYS", COLORS["bloomberg_orange"])
+            if _fp_plays:
+                _render_plays_block(_fp_plays, "▸ RATE-PATH PLAYS", "#60a5fa")
+
+            if not _rp_plays and not _fp_plays:
+                st.caption("Run AI Regime Plays and Rate-Path Plays in Risk Regime to see aligned opportunities.")
+        else:
+            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+            st.caption("Run AI Regime Plays in Risk Regime to see regime-aligned opportunities here.")
+
+    # --- Risk Matrix ---
+    with tab_risk:
+        _render_risk_matrix(open_trades)
 
     # --- Closed Trades ---
     with tab_closed:
@@ -388,7 +1791,6 @@ def render():
     with tab_analytics:
         if not closed_trades and not open_trades:
             st.info("Close some trades to see analytics.")
-            return
 
         # Compute P&L for each closed trade — all values converted to CAD
         _usdcad_metrics = _get_usdcad()
@@ -657,223 +2059,163 @@ def render():
                 )
                 st.dataframe(pd.DataFrame(_tbl_rows), use_container_width=True, hide_index=True)
 
-        # ── Portfolio Correlation ─────────────────────────────────────────────
-        # Shown for any journal entries (open OR closed) — does NOT need closed trades
-        st.markdown(
-            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-            f'letter-spacing:0.08em;margin:18px 0 6px 0;">PORTFOLIO CORRELATION</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            '<div style="font-size:11px;color:#888;line-height:1.6;margin-bottom:10px;">'
-            'Pearson correlation (ρ) measures how similarly two assets move day-to-day. '
-            '<b style="color:#ccc;">ρ = +1.0</b> means perfect lockstep (both rise/fall together). '
-            '<b style="color:#ccc;">ρ = 0</b> means no relationship. '
-            '<b style="color:#ccc;">ρ = −1.0</b> means perfect offset (one rises when the other falls). '
-            'For portfolio health, lower average ρ is better — positions with low or negative correlation '
-            'reduce overall volatility without sacrificing expected return. '
-            'The <b style="color:#ccc;">R² = ρ²</b> figure tells you what % of daily variance is shared '
-            '(e.g. ρ = 0.5 → R² = 25% shared, 75% independent).</div>',
-            unsafe_allow_html=True,
-        )
-
-        all_tickers = list({t["ticker"] for t in open_trades + closed_trades})
-
-        if len(all_tickers) < 2:
-            st.info("Need at least 2 tickers in your journal to compute correlations.")
-        else:
-            cr_col1, cr_col2 = st.columns([1, 3])
-            with cr_col1:
-                corr_period = st.selectbox(
-                    "Lookback Period",
-                    options=["3mo", "6mo", "1y", "2y", "5y"],
-                    index=2,
-                    key="jrnl_corr_period",
-                )
-
-            @st.cache_data(ttl=3600)
-            def _fetch_corr_data(tickers: tuple, period: str) -> pd.DataFrame:
-                raw = yf.download(
-                    list(tickers), period=period, interval="1d",
-                    progress=False, auto_adjust=True,
-                )
-                if raw.empty:
-                    return pd.DataFrame()
-                if isinstance(raw.columns, pd.MultiIndex):
-                    close = raw["Close"]
-                else:
-                    close = raw[["Close"]] if "Close" in raw.columns else raw
-                close = close.dropna(how="all")
-                # Keep only tickers that actually downloaded
-                close = close.loc[:, close.notna().sum() > 10]
-                return close.pct_change().dropna(how="all")
-
-            returns = _fetch_corr_data(tuple(sorted(all_tickers)), corr_period)
-
-            if returns.empty or returns.shape[1] < 2:
-                st.warning("Could not fetch enough price history for these tickers.")
-            else:
-                corr = returns.corr()
-                labels = corr.columns.tolist()
-
-                # ── Heatmap ──────────────────────────────────────────────
-                z = corr.values.tolist()
-                text = [[f"{v:.2f}" for v in row] for row in z]
-
-                fig_corr = go.Figure(go.Heatmap(
-                    z=z,
-                    x=labels,
-                    y=labels,
-                    text=text,
-                    texttemplate="%{text}",
-                    colorscale=[
-                        [0.0,  "#1565C0"],   # strong negative = blue
-                        [0.5,  "#212121"],   # zero = near-black
-                        [1.0,  "#C62828"],   # strong positive = red
-                    ],
-                    zmid=0,
-                    zmin=-1,
-                    zmax=1,
-                    showscale=True,
-                    colorbar=dict(
-                        title=dict(text="ρ", font=dict(color="#aaa")),
-                        thickness=14,
-                        len=0.8,
-                        tickfont=dict(color="#aaa", size=11),
-                    ),
-                ))
-                apply_dark_layout(fig_corr)
-                fig_corr.update_layout(
-                    title=f"Return Correlation ({corr_period})",
-                    height=max(320, 80 * len(labels)),
-                    margin=dict(t=40, b=40, l=60, r=20),
-                    xaxis=dict(side="bottom", tickfont=dict(color="#ccc", size=11)),
-                    yaxis=dict(tickfont=dict(color="#ccc", size=11), autorange="reversed"),
-                )
-                st.plotly_chart(fig_corr, use_container_width=True, key="jrnl_corr_heatmap")
-
-                # ── Highly correlated pairs warning ───────────────────────
-                high_pairs = []
-                for i, t1 in enumerate(labels):
-                    for j, t2 in enumerate(labels):
-                        if j <= i:
-                            continue
-                        v = corr.loc[t1, t2]
-                        if abs(v) >= 0.70:
-                            high_pairs.append({
-                                "Pair": f"{t1} / {t2}",
-                                "Correlation": f"{v:+.2f}",
-                                "Type": "⚠ High positive" if v >= 0.70 else "✦ Inverse hedge",
-                            })
-
-                if high_pairs:
-                    st.markdown(
-                        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};'
-                        f'margin:6px 0 4px 0;">Significant Pairs  (|ρ| ≥ 0.70)</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.dataframe(
-                        pd.DataFrame(high_pairs),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                else:
-                    st.markdown(
-                        '<div style="font-size:12px;color:#4caf50;margin-top:6px;">'
-                        '✓ No highly correlated pairs — portfolio appears well diversified.</div>',
-                        unsafe_allow_html=True,
-                    )
-
-                # ── Average pairwise correlation (concentration gauge) ────
-                upper = corr.where(
-                    pd.DataFrame(
-                        [[i < j for j in range(len(labels))] for i in range(len(labels))],
-                        index=labels, columns=labels,
-                    )
-                ).stack()
-                avg_corr = float(upper.mean()) if not upper.empty else 0.0
-                gauge_color = (
-                    COLORS.get("negative", "#f44336") if avg_corr > 0.5
-                    else COLORS.get("bloomberg_orange", "#ff9800") if avg_corr > 0.25
-                    else COLORS.get("positive", "#00e676")
-                )
-                label_text = "Concentrated" if avg_corr > 0.5 else ("Moderate" if avg_corr > 0.25 else "Diversified")
-
-                if avg_corr > 0.5:
-                    _corr_context = (
-                        "Your holdings move together strongly. A market downturn is likely to hit "
-                        "all positions simultaneously — consider adding uncorrelated assets (e.g. bonds, "
-                        "gold, inverse ETFs) or reducing position count."
-                    )
-                elif avg_corr > 0.25:
-                    """Moderate correlation — some diversification benefit but meaningful overlap. """
-                    _corr_context = (
-                        "Some diversification benefit, but your holdings share moderate common exposure. "
-                        "Watch for sector concentration (e.g. all tech) or macro factor overlap "
-                        "(e.g. all rate-sensitive). Consider whether any single macro shock "
-                        "could hit multiple positions at once."
-                    )
-                else:
-                    _r2 = avg_corr ** 2 * 100  # % variance shared
-                    _near_boundary = avg_corr >= 0.20
-                    _boundary_note = (
-                        f" Note: at {avg_corr:+.2f} you are close to the Moderate threshold (0.25) — "
-                        f"adding one more correlated position could push you into that band."
-                        if _near_boundary else ""
-                    )
-                    _corr_context = (
-                        f"Your holdings share only {_r2:.1f}% of their daily return variance on average "
-                        f"(R\u00b2 = \u03c1\u00b2 = {avg_corr:.2f}\u00b2). "
-                        f"In practice this means roughly {100 - _r2:.0f}% of each position's daily move "
-                        f"is driven by its own story, not the rest of your portfolio. "
-                        f"This reduces overall portfolio volatility compared to a concentrated book — "
-                        f"a single bad position is unlikely to drag everything down simultaneously.{_boundary_note}"
-                    )
-
-                st.markdown(
-                    f'<div style="font-size:12px;color:{COLORS["text_dim"]};margin-top:8px;">'
-                    f'Avg pairwise ρ: <b style="color:{gauge_color};">{avg_corr:+.2f}</b>'
-                    f' — <span style="color:{gauge_color};font-weight:700;">{label_text}</span>'
-                    f'<br><span style="font-size:11px;color:#888;">{_corr_context}</span></div>',
-                    unsafe_allow_html=True,
-                )
-
         # ── Equity Curve + Signal Breakdown (closed trades only) ─────────────
         if not closed_trades:
             st.info("Close some trades to see the equity curve and signal breakdown.")
-            return
 
-        # Equity curve
-        equity = [10000]  # assume $10k starting
-        for p in pnls:
-            equity.append(equity[-1] + p)
+        if closed_trades:
+            # Equity curve
+            equity = [10000]  # assume $10k starting
+            for p in pnls:
+                equity.append(equity[-1] + p)
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            y=equity, mode="lines+markers",
-            line=dict(color=COLORS["accent"], width=2),
-            marker=dict(size=4),
-            name="Equity",
-        ))
-        apply_dark_layout(fig, title="Equity Curve", yaxis_title="Portfolio Value ($)")
-        st.plotly_chart(fig, use_container_width=True)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                y=equity, mode="lines+markers",
+                line=dict(color=COLORS["accent"], width=2),
+                marker=dict(size=4),
+                name="Equity",
+            ))
+            apply_dark_layout(fig, title="Equity Curve", yaxis_title="Portfolio Value ($)")
+            st.plotly_chart(fig, use_container_width=True)
 
-        # Performance by signal source
-        df_signals = pd.DataFrame({"signal": signals, "pnl": pnls})
-        grouped = df_signals.groupby("signal").agg(
-            total_pnl=("pnl", "sum"),
-            count=("pnl", "count"),
-            win_rate=("pnl", lambda x: (x > 0).sum() / len(x) * 100),
-        ).reset_index()
+            # Performance by signal source
+            df_signals = pd.DataFrame({"signal": signals, "pnl": pnls})
+            grouped = df_signals.groupby("signal").agg(
+                total_pnl=("pnl", "sum"),
+                count=("pnl", "count"),
+                win_rate=("pnl", lambda x: (x > 0).sum() / len(x) * 100),
+            ).reset_index()
 
-        fig2 = go.Figure()
-        colors = [COLORS["positive"] if v >= 0 else COLORS["negative"] for v in grouped["total_pnl"]]
-        fig2.add_trace(go.Bar(
-            x=grouped["signal"], y=grouped["total_pnl"],
-            marker_color=colors,
-            text=[f"${v:+,.0f}<br>{n} trades<br>{wr:.0f}% win"
-                  for v, n, wr in zip(grouped["total_pnl"], grouped["count"], grouped["win_rate"])],
-            textposition="auto",
-        ))
-        apply_dark_layout(fig2, title="P&L by Signal Source", yaxis_title="Total P&L ($)")
-        st.plotly_chart(fig2, use_container_width=True)
+            fig2 = go.Figure()
+            colors = [COLORS["positive"] if v >= 0 else COLORS["negative"] for v in grouped["total_pnl"]]
+            fig2.add_trace(go.Bar(
+                x=grouped["signal"], y=grouped["total_pnl"],
+                marker_color=colors,
+                text=[f"${v:+,.0f}<br>{n} trades<br>{wr:.0f}% win"
+                      for v, n, wr in zip(grouped["total_pnl"], grouped["count"], grouped["win_rate"])],
+                textposition="auto",
+            ))
+            apply_dark_layout(fig2, title="P&L by Signal Source", yaxis_title="Total P&L ($)")
+            st.plotly_chart(fig2, use_container_width=True)
+
+    # --- Performance ---
+    with tab_perf:
+        try:
+            from modules.performance import render as _render_performance
+            _render_performance()
+        except Exception as _perf_err:
+            st.error(f"Performance tab error: {_perf_err}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    # --- AI Play Log ---
+    with tab_playlog:
+        from services.play_log import load_plays, clear_plays
+
+        _all_plays = load_plays()  # newest first
+
+        if not _all_plays:
+            st.info("No AI plays logged yet. Generate plays in Risk Regime, Discovery, or Stress Signals to start building history.")
+        else:
+            # Stats row
+            _features = sorted({p["feature"] for p in _all_plays})
+            _engines  = sorted({p["engine"]  for p in _all_plays})
+            _s1, _s2, _s3, _s4 = st.columns(4)
+            _s1.metric("Total Entries", len(_all_plays))
+            _s2.metric("Features Logged", len(_features))
+            _s3.metric("Engines Used", len(_engines))
+            from datetime import datetime as _dt
+            _last_ts = _all_plays[0].get("timestamp", "")
+            try:
+                _last_label = _dt.fromisoformat(_last_ts).strftime("%b %d %H:%M")
+            except Exception:
+                _last_label = _last_ts[:16]
+            _s4.metric("Last Entry", _last_label)
+
+            st.markdown("---")
+
+            # Filters
+            _fc1, _fc2 = st.columns(2)
+            with _fc1:
+                _feat_filter = st.selectbox("Filter by Feature", ["All"] + _features, key="playlog_feat_filter")
+            with _fc2:
+                _eng_filter = st.selectbox("Filter by Engine", ["All"] + _engines, key="playlog_eng_filter")
+
+            _filtered = [
+                p for p in _all_plays
+                if (_feat_filter == "All" or p["feature"] == _feat_filter)
+                and (_eng_filter == "All" or p["engine"] == _eng_filter)
+            ]
+
+            st.caption(f"Showing {len(_filtered)} of {len(_all_plays)} entries")
+
+            # Table
+            for _entry in _filtered:
+                _ts = _entry.get("timestamp", "")[:16].replace("T", " ")
+                _feat = _entry.get("feature", "")
+                _eng  = _entry.get("engine", "")
+                _eng_color = "#FF8811" if "👑" in _eng else ("#22c55e" if "🧠" in _eng else "#64748b")
+                _data = _entry.get("data", {})
+                _meta = _entry.get("meta", {})
+
+                # Summary line — varies by feature
+                if isinstance(_data, dict):
+                    _sectors = ", ".join(s.get("name","") for s in _data.get("sectors",[])[:3])
+                    _stocks  = ", ".join(s.get("ticker","") for s in _data.get("stocks",[])[:4])
+                    _rationale = (_data.get("rationale","") or "")[:120]
+                    _narration = (_data.get("narration","") or "")[:120]
+                    _briefing  = (_data.get("briefing","") or "")[:120]
+                    if _sectors:
+                        _summary = f"Sectors: {_sectors}" + (f" | Stocks: {_stocks}" if _stocks else "")
+                    elif _narration:
+                        _summary = _narration
+                    elif _briefing:
+                        _summary = _briefing
+                    elif "rate_path_probs" in _data:
+                        _dom = _data.get("dominant", {})
+                        _summary = f"Dominant: {_dom.get('scenario','')} {_dom.get('prob_pct',0):.0f}%"
+                    else:
+                        _summary = str(_data)[:100]
+                else:
+                    _summary = str(_data)[:100]
+
+                with st.expander(
+                    f"{_ts} &nbsp; **{_feat}** &nbsp; `{_eng}` — {_summary[:80]}{'…' if len(_summary) > 80 else ''}",
+                    expanded=False,
+                ):
+                    _col_a, _col_b = st.columns([1, 2])
+                    with _col_a:
+                        st.markdown(
+                            f'<div style="font-size:11px;color:#94a3b8;">Feature</div>'
+                            f'<div style="font-weight:700;">{_feat}</div>'
+                            f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Engine</div>'
+                            f'<div style="color:{_eng_color};font-weight:700;">{_eng}</div>'
+                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Regime</div>'
+                               f'<div>{_meta.get("regime","—")}</div>' if _meta.get("regime") else "")
+                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fed Rate</div>'
+                               f'<div>{_meta.get("fed_funds_rate","—")}</div>' if _meta.get("fed_funds_rate") else ""),
+                            unsafe_allow_html=True,
+                        )
+                    with _col_b:
+                        if _rationale:
+                            st.markdown(f"**Rationale:** {_data.get('rationale','')}")
+                        if _sectors:
+                            st.markdown(f"**Sectors:** {_sectors}")
+                        if _stocks:
+                            st.markdown(f"**Stocks:** {_stocks}")
+                        _bonds = ", ".join(s.get("ticker","") for s in _data.get("bonds",[])[:3])
+                        if _bonds:
+                            st.markdown(f"**Bonds:** {_bonds}")
+                        if _narration:
+                            st.markdown(f"**Narration:** {_data.get('narration','')}")
+                        if _briefing:
+                            st.markdown(f"**Briefing:** {_data.get('briefing','')[:600]}")
+                    with st.expander("Raw JSON", expanded=False):
+                        st.json(_entry)
+
+            st.markdown("---")
+            if st.button("🗑 Clear Play Log", key="clear_playlog"):
+                clear_plays()
+                st.success("Play log cleared.")
+                st.rerun()

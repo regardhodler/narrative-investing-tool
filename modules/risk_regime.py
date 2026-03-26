@@ -44,28 +44,56 @@ from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 _HISTORY_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 _HISTORY_FILE = os.path.join(_HISTORY_DIR, "regime_history.json")
 
+# Gist-based persistence (set REGIME_GIST_ID + GIST_TOKEN in .env / Streamlit secrets)
+_REGIME_GIST_ID  = os.getenv("REGIME_GIST_ID", "")
+_REGIME_GIST_RAW = os.getenv("REGIME_GIST_RAW_URL", "")   # optional fast-read URL
+_GIST_TOKEN      = (os.getenv("GIST_TOKEN") or os.getenv("GITHUB_GIST_TOKEN") or "").strip()
+_GIST_FILENAME   = "regime_history.json"
+
+
+def _gist_raw_url() -> str:
+    """Derive the raw read URL from env or construct it from REGIME_GIST_ID."""
+    if _REGIME_GIST_RAW:
+        return _REGIME_GIST_RAW
+    if _REGIME_GIST_ID:
+        return f"https://gist.githubusercontent.com/raw/{_REGIME_GIST_ID}/{_GIST_FILENAME}"
+    return ""
+
 
 @st.cache_data(ttl=60)
 def _load_history() -> list[dict]:
-    """Load regime history from JSON file (cached 60s to avoid repeated I/O)."""
+    """Load regime history — Gist first, local file as fallback."""
+    import requests as _req
+
+    # 1. Try Gist
+    raw_url = _gist_raw_url()
+    if raw_url:
+        try:
+            resp = _req.get(raw_url, timeout=8, headers={"User-Agent": "NarrativeInvestingTool/1.0",
+                                                          "Cache-Control": "no-cache"})
+            if resp.ok:
+                return resp.json()
+        except Exception:
+            pass
+
+    # 2. Local file fallback
     if os.path.exists(_HISTORY_FILE):
         try:
             with open(_HISTORY_FILE, "r") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
-            return []
+            pass
     return []
 
 
 def _save_snapshot(macro: dict):
-    """Persist today's regime snapshot (one entry per calendar day)."""
-    os.makedirs(_HISTORY_DIR, exist_ok=True)
-    history = _load_history()
-    today = datetime.now().strftime("%Y-%m-%d")
+    """Persist today's regime snapshot — writes to Gist (if configured) and local file."""
+    import requests as _req
 
-    # Map macro_score (0-100) to -1..+1 for history chart continuity
+    today = datetime.now().strftime("%Y-%m-%d")
     score_normalized = (macro["macro_score"] - 50) / 50.0
 
+    history = _load_history()
     history = [h for h in history if h.get("date") != today]
     history.append({
         "date": today,
@@ -81,9 +109,28 @@ def _save_snapshot(macro: dict):
 
     # Keep last 730 days max (2 years)
     history = sorted(history, key=lambda x: x["date"])[-730:]
+    payload_str = json.dumps(history, indent=2)
 
+    # 1. Write to Gist (primary — persists across Streamlit Cloud deploys)
+    if _REGIME_GIST_ID and _GIST_TOKEN:
+        try:
+            _req.patch(
+                f"https://api.github.com/gists/{_REGIME_GIST_ID}",
+                json={"files": {_GIST_FILENAME: {"content": payload_str}}},
+                headers={
+                    "Authorization": f"Bearer {_GIST_TOKEN}",
+                    "Accept": "application/vnd.github+json",
+                },
+                timeout=10,
+            )
+        except Exception:
+            pass
+
+    # 2. Write local file (fallback / local dev)
+    os.makedirs(_HISTORY_DIR, exist_ok=True)
     with open(_HISTORY_FILE, "w") as f:
-        json.dump(history, f, indent=2)
+        f.write(payload_str)
+
     _load_history.clear()
 
 
