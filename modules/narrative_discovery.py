@@ -219,6 +219,7 @@ def render():
         _selected_play_model = st.radio(
             "Engine", _PLAY_MODEL_OPTIONS, horizontal=True, key="play_engine_radio"
         )
+        st.caption("💡 🧠 Haiku is sufficient here — same structured schema as Regime Plays")
 
         # ── Stress-Test Overlay (optional scenario input) ─────────────────
         st.markdown(
@@ -228,12 +229,13 @@ def render():
         st.caption("Optional — layer a macro shock on current signals to stress-test your plays")
         # Pick up any quick-fill value BEFORE the widget is instantiated
         _qs_pending = st.session_state.pop("_pending_overlay_input", None)
+        if _qs_pending is not None:
+            st.session_state["overlay_scenario_input"] = _qs_pending
         _overlay_scenario = st.text_input(
             "Stress-Test Overlay",
             placeholder="e.g. Reverse yen carry trade, Strait of Hormuz closure, US credit downgrade",
             label_visibility="collapsed",
             key="overlay_scenario_input",
-            value=_qs_pending if _qs_pending is not None else st.session_state.get("overlay_scenario_input", ""),
         )
         _pre_swans = st.session_state.get("_custom_swans", {})
         if _pre_swans:
@@ -247,46 +249,118 @@ def render():
                         st.session_state["_pending_overlay_input"] = _qslabel
                         st.rerun()
 
-        # ── Upstream context status ───────────────────────────────────────
-        _has_regime_ctx  = bool(st.session_state.get("_regime_context"))
-        _has_fed_plays   = bool(st.session_state.get("_fed_plays_result"))
-        _has_rate_path   = bool(st.session_state.get("_dominant_rate_path"))
-        _has_black_swans = bool(st.session_state.get("_custom_swans"))
-        _bs_count        = len(st.session_state.get("_custom_swans", {}))
-        _rp_tier_label   = st.session_state.get("_regime_plays_tier", "")
-        _fed_plays_tier  = st.session_state.get("_fed_plays_tier", "")
-        _dom_rp_scenario = st.session_state.get("_dominant_rate_path", {}).get("scenario", "")
-        _scenario_labels_disc = {
-            "cut_25": "25bp cut", "cut_50": "50bp cut",
-            "hold": "Hold", "hike_25": "25bp hike",
-        }
-        _dom_rp_label = _scenario_labels_disc.get(_dom_rp_scenario, _dom_rp_scenario)
-        _fed_tier_suffix = f" ({_fed_plays_tier})" if _fed_plays_tier else ""
-
+        # ── Upstream context checklist ────────────────────────────────────
         def _age_label(ts_key: str) -> str:
             from datetime import datetime as _dt
             _ts = st.session_state.get(ts_key)
             if not _ts:
                 return ""
             _mins = int((_dt.now() - _ts).total_seconds() / 60)
-            if _mins < 1:
-                return " — just now"
-            if _mins < 60:
-                return f" — {_mins}m ago"
-            _hrs = _mins // 60
-            return f" — {_hrs}h ago"
+            if _mins < 1: return " · just now"
+            if _mins < 60: return f" · {_mins}m ago"
+            return f" · {_mins // 60}h ago"
 
-        _regime_dot  = f'<span style="color:#22c55e;font-weight:700;">✓</span> Regime AI ({_rp_tier_label}){_age_label("_regime_context_ts")}' if _has_regime_ctx else '<span style="color:#ef4444;">✗</span> Regime AI'
-        _fed_dot     = f'<span style="color:#22c55e;font-weight:700;">✓</span> Rate-Path Plays{_fed_tier_suffix}{_age_label("_fed_plays_result_ts")}' if _has_fed_plays else '<span style="color:#ef4444;">✗</span> Rate-Path Plays'
-        _rp_dot      = f'<span style="color:#22c55e;font-weight:700;">✓</span> Rate Path ({_dom_rp_label}){_age_label("_rate_path_probs_ts")}' if _has_rate_path else '<span style="color:#ef4444;">✗</span> Rate Path'
-        _bs_dot      = f'<span style="color:#22c55e;font-weight:700;">✓</span> Black Swan ({_bs_count}){_age_label("_custom_swans_ts")}' if _has_black_swans else '<span style="color:#ef4444;">✗</span> Black Swan'
-        _any_enriched = _has_regime_ctx or _has_fed_plays or _has_rate_path or _has_black_swans
+        _dom_rp_scenario = st.session_state.get("_dominant_rate_path", {}).get("scenario", "")
+        _dom_rp_prob = st.session_state.get("_dominant_rate_path", {}).get("prob_pct", 0)
+        _dp_labels = {"cut_25": "25bp Cut", "cut_50": "50bp Cut", "hold": "Hold", "hike_25": "25bp Hike"}
+        _dom_rp_label = _dp_labels.get(_dom_rp_scenario, _dom_rp_scenario)
+        _bs_count = len(st.session_state.get("_custom_swans", {}))
+        _ff_rate = st.session_state.get("_fed_funds_rate")
+
+        _ctx_signals = [
+            (
+                bool(st.session_state.get("_regime_context")),
+                "Regime",
+                f"{st.session_state.get('_regime_context', {}).get('regime', '')} · "
+                f"score {st.session_state.get('_regime_context', {}).get('score', 0):+.2f} · "
+                f"{st.session_state.get('_regime_context', {}).get('quadrant', '')}",
+                "_regime_context_ts",
+            ),
+            (
+                bool(st.session_state.get("_dominant_rate_path")),
+                "Fed Rate Path",
+                f"{_dom_rp_label} ({_dom_rp_prob:.0f}%)" if _dom_rp_label else "",
+                "_rate_path_probs_ts",
+            ),
+            (
+                _ff_rate is not None,
+                "Fed Funds Rate",
+                f"{_ff_rate:.2f}%" if _ff_rate is not None else "",
+                None,
+            ),
+            (
+                bool(st.session_state.get("_fed_plays_result")),
+                "Rate-Path Plays",
+                st.session_state.get("_fed_plays_engine", ""),
+                "_fed_plays_result_ts",
+            ),
+            (
+                bool(st.session_state.get("_rp_plays_result")),
+                "Regime Plays",
+                st.session_state.get("_rp_plays_last_tier", ""),
+                None,
+            ),
+            (
+                bool(st.session_state.get("_doom_briefing")),
+                "Doom Briefing",
+                st.session_state.get("_doom_briefing_engine", ""),
+                "_doom_briefing_ts",
+            ),
+            (
+                bool(st.session_state.get("_chain_narration")),
+                "Policy Transmission",
+                "",
+                None,
+            ),
+            (
+                bool(st.session_state.get("_custom_swans")),
+                "Black Swans",
+                f"{_bs_count} event(s)" if _bs_count else "",
+                "_custom_swans_ts",
+            ),
+            (
+                bool(st.session_state.get("_whale_summary")),
+                "Whale Activity",
+                "",
+                "_whale_summary_ts",
+            ),
+            (
+                bool(st.session_state.get("_current_events_digest")),
+                "Current Events",
+                st.session_state.get("_current_events_engine", ""),
+                "_current_events_digest_ts",
+            ),
+        ]
+
+        _n_loaded = sum(1 for ok, *_ in _ctx_signals if ok)
+        _total = len(_ctx_signals)
+        _bar_pct = int(_n_loaded / _total * 100)
+        _bar_color = "#22c55e" if _n_loaded >= 7 else ("#f59e0b" if _n_loaded >= 4 else "#ef4444")
+
+        # Build 2-column checklist rows
+        _rows_html = ""
+        _left = _ctx_signals[:5]
+        _right = _ctx_signals[5:]
+        for (ok_l, label_l, detail_l, ts_l), (ok_r, label_r, detail_r, ts_r) in zip(_left, _right):
+            _icon_l = f'<span style="color:#22c55e;">✓</span>' if ok_l else '<span style="color:#ef4444;">✗</span>'
+            _icon_r = f'<span style="color:#22c55e;">✓</span>' if ok_r else '<span style="color:#ef4444;">✗</span>'
+            _detail_l = f'<span style="color:#555;font-size:10px;"> {detail_l}{_age_label(ts_l) if ts_l else ""}</span>' if (ok_l and detail_l) else (f'<span style="color:#555;font-size:10px;">{_age_label(ts_l)}</span>' if (ok_l and ts_l) else "")
+            _detail_r = f'<span style="color:#555;font-size:10px;"> {detail_r}{_age_label(ts_r) if ts_r else ""}</span>' if (ok_r and detail_r) else (f'<span style="color:#555;font-size:10px;">{_age_label(ts_r)}</span>' if (ok_r and ts_r) else "")
+            _col_l = f'<td style="padding:2px 12px 2px 0;white-space:nowrap;">{_icon_l} <span style="color:{"#e2e8f0" if ok_l else "#475569"};">{label_l}</span>{_detail_l}</td>'
+            _col_r = f'<td style="padding:2px 0;">{_icon_r} <span style="color:{"#e2e8f0" if ok_r else "#475569"};">{label_r}</span>{_detail_r}</td>'
+            _rows_html += f"<tr>{_col_l}{_col_r}</tr>"
+
         st.markdown(
-            f'<div style="font-size:11px;color:#94a3b8;border:1px solid #334155;border-radius:6px;'
-            f'padding:8px 12px;margin-bottom:8px;">'
-            f'<span style="font-weight:700;letter-spacing:0.06em;text-transform:uppercase;">Upstream Context: </span>'
-            f'{_regime_dot} &nbsp;·&nbsp; {_fed_dot} &nbsp;·&nbsp; {_rp_dot} &nbsp;·&nbsp; {_bs_dot}'
-            f'{"&nbsp;&nbsp;<span style=\'color:#FF8811;font-size:10px;\'>↑ enriching prompt</span>" if _any_enriched else ""}'
+            f'<div style="border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-bottom:8px;">'
+            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;">Prompt Context</span>'
+            f'<span style="font-size:10px;color:{_bar_color};font-weight:600;">{_n_loaded}/{_total} signals loaded</span>'
+            f'</div>'
+            f'<div style="height:2px;background:#1e293b;border-radius:1px;margin-bottom:8px;">'
+            f'<div style="height:2px;width:{_bar_pct}%;background:{_bar_color};border-radius:1px;"></div>'
+            f'</div>'
+            f'<table style="width:100%;font-size:11px;font-family:monospace;border-collapse:collapse;">'
+            f'{_rows_html}</table>'
             f'</div>',
             unsafe_allow_html=True,
         )
@@ -315,7 +389,8 @@ def render():
                     _enrichment_parts.append(
                         f"[Regime AI ({_cached_rp_tier}): "
                         f"regime={_cached_regime_ctx['regime']}, "
-                        f"score={_cached_regime_ctx['score']:+.2f}, "
+                        f"score={_cached_regime_ctx.get('score', 0.0):+.2f}, "
+                        f"quadrant={_cached_regime_ctx.get('quadrant', 'Unknown')}, "
                         f"context={_cached_regime_ctx['signal_summary']}]"
                     )
 
@@ -363,6 +438,54 @@ def render():
                         f"[Black Swan Tail Risks: {'; '.join(_swan_parts)}]"
                     )
 
+                # Policy Transmission narration
+                _narration_cached = st.session_state.get("_chain_narration")
+                if _narration_cached:
+                    _enrichment_parts.append(f"[Policy Transmission: {_narration_cached[:400]}]")
+
+                # Doom Briefing risk assessment
+                _doom_cached = st.session_state.get("_doom_briefing")
+                if _doom_cached:
+                    _enrichment_parts.append(f"[Risk Intelligence Briefing: {_doom_cached[:400]}]")
+
+                # Prior Cross-Signal Macro Plays (previous Discovery run — enriches next)
+                _prev_plays = st.session_state.get("_plays_result")
+                if _prev_plays:
+                    _pp_sectors = ", ".join(s.get("name", "") for s in _prev_plays.get("sectors", [])[:3])
+                    _enrichment_parts.append(
+                        f"[Prior Discovery Plays: Sectors: {_pp_sectors} | {_prev_plays.get('rationale', '')}]"
+                    )
+
+                # Institutional Whale Activity Summary
+                _whale_cached = st.session_state.get("_whale_summary")
+                if _whale_cached:
+                    _enrichment_parts.append(f"[Whale Activity: {_whale_cached[:400]}]")
+
+                # AI Regime Plays (sector/stock picks for current regime)
+                _rp_plays_cached = st.session_state.get("_rp_plays_result")
+                if _rp_plays_cached:
+                    _rp_sectors = ", ".join(s.get("name", "") for s in _rp_plays_cached.get("sectors", [])[:3])
+                    _rp_stocks = ", ".join(s.get("ticker", "") for s in _rp_plays_cached.get("stocks", [])[:4])
+                    _enrichment_parts.append(
+                        f"[AI Regime Plays: Sectors: {_rp_sectors}; Stocks: {_rp_stocks}; "
+                        f"{_rp_plays_cached.get('rationale', '')[:200]}]"
+                    )
+
+                # Fed Funds Rate
+                _ff_rate_disc = st.session_state.get("_fed_funds_rate")
+                if _ff_rate_disc is not None:
+                    _enrichment_parts.append(f"[Fed Funds Rate: {_ff_rate_disc:.2f}%]")
+
+                # Regime signal_summary (17-signal breakdown)
+                _rc_disc = st.session_state.get("_regime_context")
+                if _rc_disc and _rc_disc.get("signal_summary"):
+                    _enrichment_parts.append(f"[Regime Signal Detail: {_rc_disc['signal_summary'][:400]}]")
+
+                # Current Events digest (from Current Events module)
+                _ce_disc = st.session_state.get("_current_events_digest", "")
+                if _ce_disc:
+                    _enrichment_parts.append(f"[Current Events: {_ce_disc[:400]}]")
+
                 if _enrichment_parts:
                     _signal_summary += " || UPSTREAM AI CONTEXT: " + " | ".join(_enrichment_parts)
                 _scenario_text = _overlay_scenario.strip()
@@ -390,6 +513,9 @@ def render():
                 st.session_state["_plays_engine"] = _selected_play_model
                 st.session_state["_plays_overlay_text"] = _scenario_text
                 st.session_state["_discovery_tier"] = _selected_play_model
+                from services.play_log import append_play as _append_play
+                _append_play("Discovery Plays", _selected_play_model, _plays,
+                             meta={"overlay": _scenario_text or None, "regime": _regime})
             else:
                 _plays = st.session_state["_plays_result"]
                 _cached_plays_engine = st.session_state.get("_plays_engine", "⚡ Groq")
@@ -521,6 +647,15 @@ def render():
                 st.session_state.pop("_macro_fit_error", None)
             st.session_state["_macro_fit_result"] = _fit_result
             st.session_state["_macro_fit_ticker"] = _fit_t_input
+            # Accumulate in per-ticker dict for Portfolio Intelligence
+            if _fit_result and "_error" not in (_fit_result or {}):
+                _mf_dict = st.session_state.get("_macro_fit_results", {})
+                _mf_dict[_fit_t_input.upper()] = {
+                    "fit_stars": _fit_result.get("fit_stars", 0),
+                    "verdict": _fit_result.get("verdict", ""),
+                    "rationale": _fit_result.get("rationale", ""),
+                }
+                st.session_state["_macro_fit_results"] = _mf_dict
 
         _fit_err = st.session_state.get("_macro_fit_error")
         if _fit_err:

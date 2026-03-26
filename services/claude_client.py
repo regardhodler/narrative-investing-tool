@@ -251,7 +251,7 @@ Rules:
         return []
 
 
-def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None) -> dict | None:
+def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None, current_events: str = "") -> dict | None:
     """Generate an AI valuation and recommendation for a ticker via Groq or Claude.
 
     Returns dict with keys: rating, confidence, summary, bullish_factors,
@@ -259,9 +259,11 @@ def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False,
     """
     import re
 
+    _ce_block = f"\nCURRENT EVENTS & MARKET INTEL:\n{current_events[:800]}\n" if current_events else ""
+
     prompt = f"""You are an expert equity research analyst. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
 
-{signals_text}
+{signals_text}{_ce_block}
 
 Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys:
 {{
@@ -535,16 +537,11 @@ Return ONLY valid JSON (no markdown fences) with these keys:
         return _empty
 
 
-@st.cache_data(ttl=3600)
-def summarize_whale_activity(activity_text: str) -> str:
-    """Summarize whale 13F activity into a narrative via Groq.
+def summarize_whale_activity(activity_text: str, use_claude: bool = False, model: str = None) -> str:
+    """Summarize whale 13F activity into a narrative via Groq or Claude.
 
     Returns a markdown-formatted narrative string about big money themes this quarter.
     """
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        return "GROQ_API_KEY not set — cannot generate whale activity summary."
-
     prompt = f"""You are a top-tier institutional equity analyst. Analyze these quarterly 13F whale position changes and write a concise narrative summary.
 
 Focus on:
@@ -557,6 +554,25 @@ Keep the summary to 4-6 bullet points. Be specific about names, dollar amounts, 
 
 Whale activity data:
 {activity_text}"""
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=800,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+        except Exception as _e:
+            st.error(f"Claude API error (Whale Summary): {_e}")
+            return f"Error generating whale summary: {_e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate whale activity summary."
 
     try:
         resp = requests.post(
@@ -578,7 +594,6 @@ Whale activity data:
     except Exception as e:
         return f"Error generating whale summary: {e}"
 
-    # Strip markdown fences if present
     if text.startswith("```"):
         text = text.split("\n", 1)[1]
         if text.endswith("```"):
@@ -588,25 +603,31 @@ Whale activity data:
     return text
 
 
-def generate_doom_briefing(stress_data: str, use_claude: bool = False, model: str = None) -> str:
+def generate_doom_briefing(stress_data: str, use_claude: bool = False, model: str = None, current_events: str = "") -> str:
     """Generate an ominous risk intelligence briefing from stress signal data via Groq or Claude.
 
     Returns a markdown-formatted doom briefing string.
     """
-    prompt = f"""You are a doomsday-focused financial risk analyst. Your job is to be the canary in the coal mine — flagging systemic risks that mainstream analysts ignore.
+    # Truncate stress_data to avoid Groq context limits (~6k chars is safe)
+    _stress_truncated = stress_data[:6000] + "\n[...truncated]" if len(stress_data) > 6000 else stress_data
+    if current_events:
+        _stress_truncated += f"\n\nCURRENT EVENTS CONTEXT:\n{current_events[:1500]}"
 
-Analyze the following stress signal data and write a dramatic but data-driven risk assessment briefing.
+    prompt = f"""You are a senior sell-side risk strategist writing for institutional allocators.
+
+Analyze the stress signal data below and produce a concise risk assessment briefing.
 
 Rules:
-- Be direct about risks. Do NOT sugarcoat. If something looks bad, say it looks bad.
-- Flag any systemic concerns — contagion risks, interconnected failures, cascading defaults.
-- Rate overall financial system stress from 1-10 (1 = calm seas, 10 = 2008-level crisis).
-- Use ominous, urgent language but remain factual and professional.
-- Structure as: STRESS LEVEL rating, then 4-6 bullet points on the most concerning signals, then a 2-3 sentence closing assessment.
-- If data is limited or unavailable, note what you cannot assess and why that itself is concerning.
+- Use clinical, data-driven language — no hyperbole, no metaphors, no editorial flair.
+- Every claim must cite a specific number from the data provided. Do not assert without evidence.
+- Measured urgency is appropriate; dramatic language is not.
+- Flag systemic concerns — contagion risks, interconnected failures, cascading defaults — but describe them in terms of observed data.
+- Rate overall financial system stress from 1-10 (1 = calm, 10 = systemic crisis).
+- Structure as: STRESS LEVEL rating, then 4-6 bullet points on the most significant signals, then a 2-3 sentence forward-looking assessment.
+- If data is limited or unavailable, note what cannot be assessed and why.
 
 Stress Signal Data:
-{stress_data}"""
+{_stress_truncated}"""
 
     if use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
@@ -641,7 +662,22 @@ Stress Signal Data:
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if not resp.ok:
+            # Auto-fallback to Claude if Groq is restricted/unavailable
+            if resp.status_code == 400 and os.getenv("ANTHROPIC_API_KEY"):
+                try:
+                    import anthropic as _ac
+                    _client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+                    _msg = _client.messages.create(
+                        model="claude-haiku-4-5-20251001",
+                        max_tokens=1000,
+                        temperature=0.4,
+                        messages=[{"role": "user", "content": prompt}],
+                    )
+                    return _msg.content[0].text.strip()
+                except Exception as _ce:
+                    return f"Error generating doom briefing: Groq restricted, Claude fallback also failed: {_ce}"
+            return f"Error generating doom briefing: {resp.status_code} — {resp.text[:300]}"
         text = resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"Error generating doom briefing: {e}"
@@ -770,6 +806,401 @@ Respond ONLY with valid JSON:
         import json as _json, re as _re
         m = _re.search(r"\{.*\}", raw, _re.DOTALL)
         return _json.loads(m.group()) if m else {"_error": f"No JSON in response: {raw[:200]}"}
+    except Exception as _e:
+        return {"_error": str(_e)}
+
+
+def analyze_portfolio(
+    positions: list,
+    upstream: dict,
+    use_claude: bool = True,
+    model: str | None = None,
+) -> dict | None:
+    """Analyze open positions against current macro conditions.
+
+    Returns a dict with verdict, risk_score, narrative, per-position assessments,
+    and priority_actions. Defaults to Sonnet (highest-stakes call).
+    """
+    regime = upstream.get("regime", "Unknown")
+    score = upstream.get("score", 0.0)
+    quadrant = upstream.get("quadrant", "Unknown")
+    fed_funds_rate = upstream.get("fed_funds_rate", "Unknown")
+    doom_briefing = (upstream.get("doom_briefing") or "")[:400]
+    whale_summary = (upstream.get("whale_summary") or "")[:300]
+    chain_narration = (upstream.get("chain_narration") or "")[:300]
+
+    # Rate path
+    dominant_rp = upstream.get("dominant_rate_path") or {}
+    dominant_scenario = dominant_rp.get("scenario", "Unknown")
+    prob_pct = dominant_rp.get("prob_pct", 0)
+
+    # Regime plays sectors
+    rp = upstream.get("regime_plays") or {}
+    regime_plays_sectors = ", ".join(s.get("name", s) if isinstance(s, dict) else s for s in rp.get("sectors", [])) or "None"
+
+    # Discovery plays
+    dp = upstream.get("discovery_plays") or {}
+    _dp_sectors = ", ".join(s.get("name", "") for s in dp.get("sectors", [])[:3])
+    _dp_stocks = ", ".join(s.get("ticker", "") for s in dp.get("stocks", [])[:4])
+    discovery_plays_str = (
+        f"Sectors: {_dp_sectors} | Stocks: {_dp_stocks}"
+        if (_dp_sectors or _dp_stocks) else "None"
+    )
+
+    # Black swan block
+    custom_swans = upstream.get("custom_swans") or {}
+    if custom_swans:
+        swan_lines = []
+        for label, data in custom_swans.items():
+            prob = data.get("probability_pct", "?")
+            impacts = data.get("asset_impacts", {})
+            eq = impacts.get("equities", "?")
+            bd = impacts.get("bonds", "?")
+            swan_lines.append(f"  {label} ({prob}%): equities={eq}, bonds={bd}")
+        swan_block = "\n".join(swan_lines)
+    else:
+        swan_block = "  No black swans analyzed"
+
+    # Factor exposure block
+    factor_exposure = upstream.get("factor_exposure") or {}
+    fe_block = (
+        "  " + " | ".join(f"{f.capitalize()} {v:+.2f}x" for f, v in factor_exposure.items())
+        if factor_exposure else "  Not computed"
+    )
+
+    # Sizing scores block
+    sizing_scores = upstream.get("sizing_scores") or {}
+
+    # Positions block (enriched with weight + sizing score when available)
+    pos_lines = []
+    for p in positions:
+        direction = p.get("direction", "Long").upper()
+        ticker = p.get("ticker", "?")
+        entry = p.get("entry_price", 0)
+        thesis = (p.get("thesis") or "No thesis")[:80]
+        sz = sizing_scores.get(ticker.upper(), {})
+        sz_str = ""
+        if sz.get("score") is not None:
+            sz_str = f" [Wt:{sz['weight']}% Score:{sz['score']} RegimeFit:{sz.get('regime_fit')}]"
+        pos_lines.append(f"  {direction} {ticker} @ ${entry:.2f}{sz_str} — {thesis}")
+    positions_block = "\n".join(pos_lines) if pos_lines else "  No open positions"
+
+    current_events = (upstream.get("current_events") or "").strip()
+    ce_block = f"\nCURRENT EVENTS:\n{current_events[:1000]}" if current_events else ""
+
+    prompt = f"""You are a portfolio risk manager. Analyze these open positions against current macro conditions.
+
+MACRO ENVIRONMENT:
+- Regime: {regime} (score {score:+.2f})
+- Quadrant: {quadrant}
+- Fed Rate: {fed_funds_rate}%
+- Dominant Rate Path: {dominant_scenario} ({prob_pct}% probability)
+- Policy Transmission: {chain_narration}
+- Risk Briefing: {doom_briefing}
+- Institutional Flow: {whale_summary}
+- AI Favored Sectors: {regime_plays_sectors}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}
+
+PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
+{fe_block}
+
+BLACK SWAN RISKS:
+{swan_block}
+
+OPEN POSITIONS (with portfolio weight, sizing score, regime fit where available):
+{positions_block}
+
+For each position assess regime alignment, rate path sensitivity, black swan exposure, and factor concentration.
+
+Return ONLY valid JSON:
+{{
+  "verdict": "HOLD_ALL"|"REDUCE_RISK"|"DEFENSIVE"|"EXIT_REVIEW",
+  "risk_score": 1-10,
+  "narrative": "2-3 sentence portfolio assessment",
+  "positions": [
+    {{
+      "ticker": "...",
+      "action": "HOLD"|"REDUCE"|"EXIT"|"ADD",
+      "alignment": "aligned"|"misaligned"|"neutral",
+      "rationale": "1-2 sentences",
+      "risk_factors": ["factor1", "factor2"]
+    }}
+  ],
+  "priority_actions": ["action1", "action2", "action3"]
+}}"""
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation, no preamble. Be extremely concise: rationale = max 15 words, risk_factors = max 2 short items, narrative = max 25 words, priority_actions = max 3 items. Every position in the input MUST appear in the output positions array."
+    _model = model or "claude-sonnet-4-6"
+    try:
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=_model, max_tokens=8000, temperature=0.2,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            if resp.stop_reason == "max_tokens":
+                return {"_error": "Response truncated (max_tokens hit) — portfolio too large. Try Regard Mode or reduce positions."}
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [
+                          {"role": "system", "content": _system},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": 4000, "temperature": 0.2},
+                timeout=60,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+        import json as _json, re as _re
+        # Strip markdown fences if present
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+        raw = _re.sub(r"```\s*$", "", raw, flags=_re.MULTILINE).strip()
+        # Try direct parse first
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            pass
+        # Fall back to greedy regex extraction
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if m:
+            try:
+                return _json.loads(m.group())
+            except _json.JSONDecodeError as _je:
+                return {"_error": f"JSON parse error: {_je} | raw[:300]: {raw[:300]}"}
+        return {"_error": f"No JSON in response: {raw[:200]}"}
+    except Exception as _e:
+        return {"_error": str(_e)}
+
+
+def analyze_sim_verdict(
+    ticker: str,
+    dollar_amount: float,
+    sim_result: dict,
+    regime_ctx: dict,
+    open_trades: list,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict | None:
+    """AI verdict on a pre-trade simulation.
+
+    sim_result: output of simulate_add() — {sizing_score, factor_delta, proposed_weight, corr_to_portfolio, warnings}
+    Returns: {verdict, verdict_reason, regime_fit_comment, overlap_warning, sizing_suggestion, thesis_check}
+    """
+    sc = sim_result.get("sizing_score", {})
+    fd = sim_result.get("factor_delta", {})
+    proposed_weight = sim_result.get("proposed_weight", 0)
+    corr = sim_result.get("corr_to_portfolio")
+    warnings = sim_result.get("warnings", [])
+
+    quadrant = regime_ctx.get("quadrant", "Unknown")
+    regime   = regime_ctx.get("regime") or regime_ctx.get("macro_regime", "Unknown")
+    score    = regime_ctx.get("score", 0)
+
+    held = ", ".join(t["ticker"].upper() for t in open_trades) if open_trades else "None"
+
+    factor_delta_str = " | ".join(
+        f"{f.capitalize()} {v:+.2f}x" for f, v in fd.items()
+    )
+    warnings_str = "; ".join(warnings) if warnings else "None"
+
+    prompt = f"""You are a pre-trade risk advisor. Evaluate whether adding this position makes sense given the portfolio and current macro regime.
+
+PROPOSED TRADE:
+- Ticker: {ticker}
+- Amount: ${dollar_amount:,.0f} ({proposed_weight:.1f}% of portfolio)
+- Sizing Score: {sc.get("composite_score", "N/A")} / 100
+- Regime Fit: {sc.get("regime_fit", "N/A")}
+- ATR Stop: ${sc.get("atr_stop") or "N/A"}
+- Avg Correlation to Portfolio: {f"{corr:+.2f}" if corr is not None else "N/A"}
+
+FACTOR IMPACT (change to portfolio exposure if added):
+{factor_delta_str}
+
+MATH ENGINE WARNINGS:
+{warnings_str}
+
+CURRENT MACRO REGIME:
+- Quadrant: {quadrant}
+- Regime: {regime} (score {score:+.2f})
+
+EXISTING POSITIONS: {held}
+
+Give a verdict: GO (add it), CAUTION (add smaller / with conditions), or PASS (don't add now).
+Be specific about which existing position overlaps most if correlation is high.
+
+Return ONLY valid JSON:
+{{
+  "verdict": "GO"|"CAUTION"|"PASS",
+  "verdict_reason": "max 20 words — the single biggest factor driving your verdict",
+  "regime_fit_comment": "max 15 words — how this ticker fits current {quadrant} regime",
+  "overlap_warning": "ticker name + why, or null if no significant overlap",
+  "sizing_suggestion": "max 15 words — keep size / reduce to X% / skip",
+  "thesis_check": "Diversifying"|"Concentrating"|"Hedging"
+}}"""
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown, no preamble."
+    _model = model or "claude-haiku-4-5-20251001"
+    _max_tokens = 1000
+
+    try:
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=_model, max_tokens=_max_tokens, temperature=0.2,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [
+                          {"role": "system", "content": _system},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": _max_tokens, "temperature": 0.2},
+                timeout=30,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+        import json as _json, re as _re
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+        raw = _re.sub(r"```\s*$", "", raw, flags=_re.MULTILINE).strip()
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            pass
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if m:
+            return _json.loads(m.group())
+        return {"_error": f"No JSON: {raw[:150]}"}
+    except Exception as _e:
+        return {"_error": str(_e)}
+
+
+def analyze_factor_exposure(
+    factor_exposure: dict,
+    regime_ctx: dict,
+    open_trades: list,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict | None:
+    """Analyze aggregate factor exposure and return rebalancing suggestions.
+
+    factor_exposure: output of aggregate_factor_exposure() — {factors, dominant, warnings}
+    regime_ctx: _regime_context session state dict
+    open_trades: list of open position dicts (ticker, entry_price, position_size, direction)
+    """
+    factors = factor_exposure.get("factors", {})
+    dominant = factor_exposure.get("dominant", "")
+    warnings = factor_exposure.get("warnings", [])
+    quadrant = regime_ctx.get("quadrant", "Unknown")
+    regime = regime_ctx.get("regime") or regime_ctx.get("macro_regime", "Unknown")
+    score = regime_ctx.get("score", 0)
+
+    # Build position sensitivity block
+    try:
+        from services.portfolio_sizing import _SENSITIVITY
+    except Exception:
+        _SENSITIVITY = {}
+
+    pos_lines = []
+    for p in open_trades:
+        tk = p.get("ticker", "").upper()
+        sens = _SENSITIVITY.get(tk, [0.0, 0.0, 0.0, 0.0])
+        pos_lines.append(
+            f"  {tk}: Growth{sens[0]:+.1f} Inflation{sens[1]:+.1f} "
+            f"Liquidity{sens[2]:+.1f} Credit{sens[3]:+.1f}"
+        )
+    positions_block = "\n".join(pos_lines) if pos_lines else "  No positions"
+
+    factor_block = "\n".join(
+        f"  {f.capitalize()}: {v:+.2f}x" for f, v in factors.items()
+    )
+    warnings_block = "\n".join(f"  ⚠ {w}" for w in warnings) if warnings else "  None"
+
+    prompt = f"""You are a portfolio risk manager. Analyze this portfolio's aggregate factor exposure against the current macro regime.
+
+CURRENT REGIME:
+- Quadrant: {quadrant}
+- Regime: {regime} (score {score:+.2f})
+
+AGGREGATE FACTOR EXPOSURE (portfolio-weighted):
+{factor_block}
+
+MECHANICAL WARNINGS:
+{warnings_block}
+
+POSITION SENSITIVITIES (ticker: Growth Inflation Liquidity Credit):
+{positions_block}
+
+Assess each factor's exposure relative to the current regime. Identify the top concentration risk and give 2–3 specific actionable suggestions (reference actual tickers when possible).
+
+Return ONLY valid JSON:
+{{
+  "headline": "One sentence portfolio factor summary",
+  "factor_verdicts": [
+    {{"factor": "growth",    "exposure": 0.0, "verdict": "Overweight|Moderate|Neutral|Underweight", "regime_fit": "aligned|caution|avoid", "comment": "max 12 words"}},
+    {{"factor": "inflation", "exposure": 0.0, "verdict": "...", "regime_fit": "...", "comment": "..."}},
+    {{"factor": "liquidity", "exposure": 0.0, "verdict": "...", "regime_fit": "...", "comment": "..."}},
+    {{"factor": "credit",    "exposure": 0.0, "verdict": "...", "regime_fit": "...", "comment": "..."}}
+  ],
+  "top_risk": "One sentence describing the biggest factor concentration risk",
+  "suggestions": ["suggestion 1", "suggestion 2", "suggestion 3"]
+}}"""
+
+    _system = (
+        "You are a JSON-only response bot. Return only valid JSON, no markdown fences, "
+        "no explanation. Be concise: headline max 20 words, comments max 12 words, "
+        "top_risk max 15 words, suggestions max 20 words each."
+    )
+    _model = model or "claude-haiku-4-5-20251001"
+    _max_tokens = 3000 if (_model and "sonnet" in _model) else 2000
+
+    try:
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=_model, max_tokens=_max_tokens, temperature=0.2,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [
+                          {"role": "system", "content": _system},
+                          {"role": "user", "content": prompt},
+                      ],
+                      "max_tokens": 2000, "temperature": 0.2},
+                timeout=45,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+        import json as _json, re as _re
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+        raw = _re.sub(r"```\s*$", "", raw, flags=_re.MULTILINE).strip()
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            pass
+        m = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if m:
+            return _json.loads(m.group())
+        return {"_error": f"No JSON in response: {raw[:200]}"}
     except Exception as _e:
         return {"_error": str(_e)}
 

@@ -419,12 +419,77 @@ def _render_recommendations(stress_score: float, components: dict,
         )
 
 
+def run_quick_doom(use_claude: bool = False, model: str | None = None) -> bool:
+    """
+    Background helper for Quick Intel Run.
+    Fetches credit + canary data, generates doom briefing.
+    Stores _doom_briefing to session_state.
+    """
+    import streamlit as st
+    import pandas as pd
+    import datetime as _dt
+    from services.stress_client import get_credit_spreads, get_canary_signals
+    from services.claude_client import generate_doom_briefing
+
+    fred_data = get_credit_spreads()
+    canary_df = get_canary_signals()
+    stress_score, _ = _compute_stress_score(fred_data, canary_df)
+
+    stress_text_parts = [f"Composite Stress Score: {stress_score:.1f}/100"]
+
+    for label, key in [("HY Credit Spread (OAS)", "BAMLH0A0HYM2"), ("IG Credit Spread", "BAMLC0A0CM"), ("Yield Curve 10Y-2Y", "T10Y2Y")]:
+        df = fred_data.get(key, pd.DataFrame())
+        if not df.empty and "value" in df.columns:
+            stress_text_parts.append(f"{label}: {float(df['value'].iloc[-1]):.2f}")
+
+    if not canary_df.empty:
+        stress_text_parts.append("\nCanary Watchlist:")
+        for cat in canary_df["category"].unique():
+            cat_df = canary_df[canary_df["category"] == cat]
+            if not cat_df.empty:
+                avg_ret = float(cat_df["1m_ret"].mean())
+                avg_dd = float(cat_df["drawdown_52w"].mean())
+                stress_text_parts.append(f"  {cat}: avg 1M {avg_ret:+.1f}%, drawdown {avg_dd:.1f}%")
+
+    _ce = st.session_state.get("_current_events_digest", "")
+    briefing = generate_doom_briefing(
+        "\n".join(stress_text_parts),
+        use_claude=use_claude, model=model, current_events=_ce,
+    )
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    st.session_state["_doom_briefing"] = briefing
+    st.session_state["_doom_briefing_ts"] = _dt.datetime.now()
+    st.session_state["_doom_briefing_engine"] = _tier
+    return True
+
+
 def render():
     # Pre-extract colors for f-string safety
     _dim = COLORS["text_dim"]
     _text = COLORS["text"]
     _blue = COLORS["blue"]
     _green = COLORS["green"]
+
+    # ── Regime Exit Alert (reads Trade Journal open positions) ──
+    from utils.journal import load_journal as _load_journal
+    _open_trades = [t for t in _load_journal() if t["status"] == "open"]
+    _open_longs  = [t for t in _open_trades if t["direction"] == "long"]
+    _cur_regime  = st.session_state.get("_regime_context", {}).get("regime", "")
+    if _open_longs and "Risk-Off" in _cur_regime:
+        _tickers_at_risk = ", ".join(t["ticker"] for t in _open_longs)
+        st.markdown(
+            f'<div style="background:#7f1d1d;border:2px solid #ef4444;border-radius:8px;'
+            f'padding:14px 18px;margin-bottom:16px;">'
+            f'<div style="color:#fca5a5;font-weight:700;font-size:13px;letter-spacing:0.05em;">'
+            f'⚠ REGIME SHIFT ALERT — RISK-OFF DETECTED</div>'
+            f'<div style="color:#fecaca;font-size:12px;margin-top:6px;">'
+            f'You have <b>{len(_open_longs)} open long position(s)</b> during a Risk-Off regime: '
+            f'<b>{_tickers_at_risk}</b>. Review positions for exit per your regime-shift strategy.</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    elif _open_longs and _cur_regime:
+        st.caption(f"📋 {len(_open_longs)} open long(s) in journal · Current regime: {_cur_regime}")
 
     # ── Header ──
     st.markdown(
@@ -883,6 +948,21 @@ def render():
         total_exit_val = exits_df["value_change"].sum() / 1000  # to millions
         stress_text_parts.append(f"Whale exits: {len(exits_df)} positions, total ${total_exit_val:,.0f}M closed/reduced")
 
+    # Inject open portfolio positions for personalised doom briefing
+    _journal_pos = [t for t in _open_trades if t["status"] == "open"]
+    if _journal_pos:
+        _pos_lines = []
+        for _t in _journal_pos[:10]:
+            _entry_px = _t.get("entry_price", 0)
+            _thesis = (_t.get("thesis") or _t.get("notes") or "")[:80]
+            _pos_lines.append(
+                f"{_t['direction'].upper()} {_t['ticker']} @ ${_entry_px:.2f}"
+                + (f" — {_thesis}" if _thesis else "")
+            )
+        stress_text_parts.append(
+            "\nPortfolio Positions (user's open trades):\n" + "\n".join(f"  {l}" for l in _pos_lines)
+        )
+
     stress_text = "\n".join(stress_text_parts)
 
     import os
@@ -899,12 +979,19 @@ def render():
         "Briefing Engine", _doom_tier_opts, horizontal=True, key="doom_briefing_engine",
         help="Standard = Groq · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
     )
+    st.caption("💡 👑 Sonnet recommended — briefing feeds into Valuation & Discovery; quality affects downstream AI reasoning")
     _use_claude, _doom_model = _doom_tier_map[_sel_doom_tier]
     with st.spinner("Generating risk intelligence briefing..."):
         try:
-            briefing = generate_doom_briefing(stress_text, use_claude=_use_claude, model=_doom_model)
+            _ce_digest = st.session_state.get("_current_events_digest", "")
+            briefing = generate_doom_briefing(stress_text, use_claude=_use_claude, model=_doom_model, current_events=_ce_digest)
         except Exception as e:
             briefing = f"Unable to generate briefing: {e}"
+    st.session_state["_doom_briefing"] = briefing
+    st.session_state["_doom_briefing_ts"] = __import__("datetime").datetime.now()
+    st.session_state["_doom_briefing_engine"] = _sel_doom_tier
+    from services.play_log import append_play as _append_play
+    _append_play("Doom Briefing", _sel_doom_tier, {"briefing": briefing})
 
     _doom_border = COLORS["bloomberg_orange"] if _use_claude else DOOM_RED
     _regard_badge = (
@@ -920,7 +1007,7 @@ def render():
                         border-bottom:1px solid {DOOM_BORDER};padding-bottom:8px;">
                 &#9760; CLASSIFIED &mdash; AI RISK INTELLIGENCE BRIEFING &mdash; {datetime.now().strftime('%Y-%m-%d %H:%M')}{_regard_badge}
             </div>
-            <div style="color:{COLORS['text']};font-size:13px;line-height:1.7;white-space:pre-wrap;">
+            <div style="color:{COLORS['text']};font-size:11px;line-height:1.7;white-space:pre-wrap;">
 {briefing}
             </div>
         </div>

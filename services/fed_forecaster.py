@@ -42,6 +42,49 @@ _FOMC_DATES_2026 = [
     date(2026, 12, 9),
 ]
 
+# BLS CPI release dates 2026 (second or third Wednesday of each month)
+_CPI_DATES_2026 = [
+    date(2026, 1, 15),
+    date(2026, 2, 12),
+    date(2026, 3, 12),
+    date(2026, 4, 10),
+    date(2026, 5, 13),
+    date(2026, 6, 11),
+    date(2026, 7, 15),
+    date(2026, 8, 12),
+    date(2026, 9, 10),
+    date(2026, 10, 13),
+    date(2026, 11, 12),
+    date(2026, 12, 10),
+]
+
+# BLS NFP (Jobs) release dates 2026 (first Friday of each month)
+_NFP_DATES_2026 = [
+    date(2026, 1, 9),
+    date(2026, 2, 6),
+    date(2026, 3, 6),
+    date(2026, 4, 3),
+    date(2026, 5, 8),
+    date(2026, 6, 5),
+    date(2026, 7, 10),
+    date(2026, 8, 7),
+    date(2026, 9, 4),
+    date(2026, 10, 2),
+    date(2026, 11, 6),
+    date(2026, 12, 4),
+]
+
+
+def _next_event(dates: list) -> dict:
+    """Return next upcoming date from a list and days away."""
+    today = date.today()
+    future = [d for d in dates if d >= today]
+    if not future:
+        last = dates[-1]
+        return {"date": last.strftime("%b %d"), "days_away": 0}
+    nxt = future[0]
+    return {"date": nxt.strftime("%b %d"), "days_away": (nxt - today).days}
+
 
 def get_next_fomc() -> dict:
     """Return the next upcoming FOMC meeting date and days away."""
@@ -55,6 +98,16 @@ def get_next_fomc() -> dict:
         "date": nxt.strftime("%b %d, %Y"),
         "days_away": (nxt - today).days,
     }
+
+
+def get_next_cpi() -> dict:
+    """Return the next CPI release date and days away."""
+    return _next_event(_CPI_DATES_2026)
+
+
+def get_next_nfp() -> dict:
+    """Return the next NFP (jobs) release date and days away."""
+    return _next_event(_NFP_DATES_2026)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -156,11 +209,57 @@ def _equal_weight_fallback() -> list[dict]:
 # FETCH ZQ PROBABILITIES  (cached, tiered)
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _parse_cme_fedwatch_json(data: dict, current_rate: float) -> list[dict] | None:
+    """Parse CME FedWatch JSON response into scenario probability list."""
+    try:
+        # CME returns a list of meeting objects; pick the nearest upcoming meeting
+        meetings = data.get("meetings") or data.get("MeetingDates") or []
+        if not meetings:
+            return None
+        # Find first upcoming meeting
+        from datetime import date as _date
+        today_str = _date.today().isoformat()
+        upcoming = [m for m in meetings if m.get("meetingDate", "") >= today_str]
+        if not upcoming:
+            upcoming = meetings
+        meeting = upcoming[0]
+        probs_raw = meeting.get("probabilities") or meeting.get("Probabilities") or {}
+        if not probs_raw:
+            return None
+        scenario_map = {
+            "hold":    ["Hold", "HOLD", "hold", "noChange", "no_change"],
+            "cut_25":  ["Cut 25", "CUT_25", "cut25", "minus25", "Cut25"],
+            "cut_50":  ["Cut 50", "CUT_50", "cut50", "minus50", "Cut50"],
+            "hike_25": ["Hike 25", "HIKE_25", "hike25", "plus25", "Hike25"],
+        }
+        result = []
+        for scenario, aliases in scenario_map.items():
+            prob = 0.0
+            for alias in aliases:
+                if alias in probs_raw:
+                    prob = float(probs_raw[alias])
+                    if prob > 1.0:
+                        prob /= 100.0
+                    break
+            result.append({"scenario": scenario, "prob": prob, "source": "CME FedWatch"})
+        # Only return if probabilities sum to something reasonable
+        total = sum(r["prob"] for r in result)
+        if total < 0.5:
+            return None
+        # Normalize
+        for r in result:
+            r["prob"] = r["prob"] / total
+        return result
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=14400)
 def fetch_zq_probabilities() -> list[dict]:
     """
     Derive 4-scenario Fed policy probabilities from Fed Funds Futures.
 
+    Tier 0: CME FedWatch public JSON endpoint
     Tier 1: yfinance ZQ=F (front-month generic)
     Tier 2: yfinance named contracts ZQH26, ZQK26, ZQM26
     Tier 3: equal-weight fallback (data_unavailable=True)
@@ -169,6 +268,23 @@ def fetch_zq_probabilities() -> list[dict]:
     if fedfunds_series is None or fedfunds_series.empty:
         return _equal_weight_fallback()
     current_rate = float(fedfunds_series.dropna().iloc[-1])
+
+    # Tier 0 — CME FedWatch direct
+    _CME_URLS = [
+        "https://www.cmegroup.com/CmeWS/mvc/ProductCalendar/V2/FedWatch.json",
+        "https://www.cmegroup.com/CmeWS/mvc/ProductCalendar/FedWatch.json",
+    ]
+    for _cme_url in _CME_URLS:
+        try:
+            import requests as _req
+            _resp = _req.get(_cme_url, timeout=4,
+                             headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
+            if _resp.status_code == 200:
+                _parsed = _parse_cme_fedwatch_json(_resp.json(), current_rate)
+                if _parsed:
+                    return _parsed
+        except Exception:
+            pass
 
     # Tier 1 — generic front-month
     try:
@@ -350,6 +466,189 @@ def adjust_probabilities(
             r["prob"] = r["prob"] / total
 
     return adjusted
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# BAYESIAN PROBABILITY CALIBRATION (pure)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def calibrate_probabilities(
+    market_implied_probs: list[dict],
+    adj_probs: list[dict],
+    context: dict,
+) -> dict:
+    """
+    Bayesian ensemble calibration of Fed rate-path probabilities.
+
+    Ensemble weights:
+      40% market-implied (ZQ futures)
+      40% structural (macro signal likelihood multipliers)
+      20% narrative (tone-adjusted probs from adj_probs)
+
+    Returns a dict with:
+      posteriors: list of {scenario, market_pct, structural_pct, posterior_pct, band_pct, rationale}
+      signals_used: dict of signal values
+    """
+    # ── Extract macro signals from context ───────────────────────────────────
+    pce         = context.get("core_pce") or 0.0
+    unemployment = context.get("unemployment") or 0.0
+    vix_z       = context.get("vix_z") or 0.0        # normalised [-1, 1]
+    credit_z    = context.get("credit_z") or 0.0
+    regime_score = context.get("macro_score") or 50   # 0-100, 50 = neutral
+    quadrant    = context.get("quadrant", "Unknown")
+
+    # ── Build structural prior using likelihood multipliers ──────────────────
+    # Start from market-implied as structural base, then apply multipliers
+    structural = {r["scenario"]: r["prob"] for r in market_implied_probs}
+
+    multipliers: dict[str, dict[str, float]] = {k: {} for k in SCENARIO_KEYS}
+
+    # PCE signal
+    if pce > 3.0:
+        multipliers["hike_25"]["pce"] = 1.30
+        multipliers["hold"]["pce"]    = 1.10
+        multipliers["cut_25"]["pce"]  = 0.75
+        multipliers["cut_50"]["pce"]  = 0.60
+    elif pce > 2.5:
+        multipliers["hike_25"]["pce"] = 1.15
+        multipliers["cut_25"]["pce"]  = 0.90
+        multipliers["cut_50"]["pce"]  = 0.80
+    elif pce < 2.0:
+        multipliers["cut_25"]["pce"]  = 1.20
+        multipliers["cut_50"]["pce"]  = 1.30
+        multipliers["hike_25"]["pce"] = 0.70
+
+    # Unemployment signal
+    if unemployment > 4.5:
+        multipliers["cut_50"]["unemp"] = 1.35
+        multipliers["cut_25"]["unemp"] = 1.20
+        multipliers["hike_25"]["unemp"] = 0.60
+    elif unemployment > 4.2:
+        multipliers["cut_25"]["unemp"] = 1.15
+        multipliers["cut_50"]["unemp"] = 1.10
+    elif unemployment < 3.8:
+        multipliers["hike_25"]["unemp"] = 1.15
+        multipliers["cut_50"]["unemp"]  = 0.80
+
+    # VIX z-score signal (positive = elevated stress)
+    if vix_z > 0.5:
+        multipliers["cut_25"]["vix"]  = 1.15
+        multipliers["cut_50"]["vix"]  = 1.20
+        multipliers["hike_25"]["vix"] = 0.70
+    elif vix_z < -0.3:
+        multipliers["hold"]["vix"]    = 1.10
+        multipliers["hike_25"]["vix"] = 1.05
+
+    # Credit spread z-score
+    if credit_z > 0.5:
+        multipliers["cut_50"]["cred"] = 1.20
+        multipliers["cut_25"]["cred"] = 1.10
+        multipliers["hike_25"]["cred"] = 0.65
+
+    # Quadrant bias
+    if quadrant == "Stagflation":
+        multipliers["hold"]["quad"]    = 1.10
+        multipliers["hike_25"]["quad"] = 1.08
+        multipliers["cut_50"]["quad"]  = 0.75
+    elif quadrant == "Deflation":
+        multipliers["cut_50"]["quad"]  = 1.20
+        multipliers["cut_25"]["quad"]  = 1.10
+        multipliers["hike_25"]["quad"] = 0.70
+
+    # Apply all multipliers
+    for key in SCENARIO_KEYS:
+        m = 1.0
+        for v in multipliers[key].values():
+            m *= v
+        structural[key] = max(0.001, structural.get(key, 0.25) * m)
+
+    # Normalise structural
+    s_total = sum(structural.values())
+    structural = {k: v / s_total for k, v in structural.items()}
+
+    # ── Ensemble blend ────────────────────────────────────────────────────────
+    mi_map  = {r["scenario"]: r["prob"] for r in market_implied_probs}
+    adj_map = {r["scenario"]: r["prob"] for r in adj_probs}
+
+    posterior = {}
+    for key in SCENARIO_KEYS:
+        mi  = mi_map.get(key, 0.25)
+        st  = structural.get(key, 0.25)
+        adj = adj_map.get(key, 0.25)
+        posterior[key] = 0.40 * mi + 0.40 * st + 0.20 * adj
+
+    # Normalise posterior
+    p_total = sum(posterior.values())
+    posterior = {k: v / p_total for k, v in posterior.items()}
+
+    # ── Confidence bands ──────────────────────────────────────────────────────
+    # Band width reflects disagreement between market-implied and structural
+    bands = {}
+    for key in SCENARIO_KEYS:
+        disagreement = abs(mi_map.get(key, 0.25) - structural.get(key, 0.25))
+        bands[key] = round(min(0.15, max(0.03, disagreement * 1.5)), 2)
+
+    # ── Rationale per scenario ────────────────────────────────────────────────
+    _rationale_map = {
+        "hold":    _hold_rationale(pce, unemployment, vix_z, quadrant),
+        "cut_25":  _cut_rationale(unemployment, credit_z, vix_z, False),
+        "cut_50":  _cut_rationale(unemployment, credit_z, vix_z, True),
+        "hike_25": _hike_rationale(pce, quadrant),
+    }
+
+    # ── Assemble output ───────────────────────────────────────────────────────
+    posteriors = []
+    for key in SCENARIO_KEYS:
+        posteriors.append({
+            "scenario":       key,
+            "label":          SCENARIO_LABELS[key],
+            "market_pct":     round(mi_map.get(key, 0.25) * 100, 1),
+            "structural_pct": round(structural.get(key, 0.25) * 100, 1),
+            "posterior_pct":  round(posterior[key] * 100, 1),
+            "posterior":      posterior[key],
+            "band_pct":       round(bands[key] * 100, 1),
+            "rationale":      _rationale_map[key],
+        })
+
+    return {
+        "posteriors": posteriors,
+        "signals_used": {
+            "core_pce":    round(pce, 2) if pce else None,
+            "unemployment": round(unemployment, 1) if unemployment else None,
+            "vix_z":       round(vix_z, 2),
+            "credit_z":    round(credit_z, 2),
+            "quadrant":    quadrant,
+        },
+    }
+
+
+def _hold_rationale(pce: float, unemp: float, vix_z: float, quadrant: str) -> str:
+    if pce > 2.8 and unemp < 4.5:
+        return f"PCE sticky at {pce:.1f}% with contained unemployment limits Fed's ability to cut."
+    if quadrant == "Stagflation":
+        return "Stagflation quadrant constrains policy — cutting risks inflation, hiking risks recession."
+    if vix_z > 0.3:
+        return "Elevated market stress favours patience; Fed likely to hold and monitor conditions."
+    return "Balanced signals support a data-dependent hold at the current meeting."
+
+
+def _cut_rationale(unemp: float, credit_z: float, vix_z: float, large: bool) -> str:
+    size = "50bp emergency" if large else "25bp"
+    if unemp > 4.5:
+        return f"Rising unemployment ({unemp:.1f}%) raises recession risk, supporting a {size} cut."
+    if credit_z > 0.5:
+        return f"Widening credit spreads signal financial stress, raising probability of a {size} cut."
+    if vix_z > 0.6:
+        return f"Elevated volatility and risk-off regime conditions increase odds of a {size} cut."
+    return f"Softening growth indicators provide basis for a {size} cut if inflation cooperates."
+
+
+def _hike_rationale(pce: float, quadrant: str) -> str:
+    if pce > 3.0:
+        return f"Core PCE at {pce:.1f}% — well above target — keeps re-acceleration risk on the table."
+    if quadrant == "Stagflation":
+        return "Stagflation quadrant: supply-side inflation could force tightening despite weak growth."
+    return "Resilient labour market and sticky inflation leave a residual hike tail risk."
 
 
 # ─────────────────────────────────────────────────────────────────────────────

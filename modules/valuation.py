@@ -56,9 +56,11 @@ def render():
         with _cre1:
             _regime_tier_sel = st.radio("Risk Regime Engine", _cr_tier_opts, horizontal=True,
                                         key="cr_regime_engine", index=_sel_r_idx)
+            st.caption("💡 🧠 Haiku sufficient")
         with _cre2:
             _disc_tier_sel   = st.radio("Discovery Engine",   _cr_tier_opts, horizontal=True,
                                         key="cr_disc_engine",  index=_sel_d_idx)
+            st.caption("💡 🧠 Haiku sufficient")
 
         # ── Status cards with orange glow ─────────────────────────────────────
         def _glow_card(title, tier_sel, status_badge, caption_text):
@@ -187,6 +189,7 @@ def render():
         "Engine", _tier_options, horizontal=True, key="val_engine_radio",
         help="Standard = Groq (fast/free) · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
     )
+    st.caption("💡 👑 Sonnet recommended — synthesises 20+ signals into conviction rating")
     _use_claude, _cl_model = _tier_map[_selected_val_tier]
     if not _has_anthropic and _use_claude:
         st.caption("⚠ ANTHROPIC_API_KEY not set — falling back to Groq.")
@@ -240,6 +243,128 @@ def render():
     )
     st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 24H")
 
+    # ── Earnings Intelligence panel ─────────────────────────────────────────
+    from services.market_data import fetch_earnings_intelligence as _fetch_ei
+    _ei = _fetch_ei(ticker)
+    if _ei:
+        with st.expander("📅 EARNINGS INTELLIGENCE", expanded=True):
+            _ei_cols = st.columns([1.2, 1.2, 1.2, 1.4])
+
+            # Next earnings countdown
+            _ne = _ei.get("next_earnings") or {}
+            _ne_days = _ne.get("days_away")
+            if _ne_days is not None:
+                _ne_color = "#ef4444" if _ne_days <= 7 else ("#f59e0b" if _ne_days <= 21 else "#94a3b8")
+                _ei_cols[0].markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                    f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">NEXT EARNINGS</div>'
+                    f'<div style="font-size:20px;font-weight:700;color:{_ne_color};">{_ne_days}d</div>'
+                    f'<div style="font-size:11px;color:#64748b;">{_ne.get("date","—")}</div>'
+                    f'</div>', unsafe_allow_html=True
+                )
+            else:
+                _ei_cols[0].markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                    f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">NEXT EARNINGS</div>'
+                    f'<div style="font-size:16px;font-weight:600;color:#475569;">—</div>'
+                    f'</div>', unsafe_allow_html=True
+                )
+
+            # Analyst consensus
+            _an = _ei.get("analyst") or {}
+            _an_buy = _an.get("buy", 0); _an_hold = _an.get("hold", 0); _an_sell = _an.get("sell", 0)
+            _an_total = _an_buy + _an_hold + _an_sell
+            _an_target = _an.get("mean_target"); _an_upside = _an.get("upside_pct")
+            _an_upside_color = "#22c55e" if (_an_upside or 0) >= 0 else "#ef4444"
+            _an_target_str = f"${_an_target:,.2f}" if _an_target else "—"
+            _an_upside_str = f"{_an_upside:+.1f}%" if _an_upside is not None else ""
+            _ei_cols[1].markdown(
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">ANALYST CONSENSUS</div>'
+                f'<div style="font-size:13px;font-weight:700;color:#f1f5f9;">{_an_buy}B / {_an_hold}H / {_an_sell}S'
+                + (f' <span style="color:#94a3b8;font-weight:400;font-size:11px;">({_an_total} analysts)</span>' if _an_total else "")
+                + f'</div>'
+                f'<div style="font-size:12px;color:#94a3b8;">Target: {_an_target_str}'
+                + (f' <span style="color:{_an_upside_color};font-weight:600;">{_an_upside_str}</span>' if _an_upside_str else "")
+                + f'</div>'
+                f'</div>', unsafe_allow_html=True
+            )
+
+            # Expected move from IV
+            _em = _ei.get("expected_move") or {}
+            _em_pct = _em.get("pct"); _em_dollar = _em.get("dollar"); _em_iv = _em.get("iv"); _em_dte = _em.get("dte")
+            _em_pct_str = f"±{_em_pct:.1f}%" if _em_pct else "—"
+            _em_dollar_str = f"±${_em_dollar:.2f}" if _em_dollar else ""
+            _em_sub = f"IV {_em_iv*100:.0f}% · {_em_dte}d expiry" if (_em_iv and _em_dte) else ""
+            _ei_cols[2].markdown(
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">EXPECTED MOVE (IV)</div>'
+                f'<div style="font-size:20px;font-weight:700;color:#a78bfa;">{_em_pct_str}</div>'
+                + (f'<div style="font-size:11px;color:#64748b;">{_em_dollar_str}  {_em_sub}</div>' if (_em_dollar_str or _em_sub) else "")
+                + f'</div>', unsafe_allow_html=True
+            )
+
+            # EPS history
+            _eps_hist = _ei.get("eps_history") or []
+            if _eps_hist:
+                _beat_str = " ".join(
+                    ("✅" if q.get("beat") else "❌") for q in _eps_hist
+                )
+                _last_surp = _eps_hist[0].get("surprise_pct") if _eps_hist else None
+                _surp_color = "#22c55e" if (_last_surp or 0) >= 0 else "#ef4444"
+                _surp_str = f"{_last_surp:+.1f}%" if _last_surp is not None else "—"
+                _ei_cols[3].markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                    f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">EPS HISTORY (4Q)</div>'
+                    f'<div style="font-size:16px;letter-spacing:4px;">{_beat_str}</div>'
+                    f'<div style="font-size:12px;color:#94a3b8;">Last surprise: <span style="color:{_surp_color};font-weight:700;">{_surp_str}</span></div>'
+                    f'</div>', unsafe_allow_html=True
+                )
+            else:
+                _ei_cols[3].markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;padding:10px 14px;">'
+                    f'<div style="font-size:10px;color:#64748b;letter-spacing:0.08em;font-weight:600;margin-bottom:4px;">EPS HISTORY (4Q)</div>'
+                    f'<div style="font-size:16px;color:#475569;">—</div>'
+                    f'</div>', unsafe_allow_html=True
+                )
+
+            # Quarterly EPS table
+            if _eps_hist:
+                st.markdown('<div style="margin-top:8px;">', unsafe_allow_html=True)
+                _q_rows = ""
+                for _q in _eps_hist:
+                    _qsurp = _q.get("surprise_pct")
+                    _qcolor = "#22c55e" if (_qsurp or 0) >= 0 else "#ef4444"
+                    _qbeat_badge = (
+                        '<span style="background:#14532d;color:#86efac;padding:1px 6px;border-radius:3px;font-size:10px;">BEAT</span>'
+                        if _q.get("beat")
+                        else '<span style="background:#7f1d1d;color:#fca5a5;padding:1px 6px;border-radius:3px;font-size:10px;">MISS</span>'
+                    )
+                    _qest = f"${_q.get('estimate', 0):.2f}" if _q.get('estimate') is not None else "—"
+                    _qact = f"${_q.get('actual', 0):.2f}" if _q.get('actual') is not None else "—"
+                    _qsurp_str = f"{_qsurp:+.1f}%" if _qsurp is not None else "—"
+                    _q_rows += (
+                        f'<tr style="border-bottom:1px solid #1e293b;">'
+                        f'<td style="padding:5px 10px;color:#94a3b8;font-size:12px;">{_q.get("period","—")}</td>'
+                        f'<td style="padding:5px 10px;color:#e2e8f0;font-size:12px;">{_qest}</td>'
+                        f'<td style="padding:5px 10px;color:#e2e8f0;font-size:12px;">{_qact}</td>'
+                        f'<td style="padding:5px 10px;font-size:12px;color:{_qcolor};">{_qsurp_str}</td>'
+                        f'<td style="padding:5px 10px;">{_qbeat_badge}</td>'
+                        f'</tr>'
+                    )
+                st.markdown(
+                    f'<table style="width:100%;border-collapse:collapse;background:#0f172a;border-radius:6px;overflow:hidden;">'
+                    f'<thead><tr style="background:#1e293b;">'
+                    f'<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;letter-spacing:0.08em;">PERIOD</th>'
+                    f'<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;letter-spacing:0.08em;">ESTIMATE</th>'
+                    f'<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;letter-spacing:0.08em;">ACTUAL</th>'
+                    f'<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;letter-spacing:0.08em;">SURPRISE</th>'
+                    f'<th style="padding:6px 10px;text-align:left;font-size:10px;color:#64748b;letter-spacing:0.08em;"></th>'
+                    f'</tr></thead><tbody>{_q_rows}</tbody></table>',
+                    unsafe_allow_html=True
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+
     signals_text = _format_signals_text(ticker, signals)
 
     # Inject rate path probabilities from Fed Forecaster into signals_text
@@ -289,13 +414,102 @@ def render():
         for _h in _news_sent.get("headlines", [])[:5]:
             signals_text += f"- [{_h.get('sentiment','')}] {_h.get('title','')}\n"
 
+    # Inject AI Regime Plays (sector/stock picks from Risk Regime module)
+    _rp_result = st.session_state.get("_rp_plays_result")
+    if _rp_result:
+        _rp_sectors = ", ".join(s.get("name", "") for s in _rp_result.get("sectors", [])[:3])
+        _rp_stocks  = ", ".join(s.get("ticker", "") for s in _rp_result.get("stocks", [])[:4])
+        signals_text += f"\nAI Regime Plays: Sectors={_rp_sectors} | Stocks={_rp_stocks} | {_rp_result.get('rationale', '')}"
+
+    # Inject Policy Transmission narration
+    _narration = st.session_state.get("_chain_narration")
+    if _narration:
+        signals_text += f"\nPolicy Transmission: {_narration}"
+
+    # Inject Cross-Signal Discovery Plays (from Narrative Discovery module)
+    _disc_plays = st.session_state.get("_plays_result")
+    if _disc_plays:
+        _dp_sectors = ", ".join(s.get("name", "") for s in _disc_plays.get("sectors", [])[:3])
+        _dp_stocks  = ", ".join(s.get("ticker", "") for s in _disc_plays.get("stocks", [])[:4])
+        signals_text += f"\nCross-Signal Discovery Plays: Sectors={_dp_sectors} | Stocks={_dp_stocks} | {_disc_plays.get('rationale', '')}"
+
+    # Inject Doom Briefing risk assessment (cap at 600 chars to avoid token bloat)
+    _doom = st.session_state.get("_doom_briefing")
+    if _doom:
+        signals_text += f"\nRisk Intelligence Briefing: {_doom[:600]}"
+
+    # Inject Whale Activity Summary (institutional flow context)
+    _whale_sum = st.session_state.get("_whale_summary")
+    if _whale_sum:
+        signals_text += f"\nInstitutional Whale Activity: {_whale_sum[:500]}"
+
+    # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
+    _regime_ctx_val = st.session_state.get("_regime_context")
+    if _regime_ctx_val:
+        _r_regime = _regime_ctx_val.get("regime", "")
+        _r_score = _regime_ctx_val.get("score", 0.0)
+        _r_quad = _regime_ctx_val.get("quadrant", "")
+        _r_sig = (_regime_ctx_val.get("signal_summary") or "")[:500]
+        signals_text += (
+            f"\nMacro Regime: {_r_regime} (score {_r_score:+.2f})"
+            f" | Quadrant: {_r_quad}"
+            f"\nRegime Signal Breakdown: {_r_sig}"
+        )
+
+    # Inject Fed Funds Rate
+    _ff_rate_val = st.session_state.get("_fed_funds_rate")
+    if _ff_rate_val is not None:
+        signals_text += f"\nCurrent Fed Funds Rate: {_ff_rate_val:.2f}%"
+
+    # Inject Earnings Intelligence into signals_text
+    if _ei:
+        _ei_lines = []
+        _ne2 = _ei.get("next_earnings") or {}
+        if _ne2.get("days_away") is not None:
+            _ei_lines.append(f"Next earnings: {_ne2.get('date','—')} ({_ne2['days_away']}d away)")
+        _an2 = _ei.get("analyst") or {}
+        if _an2.get("mean_target"):
+            _ei_lines.append(
+                f"Analyst consensus: {_an2.get('buy',0)}B/{_an2.get('hold',0)}H/{_an2.get('sell',0)}S"
+                f" | Mean target ${_an2['mean_target']:.2f}"
+                + (f" ({_an2['upside_pct']:+.1f}% upside)" if _an2.get('upside_pct') is not None else "")
+            )
+        _eps2 = _ei.get("eps_history") or []
+        if _eps2:
+            _beat_count = sum(1 for q in _eps2 if q.get("beat"))
+            _last_surp2 = _eps2[0].get("surprise_pct")
+            _ei_lines.append(
+                f"EPS beat rate: {_beat_count}/{len(_eps2)} last quarters"
+                + (f" | Most recent surprise: {_last_surp2:+.1f}%" if _last_surp2 is not None else "")
+            )
+        _em2 = _ei.get("expected_move") or {}
+        if _em2.get("pct"):
+            _ei_lines.append(
+                f"Options-implied expected move: ±{_em2['pct']:.1f}%"
+                + (f" (IV {_em2['iv']*100:.0f}%, {_em2['dte']}d expiry)" if _em2.get('iv') and _em2.get('dte') else "")
+            )
+        if _ei_lines:
+            signals_text += "\n\n## Earnings Intelligence\n" + "\n".join(f"- {l}" for l in _ei_lines)
+
+    # Inject Fed Rate-Path Plays (sectors/bonds to own given dominant rate path)
+    _fed_plays_val = st.session_state.get("_fed_plays_result")
+    if _fed_plays_val:
+        _fp_sectors = ", ".join(s.get("name", "") for s in _fed_plays_val.get("sectors", [])[:3])
+        _fp_bonds = ", ".join(s.get("ticker", "") for s in _fed_plays_val.get("bonds", [])[:3])
+        signals_text += (
+            f"\nRate-Path Plays: Favored Sectors={_fp_sectors}"
+            f" | Bonds={_fp_bonds}"
+            f" | {_fed_plays_val.get('rationale', '')[:200]}"
+        )
+
     # Full signal transparency expander
     with st.expander("📊 Full Signal Transparency (AI Inputs)", expanded=False):
         _render_signal_transparency(signals)
 
     with st.spinner("Generating AI valuation..."):
         from services.claude_client import generate_valuation
-        result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model)
+        _ce_val = st.session_state.get("_current_events_digest", "")
+        result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model, current_events=_ce_val)
 
     if not result:
         has_key = bool(os.getenv("GROQ_API_KEY", ""))
@@ -1791,6 +2005,9 @@ def _render_kelly(ai_result: dict, dcf_scenarios: dict) -> None:
         return
 
     b = upside / downside          # win/loss ratio
+    if b <= 0:
+        st.caption("Kelly unavailable — win/loss ratio is zero (no expected upside).")
+        return
     p = confidence
     q = 1.0 - p
     kelly_full = (b * p - q) / b

@@ -58,10 +58,229 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     return None
 
 
+@st.cache_data(ttl=86400)
+def fetch_earnings_date(ticker: str) -> dict | None:
+    """Return next earnings date and days away for a ticker. None if unavailable.
+
+    Returns: {"date": "Apr 25", "days_away": 32, "full_date": "2026-04-25"}
+    """
+    try:
+        from datetime import date as _date
+        cal = yf.Ticker(ticker).calendar
+        if cal is None:
+            return None
+        # yfinance may return a DataFrame or a dict depending on version
+        if isinstance(cal, pd.DataFrame):
+            if "Earnings Date" in cal.index:
+                raw = cal.loc["Earnings Date"].values
+                if len(raw) == 0:
+                    return None
+                ts = raw[0]
+            else:
+                return None
+        elif isinstance(cal, dict):
+            raw_list = cal.get("Earnings Date") or []
+            if not raw_list:
+                return None
+            ts = raw_list[0]
+        else:
+            return None
+        # Convert timestamp/datetime to date
+        if hasattr(ts, "date"):
+            earn_date = ts.date()
+        else:
+            earn_date = pd.Timestamp(ts).date()
+        today = _date.today()
+        days_away = (earn_date - today).days
+        if days_away < -7:  # already passed more than a week ago — not useful
+            return None
+        return {
+            "date": earn_date.strftime("%b %d"),
+            "full_date": earn_date.isoformat(),
+            "days_away": days_away,
+        }
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def fetch_earnings_intelligence(ticker: str) -> dict:
+    """
+    Fetch comprehensive earnings intelligence for a ticker.
+
+    Returns a dict with:
+      next_earnings:   {date, days_away, full_date} or None
+      eps_history:     list of {period, estimate, actual, surprise_pct, beat} — last 4
+      analyst:         {buy, hold, sell, strong_buy, strong_sell, mean_target, current_price, upside_pct}
+      expected_move:   {pct, dollar, expiry, dte} or None — from nearest-expiry ATM IV
+    """
+    result = {
+        "next_earnings": None,
+        "eps_history":   [],
+        "analyst":       {},
+        "expected_move": None,
+    }
+    tk = yf.Ticker(ticker)
+
+    # ── Next earnings date ────────────────────────────────────────────────────
+    try:
+        from datetime import date as _date
+        cal = tk.calendar
+        if isinstance(cal, pd.DataFrame) and "Earnings Date" in cal.index:
+            ts = cal.loc["Earnings Date"].values[0]
+        elif isinstance(cal, dict):
+            raw = (cal.get("Earnings Date") or [])
+            ts = raw[0] if raw else None
+        else:
+            ts = None
+        if ts is not None:
+            earn_date = pd.Timestamp(ts).date()
+            days = (earn_date - _date.today()).days
+            if days >= -7:
+                result["next_earnings"] = {
+                    "date": earn_date.strftime("%b %d, %Y"),
+                    "days_away": days,
+                    "full_date": earn_date.isoformat(),
+                }
+    except Exception:
+        pass
+
+    # ── EPS history (last 4 quarters) ─────────────────────────────────────────
+    try:
+        earn_df = tk.earnings_dates
+        if earn_df is not None and not earn_df.empty:
+            # earnings_dates has "EPS Estimate" and "Reported EPS" columns
+            earn_df = earn_df.dropna(subset=["Reported EPS"]).head(4)
+            for idx, row in earn_df.iterrows():
+                est    = row.get("EPS Estimate")
+                actual = row.get("Reported EPS")
+                if pd.isna(actual):
+                    continue
+                surprise = None
+                beat = None
+                if est is not None and not pd.isna(est) and est != 0:
+                    surprise = round((actual - est) / abs(est) * 100, 1)
+                    beat = actual >= est
+                elif est is not None and not pd.isna(est) and est == 0:
+                    beat = actual > 0
+                result["eps_history"].append({
+                    "period":       pd.Timestamp(idx).strftime("%b %Y") if hasattr(idx, "strftime") else str(idx),
+                    "estimate":     round(float(est), 2) if est is not None and not pd.isna(est) else None,
+                    "actual":       round(float(actual), 2),
+                    "surprise_pct": surprise,
+                    "beat":         beat,
+                })
+    except Exception:
+        pass
+
+    # ── Analyst consensus ─────────────────────────────────────────────────────
+    try:
+        info = tk.info
+        current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+        mean_target   = info.get("targetMeanPrice")
+        upside = None
+        if mean_target and current_price and current_price > 0:
+            upside = round((mean_target / current_price - 1) * 100, 1)
+        rec = tk.recommendations_summary
+        buy = hold = sell = strong_buy = strong_sell = 0
+        if rec is not None and not rec.empty:
+            latest = rec.iloc[0]
+            buy          = int(latest.get("buy", 0) or 0)
+            hold         = int(latest.get("hold", 0) or 0)
+            sell         = int(latest.get("sell", 0) or 0)
+            strong_buy   = int(latest.get("strongBuy", 0) or 0)
+            strong_sell  = int(latest.get("strongSell", 0) or 0)
+        result["analyst"] = {
+            "strong_buy":   strong_buy,
+            "buy":          buy,
+            "hold":         hold,
+            "sell":         sell,
+            "strong_sell":  strong_sell,
+            "total":        strong_buy + buy + hold + sell + strong_sell,
+            "mean_target":  round(float(mean_target), 2) if mean_target else None,
+            "current_price": round(float(current_price), 2) if current_price else None,
+            "upside_pct":   upside,
+        }
+    except Exception:
+        pass
+
+    # ── Expected move from nearest-expiry ATM IV ──────────────────────────────
+    try:
+        from datetime import date as _date2
+        expirations = tk.options
+        if expirations:
+            exp = expirations[0]
+            chain = tk.option_chain(exp)
+            calls = chain.calls
+            # Get current price
+            info2 = tk.fast_info
+            spot = float(info2.get("lastPrice", 0) or 0) if hasattr(info2, "get") else 0
+            if spot == 0 and not calls.empty and "lastPrice" in calls.columns:
+                spot = float(calls["strike"].median())
+            if spot > 0 and not calls.empty:
+                # ATM = strike closest to spot
+                calls = calls[calls["impliedVolatility"] > 0].copy()
+                if not calls.empty:
+                    calls["dist"] = abs(calls["strike"] - spot)
+                    atm = calls.nsmallest(3, "dist")
+                    iv = float(atm["impliedVolatility"].mean())
+                    exp_date = _date2.fromisoformat(exp)
+                    dte = max(1, (exp_date - _date2.today()).days)
+                    em_pct = round(iv * (dte / 365) ** 0.5 * 100, 1)
+                    em_dollar = round(spot * em_pct / 100, 2)
+                    result["expected_move"] = {
+                        "pct":    em_pct,
+                        "dollar": em_dollar,
+                        "expiry": exp,
+                        "dte":    dte,
+                        "iv":     round(iv * 100, 1),
+                    }
+    except Exception:
+        pass
+
+    return result
+
+
 @st.cache_data(ttl=3600)
 def fetch_ohlcv_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame | None:
     """Fetch OHLCV DataFrame for a single ticker."""
     return _fetch_single(ticker, period, interval)
+
+
+@st.cache_data(ttl=3600)
+def fetch_correlation_matrix(tickers: tuple[str, ...], period: str = "6mo") -> pd.DataFrame | None:
+    """Compute pairwise Pearson correlation of daily returns for a set of tickers.
+
+    Args:
+        tickers: tuple of ticker symbols (tuple so it's hashable for cache)
+        period: yfinance period string, default 6 months
+
+    Returns:
+        DataFrame of pairwise correlations (tickers × tickers), or None on failure.
+    """
+    if not tickers or len(tickers) < 2:
+        return None
+    try:
+        raw = yf.download(
+            list(tickers), period=period, interval="1d",
+            progress=False, auto_adjust=True, threads=True
+        )
+        if raw.empty:
+            return None
+        # Handle both single and multi-ticker yfinance output
+        if isinstance(raw.columns, pd.MultiIndex):
+            closes = raw["Close"]
+        else:
+            closes = raw[["Close"]] if "Close" in raw.columns else raw
+        closes = closes.dropna(how="all")
+        returns = closes.pct_change().dropna(how="all")
+        corr = returns.corr()
+        # Rename columns/index to uppercase tickers
+        corr.columns = [str(c).upper() for c in corr.columns]
+        corr.index = [str(i).upper() for i in corr.index]
+        return corr
+    except Exception:
+        return None
 
 
 @st.cache_data(ttl=14400)

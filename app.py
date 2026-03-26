@@ -203,6 +203,15 @@ try:
 except Exception:
     pass
 
+# Load persisted AI signals on first run of each session
+if not st.session_state.get("_signals_cache_loaded"):
+    try:
+        from services.signals_cache import load_signals
+        load_signals()
+    except Exception:
+        pass
+    st.session_state["_signals_cache_loaded"] = True
+
 # Sidebar
 with st.sidebar:
     st.markdown(
@@ -257,8 +266,8 @@ with st.sidebar:
 
     top_level = st.radio(
         "Module",
-        ["Risk Regime", "Discovery", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
-         "Signal Scorecard", "Backtesting", "Trade Journal", "Alerts"],
+        ["⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events", "Discovery", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
+         "Signal Scorecard", "Backtesting", "My Regarded Portfolio", "Signal Audit", "Export Hub", "Alerts"],
         key="top_module",
     )
 
@@ -345,8 +354,17 @@ section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="s
         )
 
 # Route to module
-if top_level == "Risk Regime":
+if top_level == "⚡ Quick Intel Run":
+    from modules.quick_run import render
+    render()
+elif top_level == "Risk Regime":
     from modules.risk_regime import render
+    render()
+elif top_level == "Fed Forecaster":
+    from modules.fed_forecaster import render
+    render()
+elif top_level == "Current Events":
+    from modules.current_events import render
     render()
 elif top_level == "Elliott Wave":
     from modules.elliott_wave import render
@@ -423,9 +441,22 @@ elif top_level == "Signal Scorecard":
 elif top_level == "Backtesting":
     from modules.backtesting import render
     render()
-elif top_level == "Trade Journal":
+elif top_level == "My Regarded Portfolio":
     from modules.trade_journal import render
+    render()
+elif top_level == "Signal Audit":
+    from modules.signal_audit import render
+    render()
+elif top_level == "Export Hub":
+    from modules.export_hub import render
     render()
 elif top_level == "Alerts":
     from modules.alerts_settings import render
     render()
+
+# Persist AI signals to disk on every rerun (survives page refresh)
+try:
+    from services.signals_cache import save_signals
+    save_signals()
+except Exception:
+    pass
