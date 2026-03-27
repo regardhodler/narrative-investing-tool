@@ -919,7 +919,7 @@ Return ONLY valid JSON:
   "narrative": "2-3 sentence portfolio assessment",
   "positions": [
     {{
-      "ticker": "...",
+      "ticker": "SYMBOL_ONLY (e.g. XTLH.TO, not the price)",
       "action": "HOLD"|"REDUCE"|"EXIT"|"ADD",
       "alignment": "aligned"|"misaligned"|"neutral",
       "rationale": "1-2 sentences",

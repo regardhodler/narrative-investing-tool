@@ -897,8 +897,6 @@ def render():
             with st.expander("🔍 Debug — cached result", expanded=False):
                 st.json(_pa)
         elif _pa and "_error" not in _pa:
-            with st.expander("🔍 Debug — stored analysis (remove after fix)", expanded=False):
-                st.json(_pa)
             st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
             _verdict = _pa.get("verdict", "UNKNOWN")
             _risk_score = _pa.get("risk_score", 0)
@@ -955,7 +953,10 @@ def render():
                 )
 
             # Section D — Per-position intelligence cards
-            _pa_positions = {p["ticker"].upper(): p for p in _pa.get("positions", [])}
+            # Normalize ticker: Claude sometimes echoes "XTLH.TO @ $36.81" — strip price suffix
+            def _norm_ticker(raw: str) -> str:
+                return raw.split(" @ ")[0].split(" ")[0].upper()
+            _pa_positions = {_norm_ticker(p.get("ticker", "")): p for p in _pa.get("positions", [])}
             if open_trades:
                 st.markdown(
                     f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
