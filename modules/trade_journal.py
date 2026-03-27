@@ -897,6 +897,8 @@ def render():
             with st.expander("🔍 Debug — cached result", expanded=False):
                 st.json(_pa)
         elif _pa and "_error" not in _pa:
+            with st.expander("🔍 Debug — stored analysis (remove after fix)", expanded=False):
+                st.json(_pa)
             st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
             _verdict = _pa.get("verdict", "UNKNOWN")
             _risk_score = _pa.get("risk_score", 0)
