@@ -1282,7 +1282,19 @@ _SECTOR_UNLEVERED_BETA = {
     "Utilities": 0.35,
 }
 
-_DEFAULT_ERP = 0.055  # Damodaran US ERP
+_DEFAULT_ERP = 0.055  # Damodaran US ERP — base rate, adjusted by regime below
+
+
+def _get_regime_erp() -> tuple[float, str]:
+    """Return (ERP, note) adjusted ±50bps for current macro regime.
+    Risk-Off → higher premium (fear); Risk-On → lower premium (greed)."""
+    ctx = st.session_state.get("_regime_context") or {}
+    regime = ctx.get("regime", "")
+    if "Risk-Off" in regime:
+        return 0.060, "6.0% (+50bps Risk-Off)"
+    if "Risk-On" in regime:
+        return 0.050, "5.0% (−50bps Risk-On)"
+    return _DEFAULT_ERP, "5.5% (Neutral — Damodaran base)"
 
 # Sector profiles ported from Stock Ticker Checker / build_model.py
 # Each profile sets per-sector growth clamps, terminal growth, and optional WACC premium
@@ -1544,14 +1556,24 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
     terminal_growth = max(profile["terminal_growth"], min(rf - 0.01, 0.025))
 
     # ── Cost of Equity (CAPM) + sector WACC premium ──
-    unlevered_beta = _SECTOR_UNLEVERED_BETA.get(sector, 0.85)
-
-    # Re-lever beta for company's capital structure
+    # Beta: prefer live market beta from yfinance (already levered, refreshed daily)
+    # Fall back to Damodaran sector unlevered beta + re-levering if unavailable
+    market_beta = info.get("beta")
     de_ratio = total_debt / total_equity if total_equity and total_equity > 0 else 0
-    levered_beta = unlevered_beta * (1 + (1 - tax_rate) * de_ratio)
-    levered_beta = max(0.8, min(2.0, levered_beta))  # clamp
+    if market_beta and isinstance(market_beta, (int, float)) and 0.3 <= float(market_beta) <= 3.5:
+        levered_beta = max(0.8, min(2.0, float(market_beta)))
+        unlevered_beta = levered_beta / (1 + (1 - tax_rate) * de_ratio) if de_ratio > 0 else levered_beta
+        beta_source = "market"
+    else:
+        unlevered_beta = _SECTOR_UNLEVERED_BETA.get(sector, 0.85)
+        levered_beta = unlevered_beta * (1 + (1 - tax_rate) * de_ratio)
+        levered_beta = max(0.8, min(2.0, levered_beta))
+        beta_source = "sector"  # Damodaran Jan 2024 — may be stale
 
-    cost_of_equity = rf + levered_beta * _DEFAULT_ERP
+    # ERP: regime-adjusted (Risk-Off +50bps, Risk-On -50bps, Neutral base 5.5%)
+    erp, erp_note = _get_regime_erp()
+
+    cost_of_equity = rf + levered_beta * erp
     discount_rate = cost_of_equity + profile.get("wacc_premium", 0.0) + wacc_adj
     terminal_growth = max(0.005, terminal_growth + tg_adj)
 
@@ -1624,7 +1646,9 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
         "initial_growth": initial_growth,
         "growth_source": growth_source,
         "sector": sector,
-        "erp": _DEFAULT_ERP,
+        "erp": erp,
+        "erp_note": erp_note,
+        "beta_source": beta_source,
         "profile_name": profile_name,
         "mid_growth": mid_growth,
     }
@@ -1962,10 +1986,12 @@ def _render_dcf(ticker: str) -> dict | None:
             st.metric("Risk-Free Rate", f"{dcf['risk_free_rate']*100:.2f}%")
             st.caption("5Y avg of 10Y Treasury")
             st.metric("Equity Risk Premium", f"{dcf['erp']*100:.1f}%")
-            st.caption("Damodaran US ERP")
+            st.caption(dcf.get("erp_note", "Damodaran US ERP"))
         with a2:
+            _beta_src = dcf.get("beta_source", "sector")
+            _beta_src_label = "Live market beta (yfinance)" if _beta_src == "market" else "⚠ Sector avg (Damodaran Jan 2024)"
             st.metric("Levered Beta", f"{dcf['levered_beta']:.2f}")
-            st.caption(f"Unlevered: {dcf['unlevered_beta']:.2f} ({dcf['sector'] or 'Default'})")
+            st.caption(f"{_beta_src_label} · Unlevered: {dcf['unlevered_beta']:.2f}")
             st.metric("D/E Ratio", f"{dcf['de_ratio']:.2f}")
         with a3:
             st.metric("Cost of Equity (Discount Rate)", f"{dcf['discount_rate']*100:.2f}%")
