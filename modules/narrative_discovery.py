@@ -350,6 +350,19 @@ def render():
             _col_r = f'<td style="padding:2px 0;">{_icon_r} <span style="color:{"#e2e8f0" if ok_r else "#475569"};">{label_r}</span>{_detail_r}</td>'
             _rows_html += f"<tr>{_col_l}{_col_r}</tr>"
 
+        # Compact amber banner for missing critical signals only
+        _dq_miss = [l for k, l in [("_regime_context", "Risk Regime"), ("_dominant_rate_path", "Fed Rate Path"), ("_rate_path_probs", "Rate Probs")] if not st.session_state.get(k)]
+        if _dq_miss:
+            st.markdown(
+                f'<div style="background:#1a0d00;border:1px solid #f59e0b55;border-radius:6px;'
+                f'padding:8px 14px;margin-bottom:8px;font-size:11px;">'
+                f'<span style="color:#f59e0b;font-weight:700;">⚠ Data Quality</span>'
+                f'<span style="color:#94a3b8;margin-left:8px;"><b>Missing:</b> {", ".join(_dq_miss)}</span>'
+                f'<span style="color:#64748b;margin-left:8px;">— run ⚡ Quick Intel Run to refresh</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
         st.markdown(
             f'<div style="border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-bottom:8px;">'
             f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'

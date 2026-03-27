@@ -677,8 +677,20 @@ def render():
                 f'<div style="color:#888;">{_age_str}</div></div>',
                 unsafe_allow_html=True,
             )
+        # Also flag missing presence (not just stale timestamps)
+        for _k, _lbl in [("_regime_context", "Regime"), ("_rate_path_probs", "Rate Path")]:
+            if not st.session_state.get(_k) and _lbl not in _missing_critical:
+                _missing_critical.append(_lbl)
         if _missing_critical:
-            st.warning(f"⚠ Critical signals missing: {', '.join(_missing_critical)} — run Risk Regime first for best results.")
+            st.markdown(
+                f'<div style="background:#1a0d00;border:1px solid #f59e0b55;border-radius:6px;'
+                f'padding:8px 14px;margin-bottom:8px;font-size:11px;">'
+                f'<span style="color:#f59e0b;font-weight:700;">⚠ Data Quality</span>'
+                f'<span style="color:#94a3b8;margin-left:8px;"><b>Missing / stale:</b> {", ".join(_missing_critical)}</span>'
+                f'<span style="color:#64748b;margin-left:8px;">— run ⚡ Quick Intel Run to refresh</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
         st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
 
