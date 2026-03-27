@@ -243,6 +243,44 @@ def render():
     )
     st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 24H")
 
+    # ── Data Quality Warning ───────────────────────────────────────────────────
+    _dq_missing, _dq_stale = [], []
+    _dq_crit = {
+        "_regime_context":    "Risk Regime",
+        "_dominant_rate_path": "Fed Rate Path",
+        "_rate_path_probs":   "Rate Probs",
+    }
+    _dq_ts = {
+        "_regime_context_ts":   ("Risk Regime",  4),
+        "_rate_path_probs_ts":  ("Fed Rate Path", 8),
+        "_fed_plays_result_ts": ("Fed Plays",    8),
+        "_doom_briefing_ts":    ("Doom Briefing", 12),
+    }
+    for _k, _lbl in _dq_crit.items():
+        if not st.session_state.get(_k):
+            _dq_missing.append(_lbl)
+    for _tsk, (_lbl, _max_h) in _dq_ts.items():
+        _ts = st.session_state.get(_tsk)
+        if _ts:
+            _age_h = (datetime.now() - _ts).total_seconds() / 3600
+            if _age_h > _max_h:
+                _dq_stale.append(f"{_lbl} ({_age_h:.0f}h old)")
+    if _dq_missing or _dq_stale:
+        _dq_parts = []
+        if _dq_missing:
+            _dq_parts.append(f"<b>Missing:</b> {', '.join(_dq_missing)}")
+        if _dq_stale:
+            _dq_parts.append(f"<b>Stale:</b> {', '.join(_dq_stale)}")
+        st.markdown(
+            f'<div style="background:#1a0d00;border:1px solid #f59e0b55;border-radius:6px;'
+            f'padding:8px 14px;margin-bottom:8px;font-size:11px;">'
+            f'<span style="color:#f59e0b;font-weight:700;">⚠ Data Quality</span>'
+            f'<span style="color:#94a3b8;margin-left:8px;">{" &nbsp;·&nbsp; ".join(_dq_parts)}</span>'
+            f'<span style="color:#64748b;margin-left:8px;">— run ⚡ Quick Intel Run to refresh</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     # ── Earnings Intelligence panel ─────────────────────────────────────────
     from services.market_data import fetch_earnings_intelligence as _fetch_ei
     _ei = _fetch_ei(ticker)
