@@ -291,7 +291,8 @@ with st.sidebar:
                     _dc = "#ef4444"
                 else:
                     _dc = "#f59e0b"
-                _dots += f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{_dc};margin:1px;" title="{_h[\"date\"]}"></span>'
+                _hdate = _h["date"]
+                _dots += f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{_dc};margin:1px;" title="{_hdate}"></span>'
             _last = _recent[-1]
             _last_regime = _last.get("regime", "")
             _last_score = _last.get("macro_score", 50)
