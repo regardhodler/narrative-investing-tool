@@ -1428,7 +1428,7 @@ def _get_risk_free_rate() -> float:
     return 0.04  # fallback
 
 
-def _compute_dcf(ticker: str, growth_adj: float = 0.0) -> dict | None:
+def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg_adj: float = 0.0) -> dict | None:
     """
     2-stage levered DCF following Simply Wall St methodology.
     Returns dict with all intermediate values for display.
@@ -1552,7 +1552,8 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0) -> dict | None:
     levered_beta = max(0.8, min(2.0, levered_beta))  # clamp
 
     cost_of_equity = rf + levered_beta * _DEFAULT_ERP
-    discount_rate = cost_of_equity + profile.get("wacc_premium", 0.0)
+    discount_rate = cost_of_equity + profile.get("wacc_premium", 0.0) + wacc_adj
+    terminal_growth = max(0.005, terminal_growth + tg_adj)
 
     if discount_rate <= terminal_growth:
         # Model breaks down
@@ -1752,6 +1753,90 @@ def _dcf_verdict(disc: float) -> tuple[str, str, str]:
         return "Significantly Overvalued", "#D50000", "rgba(213,0,0,0.10)"
 
 
+def _render_sensitivity_table(ticker: str, base_dcf: dict) -> None:
+    """Render a 3×3 WACC × Terminal Growth sensitivity table, color-coded vs current price."""
+    price = base_dcf["current_price"]
+    wacc_deltas = [-0.01, 0.0, 0.01]
+    tg_deltas   = [-0.005, 0.0, 0.005]
+
+    # Pre-compute 9 cells
+    grid = {}
+    for wd in wacc_deltas:
+        for td in tg_deltas:
+            r = _compute_dcf(ticker, wacc_adj=wd, tg_adj=td)
+            grid[(wd, td)] = r.get("intrinsic_value") if (r and not r.get("error")) else None
+
+    base_wacc = base_dcf["discount_rate"]
+    base_tg   = base_dcf["terminal_growth"]
+
+    # Column headers: terminal growth labels
+    tg_labels = [f"{(base_tg + td)*100:.2f}%" for td in tg_deltas]
+    tg_descs  = ["−0.5%", "Base", "+0.5%"]
+
+    # Build HTML table
+    _hdr_style = "padding:6px 12px;font-size:10px;color:#64748b;font-weight:700;text-align:center;letter-spacing:0.06em;"
+    _lbl_style = "padding:6px 10px;font-size:10px;color:#94a3b8;font-weight:600;white-space:nowrap;"
+
+    rows_html = ""
+    for i, wd in enumerate(wacc_deltas):
+        wacc_label = f"{(base_wacc + wd)*100:.2f}%"
+        wacc_desc  = ["−1%", "Base", "+1%"][i]
+        cells = ""
+        for td in tg_deltas:
+            iv = grid.get((wd, td))
+            if iv is None:
+                cell_val = "N/A"
+                bg = "#1e293b"
+                color = "#475569"
+            else:
+                disc = (iv / price - 1) * 100
+                cell_val = f"${iv:,.0f}<br><span style='font-size:10px;'>{disc:+.1f}%</span>"
+                if disc >= 20:
+                    bg, color = "#052e16", "#22c55e"
+                elif disc >= 0:
+                    bg, color = "#1a1a00", "#a3e635"
+                elif disc >= -20:
+                    bg, color = "#1a0d00", "#f59e0b"
+                else:
+                    bg, color = "#1a0000", "#ef4444"
+            _is_base = (wd == 0.0 and td == 0.0)
+            border = "2px solid #FF8811" if _is_base else "1px solid #1e293b"
+            cells += (
+                f'<td style="padding:8px 12px;text-align:center;background:{bg};'
+                f'border:{border};font-size:12px;font-weight:700;color:{color};">'
+                f'{cell_val}</td>'
+            )
+        rows_html += (
+            f'<tr>'
+            f'<td style="{_lbl_style}">'
+            f'<span style="color:#64748b;font-size:10px;">{wacc_desc}</span><br>'
+            f'<b>{wacc_label}</b></td>'
+            f'{cells}</tr>'
+        )
+
+    col_headers = "".join(
+        f'<th style="{_hdr_style}"><span style="color:#64748b;">{d}</span><br>{l}</th>'
+        for l, d in zip(tg_labels, tg_descs)
+    )
+
+    st.markdown(
+        f'<div style="margin:4px 0 0 0;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">'
+        f'<span style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">WACC vs Terminal Growth — Intrinsic Value per Share</span>'
+        f'<span style="font-size:10px;color:#475569;">Current price: <b style="color:#e2e8f0;">${price:,.2f}</b> &nbsp;·&nbsp; Base cell outlined</span>'
+        f'</div>'
+        f'<table style="width:100%;border-collapse:collapse;font-family:monospace;">'
+        f'<thead><tr>'
+        f'<th style="{_hdr_style};text-align:left;">WACC \\ TG</th>'
+        f'{col_headers}'
+        f'</tr></thead>'
+        f'<tbody>{rows_html}</tbody>'
+        f'</table>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_dcf(ticker: str) -> dict | None:
     """Render the 2-stage DCF valuation section. Returns {bear, base, bull} dicts or None."""
     st.markdown("### 2-Stage DCF Valuation")
@@ -1893,6 +1978,9 @@ def _render_dcf(ticker: str) -> dict | None:
             f"**Initial Growth:** {dcf['initial_growth']*100:.1f}% ({dcf['growth_source']}) | "
             f"**Shares Outstanding:** {dcf['shares']/1e9:.3f}B"
         )
+
+    with st.expander("📊 WACC × Terminal Growth Sensitivity"):
+        _render_sensitivity_table(ticker, dcf)
 
     with st.expander("How This DCF Works"):
         st.markdown(f"""
