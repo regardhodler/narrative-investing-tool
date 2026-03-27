@@ -182,12 +182,50 @@ def clear_inbox() -> None:
             pass
 
 
+def _extract_url_content(url: str, max_chars: int = 2000) -> str | None:
+    """
+    Fetch a URL and extract the main article text using BeautifulSoup.
+    Returns extracted text or None on failure.
+    """
+    try:
+        from bs4 import BeautifulSoup
+        resp = requests.get(
+            url, timeout=10,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "en-US,en;q=0.5",
+            },
+            allow_redirects=True,
+        )
+        if not resp.ok:
+            return None
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # Remove noise
+        for tag in soup(["script", "style", "nav", "header", "footer", "aside", "form"]):
+            tag.decompose()
+
+        # Try article > main > body in order
+        for selector in ["article", "main", "[role='main']", ".article-body", ".post-content", "body"]:
+            container = soup.select_one(selector)
+            if container:
+                text = " ".join(container.get_text(" ", strip=True).split())
+                if len(text) > 200:
+                    return text[:max_chars]
+        return None
+    except Exception:
+        return None
+
+
 def sync_telegram_to_inbox() -> int:
     """
     Poll Telegram for new messages and save them to the inbox.
+    If a message is a URL, fetches the page and extracts article text.
     Returns number of new messages added.
     Only runs if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID are configured.
     """
+    import re
     try:
         from services.telegram_client import poll_new_messages, is_configured
         if not is_configured():
@@ -199,12 +237,33 @@ def sync_telegram_to_inbox() -> int:
         since_id = max(seen_ids) if seen_ids else 0
 
         new_msgs = poll_new_messages(since_message_id=since_id)
+        _url_re = re.compile(r'https?://\S+')
+
         for msg in new_msgs:
-            save_to_inbox(
-                text=msg["text"],
-                source="📱 Telegram",
-                message_id=msg["message_id"],
-            )
+            text = msg["text"]
+            urls = _url_re.findall(text)
+
+            if urls:
+                # Extract content from each URL found in the message
+                extracted_parts = []
+                for url in urls[:2]:  # max 2 URLs per message
+                    content = _extract_url_content(url)
+                    if content:
+                        extracted_parts.append(f"[From {url}]\n{content}")
+
+                if extracted_parts:
+                    # Prepend any non-URL text the user wrote as context
+                    user_note = _url_re.sub("", text).strip()
+                    full_text = "\n\n".join(
+                        ([f"Note: {user_note}"] if user_note else []) + extracted_parts
+                    )
+                    save_to_inbox(full_text, source="📱 Telegram (article)", message_id=msg["message_id"])
+                else:
+                    # URL fetch failed — save the raw URL with a note
+                    save_to_inbox(f"[Link — could not extract]\n{text}", source="📱 Telegram", message_id=msg["message_id"])
+            else:
+                save_to_inbox(text, source="📱 Telegram", message_id=msg["message_id"])
+
         return len(new_msgs)
     except Exception:
         return 0
