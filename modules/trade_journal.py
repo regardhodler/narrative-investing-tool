@@ -885,12 +885,18 @@ def render():
                     st.error(f"Analysis failed: {_err}")
                     if _use_claude and not _pi_has_claude:
                         st.warning("⚠ ANTHROPIC_API_KEY not found — Claude modes require this key in Streamlit secrets.")
+                    with st.expander("🔍 Debug — raw result", expanded=False):
+                        st.json(_pi_result or {"result": "None returned"})
 
         # Section C — Portfolio Verdict card
         _pa = st.session_state.get("_portfolio_analysis")
         _pa_ts = st.session_state.get("_portfolio_analysis_ts")
         _pa_engine = st.session_state.get("_portfolio_analysis_engine", "")
-        if _pa and "_error" not in _pa:
+        if _pa and "_error" in _pa:
+            st.error(f"Cached analysis has error: {_pa['_error']}")
+            with st.expander("🔍 Debug — cached result", expanded=False):
+                st.json(_pa)
+        elif _pa and "_error" not in _pa:
             st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
             _verdict = _pa.get("verdict", "UNKNOWN")
             _risk_score = _pa.get("risk_score", 0)
