@@ -305,6 +305,90 @@ def _render_risk_matrix(open_trades: list):
         unsafe_allow_html=True,
     )
 
+    # ── Diversification ratio ─────────────────────────────────────────────────
+    if len(port_tickers) > 1 and var_95 and len(port_ret_clean) > 20:
+        indiv_vars = []
+        for tk in port_tickers:
+            if tk in returns.columns:
+                tk_ret = returns[tk].dropna()
+                if len(tk_ret) > 20:
+                    indiv_vars.append(abs(float(np.percentile(tk_ret, 5))) * weights.get(tk, 0))
+        wsum_var = sum(indiv_vars)
+        port_var_abs = abs(var_95 / 100)
+        div_ratio = round(wsum_var / port_var_abs, 2) if port_var_abs > 0 else None
+        if div_ratio:
+            div_color = "#22c55e" if div_ratio >= 1.2 else ("#f59e0b" if div_ratio >= 1.05 else "#ef4444")
+            div_label = "Good" if div_ratio >= 1.2 else ("Moderate" if div_ratio >= 1.05 else "Low")
+            st.markdown(
+                f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                f'border-radius:6px;padding:10px 14px;margin:10px 0 4px 0;display:flex;align-items:center;gap:16px;">'
+                f'<span style="font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.08em;">DIVERSIFICATION RATIO</span>'
+                f'<span style="font-size:18px;font-weight:700;color:{div_color};">{div_ratio}×</span>'
+                f'<span style="font-size:11px;color:{div_color};">{div_label}</span>'
+                f'<span style="font-size:11px;color:#475569;">— sum of individual VaRs ÷ portfolio VaR '
+                f'(higher = more diversification benefit from low correlation)</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Stress test scenarios ─────────────────────────────────────────────────
+    if total_val and betas:
+        st.markdown(
+            f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.08em;margin:14px 0 6px 0;">STRESS TEST SCENARIOS</div>',
+            unsafe_allow_html=True,
+        )
+        _stress_scenarios = [
+            ("2008 GFC",         -0.57, "SPY peak-to-trough Oct 07 – Mar 09"),
+            ("COVID Crash",      -0.34, "SPY Feb 19 – Mar 23, 2020 (33 days)"),
+            ("2022 Rate Shock",  -0.25, "SPY Jan – Oct 2022, Fed 0→4.5%"),
+            ("Flash Crash",      -0.10, "Intraday -10% shock (1-day stress)"),
+            ("VIX Spike +200%",  -0.15, "Hypothetical vol regime shift"),
+        ]
+        _s_rows = ""
+        for _s_label, _spy_shock, _s_desc in _stress_scenarios:
+            # Beta-adjusted loss per position, weighted by portfolio weight
+            # Longs lose beta × shock; Shorts gain beta × shock
+            _port_impact = 0.0
+            for trade in open_trades:
+                tk = trade["ticker"].upper()
+                if tk not in port_tickers:
+                    continue
+                _w = weights.get(tk, 0)
+                _b = betas.get(tk, 1.0)
+                _dir = trade.get("direction", "long").lower()
+                _sign = 1 if _dir == "long" else -1
+                _port_impact += _w * _b * _spy_shock * _sign
+            _loss_pct = _port_impact * 100
+            _loss_dollar = _port_impact * total_val
+            _s_color = "#ef4444" if _loss_pct < -15 else ("#f59e0b" if _loss_pct < -5 else "#22c55e")
+            _s_rows += (
+                f'<tr>'
+                f'<td style="padding:6px 12px;font-weight:700;color:#e2e8f0;">{_s_label}</td>'
+                f'<td style="padding:6px 12px;color:#64748b;font-size:10px;">{_s_desc}</td>'
+                f'<td style="padding:6px 12px;text-align:right;color:#94a3b8;">{_spy_shock*100:+.0f}%</td>'
+                f'<td style="padding:6px 12px;text-align:right;font-weight:700;color:{_s_color};">{_loss_pct:+.1f}%</td>'
+                f'<td style="padding:6px 12px;text-align:right;font-weight:700;color:{_s_color};">'
+                f'{"−" if _loss_dollar < 0 else "+"}${abs(_loss_dollar):,.0f}</td>'
+                f'</tr>'
+            )
+        _hdr = "padding:6px 12px;font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.06em;"
+        st.markdown(
+            f'<div style="border:1px solid {COLORS["border"]};border-radius:6px;overflow:hidden;margin-bottom:10px;">'
+            f'<table style="width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;">'
+            f'<thead><tr style="background:{COLORS["surface"]};">'
+            f'<th style="{_hdr};text-align:left;">SCENARIO</th>'
+            f'<th style="{_hdr};text-align:left;">CONTEXT</th>'
+            f'<th style="{_hdr};text-align:right;">SPY SHOCK</th>'
+            f'<th style="{_hdr};text-align:right;">PORT IMPACT</th>'
+            f'<th style="{_hdr};text-align:right;">$ P&L</th>'
+            f'</tr></thead>'
+            f'<tbody>{_s_rows}</tbody>'
+            f'</table></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("Beta-adjusted estimates. Longs lose β × shock; shorts gain β × shock. Assumes beta stability — actual losses may differ significantly in tail events.")
+
     # ── Risk flags ────────────────────────────────────────────────────────────
     flags = []
     if port_beta > 1.4:
