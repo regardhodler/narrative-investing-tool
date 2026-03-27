@@ -529,6 +529,24 @@ def render():
         if _ei_lines:
             signals_text += "\n\n## Earnings Intelligence\n" + "\n".join(f"- {l}" for l in _ei_lines)
 
+    # Inject Elliott Wave + Wyckoff price action signals
+    _pa = signals.get("price_action") or {}
+    if _pa:
+        _pa_lines = []
+        if _pa.get("wyckoff_phase"):
+            _wy_conf = f" ({_pa['wyckoff_confidence']*100:.0f}% conf)" if _pa.get("wyckoff_confidence") else ""
+            _wy_sub = f" sub-{_pa['wyckoff_sub_phase']}" if _pa.get("wyckoff_sub_phase") else ""
+            _wy_target = f" — cause target ${_pa['wyckoff_cause_target']:,.2f}" if _pa.get("wyckoff_cause_target") else ""
+            _pa_lines.append(f"Wyckoff: {_pa['wyckoff_phase']}{_wy_sub}{_wy_conf}{_wy_target}")
+        if _pa.get("ew_wave"):
+            _ew_dir = f" ({_pa['ew_direction']})" if _pa.get("ew_direction") else ""
+            _ew_conf = f" {_pa['ew_confidence']*100:.0f}% conf" if _pa.get("ew_confidence") else ""
+            _ew_target = f" — primary target ${_pa['ew_primary_target']:,.2f} ({_pa.get('ew_primary_prob',0)*100:.0f}%)" if _pa.get("ew_primary_target") else ""
+            _ew_inv = f" | invalidation ${_pa['ew_invalidation']:,.2f}" if _pa.get("ew_invalidation") else ""
+            _pa_lines.append(f"Elliott Wave: Wave {_pa['ew_wave']}{_ew_dir}{_ew_conf}{_ew_target}{_ew_inv}")
+        if _pa_lines:
+            signals_text += "\n\n## Price Action (Elliott Wave & Wyckoff)\n" + "\n".join(f"- {l}" for l in _pa_lines)
+
     # Inject Fed Rate-Path Plays (sectors/bonds to own given dominant rate path)
     _fed_plays_val = st.session_state.get("_fed_plays_result")
     if _fed_plays_val:
@@ -723,6 +741,9 @@ def _collect_signals(ticker: str) -> dict | None:
     signals["whale"] = _collect_whale_signals(ticker)
     signals["stress"] = _collect_stress_signals()
 
+    # 8. Price action: Elliott Wave + Wyckoff (lightweight, cached)
+    signals["price_action"] = _get_price_action_signal(ticker)
+
     return signals
 
 
@@ -770,6 +791,53 @@ def _collect_whale_signals(ticker: str) -> dict:
     except Exception:
         result["insider_sentiment"] = "UNKNOWN"
 
+    return result
+
+
+@st.cache_data(ttl=3600)
+def _get_price_action_signal(ticker: str) -> dict:
+    """Run Elliott Wave + Wyckoff on daily data and return a compact signal dict.
+    Cached 1hr — these are compute-heavy engines."""
+    result = {}
+    try:
+        from services.market_data import fetch_ohlcv_single
+        df = fetch_ohlcv_single(ticker, period="2y", interval="1d")
+        if df is None or df.empty or len(df) < 60:
+            return result
+
+        # ── Wyckoff ──────────────────────────────────────────────────────────
+        try:
+            from services.wyckoff_engine import analyze_wyckoff
+            wa = analyze_wyckoff(df["Close"], df["High"], df["Low"], df["Volume"])
+            if wa and wa.current_phase:
+                cp = wa.current_phase
+                result["wyckoff_phase"]      = cp.phase
+                result["wyckoff_sub_phase"]  = cp.sub_phase or ""
+                result["wyckoff_confidence"] = round(float(cp.confidence), 2) if cp.confidence else None
+                result["wyckoff_cause_target"] = round(float(cp.cause_target), 2) if cp.cause_target else None
+        except Exception:
+            pass
+
+        # ── Elliott Wave ──────────────────────────────────────────────────────
+        try:
+            from services.elliott_wave_engine import get_best_wave_count, build_wave_forecast
+            bc = get_best_wave_count(df["Close"])
+            if bc:
+                result["ew_wave"]        = bc.current_wave_label
+                result["ew_confidence"]  = round(float(bc.confidence), 2) if bc.confidence else None
+                result["ew_invalidation"] = round(float(bc.invalidation_level), 2) if bc.invalidation_level else None
+                current_price = float(df["Close"].iloc[-1])
+                fc = build_wave_forecast(bc, current_price)
+                if fc:
+                    result["ew_direction"]         = fc.direction
+                    result["ew_primary_target"]    = round(float(fc.primary_target), 2) if fc.primary_target else None
+                    result["ew_primary_prob"]      = round(float(fc.primary_probability), 2) if fc.primary_probability else None
+                    result["ew_alternate_target"]  = round(float(fc.alternate_target), 2) if fc.alternate_target else None
+        except Exception:
+            pass
+
+    except Exception:
+        pass
     return result
 
 

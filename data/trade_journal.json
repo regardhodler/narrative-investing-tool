@@ -50,14 +50,14 @@
     "direction": "Long",
     "entry_date": "2025-03-07",
     "entry_price": 15.9,
-    "exit_date": null,
-    "exit_price": null,
-    "position_size": 125,
+    "exit_date": "2026-03-26",
+    "exit_price": 29.905000686645508,
+    "position_size": 40,
     "signal_source": "Manual",
     "notes": "",
     "thesis": "Silver shortage.",
     "regime_at_entry": "Neutral (50)",
-    "status": "open"
+    "status": "closed"
   },
   {
     "id": "48f648e1-1af6-42d8-8fb0-6828e078c809",
@@ -207,6 +207,21 @@
     "notes": "",
     "thesis": "Hedge against inflation.",
     "regime_at_entry": "Neutral (50)",
+    "status": "open"
+  },
+  {
+    "id": "847b75f8-52a8-4304-9b0b-4ff8bcb24aff",
+    "ticker": "ZUT.TO",
+    "direction": "Long",
+    "entry_date": "2026-03-26",
+    "entry_price": 28.79,
+    "exit_date": null,
+    "exit_price": null,
+    "position_size": 279,
+    "signal_source": "Manual",
+    "notes": "Defensive utilities",
+    "thesis": "Defensive utilities",
+    "regime_at_entry": "Neutral \u2014 Leaning Risk-Off (46)",
     "status": "open"
   }
 ]
