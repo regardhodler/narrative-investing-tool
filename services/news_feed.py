@@ -86,12 +86,23 @@ def fetch_financial_headlines(max_per_feed: int = 6) -> list[dict]:
     return all_items
 
 
-def load_news_inbox() -> list[dict]:
+def load_news_inbox(prefer_gist: bool = False) -> list[dict]:
     """
-    Load inbox. Tries Gist first (survives Streamlit Cloud redeploys), falls back to local file.
-    Each item: {text, source, ts, message_id (optional)}
+    Load inbox.
+    Default: local file first (fast, consistent within a session), Gist as cold-start fallback.
+    prefer_gist=True: Gist first (used on fresh Streamlit Cloud deploy where local file is absent).
     """
-    # 1. Try Gist
+    # If local file exists and we're not forcing Gist, use it — avoids stale-Gist overwrite bug
+    if not prefer_gist and os.path.exists(_INBOX_FILE):
+        try:
+            with open(_INBOX_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, list):
+                return data
+        except Exception:
+            pass
+
+    # Cold-start: try Gist (Streamlit Cloud fresh deploy — no local file yet)
     if _INBOX_GIST_RAW:
         try:
             resp = requests.get(
@@ -101,19 +112,15 @@ def load_news_inbox() -> list[dict]:
             if resp.ok:
                 data = resp.json()
                 if isinstance(data, list):
+                    # Seed local file from Gist so subsequent calls use local
+                    os.makedirs(_DATA_DIR, exist_ok=True)
+                    with open(_INBOX_FILE, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2)
                     return data
         except Exception:
             pass
 
-    # 2. Fall back to local file
-    if not os.path.exists(_INBOX_FILE):
-        return []
-    try:
-        with open(_INBOX_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, list) else []
-    except Exception:
-        return []
+    return []
 
 
 def save_to_inbox(text: str, source: str = "manual", message_id: int = 0) -> None:
@@ -182,6 +189,28 @@ def clear_inbox() -> None:
             pass
 
 
+def _extract_tweet_content(url: str) -> str | None:
+    """Use Twitter oEmbed API to get tweet text without requiring JavaScript."""
+    try:
+        r = requests.get(
+            "https://publish.twitter.com/oembed",
+            params={"url": url, "omit_script": "true"},
+            timeout=8,
+        )
+        if r.ok:
+            html = r.json().get("html", "")
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "html.parser")
+            # oEmbed returns an HTML blockquote — extract the text
+            text = soup.get_text(" ", strip=True)
+            if text and len(text) > 20:
+                author = r.json().get("author_name", "")
+                return f"@{author}: {text}" if author else text
+    except Exception:
+        pass
+    return None
+
+
 def _extract_url_content(url: str, max_chars: int = 2000) -> str | None:
     """
     Fetch a URL and extract the main article text using BeautifulSoup.
@@ -247,7 +276,14 @@ def sync_telegram_to_inbox() -> int:
                 # Extract content from each URL found in the message
                 extracted_parts = []
                 for url in urls[:2]:  # max 2 URLs per message
-                    content = _extract_url_content(url)
+                    # Special handler for X / Twitter
+                    if any(d in url for d in ("x.com", "twitter.com")):
+                        content = _extract_tweet_content(url) or _extract_url_content(url)
+                    else:
+                        content = _extract_url_content(url)
+                    # Reject JS-wall responses
+                    if content and "javascript" in content.lower()[:80]:
+                        content = None
                     if content:
                         extracted_parts.append(f"[From {url}]\n{content}")
 
