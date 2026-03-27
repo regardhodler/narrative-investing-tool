@@ -785,9 +785,20 @@ def render():
             f'letter-spacing:0.08em;margin-bottom:8px;">PORTFOLIO ANALYSIS ENGINE</div>',
             unsafe_allow_html=True,
         )
-        _pi_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        import os as _os
+        _pi_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
+        _pi_tier_opts = ["⚡ Groq"]
+        if _pi_has_claude:
+            _pi_tier_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
         _sel_pi_tier = st.radio("Analysis Engine", _pi_tier_opts, horizontal=True, key="portfolio_intel_engine")
         st.caption("💡 👑 Highly Regarded Mode strongly recommended — this is the highest-stakes synthesis task (actual position decisions)")
+        if not _pi_has_claude:
+            st.markdown(
+                '<div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;'
+                'padding:6px 12px;font-size:10px;color:#f59e0b;margin-bottom:4px;">'
+                '🔒 <b>Regard / Highly Regarded Mode unavailable</b> — set ANTHROPIC_API_KEY in Streamlit secrets to unlock Claude analysis</div>',
+                unsafe_allow_html=True,
+            )
 
         if not open_trades:
             st.info("No open positions to analyze.")
@@ -872,6 +883,8 @@ def render():
                 else:
                     _err = (_pi_result or {}).get("_error", "Unknown error")
                     st.error(f"Analysis failed: {_err}")
+                    if _use_claude and not _pi_has_claude:
+                        st.warning("⚠ ANTHROPIC_API_KEY not found — Claude modes require this key in Streamlit secrets.")
 
         # Section C — Portfolio Verdict card
         _pa = st.session_state.get("_portfolio_analysis")
@@ -917,10 +930,21 @@ def render():
                 f'<span style="color:{_verdict_color};font-size:18px;font-weight:700;">{_verdict_label}</span>'
                 f'<span style="color:#ccc;font-size:14px;">Risk Score: <b style="color:{_verdict_color};">{_risk_score}/10</b></span>'
                 f'</div>'
-                f'<div style="color:#bbb;font-size:12px;line-height:1.6;">{_narrative}</div>'
+                f'<div style="color:#bbb;font-size:12px;line-height:1.6;">{_narrative or "<i style=\'color:#555\'>No narrative generated — re-run analysis.</i>"}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
+            _priority_actions = _pa.get("priority_actions", [])
+            if _priority_actions:
+                st.markdown(
+                    '<div style="margin-top:6px;">'
+                    + "".join(
+                        f'<div style="font-size:11px;color:#f59e0b;padding:2px 0;">▸ {a}</div>'
+                        for a in _priority_actions
+                    )
+                    + '</div>',
+                    unsafe_allow_html=True,
+                )
 
             # Section D — Per-position intelligence cards
             _pa_positions = {p["ticker"].upper(): p for p in _pa.get("positions", [])}
