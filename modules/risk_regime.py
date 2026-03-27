@@ -638,13 +638,28 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     signal_summary = "\n".join(sig_lines)
     norm_score = (macro.get("macro_score", 50) - 50) / 50
 
+    _prev_regime = (st.session_state.get("_regime_context") or {}).get("regime", "")
+    _new_regime = macro["macro_regime"]
     st.session_state["_regime_context"] = {
-        "regime": macro["macro_regime"],
+        "regime": _new_regime,
         "score": norm_score,
         "signal_summary": signal_summary,
         "quadrant": macro["quadrant"],
     }
     st.session_state["_regime_context_ts"] = _dt.datetime.now()
+
+    # Telegram alert on regime flip
+    if _prev_regime and _prev_regime != _new_regime:
+        try:
+            from services.telegram_client import send_alert as _tg_alert
+            _quad = macro["quadrant"]
+            _tg_alert(
+                f"⚠️ <b>REGIME FLIP</b>\n"
+                f"{_prev_regime} → <b>{_new_regime}</b>\n"
+                f"Score: {norm_score:+.2f} | {_quad}"
+            )
+        except Exception:
+            pass
 
     _plays = suggest_regime_plays(
         macro["macro_regime"], norm_score, signal_summary,

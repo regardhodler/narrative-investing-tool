@@ -15,6 +15,12 @@ _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 _INBOX_FILE = os.path.join(_DATA_DIR, "news_inbox.json")
 _INBOX_MAX = 50
 
+# Inbox Gist persistence (survives Streamlit Cloud redeploys)
+_INBOX_GIST_ID  = os.getenv("INBOX_GIST_ID", "")
+_INBOX_GIST_RAW = os.getenv("INBOX_GIST_RAW_URL", "")
+_GIST_TOKEN     = (os.getenv("GIST_TOKEN") or os.getenv("GITHUB_GIST_TOKEN") or "").strip()
+_INBOX_GIST_FILENAME = "news_inbox.json"
+
 _RSS_FEEDS = [
     ("Reuters",     "https://feeds.reuters.com/reuters/businessNews"),
     ("MarketWatch", "https://feeds.marketwatch.com/marketwatch/topstories/"),
@@ -82,10 +88,24 @@ def fetch_financial_headlines(max_per_feed: int = 6) -> list[dict]:
 
 def load_news_inbox() -> list[dict]:
     """
-    Read data/news_inbox.json.
-    Each item: {text, source, ts}
-    Returns [] if file missing or corrupt.
+    Load inbox. Tries Gist first (survives Streamlit Cloud redeploys), falls back to local file.
+    Each item: {text, source, ts, message_id (optional)}
     """
+    # 1. Try Gist
+    if _INBOX_GIST_RAW:
+        try:
+            resp = requests.get(
+                _INBOX_GIST_RAW, timeout=8,
+                headers={"User-Agent": "NarrativeInvestingTool/1.0", "Cache-Control": "no-cache"},
+            )
+            if resp.ok:
+                data = resp.json()
+                if isinstance(data, list):
+                    return data
+        except Exception:
+            pass
+
+    # 2. Fall back to local file
     if not os.path.exists(_INBOX_FILE):
         return []
     try:
@@ -96,26 +116,98 @@ def load_news_inbox() -> list[dict]:
         return []
 
 
-def save_to_inbox(text: str, source: str = "manual") -> None:
-    """Append a new item to news_inbox.json. Caps at _INBOX_MAX items (rolling)."""
+def save_to_inbox(text: str, source: str = "manual", message_id: int = 0) -> None:
+    """
+    Append a new item to inbox. Deduplicates Telegram messages by message_id.
+    Writes local file + Gist (Gist debounced to 2 min).
+    """
     os.makedirs(_DATA_DIR, exist_ok=True)
     items = load_news_inbox()
+
+    # Deduplicate Telegram messages
+    if message_id:
+        existing_ids = {i.get("message_id", 0) for i in items}
+        if message_id in existing_ids:
+            return
+
     items.append({
         "text": text.strip(),
         "source": source,
         "ts": datetime.now().isoformat(),
+        **({"message_id": message_id} if message_id else {}),
     })
-    # Keep newest _INBOX_MAX items
     items = items[-_INBOX_MAX:]
+
+    payload_str = json.dumps(items, indent=2)
+
+    # Always write local file
     with open(_INBOX_FILE, "w", encoding="utf-8") as f:
-        json.dump(items, f, indent=2)
+        f.write(payload_str)
+
+    # Write Gist (debounced via streamlit session_state)
+    if _INBOX_GIST_ID and _GIST_TOKEN:
+        try:
+            import streamlit as _st
+            last = _st.session_state.get("_inbox_gist_saved_at")
+            now = datetime.now()
+            if last is None or (now - last).total_seconds() > 120:
+                requests.patch(
+                    f"https://api.github.com/gists/{_INBOX_GIST_ID}",
+                    json={"files": {_INBOX_GIST_FILENAME: {"content": payload_str}}},
+                    headers={"Authorization": f"Bearer {_GIST_TOKEN}",
+                             "Accept": "application/vnd.github+json"},
+                    timeout=10,
+                )
+                _st.session_state["_inbox_gist_saved_at"] = now
+        except Exception:
+            pass
 
 
 def clear_inbox() -> None:
-    """Delete all inbox items."""
-    if os.path.exists(_INBOX_FILE):
-        with open(_INBOX_FILE, "w", encoding="utf-8") as f:
-            json.dump([], f)
+    """Delete all inbox items (local + Gist)."""
+    payload_str = json.dumps([], indent=2)
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    with open(_INBOX_FILE, "w", encoding="utf-8") as f:
+        f.write(payload_str)
+    if _INBOX_GIST_ID and _GIST_TOKEN:
+        try:
+            requests.patch(
+                f"https://api.github.com/gists/{_INBOX_GIST_ID}",
+                json={"files": {_INBOX_GIST_FILENAME: {"content": payload_str}}},
+                headers={"Authorization": f"Bearer {_GIST_TOKEN}",
+                         "Accept": "application/vnd.github+json"},
+                timeout=10,
+            )
+        except Exception:
+            pass
+
+
+def sync_telegram_to_inbox() -> int:
+    """
+    Poll Telegram for new messages and save them to the inbox.
+    Returns number of new messages added.
+    Only runs if TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID are configured.
+    """
+    try:
+        from services.telegram_client import poll_new_messages, is_configured
+        if not is_configured():
+            return 0
+
+        # Find highest message_id already in inbox to avoid re-importing
+        items = load_news_inbox()
+        seen_ids = {i.get("message_id", 0) for i in items if i.get("message_id")}
+        since_id = max(seen_ids) if seen_ids else 0
+
+        new_msgs = poll_new_messages(since_message_id=since_id)
+        for msg in new_msgs:
+            save_to_inbox(
+                text=msg["text"],
+                source="📱 Telegram",
+                message_id=msg["message_id"],
+            )
+        return len(new_msgs)
+    except Exception:
+        return 0
 
 
 @st.cache_data(ttl=900)  # 15-minute cache — matches bot's run interval

@@ -879,6 +879,21 @@ def render():
                     st.session_state["_portfolio_analysis_engine"] = _sel_pi_tier
                     append_play("Portfolio Analysis", _sel_pi_tier, _pi_result,
                                 meta={"n_positions": len(open_trades), "verdict": _pi_result.get("verdict")})
+                    # Telegram alert for high-risk verdicts
+                    _verdict_val = _pi_result.get("verdict", "")
+                    if _verdict_val in ("DEFENSIVE", "EXIT_REVIEW"):
+                        try:
+                            from services.telegram_client import send_alert as _tg_alert
+                            _vl = {"DEFENSIVE": "🛡 DEFENSIVE", "EXIT_REVIEW": "🚨 EXIT REVIEW"}.get(_verdict_val, _verdict_val)
+                            _rs = _pi_result.get("risk_score", "?")
+                            _narr = (_pi_result.get("narrative") or "")[:200]
+                            _tg_alert(
+                                f"<b>PORTFOLIO ALERT: {_vl}</b>\n"
+                                f"Risk Score: {_rs}/10\n\n"
+                                f"{_narr}"
+                            )
+                        except Exception:
+                            pass
                     st.rerun()
                 else:
                     _err = (_pi_result or {}).get("_error", "Unknown error")

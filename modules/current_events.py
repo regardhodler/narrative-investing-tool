@@ -8,6 +8,7 @@ from services.news_feed import (
     load_news_inbox,
     save_to_inbox,
     clear_inbox,
+    sync_telegram_to_inbox,
     headlines_to_text,
     inbox_to_text,
     polymarket_to_text,
@@ -25,6 +26,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     import streamlit as st
     from datetime import datetime
 
+    sync_telegram_to_inbox()
     headlines = fetch_financial_headlines()
     inbox = load_news_inbox()
     gist = fetch_gist_intel()
@@ -126,6 +128,17 @@ def render():
         f'{COLORS["bloomberg_orange"]}44,transparent);border-radius:1px;"></div>',
         unsafe_allow_html=True,
     )
+
+    # ── Telegram field notes sync ─────────────────────────────────────────────
+    from services.telegram_client import is_configured as _tg_configured
+    _n_new = sync_telegram_to_inbox()
+    if _tg_configured():
+        _tg_badge_color = "#22c55e" if _n_new > 0 else "#334155"
+        _tg_badge_text = f"📱 Telegram — {_n_new} new note{'s' if _n_new != 1 else ''} synced" if _n_new else "📱 Telegram connected"
+        st.markdown(
+            f'<div style="font-size:10px;color:{_tg_badge_color};margin-bottom:8px;">{_tg_badge_text}</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Bot Intel (Gist) ──────────────────────────────────────────────────────
     gist = fetch_gist_intel()
