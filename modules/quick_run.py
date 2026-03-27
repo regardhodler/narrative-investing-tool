@@ -296,3 +296,48 @@ def render():
                     f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_doom}</div>',
                     unsafe_allow_html=True,
                 )
+
+    # ── Data Flow Legend ───────────────────────────────────────────────────────
+    with st.expander("📊 Data Flow", expanded=False):
+        _oc = COLORS["bloomberg_orange"]
+        st.markdown(
+            f"""
+<div style="font-family:'JetBrains Mono',Consolas,monospace;font-size:11px;line-height:1.9;">
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">DATA SOURCES</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
+  {''.join(f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px 8px;color:#94a3b8;">{s}</span>' for s in ['yfinance','FRED API','RSS feeds','Polymarket Gist','📱 Telegram inbox','SEC EDGAR'])}
+</div>
+
+<div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL LAYER <span style="font-weight:400;color:#475569;">(Quick Intel Run generates these)</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:14px;">
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission'])}
+</div>
+
+<div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">CONSUMERS</div>
+<div style="display:flex;flex-direction:column;gap:4px;">
+  <div style="background:#0c1a0c;border:1px solid #22c55e44;border-radius:4px;padding:6px 10px;">
+    <span style="color:#22c55e;font-weight:700;">Portfolio Intelligence</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events</span>
+  </div>
+  <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
+    <span style="color:#f59e0b;font-weight:700;">Discovery</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · rate probabilities</span>
+  </div>
+  <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
+    <span style="color:#3b82f6;font-weight:700;">Valuation</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime only (ERP adjustment) — rest is ticker-level DCF + Elliott Wave + Wyckoff</span>
+  </div>
+</div>
+
+<div style="margin-top:12px;padding-top:8px;border-top:1px solid #1e293b;color:#334155;font-size:10px;">
+  📱 Telegram inbox → Current Events Digest → Portfolio Intelligence + Doom Briefing
+</div>
+
+</div>""",
+            unsafe_allow_html=True,
+        )
