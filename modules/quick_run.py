@@ -190,6 +190,57 @@ def render():
         else:
             st.warning(f"{_n_ok}/4 modules completed — check errors above.")
 
+        # ── Signal Coverage Panel ──────────────────────────────────────────────
+        from datetime import datetime as _dt2
+        _coverage_signals = [
+            ("Regime",             "_regime_context",        "_regime_context_ts"),
+            ("Fed Rate Path",      "_dominant_rate_path",    "_rate_path_probs_ts"),
+            ("Fed Funds Rate",     "_fed_funds_rate",        None),
+            ("Rate-Path Plays",    "_fed_plays_result",      "_fed_plays_result_ts"),
+            ("Regime Plays",       "_rp_plays_result",       None),
+            ("Doom Briefing",      "_doom_briefing",         "_doom_briefing_ts"),
+            ("Policy Trans.",      "_chain_narration",       None),
+            ("Black Swans",        "_custom_swans",          "_custom_swans_ts"),
+            ("Whale Activity",     "_whale_summary",         "_whale_summary_ts"),
+            ("Current Events",     "_current_events_digest", "_current_events_digest_ts"),
+        ]
+        _now2 = _dt2.now()
+        _n_loaded = sum(1 for _, k, _ in _coverage_signals if st.session_state.get(k))
+        _bar_pct = int(_n_loaded / len(_coverage_signals) * 100)
+        _bar_color = "#22c55e" if _n_loaded == len(_coverage_signals) else ("#f59e0b" if _n_loaded >= 7 else "#ef4444")
+
+        _left = _coverage_signals[:5]
+        _right = _coverage_signals[5:]
+        _rows_html = ""
+        for (lbl_l, k_l, ts_l), (lbl_r, k_r, ts_r) in zip(_left, _right):
+            def _sig_cell(lbl, k, ts_k):
+                ok = bool(st.session_state.get(k))
+                icon = f'<span style="color:#22c55e;">✓</span>' if ok else '<span style="color:#ef4444;">✗</span>'
+                age = ""
+                if ok and ts_k:
+                    _ts = st.session_state.get(ts_k)
+                    if _ts:
+                        _m = int((_now2 - _ts).total_seconds() / 60)
+                        age = f' <span style="color:#555;font-size:10px;">· {"just now" if _m < 1 else (f"{_m}m ago" if _m < 60 else f"{_m//60}h ago")}</span>'
+                color = "#e2e8f0" if ok else "#475569"
+                return f'<td style="padding:2px 12px 2px 0;white-space:nowrap;">{icon} <span style="color:{color};">{lbl}</span>{age}</td>'
+            _rows_html += f"<tr>{_sig_cell(lbl_l, k_l, ts_l)}{_sig_cell(lbl_r, k_r, ts_r)}</tr>"
+
+        st.markdown(
+            f'<div style="border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-top:10px;">'
+            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;">Prompt Context</span>'
+            f'<span style="font-size:10px;color:{_bar_color};font-weight:600;">{_n_loaded}/{len(_coverage_signals)} signals loaded</span>'
+            f'</div>'
+            f'<div style="height:2px;background:#1e293b;border-radius:1px;margin-bottom:8px;">'
+            f'<div style="height:2px;width:{_bar_pct}%;background:{_bar_color};border-radius:1px;"></div>'
+            f'</div>'
+            f'<table style="width:100%;font-size:11px;font-family:monospace;border-collapse:collapse;">'
+            f'{_rows_html}</table>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
         # ── Previews ───────────────────────────────────────────────────────────
         _digest = st.session_state.get("_current_events_digest", "")
         _doom = st.session_state.get("_doom_briefing", "")

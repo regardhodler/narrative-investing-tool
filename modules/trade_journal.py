@@ -642,6 +642,7 @@ def render():
             ("Black Swans", "_custom_swans_ts"),
             ("Whale Summary", "_whale_summary_ts"),
             ("Fed Plays", "_fed_plays_result_ts"),
+            ("Current Events", "_current_events_digest_ts"),
         ]
         _ctx_cols = st.columns(len(_ctx_items))
         _now = _dt.now()
