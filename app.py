@@ -235,7 +235,79 @@ with st.sidebar:
         f'<div style="{_status_style}">TICKER <span style="{_val_style}">{ticker or "—"}</span></div>',
         unsafe_allow_html=True,
     )
-    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0 8px 0;"></div>', unsafe_allow_html=True)
+    # --- Macro Event Countdown ---
+    try:
+        from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
+        _events = [
+            ("FOMC", get_next_fomc()),
+            ("CPI",  get_next_cpi()),
+            ("NFP",  get_next_nfp()),
+        ]
+        _cells = ""
+        for _label, _ev in _events:
+            _days = _ev.get("days_away", 99)
+            _date_str = _ev.get("date", "")[:6]  # "Mar 18"
+            if _days == 0:
+                _c, _bg = "#ef4444", "#2d0a0a"
+                _d = "TODAY"
+            elif _days == 1:
+                _c, _bg = "#f97316", "#1f0d00"
+                _d = "TMRW"
+            elif _days <= 5:
+                _c, _bg = "#f59e0b", "#1a1200"
+                _d = f"{_days}d"
+            else:
+                _c, _bg = "#475569", "#0d1117"
+                _d = f"{_days}d"
+            _cells += (
+                f'<div style="background:{_bg};border:1px solid {_c}44;border-radius:4px;'
+                f'padding:4px 6px;text-align:center;">'
+                f'<div style="font-size:9px;color:#64748b;letter-spacing:0.08em;">{_label}</div>'
+                f'<div style="font-size:11px;font-weight:700;color:{_c};">{_d}</div>'
+                f'<div style="font-size:9px;color:#475569;">{_date_str}</div>'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin:8px 0;">'
+            f'{_cells}</div>',
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass
+
+    # --- Regime History Strip ---
+    try:
+        from modules.risk_regime import _load_history
+        _hist = _load_history()
+        if _hist:
+            _recent = sorted(_hist, key=lambda x: x["date"])[-30:]
+            _dots = ""
+            for _h in _recent:
+                _s = _h.get("macro_score", 50)
+                _r = _h.get("regime", "")
+                if _s >= 60 or "Risk-On" in _r:
+                    _dc = "#22c55e"
+                elif _s <= 40 or "Risk-Off" in _r:
+                    _dc = "#ef4444"
+                else:
+                    _dc = "#f59e0b"
+                _dots += f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:{_dc};margin:1px;" title="{_h[\"date\"]}"></span>'
+            _last = _recent[-1]
+            _last_regime = _last.get("regime", "")
+            _last_score = _last.get("macro_score", 50)
+            _rc = "#22c55e" if _last_score >= 60 else ("#ef4444" if _last_score <= 40 else "#f59e0b")
+            st.markdown(
+                f'<div style="margin:6px 0 4px 0;">'
+                f'<div style="font-size:9px;color:#475569;letter-spacing:0.08em;margin-bottom:3px;">REGIME · 30D</div>'
+                f'<div style="line-height:1;">{_dots}</div>'
+                f'<div style="font-size:10px;color:{_rc};font-weight:700;margin-top:4px;">{_last_regime} · {_last_score:.0f}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
+
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:4px 0 8px 0;"></div>', unsafe_allow_html=True)
 
     # --- Watchlist widget ---
     watchlist = load_watchlist()
