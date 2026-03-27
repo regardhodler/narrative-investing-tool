@@ -28,51 +28,92 @@ from services.market_data import fetch_fred_series_safe
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FOMC CALENDAR  (update each January from federalreserve.gov/monetarypolicy/fomccalendars.htm)
+# FOMC / CPI / NFP CALENDARS  — auto-fetched, hardcoded 2026 as fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Fallback dates (used when live fetch fails)
 _FOMC_DATES_2026 = [
-    date(2026, 1, 28),
-    date(2026, 3, 18),
-    date(2026, 4, 29),
-    date(2026, 6, 10),
-    date(2026, 7, 29),
-    date(2026, 9, 16),
-    date(2026, 10, 28),
-    date(2026, 12, 9),
+    date(2026, 1, 28), date(2026, 3, 18), date(2026, 4, 29), date(2026, 6, 10),
+    date(2026, 7, 29), date(2026, 9, 16), date(2026, 10, 28), date(2026, 12, 9),
 ]
-
-# BLS CPI release dates 2026 (second or third Wednesday of each month)
 _CPI_DATES_2026 = [
-    date(2026, 1, 15),
-    date(2026, 2, 12),
-    date(2026, 3, 12),
-    date(2026, 4, 10),
-    date(2026, 5, 13),
-    date(2026, 6, 11),
-    date(2026, 7, 15),
-    date(2026, 8, 12),
-    date(2026, 9, 10),
-    date(2026, 10, 13),
-    date(2026, 11, 12),
-    date(2026, 12, 10),
+    date(2026, 1, 15), date(2026, 2, 12), date(2026, 3, 12), date(2026, 4, 10),
+    date(2026, 5, 13), date(2026, 6, 11), date(2026, 7, 15), date(2026, 8, 12),
+    date(2026, 9, 10), date(2026, 10, 13), date(2026, 11, 12), date(2026, 12, 10),
+]
+_NFP_DATES_2026 = [
+    date(2026, 1, 9), date(2026, 2, 6), date(2026, 3, 6), date(2026, 4, 3),
+    date(2026, 5, 8), date(2026, 6, 5), date(2026, 7, 10), date(2026, 8, 7),
+    date(2026, 9, 4), date(2026, 10, 2), date(2026, 11, 6), date(2026, 12, 4),
 ]
 
-# BLS NFP (Jobs) release dates 2026 (first Friday of each month)
-_NFP_DATES_2026 = [
-    date(2026, 1, 9),
-    date(2026, 2, 6),
-    date(2026, 3, 6),
-    date(2026, 4, 3),
-    date(2026, 5, 8),
-    date(2026, 6, 5),
-    date(2026, 7, 10),
-    date(2026, 8, 7),
-    date(2026, 9, 4),
-    date(2026, 10, 2),
-    date(2026, 11, 6),
-    date(2026, 12, 4),
-]
+
+@st.cache_data(ttl=86400)
+def _fetch_fomc_dates() -> list:
+    """Fetch FOMC meeting dates from the Fed's iCal feed. Falls back to hardcoded 2026 list."""
+    try:
+        resp = requests.get(
+            "https://www.federalreserve.gov/apps/fomccalendar/fomccalendar.ics",
+            timeout=8, headers={"User-Agent": "NarrativeInvestingTool/1.0"},
+        )
+        if not resp.ok:
+            return _FOMC_DATES_2026
+        dates = []
+        for line in resp.text.splitlines():
+            line = line.strip()
+            # iCal DTSTART lines: DTSTART;VALUE=DATE:20260128 or DTSTART:20260128
+            if line.startswith("DTSTART"):
+                val = line.split(":")[-1].strip()
+                if len(val) == 8 and val.isdigit():
+                    try:
+                        dates.append(date(int(val[:4]), int(val[4:6]), int(val[6:8])))
+                    except ValueError:
+                        pass
+        dates = sorted(set(dates))
+        return dates if dates else _FOMC_DATES_2026
+    except Exception:
+        return _FOMC_DATES_2026
+
+
+def _calc_cpi_dates(months_ahead: int = 18) -> list:
+    """Calculate CPI release dates algorithmically (second Wednesday of each month).
+    BLS typically releases CPI on the second or third Wednesday; second Wednesday
+    is the most common pattern. Uses 2026 verified dates for current year."""
+    today = date.today()
+    # Use verified 2026 dates for this year, calculate forward for future years
+    verified = {(d.year, d.month): d for d in _CPI_DATES_2026}
+    result = []
+    for i in range(months_ahead):
+        month = (today.month - 1 + i) % 12 + 1
+        year = today.year + (today.month - 1 + i) // 12
+        if (year, month) in verified:
+            result.append(verified[(year, month)])
+        else:
+            # Second Wednesday of the month
+            first_day = date(year, month, 1)
+            first_wed = first_day + __import__("datetime").timedelta(days=(2 - first_day.weekday()) % 7)
+            second_wed = first_wed + __import__("datetime").timedelta(weeks=1)
+            result.append(second_wed)
+    return sorted(set(result))
+
+
+def _calc_nfp_dates(months_ahead: int = 18) -> list:
+    """Calculate NFP release dates algorithmically (first Friday of each month).
+    Uses 2026 verified dates for current year, calculates forward for future years."""
+    today = date.today()
+    verified = {(d.year, d.month): d for d in _NFP_DATES_2026}
+    result = []
+    for i in range(months_ahead):
+        month = (today.month - 1 + i) % 12 + 1
+        year = today.year + (today.month - 1 + i) // 12
+        if (year, month) in verified:
+            result.append(verified[(year, month)])
+        else:
+            # First Friday of the month
+            first_day = date(year, month, 1)
+            first_fri = first_day + __import__("datetime").timedelta(days=(4 - first_day.weekday()) % 7)
+            result.append(first_fri)
+    return sorted(set(result))
 
 
 def _next_event(dates: list) -> dict:
@@ -80,34 +121,25 @@ def _next_event(dates: list) -> dict:
     today = date.today()
     future = [d for d in dates if d >= today]
     if not future:
-        last = dates[-1]
-        return {"date": last.strftime("%b %d"), "days_away": 0}
+        last = max(dates)
+        return {"date": last.strftime("%b %d, %Y"), "days_away": 0}
     nxt = future[0]
-    return {"date": nxt.strftime("%b %d"), "days_away": (nxt - today).days}
+    return {"date": nxt.strftime("%b %d, %Y"), "days_away": (nxt - today).days}
 
 
 def get_next_fomc() -> dict:
-    """Return the next upcoming FOMC meeting date and days away."""
-    today = date.today()
-    future = [d for d in _FOMC_DATES_2026 if d >= today]
-    if not future:
-        last = _FOMC_DATES_2026[-1]
-        return {"date": last.strftime("%b %d, %Y"), "days_away": 0}
-    nxt = future[0]
-    return {
-        "date": nxt.strftime("%b %d, %Y"),
-        "days_away": (nxt - today).days,
-    }
+    """Return the next upcoming FOMC meeting date and days away (live from Fed iCal)."""
+    return _next_event(_fetch_fomc_dates())
 
 
 def get_next_cpi() -> dict:
     """Return the next CPI release date and days away."""
-    return _next_event(_CPI_DATES_2026)
+    return _next_event(_calc_cpi_dates())
 
 
 def get_next_nfp() -> dict:
     """Return the next NFP (jobs) release date and days away."""
-    return _next_event(_NFP_DATES_2026)
+    return _next_event(_calc_nfp_dates())
 
 
 # ─────────────────────────────────────────────────────────────────────────────
