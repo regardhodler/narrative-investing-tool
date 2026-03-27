@@ -1,7 +1,8 @@
 """Persistent cache for cross-module AI signals.
 
-Saves all generated AI signal keys to data/signals_cache.json so they survive
-page refreshes. Datetime objects are serialized as ISO strings.
+Saves all generated AI signal keys to a GitHub Gist (primary, survives Streamlit
+Cloud deploys) and data/signals_cache.json (local fallback). Datetime objects are
+serialized as ISO strings.
 """
 
 import json
@@ -12,7 +13,13 @@ import streamlit as st
 
 _CACHE_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "signals_cache.json")
 
-# All session_state keys that should survive a page refresh
+# Gist-based persistence (set SIGNALS_GIST_ID + GIST_TOKEN in .env / Streamlit secrets)
+_SIGNALS_GIST_ID  = os.getenv("SIGNALS_GIST_ID", "")
+_SIGNALS_GIST_RAW = os.getenv("SIGNALS_GIST_RAW_URL", "")
+_GIST_TOKEN       = (os.getenv("GIST_TOKEN") or os.getenv("GITHUB_GIST_TOKEN") or "").strip()
+_GIST_FILENAME    = "signals_cache.json"
+
+# All session_state keys that should survive a page refresh / redeploy
 _SIGNAL_KEYS = [
     # Regime context
     "_regime_context",
@@ -55,6 +62,14 @@ _SIGNAL_KEYS = [
     "_portfolio_analysis",
     "_portfolio_analysis_ts",
     "_portfolio_analysis_engine",
+    # Current Events
+    "_current_events_digest",
+    "_current_events_digest_ts",
+    "_current_events_engine",
+    # Factor Analysis
+    "_factor_analysis",
+    "_factor_analysis_ts",
+    "_factor_analysis_engine",
 ]
 
 
@@ -80,30 +95,76 @@ def _deserialize(v):
     return v
 
 
+def load_signals() -> None:
+    """Load signal cache into session_state. Tries Gist first, falls back to local file.
+    Only sets keys not already present (non-destructive)."""
+    import requests as _req
+    payload = None
+
+    # 1. Try Gist
+    if _SIGNALS_GIST_RAW:
+        try:
+            resp = _req.get(
+                _SIGNALS_GIST_RAW, timeout=8,
+                headers={"User-Agent": "NarrativeInvestingTool/1.0",
+                         "Cache-Control": "no-cache"},
+            )
+            if resp.ok:
+                payload = resp.json()
+        except Exception:
+            pass
+
+    # 2. Fall back to local file
+    if payload is None and os.path.exists(_CACHE_FILE):
+        try:
+            with open(_CACHE_FILE, encoding="utf-8") as f:
+                payload = json.load(f)
+        except Exception:
+            pass
+
+    if payload is None:
+        return
+
+    for key, val in payload.items():
+        if key not in st.session_state or st.session_state[key] is None:
+            st.session_state[key] = _deserialize(val)
+
+
 def save_signals() -> None:
-    """Write all known signal keys from session_state to disk. Silent on failure."""
+    """Write all known signal keys from session_state to local file and Gist.
+    Local file is written every call. Gist is written at most every 5 minutes."""
+    import requests as _req
     try:
         payload = {}
         for key in _SIGNAL_KEYS:
             val = st.session_state.get(key)
             if val is not None:
                 payload[key] = _serialize(val)
+
+        payload_str = json.dumps(payload, indent=2)
+
+        # Always write local file (fast, no network)
         os.makedirs(os.path.dirname(_CACHE_FILE), exist_ok=True)
         with open(_CACHE_FILE, "w", encoding="utf-8") as f:
-            json.dump(payload, f, indent=2)
-    except Exception:
-        pass
+            f.write(payload_str)
 
-
-def load_signals() -> None:
-    """Load signal cache into session_state. Only sets keys not already present."""
-    if not os.path.exists(_CACHE_FILE):
-        return
-    try:
-        with open(_CACHE_FILE, encoding="utf-8") as f:
-            payload = json.load(f)
-        for key, val in payload.items():
-            if key not in st.session_state or st.session_state[key] is None:
-                st.session_state[key] = _deserialize(val)
+        # Write Gist at most every 5 minutes (debounce to avoid API rate limits)
+        if _SIGNALS_GIST_ID and _GIST_TOKEN:
+            last = st.session_state.get("_signals_gist_saved_at")
+            now = datetime.now()
+            if last is None or (now - last).total_seconds() > 300:
+                try:
+                    _req.patch(
+                        f"https://api.github.com/gists/{_SIGNALS_GIST_ID}",
+                        json={"files": {_GIST_FILENAME: {"content": payload_str}}},
+                        headers={
+                            "Authorization": f"Bearer {_GIST_TOKEN}",
+                            "Accept": "application/vnd.github+json",
+                        },
+                        timeout=10,
+                    )
+                    st.session_state["_signals_gist_saved_at"] = now
+                except Exception:
+                    pass
     except Exception:
         pass
