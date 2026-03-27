@@ -32,6 +32,10 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     gist = fetch_gist_intel()
 
     parts = []
+    # Inbox first — user-curated intel has highest priority
+    inbox_text = inbox_to_text(inbox)
+    if inbox_text:
+        parts.append("USER FIELD NOTES (highest priority — curated X posts & observations):\n" + inbox_text)
     if gist and gist.get("narrative"):
         parts.append("BOT NARRATIVE ANALYSIS:\n" + gist["narrative"][:800])
     if gist and gist.get("polymarket"):
@@ -41,9 +45,6 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     hl_text = headlines_to_text(headlines, max_items=15)
     if hl_text:
         parts.append("RSS HEADLINES:\n" + hl_text)
-    inbox_text = inbox_to_text(inbox)
-    if inbox_text:
-        parts.append("MANUAL INBOX:\n" + inbox_text)
 
     if not parts:
         return False
@@ -53,8 +54,9 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
+        "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
         "Be clinical, specific, and reference actual catalysts.\n\n"
-        f"{context[:3000]}"
+        f"{context[:5000]}"
     )
 
     digest = None
@@ -368,6 +370,11 @@ def _run_digest(headlines, inbox, gist, engine: str):
 
     parts = []
 
+    # Inbox first — user-curated intel has highest priority
+    inbox_text = inbox_to_text(inbox)
+    if inbox_text:
+        parts.append("USER FIELD NOTES (highest priority — curated X posts & observations):\n" + inbox_text)
+
     if gist and gist.get("narrative"):
         parts.append("BOT NARRATIVE ANALYSIS:\n" + gist["narrative"][:800])
 
@@ -380,10 +387,6 @@ def _run_digest(headlines, inbox, gist, engine: str):
     if hl_text:
         parts.append("RSS HEADLINES:\n" + hl_text)
 
-    inbox_text = inbox_to_text(inbox)
-    if inbox_text:
-        parts.append("MANUAL INBOX:\n" + inbox_text)
-
     if not parts:
         st.warning("No content to digest. Refresh RSS or add inbox items first.")
         return
@@ -393,8 +396,9 @@ def _run_digest(headlines, inbox, gist, engine: str):
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
+        "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
         "Be clinical, specific, and reference actual catalysts.\n\n"
-        f"{context[:3000]}"
+        f"{context[:5000]}"
     )
 
     _tier_model = {

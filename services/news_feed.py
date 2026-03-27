@@ -333,12 +333,18 @@ def headlines_to_text(headlines: list[dict], max_items: int = 20) -> str:
     return "\n".join(lines)
 
 
+_JS_WALL_MARKERS = ("javascript is not available", "please enable javascript", "enable js and disable")
+
 def inbox_to_text(inbox: list[dict], max_items: int = 10) -> str:
-    """Format inbox items as plain text for AI prompt injection."""
+    """Format inbox items as plain text for AI prompt injection. Skips JS-wall failures."""
     lines = []
     for item in inbox[-max_items:]:
+        text = item.get("text", "")
+        # Skip entries that are just JS-wall error pages
+        if any(m in text.lower()[:120] for m in _JS_WALL_MARKERS):
+            continue
         ts = item.get("ts", "")[:16].replace("T", " ")
-        lines.append(f"[{ts}] {item.get('text', '')}")
+        lines.append(f"[{ts}] {text}")
     return "\n".join(lines)
 
 
