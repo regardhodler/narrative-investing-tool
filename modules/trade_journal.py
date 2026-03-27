@@ -584,7 +584,7 @@ def render():
                 )
                 # Concentration warning line at 15%
                 _fig_alloc.add_vline(x=15, line_dash="dot",
-                                     line_color=COLORS["bloomberg_orange"] + "66",
+                                     line_color="rgba(255,136,17,0.4)",
                                      annotation_text="15% cap",
                                      annotation_font_size=9,
                                      annotation_font_color=COLORS["bloomberg_orange"])
