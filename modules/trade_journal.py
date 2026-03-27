@@ -528,6 +528,70 @@ def render():
 
             _cur_regime = st.session_state.get("_regime_context", {}).get("regime", "")
 
+            # ── Portfolio Allocation Chart ─────────────────────────────────
+            if total_portfolio_val > 0:
+                import plotly.graph_objects as go
+                from utils.theme import apply_dark_layout
+
+                # Aggregate by ticker (multiple tranches → combined weight)
+                _alloc: dict[str, dict] = {}
+                for _t in open_trades:
+                    _tk = _t["ticker"]
+                    _cur = prices.get(_tk) or _t["entry_price"]
+                    _val = _cur * _t["position_size"]
+                    _pnl = ((_cur - _t["entry_price"]) * _t["position_size"]
+                            if _t["direction"] == "Long"
+                            else (_t["entry_price"] - _cur) * _t["position_size"])
+                    if _tk not in _alloc:
+                        _alloc[_tk] = {"val": 0.0, "pnl": 0.0, "direction": _t["direction"]}
+                    _alloc[_tk]["val"] += _val
+                    _alloc[_tk]["pnl"] += _pnl
+
+                _alloc_sorted = sorted(_alloc.items(), key=lambda x: x[1]["val"], reverse=True)
+                _tks   = [a[0] for a in _alloc_sorted]
+                _wts   = [a[1]["val"] / total_portfolio_val * 100 for a in _alloc_sorted]
+                _pnls  = [a[1]["pnl"] for a in _alloc_sorted]
+                _dirs  = [a[1]["direction"] for a in _alloc_sorted]
+                _bar_colors = [
+                    COLORS["positive"] if p >= 0 else COLORS["negative"]
+                    for p in _pnls
+                ]
+                _text_labels = [
+                    f"{w:.1f}%  {'+' if p >= 0 else ''}${p:,.0f}"
+                    for w, p in zip(_wts, _pnls)
+                ]
+
+                _fig_alloc = go.Figure(go.Bar(
+                    x=_wts, y=_tks,
+                    orientation="h",
+                    marker_color=_bar_colors,
+                    text=_text_labels,
+                    textposition="outside",
+                    textfont=dict(size=10, color=COLORS["text_dim"]),
+                    hovertemplate="%{y}: %{x:.1f}%<extra></extra>",
+                ))
+                apply_dark_layout(_fig_alloc)
+                _fig_alloc.update_layout(
+                    height=max(160, len(_tks) * 28 + 40),
+                    margin=dict(l=0, r=80, t=24, b=0),
+                    xaxis=dict(title="Portfolio Weight %", ticksuffix="%",
+                               showgrid=True, gridcolor=COLORS["border"]),
+                    yaxis=dict(autorange="reversed"),
+                    title=dict(text="PORTFOLIO ALLOCATION",
+                               font=dict(size=11, color=COLORS["bloomberg_orange"]),
+                               x=0, xanchor="left"),
+                    showlegend=False,
+                )
+                # Concentration warning line at 15%
+                _fig_alloc.add_vline(x=15, line_dash="dot",
+                                     line_color=COLORS["bloomberg_orange"] + "66",
+                                     annotation_text="15% cap",
+                                     annotation_font_size=9,
+                                     annotation_font_color=COLORS["bloomberg_orange"])
+
+                with st.expander("📊 Allocation Chart", expanded=True):
+                    st.plotly_chart(_fig_alloc, use_container_width=True)
+
             for trade in open_trades:
                 tid = trade["id"]
                 current = prices.get(trade["ticker"])
