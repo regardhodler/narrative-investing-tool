@@ -948,6 +948,7 @@ def render():
                         ""
                     ),
                     "trending_narratives": st.session_state.get("_trending_narratives") or [],
+                    "auto_trending_groups": st.session_state.get("_auto_trending_groups") or [],
                 }
                 _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _pi_model = None

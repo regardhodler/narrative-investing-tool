@@ -260,7 +260,7 @@ Rules:
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": 1500,
                     "temperature": 0.3,
@@ -932,6 +932,15 @@ def analyze_portfolio(
         ]
         _tn_block = "\n\nTRENDING NARRATIVES (market attention signals):\n" + "\n".join(_tn_lines)
 
+    _atg_pi = upstream.get("auto_trending_groups") or []
+    _atg_block = ""
+    if _atg_pi:
+        _atg_lines = [
+            f"  - {g['narrative']} ({g.get('conviction','')}, {g.get('regime_alignment','')}) — {', '.join(g.get('tickers', []))}"
+            for g in _atg_pi[:3]
+        ]
+        _atg_block = "\n\nTRENDING PRICE MOVERS (Yahoo Finance themes):\n" + "\n".join(_atg_lines)
+
     prompt = f"""You are a portfolio risk manager. Analyze these open positions against current macro conditions.
 
 MACRO ENVIRONMENT:
@@ -943,7 +952,7 @@ MACRO ENVIRONMENT:
 - Risk Briefing: {doom_briefing}
 - Institutional Flow: {whale_summary}
 - AI Favored Sectors: {regime_plays_sectors}
-- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
 {fe_block}

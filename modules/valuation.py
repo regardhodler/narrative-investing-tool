@@ -490,6 +490,15 @@ def render():
         ]
         signals_text += "\n\nTRENDING NARRATIVES (market attention signals):\n" + "\n".join(_tn_lines)
 
+    # Inject Auto-Trending ticker groups (Yahoo Finance price movers)
+    _atg_val = st.session_state.get("_auto_trending_groups")
+    if _atg_val:
+        _atg_lines = [
+            f"- {g['narrative']} ({g.get('conviction','')}, {g.get('regime_alignment','')}) — {', '.join(g.get('tickers', []))}"
+            for g in _atg_val[:3]
+        ]
+        signals_text += "\n\nTRENDING PRICE MOVERS (Yahoo Finance themes):\n" + "\n".join(_atg_lines)
+
     # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
     _regime_ctx_val = st.session_state.get("_regime_context")
     if _regime_ctx_val:

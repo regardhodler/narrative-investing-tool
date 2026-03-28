@@ -74,6 +74,10 @@ _SIGNAL_KEYS = [
     "_trending_narratives",
     "_trending_narratives_ts",
     "_trending_narratives_tf",
+    # Auto-Trending ticker groups (Yahoo Finance price movers grouped by theme)
+    "_auto_trending_groups",
+    "_auto_trending_groups_ts",
+    "_auto_trending_groups_engine",
 ]
 
 

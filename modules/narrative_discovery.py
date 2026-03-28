@@ -656,6 +656,16 @@ def render():
                     ]
                     _enrichment_parts.append("[Trending Narratives: " + " | ".join(_tn_lines) + "]")
 
+                # Auto-Trending ticker groups (Yahoo Finance price movers)
+                _atg_disc = st.session_state.get("_auto_trending_groups")
+                if _atg_disc:
+                    _atg_lines = [
+                        f"{g['narrative']} ({g.get('conviction','')}, {g.get('regime_alignment','')})"
+                        f" — {', '.join(g.get('tickers', []))}"
+                        for g in _atg_disc[:3]
+                    ]
+                    _enrichment_parts.append("[Trending Price Movers: " + " | ".join(_atg_lines) + "]")
+
                 if _enrichment_parts:
                     _signal_summary += " || UPSTREAM AI CONTEXT: " + " | ".join(_enrichment_parts)
                 _scenario_text = _overlay_scenario.strip()
@@ -953,6 +963,14 @@ def _render_auto():
             narrative_groups = group_tickers_by_narrative(
                 tickers_for_grouping, _regime_ctx_str, _auto_use_claude, _auto_model
             )
+
+        if narrative_groups:
+            from datetime import datetime as _dt2
+            st.session_state["_auto_trending_groups"] = narrative_groups
+            st.session_state["_auto_trending_groups_ts"] = _dt2.now()
+            st.session_state["_auto_trending_groups_engine"] = _auto_engine_sel
+            from services.signals_cache import save_signals
+            save_signals()
 
         from datetime import datetime
         _engine_badge_color = {"⚡ Groq": "#f59e0b", "🧠 Regard Mode": "#3b82f6", "👑 Highly Regarded Mode": "#a855f7"}.get(_auto_engine_sel, "#64748b")
