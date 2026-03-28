@@ -1,5 +1,6 @@
 """Signal Scorecard — Short Squeeze Screener + Composite Scorecard."""
 
+import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from utils.theme import COLORS, apply_dark_layout
@@ -14,6 +15,12 @@ _CURATED = [
     "CHWY", "W", "CVNA",
     "CHPT", "NKLA", "BLNK",
 ]
+
+_TIER_MAP = {
+    "⚡ Groq (Fast)":           (False, None),
+    "🧠 Regard Mode (Grok 4.1)": (True,  "grok-4-1-fast-reasoning"),
+    "👑 Highly Regarded (Claude)": (True,  "claude-sonnet-4-6"),
+}
 
 
 def _score_color(score: int) -> str:
@@ -35,7 +42,7 @@ def _short_color(pct: float) -> str:
 
 
 def render():
-    tab_squeeze, tab_composite = st.tabs(["🎯 Short Squeeze Screen", "📊 Composite Scorecard"])
+    tab_squeeze, tab_composite = st.tabs(["🎯 Short Squeeze Radar", "📊 Composite Scorecard"])
     with tab_squeeze:
         _render_squeeze_screen()
     with tab_composite:
@@ -47,12 +54,11 @@ def render():
 def _render_squeeze_screen():
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'letter-spacing:0.1em;margin-bottom:4px;">SHORT SQUEEZE SCREEN</div>',
+        f'letter-spacing:0.1em;margin-bottom:4px;">SHORT SQUEEZE RADAR</div>',
         unsafe_allow_html=True,
     )
     st.caption(
-        "Hunts for high short-interest setups across a universe of tickers. "
-        "Scan → rank by squeeze potential → click any ticker for full signal detail."
+        "Hunts for high short-interest setups. Scan → click any row → full signal detail + AI thesis."
     )
 
     # Universe controls
@@ -92,14 +98,17 @@ def _render_squeeze_screen():
         _do_scan = st.button("SCAN UNIVERSE", type="primary", key="sq_scan")
     with col_clear:
         if st.button("Clear", key="sq_clear"):
-            st.session_state.pop("sq_scan_results", None)
-            st.session_state.pop("sq_drill_result", None)
+            for _k in ("sq_scan_results", "sq_drill_result", "sq_selected_ticker", "sq_thesis"):
+                st.session_state.pop(_k, None)
             st.rerun()
 
     if _do_scan:
         with st.spinner(f"Scanning {len(_universe)} tickers for short interest data..."):
             _raw_results = scan_short_interest(tuple(_universe))
         st.session_state["sq_scan_results"] = _raw_results
+        # Clear previous drill on fresh scan
+        for _k in ("sq_drill_result", "sq_selected_ticker", "sq_thesis"):
+            st.session_state.pop(_k, None)
 
     _all_results = st.session_state.get("sq_scan_results")
     if not _all_results:
@@ -127,54 +136,51 @@ def _render_squeeze_screen():
 
     st.markdown(
         f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'margin:14px 0 6px 0;">RANKED BY SQUEEZE SCORE</div>',
+        f'margin:14px 0 4px 0;">RANKED BY SQUEEZE SCORE — click any row to analyze</div>',
         unsafe_allow_html=True,
     )
 
-    # Ranked table
-    _tbl = (
-        f'<table style="width:100%;border-collapse:collapse;'
-        f'font-family:JetBrains Mono,monospace;font-size:12px;">'
-        f'<tr style="border-bottom:2px solid {COLORS["bloomberg_orange"]};">'
-    )
-    for _h in ["#", "Ticker", "Name", "Short % Float", "Days-to-Cover",
-               "Squeeze Score", "Inst. Own%", "Setup"]:
-        _tbl += (
-            f'<th style="padding:5px 10px;text-align:left;'
-            f'color:{COLORS["bloomberg_orange"]};">{_h}</th>'
-        )
-    _tbl += "</tr>"
-
-    for i, r in enumerate(_results):
-        _bg = COLORS["surface"] if i % 2 == 0 else COLORS["bg"]
-        _sc_col = _short_color(r["short_pct"])
-        _sq_col = _score_color(r["squeeze_score"])
+    # Build dataframe for interactive selection
+    _df_rows = []
+    for r in _results:
         _chk = r.get("checks", {})
-        _setup = "".join([
-            f'<span title="Short % ≥ 10%">{"✅" if _chk.get("short_pct") else "⬜"}</span>',
-            f'<span title="Days-to-cover ≥ 3">{"✅" if _chk.get("days_cover") else "⬜"}</span>',
-            f'<span title="Institutional ≥ 30%">{"✅" if _chk.get("inst_buying") else "⬜"}</span>',
+        _setup_count = sum([
+            _chk.get("short_pct", False),
+            _chk.get("days_cover", False),
+            _chk.get("inst_buying", False),
         ])
-        _tbl += (
-            f'<tr style="background:{_bg};">'
-            f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">{i + 1}</td>'
-            f'<td style="padding:5px 10px;font-weight:700;color:{COLORS["text"]};">'
-            f'{r["ticker"]}</td>'
-            f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};font-size:11px;">'
-            f'{r["name"][:22]}</td>'
-            f'<td style="padding:5px 10px;color:{_sc_col};font-weight:700;">'
-            f'{r["short_pct"] * 100:.1f}%</td>'
-            f'<td style="padding:5px 10px;color:{COLORS["text"]};">'
-            f'{r["days_to_cover"]:.1f}d</td>'
-            f'<td style="padding:5px 10px;color:{_sq_col};font-weight:800;font-size:16px;">'
-            f'{r["squeeze_score"]}</td>'
-            f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">'
-            f'{r["inst_pct"] * 100:.0f}%</td>'
-            f'<td style="padding:5px 10px;letter-spacing:3px;">{_setup}</td>'
-            f'</tr>'
-        )
-    _tbl += "</table>"
-    st.markdown(_tbl, unsafe_allow_html=True)
+        _setup_str = ("✅✅✅" if _setup_count == 3
+                      else "✅✅⬜" if _setup_count == 2
+                      else "✅⬜⬜" if _setup_count == 1
+                      else "⬜⬜⬜")
+        _df_rows.append({
+            "Ticker": r["ticker"],
+            "Name": r["name"][:22],
+            "Short % Float": round(r["short_pct"] * 100, 1),
+            "Days-to-Cover": round(r["days_to_cover"], 1),
+            "Squeeze Score": r["squeeze_score"],
+            "Inst. Own%": round(r["inst_pct"] * 100, 0),
+            "Setup": _setup_str,
+        })
+
+    _df = pd.DataFrame(_df_rows)
+
+    _event = st.dataframe(
+        _df,
+        use_container_width=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        column_config={
+            "Short % Float": st.column_config.NumberColumn(format="%.1f%%"),
+            "Days-to-Cover": st.column_config.NumberColumn(format="%.1fd"),
+            "Inst. Own%": st.column_config.NumberColumn(format="%.0f%%"),
+            "Squeeze Score": st.column_config.ProgressColumn(
+                min_value=0, max_value=100, format="%d"
+            ),
+        },
+        hide_index=True,
+        key="sq_table",
+    )
 
     st.caption(
         "Setup: ✅ Short % ≥ 10% &nbsp;·&nbsp; "
@@ -182,30 +188,41 @@ def _render_squeeze_screen():
         "✅ Institutional ownership ≥ 30%"
     )
 
-    # ── Drill-down ────────────────────────────────────────────────────────────
-    st.markdown("---")
-    st.markdown(
-        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'margin-bottom:6px;">FULL SIGNAL DETAIL</div>',
-        unsafe_allow_html=True,
-    )
+    # ── Auto-analyze on row click ──────────────────────────────────────────────
+    _sel_rows = _event.selection.rows if _event and hasattr(_event, "selection") else []
+    if _sel_rows:
+        _sel_idx = _sel_rows[0]
+        if 0 <= _sel_idx < len(_results):
+            _clicked_ticker = _results[_sel_idx]["ticker"]
+            _prev_ticker = st.session_state.get("sq_selected_ticker")
+            if _clicked_ticker != _prev_ticker:
+                st.session_state["sq_selected_ticker"] = _clicked_ticker
+                st.session_state.pop("sq_drill_result", None)
+                st.session_state.pop("sq_thesis", None)
+            _selected = _clicked_ticker
+        else:
+            _selected = st.session_state.get("sq_selected_ticker")
+    else:
+        _selected = st.session_state.get("sq_selected_ticker")
 
-    _drill_opts = [r["ticker"] for r in _results]
-    _selected = st.selectbox("Select ticker", _drill_opts, key="sq_drill")
+    if not _selected:
+        return
 
-    if st.button("ANALYZE", type="primary", key="sq_analyze"):
+    # Auto-run full score if not cached for this ticker
+    _drill = st.session_state.get("sq_drill_result")
+    if not _drill or _drill.get("ticker") != _selected:
         with st.spinner(f"Running full 6-category analysis on {_selected}..."):
             _full = score_ticker(_selected)
         st.session_state["sq_drill_result"] = _full
+        _drill = _full
 
-    _drill = st.session_state.get("sq_drill_result")
-    if _drill and _drill.get("ticker") == _selected:
-        _scan_row = next((r for r in _results if r["ticker"] == _selected), {})
-        _render_squeeze_detail(_drill, _scan_row)
+    st.markdown("---")
+    _scan_row = next((r for r in _results if r["ticker"] == _selected), {})
+    _render_squeeze_detail(_drill, _scan_row)
 
 
 def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
-    """Full detail panel — radar + squeeze checklist + category breakdowns."""
+    """Full detail panel — radar + squeeze checklist + AI thesis."""
     _ticker = r["ticker"]
     _short_pct = scan_row.get("short_pct", 0.0)
     _dtc = scan_row.get("days_to_cover", 0.0)
@@ -315,6 +332,44 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
                                 f'{k}: <span style="color:#94a3b8;">{v}</span></div>',
                                 unsafe_allow_html=True,
                             )
+
+    # ── AI Squeeze Thesis ──────────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'margin-bottom:6px;">AI SQUEEZE THESIS</div>',
+        unsafe_allow_html=True,
+    )
+
+    _tier_sel = st.radio(
+        "Engine", list(_TIER_MAP.keys()), horizontal=True, key="sq_thesis_engine"
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:6px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    _use_cl, _model = _TIER_MAP[_tier_sel]
+
+    if st.button("GENERATE SQUEEZE THESIS", type="primary", key="sq_gen_thesis"):
+        from services.claude_client import generate_squeeze_thesis
+        with st.spinner(f"Generating squeeze thesis for {_ticker}..."):
+            _thesis = generate_squeeze_thesis(
+                _ticker, scan_row, r, use_claude=_use_cl, model=_model
+            )
+        st.session_state["sq_thesis"] = {"ticker": _ticker, "text": _thesis}
+
+    _cached_thesis = st.session_state.get("sq_thesis")
+    if _cached_thesis and _cached_thesis.get("ticker") == _ticker:
+        _border = f"1px solid {COLORS['bloomberg_orange']}44"
+        st.markdown(
+            f'<div style="border:{_border};border-radius:6px;padding:12px 16px;'
+            f'background:#1A1F2E;margin-top:8px;white-space:pre-line;line-height:1.9;">'
+            f'{_cached_thesis["text"]}</div>',
+            unsafe_allow_html=True,
+        )
 
 
 # ── Composite Scorecard (existing, unchanged) ──────────────────────────────────

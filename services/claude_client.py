@@ -1743,3 +1743,116 @@ Return ONLY a valid JSON array:
         return None
     except Exception:
         return None
+
+
+def generate_squeeze_thesis(
+    ticker: str,
+    short_data: dict,
+    score_data: dict,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> str:
+    """Generate a short squeeze thesis for a ticker via Grok / Claude / Groq.
+
+    Args:
+        ticker: Stock ticker symbol
+        short_data: Dict with short_pct, days_to_cover, inst_pct, squeeze_score, checks
+        score_data: Full score_ticker() result with composite + category scores + details
+    Returns:
+        Narrative thesis string (3-6 paragraphs, markdown-friendly).
+    """
+    _short_pct = short_data.get("short_pct", 0) * 100
+    _dtc = short_data.get("days_to_cover", 0)
+    _inst = short_data.get("inst_pct", 0) * 100
+    _sq_score = short_data.get("squeeze_score", 0)
+    _chk = short_data.get("checks", {})
+    _composite = score_data.get("composite", 50)
+    _tech = score_data.get("technicals", 50)
+    _fund = score_data.get("fundamentals", 50)
+    _ins = score_data.get("insider", 50)
+    _opt = score_data.get("options", 50)
+    _cong = score_data.get("congress", 50)
+    _si = score_data.get("short_interest", 50)
+    _details = score_data.get("details", {})
+    _tech_det = _details.get("technicals", {})
+    _fund_det = _details.get("fundamentals", {})
+    _si_det = _details.get("short_interest", {})
+
+    prompt = f"""You are a quant equity analyst specializing in short squeeze setups. Analyze the following data for {ticker} and write a concise squeeze thesis.
+
+SHORT INTEREST DATA:
+- Short % of Float: {_short_pct:.1f}%
+- Days-to-Cover: {_dtc:.1f} days
+- Institutional Ownership: {_inst:.0f}%
+- Squeeze Score: {_sq_score}/100
+- Setup checks: Short % ≥10%: {"YES" if _chk.get("short_pct") else "NO"} | DTC ≥3: {"YES" if _chk.get("days_cover") else "NO"} | Inst ≥30%: {"YES" if _chk.get("inst_buying") else "NO"}
+
+SIGNAL SCORECARD (0-100 each):
+- Composite: {_composite} | Technicals: {_tech} | Fundamentals: {_fund}
+- Insider: {_ins} | Options: {_opt} | Congress: {_cong} | Short Interest: {_si}
+
+TECHNICAL DETAILS: {_tech_det}
+FUNDAMENTAL DETAILS: {_fund_det}
+SHORT INTEREST DETAILS: {_si_det}
+
+Write a squeeze thesis covering:
+1. The squeeze setup quality — is the short float + DTC combination dangerous for bears?
+2. What would trigger the squeeze (catalyst types to watch: earnings, news, sector rotation, gamma squeeze)?
+3. What signals support or undermine the bull case (technicals, insider, options sentiment)?
+4. Key risks — what could prevent the squeeze or accelerate the downside?
+5. One-line verdict: Bull / Neutral / Bear on the squeeze probability.
+
+Use clear paragraphs with a blank line between each. Be specific and direct. No fluff."""
+
+    _cl_model = model or "grok-4-1-fast-reasoning"
+
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 900, 0.3)
+        except Exception as _e:
+            st.error(f"xAI API error (Squeeze Thesis): {_e}")
+            return f"Error generating squeeze thesis: {_e}"
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic as _ant
+            _client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            _msg = _client.messages.create(
+                model=_cl_model,
+                max_tokens=900,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _msg.content[0].text.strip()
+        except Exception as _e:
+            st.error(f"Claude API error (Squeeze Thesis): {_e}")
+            return f"Error generating squeeze thesis: {_e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate squeeze thesis."
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 900,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating squeeze thesis: {e}"
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    return text
