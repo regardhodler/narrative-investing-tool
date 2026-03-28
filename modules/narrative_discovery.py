@@ -176,7 +176,7 @@ def _render_trending_narratives():
     with col_e:
         _eng = st.radio("Engine", _eng_opts, horizontal=True, key="disc_trend_engine")
     with col_t:
-        _tf = st.radio("Timeframe", ["1W", "1M"], horizontal=True, key="disc_trend_tf")
+        _tf = st.radio("Timeframe", ["1W", "1M", "3M"], horizontal=True, key="disc_trend_tf")
 
     _use_claude, _model = _eng_map.get(_eng, (False, None))
 
@@ -196,7 +196,22 @@ def _render_trending_narratives():
             _headlines_raw = fetch_financial_headlines()
             _headline_strs = [f"[{h['source']}] {h['title']}" for h in _headlines_raw[:40]]
             try:
-                _trends = get_trending_searches()
+                if _tf == "1W":
+                    # Real-time trending searches for short-term
+                    _trends = get_trending_searches()
+                else:
+                    # Interest-over-time for key finance themes over the chosen window
+                    from services.trends_client import get_interest_over_time_multi
+                    _finance_keywords = (
+                        "gold", "oil price", "interest rates", "AI stocks", "inflation",
+                    )
+                    _trends_df = get_interest_over_time_multi(_finance_keywords, timeframe=_tf)
+                    if not _trends_df.empty:
+                        # Return keywords sorted by average interest descending
+                        _avgs = {k: _trends_df[k].mean() for k in _finance_keywords if k in _trends_df.columns}
+                        _trends = [f"{k} (avg interest: {v:.0f}/100)" for k, v in sorted(_avgs.items(), key=lambda x: -x[1])]
+                    else:
+                        _trends = get_trending_searches()
                 # Filter out obvious non-financial terms
                 _trends = [t for t in _trends if not any(
                     kw in t.lower() for kw in _NON_FINANCIAL_KEYWORDS
