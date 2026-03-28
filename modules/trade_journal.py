@@ -592,6 +592,15 @@ def render():
                 with st.expander("📊 Allocation Chart", expanded=True):
                     st.plotly_chart(_fig_alloc, use_container_width=True)
 
+            # Build alignment lookup from last Portfolio Analysis
+            _drift_map: dict[str, dict] = {}
+            _pa_drift = st.session_state.get("_portfolio_analysis") or {}
+            if "_error" not in _pa_drift:
+                for _dp in _pa_drift.get("positions", []):
+                    _raw = _dp.get("ticker", "")
+                    _clean = _raw.split(" @ ")[0].split(" ")[0].upper()
+                    _drift_map[_clean] = _dp
+
             for trade in open_trades:
                 tid = trade["id"]
                 current = prices.get(trade["ticker"])
@@ -633,12 +642,22 @@ def render():
                             )
                     except Exception:
                         pass
+                    _drift = _drift_map.get(trade["ticker"].upper(), {})
+                    _alignment = _drift.get("alignment", "")
+                    _action = _drift.get("action", "")
+                    _drift_badge = ""
+                    if _alignment == "aligned":
+                        _drift_badge = f' <span style="background:#052e16;border:1px solid #22c55e55;border-radius:3px;padding:1px 6px;font-size:10px;color:#22c55e;">✓ {_action or "aligned"}</span>'
+                    elif _alignment == "misaligned":
+                        _drift_badge = f' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">✗ {_action or "misaligned"}</span>'
+                    elif _alignment == "neutral":
+                        _drift_badge = f' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">~ {_action or "neutral"}</span>'
                     st.markdown(
                         f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{trade["ticker"]}</span>'
                         f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{direction} · {trade["signal_source"]}'
                         f' · {trade["entry_date"]}</span>'
                         f' <span style="color:{_badge_color};font-size:11px;font-weight:600;margin-left:6px;">{_badge_text}</span>'
-                        f'{_earn_badge}',
+                        f'{_drift_badge}{_earn_badge}',
                         unsafe_allow_html=True,
                     )
                     if trade.get("regime_at_entry") and _cur_regime and trade["regime_at_entry"] != _cur_regime:
