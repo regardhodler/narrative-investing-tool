@@ -536,6 +536,29 @@ def render():
             f"({_cong_b.get('buy_pct', 50):.0f}% cumulative buy bias)"
         )
 
+    # Inject Price Momentum signal (from Narrative Pulse)
+    _pm = st.session_state.get("_price_momentum") or {}
+    if _pm.get("ticker", "").upper() == ticker.upper():
+        _ma_parts = []
+        for _k, _v in (_pm.get("ma_signals") or {}).items():
+            _period = _k.replace("sma_", "SMA")
+            _dir = "above" if _v["above"] else "below"
+            _ma_parts.append(f"{_period} ${_v['value']:.2f} ({_dir})")
+        signals_text += (
+            f"\nPrice Momentum: RSI {_pm.get('rsi', 0):.1f} ({_pm.get('rsi_label', '')})"
+            f" | MA Trend: {_pm.get('ma_trend', '')}"
+            + (f" | {', '.join(_ma_parts)}" if _ma_parts else "")
+            + f" | Vol ratio vs avg: {_pm.get('vol_ratio', 1.0):.2f}x"
+        )
+
+    # Inject Filing Digest (from EDGAR Scanner)
+    _fd = st.session_state.get("_filing_digest") or {}
+    if _fd.get("ticker", "").upper() == ticker.upper() and _fd.get("summary"):
+        signals_text += (
+            f"\nRecent SEC Filing ({_fd.get('form_type', '')} {_fd.get('date', '')}): "
+            f"{str(_fd['summary'])[:600]}"
+        )
+
     # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
     _regime_ctx_val = st.session_state.get("_regime_context")
     if _regime_ctx_val:

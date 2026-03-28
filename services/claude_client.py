@@ -941,6 +941,26 @@ def analyze_portfolio(
         ]
         _atg_block = "\n\nTRENDING PRICE MOVERS (Yahoo Finance themes):\n" + "\n".join(_atg_lines)
 
+    # Price momentum (from Narrative Pulse)
+    _pm_pi = upstream.get("price_momentum") or {}
+    _pm_block = ""
+    if _pm_pi.get("ticker") and _pm_pi.get("rsi_label"):
+        _pm_block = (
+            f"\n\nPRICE MOMENTUM ({_pm_pi['ticker']}):"
+            f"\n  RSI {_pm_pi.get('rsi', 0):.1f} ({_pm_pi.get('rsi_label', '')})"
+            f" | MA Trend: {_pm_pi.get('ma_trend', '')}"
+            f" | Volume ratio: {_pm_pi.get('vol_ratio', 1.0):.2f}x avg"
+        )
+
+    # Filing digest (from EDGAR Scanner)
+    _fd_pi = upstream.get("filing_digest") or {}
+    _fd_block = ""
+    if _fd_pi.get("ticker") and _fd_pi.get("summary"):
+        _fd_block = (
+            f"\n\nRECENT SEC FILING ({_fd_pi['ticker']} {_fd_pi.get('form_type','')} {_fd_pi.get('date','')}):"
+            f"\n  {str(_fd_pi['summary'])[:500]}"
+        )
+
     # Smart money signals (ticker-level — show for any position ticker that matches)
     _sm_lines = []
     for _sig_key, _label in [
@@ -968,7 +988,7 @@ MACRO ENVIRONMENT:
 - Risk Briefing: {doom_briefing}
 - Institutional Flow: {whale_summary}
 - AI Favored Sectors: {regime_plays_sectors}
-- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}{_sm_block}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}{_pm_block}{_fd_block}{_sm_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
 {fe_block}

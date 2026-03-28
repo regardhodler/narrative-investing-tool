@@ -78,6 +78,10 @@ _SIGNAL_KEYS = [
     "_auto_trending_groups",
     "_auto_trending_groups_ts",
     "_auto_trending_groups_engine",
+    # Price momentum signal (from Narrative Pulse module)
+    "_price_momentum",
+    # Filing digest (from EDGAR Scanner module)
+    "_filing_digest",
     # Ticker-level smart money signals (set when user visits each module)
     "_options_sentiment",
     "_unusual_activity_sentiment",

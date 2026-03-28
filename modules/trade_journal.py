@@ -949,6 +949,8 @@ def render():
                     ),
                     "trending_narratives": st.session_state.get("_trending_narratives") or [],
                     "auto_trending_groups": st.session_state.get("_auto_trending_groups") or [],
+                    "price_momentum": st.session_state.get("_price_momentum") or {},
+                    "filing_digest": st.session_state.get("_filing_digest") or {},
                     "options_sentiment": st.session_state.get("_options_sentiment") or {},
                     "unusual_activity": st.session_state.get("_unusual_activity_sentiment") or {},
                     "institutional_bias": st.session_state.get("_institutional_bias") or {},

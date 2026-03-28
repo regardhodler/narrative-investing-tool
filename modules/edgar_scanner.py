@@ -134,6 +134,22 @@ def render():
         with st.spinner("Generating AI summary..."):
             summary = summarize_filing(text, row["form_type"], company_info["name"], use_claude=_use_claude_edgar, model=_edgar_model)
 
+        # Persist filing digest for downstream use (valuation, portfolio intelligence)
+        from datetime import datetime as _dt_edgar
+        st.session_state["_filing_digest"] = {
+            "ticker": ticker_input,
+            "company": company_info["name"],
+            "form_type": row["form_type"],
+            "date": str(row["date"]),
+            "summary": summary,
+            "ts": _dt_edgar.now().isoformat(),
+        }
+        try:
+            from services.signals_cache import save_signals
+            save_signals()
+        except Exception:
+            pass
+
         _border = "2px solid #FF8811" if _use_claude_edgar else "1px solid #2A3040"
         st.markdown(
             f'<div style="border:{_border};border-left-width:4px;border-radius:6px;'

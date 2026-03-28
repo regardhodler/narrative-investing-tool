@@ -81,6 +81,45 @@ def render():
     # --- RSI ---
     _render_rsi(df, ticker)
 
+    # --- Persist price momentum signal for downstream use ---
+    if len(df) >= 14:
+        _rsi_vals = _calc_rsi(df["Close"], 14)
+        _cur_rsi = _rsi_vals.iloc[-1]
+        _rsi_lbl = "OVERBOUGHT" if _cur_rsi > 70 else ("OVERSOLD" if _cur_rsi < 30 else "NEUTRAL")
+
+        _price_now = df["Close"].iloc[-1]
+        _ma_pos = {}
+        for _p in [20, 50, 200]:
+            if len(df) >= _p:
+                _ma_val = df["Close"].rolling(_p).mean().iloc[-1]
+                _ma_pos[f"sma_{_p}"] = {"value": round(_ma_val, 2), "above": bool(_price_now > _ma_val)}
+
+        _avg_vol = df["Volume"].mean()
+        _last_vol = df["Volume"].iloc[-1]
+        _vol_ratio = round(_last_vol / _avg_vol, 2) if _avg_vol > 0 else 1.0
+
+        # MA trend summary: count how many MAs price is above
+        _above_count = sum(1 for v in _ma_pos.values() if v["above"])
+        _ma_trend = "STRONG UPTREND" if _above_count == 3 else (
+            "UPTREND" if _above_count == 2 else (
+            "DOWNTREND" if _above_count == 1 else (
+            "STRONG DOWNTREND" if _above_count == 0 and _ma_pos else "NEUTRAL")))
+
+        st.session_state["_price_momentum"] = {
+            "ticker": ticker,
+            "rsi": round(_cur_rsi, 1),
+            "rsi_label": _rsi_lbl,
+            "ma_trend": _ma_trend,
+            "ma_signals": _ma_pos,
+            "vol_ratio": _vol_ratio,
+            "price": round(_price_now, 2),
+        }
+        try:
+            from services.signals_cache import save_signals
+            save_signals()
+        except Exception:
+            pass
+
 
 def _render_metrics(df: pd.DataFrame, ticker: str):
     """Key price metrics row."""
