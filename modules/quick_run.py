@@ -313,7 +313,7 @@ def render():
 
 <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL LAYER <span style="font-weight:400;color:#475569;">(Quick Intel Run generates these)</span></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:14px;">
-  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission','Trending Narratives'])}
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission','Trending Narratives','Auto-Trending Groups'])}
 </div>
 
 <div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
@@ -322,15 +322,15 @@ def render():
 <div style="display:flex;flex-direction:column;gap:4px;">
   <div style="background:#0c1a0c;border:1px solid #22c55e44;border-radius:4px;padding:6px 10px;">
     <span style="color:#22c55e;font-weight:700;">Portfolio Intelligence</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events · trending narratives</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events · trending narratives · auto-trending groups</span>
   </div>
   <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
     <span style="color:#f59e0b;font-weight:700;">Discovery</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · trending narratives (feeds Cross-Signal Plays)</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · trending narratives · auto-trending groups (feeds Cross-Signal Plays)</span>
   </div>
   <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
     <span style="color:#3b82f6;font-weight:700;">Valuation</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · plays · trending narratives · DCF + Elliott Wave + Wyckoff</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · plays · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff</span>
   </div>
 </div>
 
