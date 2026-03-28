@@ -44,12 +44,13 @@ def render():
         st.markdown(f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};margin-bottom:4px;">'
                     f'CATEGORY WEIGHTS</div>', unsafe_allow_html=True)
         w_tech = st.slider("Technicals", 0, 100, 25, key="w_tech")
-        w_fund = st.slider("Fundamentals", 0, 100, 25, key="w_fund")
+        w_fund = st.slider("Fundamentals", 0, 100, 20, key="w_fund")
         w_ins = st.slider("Insider", 0, 100, 15, key="w_ins")
         w_opt = st.slider("Options", 0, 100, 15, key="w_opt")
-        w_cong = st.slider("Congress", 0, 100, 20, key="w_cong")
+        w_cong = st.slider("Congress", 0, 100, 15, key="w_cong")
+        w_short = st.slider("Short Interest", 0, 100, 10, key="w_short")
 
-    weights = {"technicals": w_tech, "fundamentals": w_fund, "insider": w_ins, "options": w_opt, "congress": w_cong}
+    weights = {"technicals": w_tech, "fundamentals": w_fund, "insider": w_ins, "options": w_opt, "congress": w_cong, "short_interest": w_short}
 
     if not tickers:
         st.warning("Enter at least one ticker.")
@@ -78,7 +79,7 @@ def render():
     # Build colored HTML table
     html = '<table style="width:100%;border-collapse:collapse;font-family:JetBrains Mono,monospace;font-size:13px;">'
     html += '<tr style="border-bottom:2px solid ' + COLORS["bloomberg_orange"] + ';">'
-    for h in ["#", "Ticker", "Composite", "Technicals", "Fundamentals", "Insider", "Options", "Congress"]:
+    for h in ["#", "Ticker", "Composite", "Technicals", "Fundamentals", "Insider", "Options", "Congress", "Short Int"]:
         html += f'<th style="padding:6px 10px;text-align:left;color:{COLORS["bloomberg_orange"]};">{h}</th>'
     html += '</tr>'
 
@@ -87,8 +88,8 @@ def render():
         html += f'<tr style="background:{bg};">'
         html += f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">{i+1}</td>'
         html += f'<td style="padding:5px 10px;font-weight:700;color:{COLORS["text"]};">{r["ticker"]}</td>'
-        for key in ["composite", "technicals", "fundamentals", "insider", "options", "congress"]:
-            val = r[key]
+        for key in ["composite", "technicals", "fundamentals", "insider", "options", "congress", "short_interest"]:
+            val = r.get(key, 50)
             color = _score_color(val)
             html += f'<td style="padding:5px 10px;color:{color};font-weight:600;">{val}</td>'
         html += '</tr>'
@@ -114,6 +115,7 @@ def render():
 | **Insider** | Buy/sell ratio from SEC Form 4 filings, cluster detection (3+ buys in 30 days) | Insiders are net buyers — especially meaningful when purchases cluster in a short window |
 | **Options** | Put/Call open-interest ratio (contrarian) | High P/C ratio = elevated fear = contrarian bullish signal; low P/C = complacency = contrarian bearish |
 | **Congress** | Congressional buy/sell ratio, recency of trades | Members of Congress are net buyers — recent cluster of purchases is especially noteworthy |
+| **Short Int** | Short % of float + days-to-cover (contrarian) | High short interest = more squeeze fuel = contrarian bullish; days-to-cover > 5 signals harder exits for shorts |
 
 ---
 
@@ -132,8 +134,8 @@ def render():
     sel_data = next((r for r in results if r["ticker"] == selected), None)
 
     if sel_data:
-        categories = ["Technicals", "Fundamentals", "Insider", "Options", "Congress"]
-        values = [sel_data["technicals"], sel_data["fundamentals"], sel_data["insider"], sel_data["options"], sel_data["congress"]]
+        categories = ["Technicals", "Fundamentals", "Insider", "Options", "Congress", "Short Int"]
+        values = [sel_data["technicals"], sel_data["fundamentals"], sel_data["insider"], sel_data["options"], sel_data["congress"], sel_data.get("short_interest", 50)]
 
         fig = go.Figure()
         fig.add_trace(go.Scatterpolar(
@@ -158,7 +160,7 @@ def render():
         # Show details
         details = sel_data.get("details", {})
         if details:
-            cols = st.columns(5)
+            cols = st.columns(6)
             for i, (cat, data) in enumerate(details.items()):
                 with cols[i]:
                     st.markdown(f'**{cat.upper()}**')

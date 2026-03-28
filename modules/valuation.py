@@ -808,7 +808,24 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["insider"] = None
 
-    # 5. Options Sentiment
+    # 5. Short Interest
+    try:
+        short_pct = info.get("shortPercentOfFloat") or 0.0
+        days_to_cover = info.get("shortRatio") or 0.0
+        signals["short_interest"] = {
+            "short_pct_float": round(short_pct * 100, 1),
+            "days_to_cover": round(days_to_cover, 1),
+            "squeeze_potential": (
+                "extreme" if short_pct >= 0.30 else
+                "high" if short_pct >= 0.20 else
+                "elevated" if short_pct >= 0.10 else
+                "moderate" if short_pct >= 0.05 else "low"
+            ),
+        }
+    except Exception:
+        signals["short_interest"] = None
+
+    # 6. Options Sentiment
     try:
         expirations = stock.options
         if expirations:
@@ -827,7 +844,7 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["options"] = None
 
-    # 6. Company Profile
+    # 7. Company Profile
     try:
         from services.claude_client import describe_company
         name = info.get("longName", ticker)
@@ -837,11 +854,11 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["profile"] = None
 
-    # 7. Cross-module: institutional 13F flow + stress signals
+    # 8. Cross-module: institutional 13F flow + stress signals
     signals["whale"] = _collect_whale_signals(ticker)
     signals["stress"] = _collect_stress_signals()
 
-    # 8. Price action: Elliott Wave + Wyckoff (lightweight, cached)
+    # 9. Price action: Elliott Wave + Wyckoff (lightweight, cached)
     signals["price_action"] = _get_price_action_signal(ticker)
 
     return signals

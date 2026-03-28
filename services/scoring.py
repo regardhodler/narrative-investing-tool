@@ -1,12 +1,13 @@
 """
 Quantitative scoring engine for tickers.
 
-Scores each ticker 0-100 across five categories using free data sources:
+Scores each ticker 0-100 across six categories using free data sources:
 - Technicals (SMA positioning, RSI, momentum) — yfinance
 - Fundamentals (P/E, growth, margins) — yfinance .info
 - Insider activity (buy/sell ratio, recency) — SEC EDGAR
 - Options sentiment (P/C ratio) — yfinance options chains
 - Congress (congressional buy/sell ratio, recency) — Quiver Quant
+- Short Interest (squeeze potential, days-to-cover) — yfinance .info
 """
 
 import numpy as np
@@ -215,6 +216,42 @@ def _fetch_options_score(ticker: str) -> dict:
 
 
 @st.cache_data(ttl=3600)
+def _fetch_short_interest(ticker: str) -> dict:
+    """Score short interest 0-100 — high short float = squeeze potential (contrarian bullish)."""
+    try:
+        info = yf.Ticker(ticker).info or {}
+        short_pct = info.get("shortPercentOfFloat") or 0.0
+        days_to_cover = info.get("shortRatio") or 0.0
+
+        # Contrarian: high short % → more squeeze fuel → higher score
+        if short_pct >= 0.30:
+            base_score, label = 90, "extreme"
+        elif short_pct >= 0.20:
+            base_score, label = 75, "high"
+        elif short_pct >= 0.10:
+            base_score, label = 60, "elevated"
+        elif short_pct >= 0.05:
+            base_score, label = 45, "moderate"
+        else:
+            base_score, label = 30, "low"
+
+        # Days-to-cover bonus: longer exit runway = harder short squeeze to stop
+        dtc_bonus = 10 if days_to_cover > 5 else 5 if days_to_cover > 3 else 0
+        score = _clamp(base_score + dtc_bonus)
+
+        return {
+            "score": round(score),
+            "details": {
+                "short_pct_float": f"{short_pct * 100:.1f}%",
+                "days_to_cover": round(days_to_cover, 1),
+                "squeeze_potential": label,
+            },
+        }
+    except Exception:
+        return {"score": 50, "details": {}}
+
+
+@st.cache_data(ttl=3600)
 def _fetch_congress_score(ticker: str) -> dict:
     """Score congressional trading activity 0-100 based on buy/sell ratio and recency."""
     try:
@@ -257,27 +294,30 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict:
 
     Args:
         ticker: Stock ticker symbol
-        weights: Category weights dict, e.g. {"technicals": 25, "fundamentals": 25, "insider": 15, "options": 15, "congress": 20}
+        weights: Category weights dict, e.g. {"technicals": 25, "fundamentals": 20, "insider": 15,
+                                              "options": 15, "congress": 15, "short_interest": 10}
 
     Returns:
-        {ticker, composite, technicals, fundamentals, insider, options, congress, details}
+        {ticker, composite, technicals, fundamentals, insider, options, congress, short_interest, details}
     """
     if weights is None:
-        weights = {"technicals": 25, "fundamentals": 25, "insider": 15, "options": 15, "congress": 20}
+        weights = {"technicals": 25, "fundamentals": 20, "insider": 15, "options": 15, "congress": 15, "short_interest": 10}
 
     tech = _fetch_technicals(ticker)
     fund = _fetch_fundamentals(ticker)
     insider = _fetch_insider_score(ticker)
     options = _fetch_options_score(ticker)
     congress = _fetch_congress_score(ticker)
+    short_int = _fetch_short_interest(ticker)
 
     total_weight = sum(weights.values())
     composite = (
         tech["score"] * weights.get("technicals", 25)
-        + fund["score"] * weights.get("fundamentals", 25)
+        + fund["score"] * weights.get("fundamentals", 20)
         + insider["score"] * weights.get("insider", 15)
         + options["score"] * weights.get("options", 15)
-        + congress["score"] * weights.get("congress", 20)
+        + congress["score"] * weights.get("congress", 15)
+        + short_int["score"] * weights.get("short_interest", 10)
     ) / max(total_weight, 1)
 
     return {
@@ -288,12 +328,14 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict:
         "insider": insider["score"],
         "options": options["score"],
         "congress": congress["score"],
+        "short_interest": short_int["score"],
         "details": {
             "technicals": tech["details"],
             "fundamentals": fund["details"],
             "insider": insider["details"],
             "options": options["details"],
             "congress": congress["details"],
+            "short_interest": short_int["details"],
         },
     }
 
@@ -311,7 +353,7 @@ def score_multiple(tickers: list[str], weights: dict | None = None,
                 t = futures[future]
                 results.append({"ticker": t.upper(), "composite": 0,
                                 "technicals": 0, "fundamentals": 0, "insider": 0, "options": 0,
-                                "congress": 0, "details": {}})
+                                "congress": 0, "short_interest": 50, "details": {}})
             if progress_callback:
                 progress_callback((i + 1) / len(tickers))
 

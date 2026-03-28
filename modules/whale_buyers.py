@@ -50,6 +50,14 @@ def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
 
 
 def render():
+    tab_whales, tab_activism = st.tabs(["🐋 13F Whale Movement", "🎯 Activism (13D/13G)"])
+    with tab_whales:
+        _render_whale_tab()
+    with tab_activism:
+        _render_activism_tab()
+
+
+def _render_whale_tab():
     st.header("13F WHALE MOVEMENT")
     st.caption(
         "Compares each whale's two most recent 13F filings to surface new/changed positions. "
@@ -523,3 +531,86 @@ def _render_treemap(df: pd.DataFrame):
             "Block size = absolute dollar change",
             unsafe_allow_html=True,
         )
+
+
+def _render_activism_tab():
+    """Schedule 13D/13G activism filings screener."""
+    from services.activism_screener import get_activism_filings
+
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">SCHEDULE 13D/13G ACTIVISM TRACKER</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "SC 13D = activist stake (>5% float, intent to influence). "
+        "SC 13G = passive stake (>5%). Filed within 10 days of crossing threshold. "
+        "Activism campaigns historically drive 10–30% price moves."
+    )
+
+    # Controls
+    ctrl1, ctrl2 = st.columns([1, 1])
+    with ctrl1:
+        days_back = st.selectbox("Lookback Window", [7, 14, 30, 60, 90], index=2,
+                                  format_func=lambda d: f"Last {d} days", key="act_days")
+    with ctrl2:
+        include_13g = st.toggle("Include SC 13G (passive stakes)", value=False, key="act_13g")
+
+    if st.button("FETCH ACTIVISM FILINGS", type="primary", key="act_fetch"):
+        st.session_state["act_results"] = None  # clear cache to force refresh
+        get_activism_filings.clear()
+
+    with st.spinner("Querying SEC EDGAR for 13D/13G filings..."):
+        filings = get_activism_filings(days_back=days_back, include_13g=include_13g)
+
+    if not filings:
+        st.warning("No SC 13D filings found for the selected window. Try extending the lookback period.")
+        return
+
+    # Summary metric
+    activist_count = sum(1 for f in filings if f["form_type"] == "SC 13D")
+    passive_count = sum(1 for f in filings if f["form_type"] == "SC 13G")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Filings", len(filings))
+    m2.metric("SC 13D (Activist)", activist_count)
+    m3.metric("SC 13G (Passive)", passive_count)
+
+    st.markdown(f'<div style="margin:12px 0 6px 0;font-size:12px;color:{COLORS["bloomberg_orange"]};'
+                f'font-weight:700;letter-spacing:0.06em;">RECENT FILINGS</div>', unsafe_allow_html=True)
+
+    # Build table HTML
+    html = (
+        f'<table style="width:100%;border-collapse:collapse;font-family:JetBrains Mono,monospace;font-size:12px;">'
+        f'<tr style="border-bottom:2px solid {COLORS["bloomberg_orange"]};">'
+    )
+    for h in ["Date", "Form", "Filer (Activist / Shareholder)", "Target Company", "SEC Filing"]:
+        html += f'<th style="padding:6px 10px;text-align:left;color:{COLORS["bloomberg_orange"]};">{h}</th>'
+    html += "</tr>"
+
+    for i, row in enumerate(filings):
+        bg = COLORS["surface"] if i % 2 == 0 else COLORS["bg"]
+        form = row["form_type"]
+        form_color = COLORS["negative"] if form == "SC 13D" else COLORS["text_dim"]
+        link = (
+            f'<a href="{row["filing_url"]}" target="_blank" style="color:{COLORS["accent"]};'
+            f'text-decoration:none;">{row["accession_no"][:20] or "View"}</a>'
+            if row.get("filing_url") else "—"
+        )
+        html += (
+            f'<tr style="background:{bg};">'
+            f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">{row["file_date"]}</td>'
+            f'<td style="padding:5px 10px;color:{form_color};font-weight:700;">{form}</td>'
+            f'<td style="padding:5px 10px;color:{COLORS["text"]};">{row["filer"][:45]}</td>'
+            f'<td style="padding:5px 10px;color:{COLORS["yellow"]};">{row["subject"][:35]}</td>'
+            f'<td style="padding:5px 10px;">{link}</td>'
+            f'</tr>'
+        )
+    html += "</table>"
+    st.markdown(html, unsafe_allow_html=True)
+
+    st.markdown(
+        f'<div style="margin-top:10px;font-size:11px;color:{COLORS["text_dim"]};">'
+        f'SC 13D filings highlighted in red — these signal activist intent and are the highest-alpha event. '
+        f'Click accession numbers to view full filings on SEC EDGAR.</div>',
+        unsafe_allow_html=True,
+    )
