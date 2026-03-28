@@ -1,4 +1,4 @@
-import plotly.graph_objects as go
+﻿import plotly.graph_objects as go
 import streamlit as st
 
 from services.trends_client import (
@@ -166,11 +166,11 @@ def _render_trending_narratives():
 
 
     _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _eng_opts = ["⚡ Groq (fast)"]
+    _eng_opts = ["⚡ Freeloader Mode"]
     if _has_claude:
         _eng_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
     _eng_map = {
-        "⚡ Groq (fast)":        (False, None),
+        "⚡ Freeloader Mode":        (False, None),
         "🧠 Regard Mode":         (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -311,9 +311,9 @@ def render():
     # ── Cross-Signal Macro Plays ───────────────────────────────────────────
     import os
     _has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _PLAY_MODEL_OPTIONS = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_api_key else ["⚡ Groq"]
+    _PLAY_MODEL_OPTIONS = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_api_key else ["⚡ Freeloader Mode"]
     _PLAY_MODEL_MAP = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -708,7 +708,7 @@ def render():
                              meta={"overlay": _scenario_text or None, "regime": _regime})
             else:
                 _plays = st.session_state["_plays_result"]
-                _cached_plays_engine = st.session_state.get("_plays_engine", "⚡ Groq")
+                _cached_plays_engine = st.session_state.get("_plays_engine", "⚡ Freeloader Mode")
 
             if _plays and (_plays.get("sectors") or _plays.get("stocks") or _plays.get("bonds")):
                 _display_engine = _cached_plays_engine if not _gen_plays else _selected_play_model
@@ -908,9 +908,9 @@ def _render_auto():
     _has_xai = bool(_os.getenv("XAI_API_KEY"))
 
     _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _AUTO_ENGINE_OPTIONS = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
+    _AUTO_ENGINE_OPTIONS = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
     _AUTO_ENGINE_MAP = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -985,7 +985,7 @@ def _render_auto():
             save_signals()
 
         from datetime import datetime
-        _engine_badge_color = {"⚡ Groq": "#f59e0b", "🧠 Regard Mode": "#3b82f6", "👑 Highly Regarded Mode": "#a855f7"}.get(_auto_engine_sel, "#64748b")
+        _engine_badge_color = {"⚡ Freeloader Mode": "#f59e0b", "🧠 Regard Mode": "#3b82f6", "👑 Highly Regarded Mode": "#a855f7"}.get(_auto_engine_sel, "#64748b")
         st.markdown(
             f'<span style="color:#475569;font-size:11px;">LAST UPDATE {datetime.now().strftime("%Y-%m-%d %H:%M")} · CACHE 1H</span>'
             f'&nbsp;&nbsp;<span style="background:{_engine_badge_color}22;color:{_engine_badge_color};'

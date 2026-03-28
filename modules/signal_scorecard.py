@@ -1,11 +1,11 @@
-"""Signal Scorecard — Short Squeeze Screener + Composite Scorecard."""
+﻿"""Signal Scorecard — Short Squeeze Screener + Composite Scorecard."""
 
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from utils.theme import COLORS, apply_dark_layout
 from utils.watchlist import load_watchlist
-from services.scoring import score_multiple, score_ticker, scan_short_interest
+from services.scoring import score_ticker, scan_short_interest
 
 # Curated list of historically high short-interest names across sectors
 _CURATED = [
@@ -17,7 +17,7 @@ _CURATED = [
 ]
 
 _TIER_MAP = {
-    "⚡ Groq (Fast)":           (False, None),
+    "⚡ Freeloader Mode":           (False, None),
     "🧠 Regard Mode (Grok 4.1)": (True,  "grok-4-1-fast-reasoning"),
     "👑 Highly Regarded (Claude)": (True,  "claude-sonnet-4-6"),
 }
@@ -42,11 +42,7 @@ def _short_color(pct: float) -> str:
 
 
 def render():
-    tab_squeeze, tab_composite = st.tabs(["🎯 Short Squeeze Radar", "📊 Composite Scorecard"])
-    with tab_squeeze:
-        _render_squeeze_screen()
-    with tab_composite:
-        _render_composite_scorecard()
+    _render_squeeze_screen()
 
 
 # ── Short Squeeze Screen ───────────────────────────────────────────────────────
@@ -370,170 +366,3 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
             f'{_cached_thesis["text"]}</div>',
             unsafe_allow_html=True,
         )
-
-
-# ── Composite Scorecard (existing, unchanged) ──────────────────────────────────
-
-def _render_composite_scorecard():
-    st.markdown(
-        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'letter-spacing:0.1em;margin-bottom:12px;">COMPOSITE SCORECARD</div>',
-        unsafe_allow_html=True,
-    )
-
-    col_input, col_weights = st.columns([2, 1])
-
-    with col_input:
-        watchlist = load_watchlist()
-        wl_tickers = [w["ticker"] for w in watchlist] if watchlist else []
-        input_mode = st.radio("Ticker Source", ["Watchlist", "Custom"], horizontal=True, key="sc_mode")
-        if input_mode == "Watchlist" and wl_tickers:
-            tickers = wl_tickers
-            st.caption(f"Scanning: {', '.join(tickers)}")
-        else:
-            raw = st.text_input(
-                "Tickers (comma-separated, max 20)",
-                value="AAPL, NVDA, MSFT, TSLA, SPY",
-                key="sc_tickers",
-            )
-            tickers = [t.strip().upper() for t in raw.split(",") if t.strip()][:20]
-
-    with col_weights:
-        st.markdown(
-            f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};margin-bottom:4px;">'
-            f'CATEGORY WEIGHTS</div>',
-            unsafe_allow_html=True,
-        )
-        w_tech  = st.slider("Technicals",     0, 100, 25, key="w_tech")
-        w_fund  = st.slider("Fundamentals",   0, 100, 20, key="w_fund")
-        w_ins   = st.slider("Insider",        0, 100, 15, key="w_ins")
-        w_opt   = st.slider("Options",        0, 100, 15, key="w_opt")
-        w_cong  = st.slider("Congress",       0, 100, 15, key="w_cong")
-        w_short = st.slider("Short Interest", 0, 100, 10, key="w_short")
-
-    weights = {
-        "technicals": w_tech, "fundamentals": w_fund, "insider": w_ins,
-        "options": w_opt, "congress": w_cong, "short_interest": w_short,
-    }
-
-    if not tickers:
-        st.warning("Enter at least one ticker.")
-        return
-
-    if st.button("SCAN", type="primary", key="sc_scan"):
-        progress = st.progress(0, text="Scanning...")
-
-        def _upd(pct):
-            progress.progress(pct, text=f"Scanning... {int(pct * 100)}%")
-
-        results = score_multiple(tickers, weights, progress_callback=_upd)
-        progress.empty()
-        st.session_state["sc_results"] = results
-
-    results = st.session_state.get("sc_results")
-    if not results:
-        st.info("Click SCAN to score tickers.")
-        return
-
-    st.markdown(
-        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'margin:16px 0 8px 0;">RANKED RESULTS</div>',
-        unsafe_allow_html=True,
-    )
-
-    html = (
-        f'<table style="width:100%;border-collapse:collapse;'
-        f'font-family:JetBrains Mono,monospace;font-size:13px;">'
-        f'<tr style="border-bottom:2px solid {COLORS["bloomberg_orange"]};">'
-    )
-    for h in ["#", "Ticker", "Composite", "Technicals", "Fundamentals",
-              "Insider", "Options", "Congress", "Short Int"]:
-        html += (
-            f'<th style="padding:6px 10px;text-align:left;'
-            f'color:{COLORS["bloomberg_orange"]};">{h}</th>'
-        )
-    html += "</tr>"
-    for i, r in enumerate(results):
-        bg = COLORS["surface"] if i % 2 == 0 else COLORS["bg"]
-        html += f'<tr style="background:{bg};">'
-        html += f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">{i + 1}</td>'
-        html += (
-            f'<td style="padding:5px 10px;font-weight:700;color:{COLORS["text"]};">'
-            f'{r["ticker"]}</td>'
-        )
-        for key in ["composite", "technicals", "fundamentals", "insider",
-                    "options", "congress", "short_interest"]:
-            val = r.get(key, 50)
-            html += (
-                f'<td style="padding:5px 10px;color:{_score_color(val)};'
-                f'font-weight:600;">{val}</td>'
-            )
-        html += "</tr>"
-    html += "</table>"
-    st.markdown(html, unsafe_allow_html=True)
-
-    with st.expander("How to Read These Scores"):
-        st.markdown(f"""
-**Score Ranges**
-- <span style="color:{COLORS['positive']};font-weight:600;">70–100</span> — Strong / Bullish
-- <span style="color:{COLORS['yellow']};font-weight:600;">40–69</span> — Neutral / Mixed
-- <span style="color:{COLORS['negative']};font-weight:600;">0–39</span> — Weak / Bearish
-
-| Category | High Score Means |
-|---|---|
-| **Technicals** | Price above SMAs, positive momentum |
-| **Fundamentals** | Low P/E, strong growth, healthy margins |
-| **Insider** | Insiders are net buyers, recent cluster |
-| **Options** | High P/C ratio = elevated fear = contrarian bullish |
-| **Congress** | Congress members net buyers recently |
-| **Short Int** | High short % = squeeze fuel = contrarian bullish |
-""", unsafe_allow_html=True)
-
-    st.markdown(
-        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'margin:20px 0 8px 0;">DRILL-DOWN</div>',
-        unsafe_allow_html=True,
-    )
-
-    selected = st.selectbox("Select ticker", [r["ticker"] for r in results], key="sc_drill")
-    sel_data = next((r for r in results if r["ticker"] == selected), None)
-
-    if sel_data:
-        categories = ["Technicals", "Fundamentals", "Insider", "Options", "Congress", "Short Int"]
-        values = [
-            sel_data["technicals"], sel_data["fundamentals"], sel_data["insider"],
-            sel_data["options"], sel_data["congress"], sel_data.get("short_interest", 50),
-        ]
-        fig = go.Figure()
-        fig.add_trace(go.Scatterpolar(
-            r=values + [values[0]],
-            theta=categories + [categories[0]],
-            fill="toself",
-            fillcolor="rgba(0,212,170,0.15)",
-            line=dict(color=COLORS["accent"], width=2),
-            marker=dict(size=6, color=COLORS["accent"]),
-            name=selected,
-        ))
-        apply_dark_layout(
-            fig,
-            title=f"{selected} — Score Breakdown (Composite: {sel_data['composite']})",
-            polar=dict(
-                bgcolor=COLORS["bg"],
-                radialaxis=dict(range=[0, 100], gridcolor=COLORS["grid"],
-                                tickfont=dict(color=COLORS["text_dim"])),
-                angularaxis=dict(gridcolor=COLORS["grid"],
-                                 tickfont=dict(color=COLORS["text"])),
-            ),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        details = sel_data.get("details", {})
-        if details:
-            cols = st.columns(6)
-            for i, (cat, data) in enumerate(details.items()):
-                with cols[i]:
-                    st.markdown(f"**{cat.upper()}**")
-                    if isinstance(data, dict):
-                        for k, v in data.items():
-                            if v is not None:
-                                st.markdown(f"{k}: `{v}`")

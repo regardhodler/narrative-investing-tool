@@ -1,4 +1,4 @@
-import streamlit as st
+﻿import streamlit as st
 from services.sec_client import get_filings_by_ticker, get_company_info, fetch_filing_text, get_latest_annual_filing, extract_mda_text
 from services.claude_client import summarize_filing, analyze_mda_sentiment
 from utils.session import get_ticker, set_ticker
@@ -86,9 +86,9 @@ def render():
     _edgar_has_xai = bool(_os.getenv("XAI_API_KEY"))
 
     _edgar_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _edgar_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _edgar_has_xai else []) + (["👑 Highly Regarded Mode"] if _edgar_has_claude else [])
+    _edgar_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _edgar_has_xai else []) + (["👑 Highly Regarded Mode"] if _edgar_has_claude else [])
     _edgar_tier_map = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -181,9 +181,9 @@ def render():
 
     _mda_has_xai = bool(__import__("os").getenv("XAI_API_KEY"))
     _mda_has_claude = bool(__import__("os").getenv("ANTHROPIC_API_KEY"))
-    _mda_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _mda_has_xai else []) + (["👑 Highly Regarded Mode"] if _mda_has_claude else [])
+    _mda_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _mda_has_xai else []) + (["👑 Highly Regarded Mode"] if _mda_has_claude else [])
     _mda_tier_map = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }

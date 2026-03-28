@@ -1,4 +1,4 @@
-"""Quick Intel Run — one button runs Regime + Rate-Path Plays + Current Events + Doom Briefing."""
+﻿"""Quick Intel Run — one button runs Regime + Rate-Path Plays + Current Events + Doom Briefing."""
 
 import streamlit as st
 from utils.theme import COLORS
@@ -62,19 +62,19 @@ def render():
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
     _hr_unlocked, _hr_reason = _hr_gate_check()
 
-    _tier_opts = ["⚡ Groq (fast, free)"]
+    _tier_opts = ["⚡ Freeloader Mode"]
     if _has_xai:
         _tier_opts.append("🧠 Regard Mode")
     if _has_anthropic and _hr_unlocked:
         _tier_opts.append("👑 Highly Regarded Mode")
 
     _tier_map = {
-        "⚡ Groq (fast, free)":      (False, None),
+        "⚡ Freeloader Mode":      (False, None),
         "🧠 Regard Mode":            (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode":   (True, "claude-sonnet-4-6"),
     }
     _rec_map = {
-        "⚡ Groq (fast, free)":      "Daily routine — all 8 modules in ~90s, completely free.",
+        "⚡ Freeloader Mode":      "Daily routine — all 8 modules in ~90s, completely free.",
         "🧠 Regard Mode":            "Active day — Grok 4.1 reasoning for deeper synthesis + live X feed in Current Events.",
         "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 8 modules before running Portfolio.",
     }
@@ -271,7 +271,7 @@ def render():
 
                 _synopsis = _gen_synopsis("\n\n".join(_sig_parts), use_claude=_use_claude, model=_cl_model)
                 _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
-                    else ("🧠 Regard Mode" if _use_claude else "⚡ Groq")
+                    else ("🧠 Regard Mode" if _use_claude else "⚡ Freeloader Mode")
                 st.session_state["_macro_synopsis"] = _synopsis
                 st.session_state["_macro_synopsis_ts"] = _syndt.datetime.now()
                 st.session_state["_macro_synopsis_engine"] = _syn_tier

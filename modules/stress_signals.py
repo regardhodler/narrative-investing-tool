@@ -1,4 +1,4 @@
-"""
+﻿"""
 Module 9: Stress Signals / Doomsday Monitor
 
 The canary-in-the-coal-mine dashboard — tracking credit stress, institutional
@@ -456,7 +456,7 @@ def run_quick_doom(use_claude: bool = False, model: str | None = None) -> bool:
         "\n".join(stress_text_parts),
         use_claude=use_claude, model=model, current_events=_ce,
     )
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_doom_briefing"] = briefing
     st.session_state["_doom_briefing_ts"] = _dt.datetime.now()
     st.session_state["_doom_briefing_engine"] = _tier
@@ -972,9 +972,9 @@ def render():
 
 
     _has_anthropic_doom_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _doom_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _doom_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_doom_has_claude else [])
+    _doom_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _doom_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_doom_has_claude else [])
     _doom_tier_map = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }

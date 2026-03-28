@@ -663,6 +663,24 @@
     "__datetime__": "2026-03-27T19:40:05.818208"
   },
   "_auto_trending_groups_engine": "\ud83e\udde0 Regard Mode",
+  "_institutional_bias": {
+    "ticker": "GOOG",
+    "bias": "BULLISH",
+    "weighted_pct": 2.42
+  },
+  "_insider_net_flow": {
+    "ticker": "GOOG",
+    "bias": "BEARISH",
+    "buy_pct": 0.0,
+    "buy_value": 0,
+    "sell_value": 20184658,
+    "n_trades": 90
+  },
+  "_congress_bias": {
+    "ticker": "GOOG",
+    "bias": "BULLISH",
+    "buy_pct": 69.8
+  },
   "_macro_synopsis": {
     "conviction": "BEARISH",
     "summary": "Stagflation regime confirmed amid supply shocks from Qatar helium collapse and Strait of Hormuz risks, exacerbating input inflation without growth. Banking stress evident in regional banks' -10.1% 1M return and -21.3% drawdown, plus CRE -5.6% 1M and PE -39.1% drawdown. Moderate doom stress at 31.6/100 and black swans like reverse yen carry (8.5% annual) outweigh tech whale buying.",

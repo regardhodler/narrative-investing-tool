@@ -1,4 +1,4 @@
-"""
+﻿"""
 Module: Fed Forecaster
 
 Fed policy probability engine — standalone sidebar module.
@@ -315,9 +315,9 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
     # ── AI Regime Plays ────────────────────────────────────────────────────
     _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
+    _tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
     _tier_map  = {
-        "⚡ Groq":                (False, None),
+        "⚡ Freeloader Mode":                (False, None),
         "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
     }
@@ -374,7 +374,7 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
         else:
             _plays = st.session_state["_fed_plays_result"]
 
-        _eng_label = st.session_state.get("_fed_plays_engine", "⚡ Groq")
+        _eng_label = st.session_state.get("_fed_plays_engine", "⚡ Freeloader Mode")
         st.caption(f"*{_eng_label} · Rate Path: {dominant_label} · Quadrant: {quadrant}*")
 
         if _plays and (_plays.get("sectors") or _plays.get("stocks") or _plays.get("bonds")):
@@ -606,7 +606,7 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
         _ff_rate = float(_ff_series.dropna().iloc[-1]) if (_ff_series is not None and not _ff_series.empty) else None
         st.session_state["_fed_funds_rate"] = _ff_rate
         from services.play_log import append_play as _append_play
-        _append_play("Fed Forecaster", st.session_state.get("fed_engine_radio", "⚡ Groq"),
+        _append_play("Fed Forecaster", st.session_state.get("fed_engine_radio", "⚡ Freeloader Mode"),
                      {"rate_path_probs": _final_probs, "dominant": st.session_state["_dominant_rate_path"]},
                      meta={"fed_funds_rate": _ff_rate})
 
@@ -703,12 +703,12 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
 
     _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_options = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
-    _tier_hints   = {"⚡ Groq": "", "🧠 Regard Mode": "Grok 4.1", "👑 Highly Regarded Mode": "Sonnet"}
-    _tier_map     = {"⚡ Groq": "groq", "🧠 Regard Mode": "grok", "👑 Highly Regarded Mode": "sonnet"}
+    _tier_options = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
+    _tier_hints   = {"⚡ Freeloader Mode": "", "🧠 Regard Mode": "Grok 4.1", "👑 Highly Regarded Mode": "Sonnet"}
+    _tier_map     = {"⚡ Freeloader Mode": "groq", "🧠 Regard Mode": "grok", "👑 Highly Regarded Mode": "sonnet"}
 
     if _has_xai or _has_claude:
-        _prev_tier = st.session_state.get("_fed_tier", "⚡ Groq")
+        _prev_tier = st.session_state.get("_fed_tier", "⚡ Freeloader Mode")
         _tier_cols = st.columns([4, 1])
         with _tier_cols[0]:
             _selected_tier = st.radio(
@@ -737,7 +737,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             st.rerun()
         _model_tier = _tier_map[_selected_tier]
     else:
-        _selected_tier = "⚡ Groq"
+        _selected_tier = "⚡ Freeloader Mode"
         _model_tier = "groq"
 
     _use_claude = _model_tier != "groq"
@@ -775,8 +775,8 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
-    _engine_badge_map = {"groq": "⚡ Groq", "grok": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
-    _engine_badge = _engine_badge_map.get(expanded.get("_core_engine", "groq"), "⚡ Groq")
+    _engine_badge_map = {"groq": "⚡ Freeloader Mode", "grok": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
+    _engine_badge = _engine_badge_map.get(expanded.get("_core_engine", "groq"), "⚡ Freeloader Mode")
     _exp_status = full_expanded.get("_call_status", {})
     _exp_core_msg = _exp_status.get("core", "ok")
     if _exp_core_msg != "ok":
@@ -938,9 +938,9 @@ def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
     st.markdown("---")
     _cc_has_xai = bool(os.getenv("XAI_API_KEY"))
     _cc_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _cc_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _cc_has_xai else []) + (["👑 Highly Regarded Mode"] if _cc_has_claude else [])
+    _cc_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _cc_has_xai else []) + (["👑 Highly Regarded Mode"] if _cc_has_claude else [])
     _cc_tier_map = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -1370,9 +1370,9 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: b
 
     _bs_has_xai = bool(os.getenv("XAI_API_KEY"))
     _bs_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _bs_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _bs_has_xai else []) + (["👑 Highly Regarded Mode"] if _bs_has_claude else [])
+    _bs_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _bs_has_xai else []) + (["👑 Highly Regarded Mode"] if _bs_has_claude else [])
     _bs_tier_map = {
-        "⚡ Groq": (False, None),
+        "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
@@ -1572,7 +1572,7 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
         f"Regime: {regime} | Quadrant: {macro.get('quadrant', 'Unknown')}"
     )
     _plays = suggest_regime_plays(regime, norm_score, sig, use_claude=use_claude, model=model)
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_fed_plays_result"] = _plays
     st.session_state["_fed_plays_result_ts"] = _dt.datetime.now()
     st.session_state["_fed_plays_engine"] = _tier
@@ -1607,7 +1607,7 @@ def run_quick_chain(use_claude: bool = False, model: str | None = None) -> bool:
     chains_json = _json.dumps(chains)
     narration = narrate_policy_transmission(chains_json, probs_json, use_claude=use_claude, model=model)
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
-        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+        else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_chain_narration"] = narration
     st.session_state["_chain_narration_engine"] = _tier
     return True
@@ -1648,7 +1648,7 @@ def run_quick_swans(use_claude: bool = False, model: str | None = None) -> bool:
         scenarios = ["Geopolitical Black Swan", "US Credit Downgrade", "Oil Supply Shock"]
 
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
-        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+        else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     _new_swans = {}
     for label in scenarios:
         try:

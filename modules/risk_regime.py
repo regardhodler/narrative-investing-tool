@@ -1,4 +1,4 @@
-"""
+﻿"""
 Module 0: Macro Dashboard
 
 Daily macro regime indicator using 21 cross-asset signals:
@@ -665,7 +665,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         macro["macro_regime"], norm_score, signal_summary,
         use_claude=use_claude, model=model,
     )
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_rp_plays_result"] = _plays
     st.session_state["_rp_plays_last_tier"] = _tier
     return macro, fred_data
@@ -1704,7 +1704,7 @@ def render():
 
         # AI News Digest
         _ce_has_claude = bool(os.getenv("XAI_API_KEY"))
-        _ce_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _ce_has_claude else [])
+        _ce_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _ce_has_claude else [])
         _ced1, _ced2 = st.columns([2, 2])
         with _ced1:
             _ce_tier = st.radio("Engine", _ce_tier_opts, horizontal=True, key="ce_engine_radio")
@@ -1728,7 +1728,7 @@ def render():
             )
             _groq_key = os.getenv("GROQ_API_KEY", "")
             _digest = None
-            if _ce_tier != "⚡ Groq" and _ce_has_claude:
+            if _ce_tier != "⚡ Freeloader Mode" and _ce_has_claude:
                 try:
                     import anthropic as _ac
                     _ac_client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
@@ -1952,9 +1952,9 @@ def render():
 
         # ── AI Regime Plays ──────────────────────────────────────────────────
         _rp_has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-        _rp_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _rp_has_anthropic else ["⚡ Groq"]
+        _rp_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _rp_has_anthropic else ["⚡ Freeloader Mode"]
         _rp_tier_map  = {
-            "⚡ Groq":                (False, None),
+            "⚡ Freeloader Mode":                (False, None),
             "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }

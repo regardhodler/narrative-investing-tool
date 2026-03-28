@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -42,7 +42,7 @@ def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
 
     summary = summarize_whale_activity("\n".join(lines), use_claude=use_claude, model=model)
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
-        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+        else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_whale_summary"] = summary
     st.session_state["_whale_summary_ts"] = _dt.datetime.now()
     st.session_state["_whale_summary_engine"] = _tier
@@ -403,9 +403,9 @@ def _render_ai_summary(df: pd.DataFrame):
         # Engine selector
         _has_xai_whale = bool(_os.getenv("XAI_API_KEY"))
         _has_anthropic = bool(_os.getenv("ANTHROPIC_API_KEY"))
-        _whale_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai_whale else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
+        _whale_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai_whale else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
         _whale_tier_map = {
-            "⚡ Groq":                (False, None),
+            "⚡ Freeloader Mode":                (False, None),
             "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }

@@ -1,4 +1,4 @@
-"""Trade Journal — log trades, track live P&L, and analyze performance by signal source."""
+﻿"""Trade Journal — log trades, track live P&L, and analyze performance by signal source."""
 
 import json
 import os
@@ -872,7 +872,7 @@ def render():
         _pi_has_xai = bool(_os.getenv("XAI_API_KEY"))
 
         _pi_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-        _pi_tier_opts = ["⚡ Groq"]
+        _pi_tier_opts = ["⚡ Freeloader Mode"]
         if _pi_has_claude:
             _pi_tier_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
         _sel_pi_tier = st.radio("Analysis Engine", _pi_tier_opts, horizontal=True, key="portfolio_intel_engine")
@@ -1508,7 +1508,7 @@ def render():
 
 
             _has_anthropic_fa_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-            _fa_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _fa_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_fa_has_claude else [])
+            _fa_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _fa_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_fa_has_claude else [])
             _fa_col1, _fa_col2 = st.columns([4, 2])
             with _fa_col1:
                 _fa_tier = st.radio(
@@ -1742,7 +1742,7 @@ def render():
                     _sv_has_claude = bool(os.getenv("XAI_API_KEY"))
 
                     _has_anthropic_sv_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-                    _sv_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _sv_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_sv_has_claude else [])
+                    _sv_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _sv_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_sv_has_claude else [])
                     _sv_col1, _sv_col2 = st.columns([4, 2])
                     with _sv_col1:
                         _sv_tier = st.radio(

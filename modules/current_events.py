@@ -1,4 +1,4 @@
-"""Current Events — standalone intelligence feed module."""
+﻿"""Current Events — standalone intelligence feed module."""
 
 import streamlit as st
 
@@ -165,7 +165,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
             return False
 
     if digest:
-        _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Groq")
+        _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
     if _use_cl and st.session_state.get("_x_feed_used"):
         st.session_state.pop("_x_feed_used", None)
         st.session_state["_current_events_digest"] = digest
@@ -410,7 +410,7 @@ def render():
     # Engine selector
     engine = st.radio(
         "Engine",
-        ["⚡ Groq (fast)", "🧠 Regard Mode", "👑 Highly Regarded Mode"],
+        ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"],
         key="ce_digest_engine",
         horizontal=True,
         label_visibility="collapsed",
@@ -423,7 +423,7 @@ def render():
         unsafe_allow_html=True,
     )
     _rec_map = {
-        "⚡ Groq (fast)": "Daily routine check — fast, free. Use when markets are calm and you just want a quick brief.",
+        "⚡ Freeloader Mode": "Daily routine check — fast, free. Use when markets are calm and you just want a quick brief.",
         "🧠 Regard Mode": "Active trading day — Grok 4.1 reasoning + 🐦 live X/Twitter feed for real-time macro posts. Best for market-moving days.",
         "👑 Highly Regarded Mode": "High-conviction sessions — Sonnet reads macro nuance best. Use before running Valuation or Portfolio when volatility is elevated or a major catalyst is live.",
     }
@@ -511,7 +511,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
     )
 
     _tier_model = {
-        "⚡ Groq (fast)": None,
+        "⚡ Freeloader Mode": None,
         "🧠 Regard Mode": "grok-4-1-fast-reasoning",
         "👑 Highly Regarded Mode": "claude-sonnet-4-6",
     }

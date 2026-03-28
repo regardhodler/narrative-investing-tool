@@ -1,4 +1,4 @@
-import json
+﻿import json
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -20,7 +20,7 @@ def render():
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _tier_badges = {
-        "⚡ Standard": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Groq</span>',
+        "⚡ Standard": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Freeloader Mode</span>',
         "🧠 Regard Mode": '<span style="font-size:11px;background:#FF8811;color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">🧠 Grok 4.1</span>',
         "👑 Highly Regarded Mode": '<span style="font-size:11px;background:linear-gradient(90deg,#c89b3c,#f0d060);color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">👑 Sonnet</span>',
     }
@@ -88,9 +88,9 @@ def render():
     _cr_suffix = " ✅" if _both_sonnet else " ⚠️" if not _both_loaded else " 🟡"
     with st.expander(f"📡 Context Readiness{_cr_suffix}", expanded=not _both_loaded):
         # ── Engine selectors ──────────────────────────────────────────────────
-        _cr_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
+        _cr_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
         _cr_model_map = {
-            "⚡ Groq": (False, None),
+            "⚡ Freeloader Mode": (False, None),
             "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
         }
