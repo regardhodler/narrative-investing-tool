@@ -1482,6 +1482,236 @@ def _render_signals_table(signals: list[dict]):
 # RENDER
 # ─────────────────────────────────────────────
 
+# ── Sector Rotation Monitor ───────────────────────────────────────────────────
+
+_SECTOR_ETFS = {
+    "XLK":  "Technology",
+    "XLV":  "Health Care",
+    "XLE":  "Energy",
+    "XLF":  "Financials",
+    "XLI":  "Industrials",
+    "XLC":  "Communication",
+    "XLP":  "Consumer Staples",
+    "XLY":  "Consumer Discr.",
+    "XLU":  "Utilities",
+    "XLB":  "Materials",
+    "XLRE": "Real Estate",
+}
+
+# Sectors historically favored in each Dalio quadrant
+_QUADRANT_SECTOR_ALIGNMENT = {
+    "Goldilocks":  ["XLK", "XLC", "XLY", "XLI", "XLF"],
+    "Reflation":   ["XLE", "XLB", "XLF", "XLI", "XLY"],
+    "Stagflation": ["XLE", "XLB", "XLU", "XLP", "XLV"],
+    "Deflation":   ["XLU", "XLV", "XLP", "XLRE"],
+}
+
+
+@st.cache_data(ttl=3600)
+def _fetch_sector_momentum() -> list[dict]:
+    """Download 6-month weekly closes for all 11 SPDR sector ETFs.
+    Returns list sorted by 4W momentum descending."""
+    tickers = list(_SECTOR_ETFS.keys())
+    try:
+        raw = yf.download(tickers, period="6mo", interval="1wk",
+                          progress=False, auto_adjust=True)
+        if raw is None or raw.empty:
+            return []
+        close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+        results = []
+        for t in tickers:
+            if t not in close.columns:
+                continue
+            s = close[t].dropna()
+            if len(s) < 5:
+                continue
+            price = float(s.iloc[-1])
+            ret_4w  = (price / float(s.iloc[-5])  - 1) * 100 if len(s) >= 5  else None
+            ret_12w = (price / float(s.iloc[-13]) - 1) * 100 if len(s) >= 13 else None
+            ret_26w = (price / float(s.iloc[0])   - 1) * 100
+            results.append({
+                "ticker": t,
+                "name": _SECTOR_ETFS[t],
+                "price": round(price, 2),
+                "ret_4w":  round(ret_4w,  2) if ret_4w  is not None else None,
+                "ret_12w": round(ret_12w, 2) if ret_12w is not None else None,
+                "ret_26w": round(ret_26w, 2),
+            })
+        # Rank by 4W and 12W (1 = best)
+        v4  = sorted([r for r in results if r["ret_4w"]  is not None], key=lambda x: x["ret_4w"],  reverse=True)
+        v12 = sorted([r for r in results if r["ret_12w"] is not None], key=lambda x: x["ret_12w"], reverse=True)
+        r4m  = {r["ticker"]: i + 1 for i, r in enumerate(v4)}
+        r12m = {r["ticker"]: i + 1 for i, r in enumerate(v12)}
+        for r in results:
+            r["rank_4w"]  = r4m.get(r["ticker"])
+            r["rank_12w"] = r12m.get(r["ticker"])
+        results.sort(key=lambda x: (x["ret_4w"] or -999), reverse=True)
+        return results
+    except Exception:
+        return []
+
+
+def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
+    """Live sector rotation panel: 4W + 12W momentum ranks + regime alignment."""
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">SECTOR ROTATION MONITOR</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"11 SPDR sector ETFs ranked by 4-week and 12-week momentum. "
+        f"Current regime: **{regime}** · **{quadrant}** quadrant. "
+        f"Bright bars = regime-aligned sectors."
+    )
+
+    with st.spinner("Loading sector momentum data..."):
+        sectors = _fetch_sector_momentum()
+
+    if not sectors:
+        st.warning("Could not fetch sector ETF data. Click Refresh Data and try again.")
+        return
+
+    aligned = set(_QUADRANT_SECTOR_ALIGNMENT.get(quadrant, []))
+
+    # ── Regime-confirmed leaders callout ──────────────────────────────────────
+    confirmed = [s for s in sectors[:5] if s["ticker"] in aligned]
+    if confirmed:
+        _names = " &nbsp;·&nbsp; ".join(
+            f'<span style="font-weight:700;color:#f1f5f9;">{s["ticker"]}</span> '
+            f'<span style="color:#94a3b8;">{s["name"]} {s["ret_4w"]:+.1f}%</span>'
+            for s in confirmed
+        )
+        st.markdown(
+            f'<div style="background:#0a2218;border-left:3px solid #22c55e;'
+            f'padding:8px 14px;border-radius:0 4px 4px 0;margin:8px 0 14px 0;">'
+            f'<span style="font-size:10px;color:#22c55e;font-weight:700;letter-spacing:0.06em;">'
+            f'REGIME-CONFIRMED LEADERS (top 5 momentum ∩ {quadrant} alignment)</span><br>'
+            f'<span style="font-size:13px;">{_names}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Momentum bar charts ────────────────────────────────────────────────────
+    col_4w, col_12w = st.columns(2)
+
+    def _bar_colors(data, ret_key):
+        return [
+            "#22c55e" if ((s[ret_key] or 0) > 0 and s["ticker"] in aligned)
+            else "#86efac" if (s[ret_key] or 0) > 0
+            else "#ef4444" if s["ticker"] in aligned
+            else "#fca5a5"
+            for s in data
+        ]
+
+    with col_4w:
+        st.markdown(
+            f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};'
+            f'font-weight:700;margin-bottom:2px;">4-WEEK MOMENTUM</div>',
+            unsafe_allow_html=True,
+        )
+        _d4 = sorted([s for s in sectors if s["ret_4w"] is not None], key=lambda x: x["ret_4w"])
+        fig4 = go.Figure(go.Bar(
+            x=[s["ret_4w"] for s in _d4],
+            y=[s["ticker"] for s in _d4],
+            orientation="h",
+            marker_color=_bar_colors(_d4, "ret_4w"),
+            text=[f"{s['ret_4w']:+.1f}%" for s in _d4],
+            textposition="outside",
+        ))
+        apply_dark_layout(fig4, height=340)
+        fig4.update_layout(
+            margin=dict(l=10, r=55, t=10, b=10),
+            xaxis=dict(ticksuffix="%", gridcolor=COLORS["grid"]),
+            yaxis=dict(gridcolor="rgba(0,0,0,0)"),
+            showlegend=False,
+        )
+        st.plotly_chart(fig4, use_container_width=True)
+
+    with col_12w:
+        st.markdown(
+            f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};'
+            f'font-weight:700;margin-bottom:2px;">12-WEEK MOMENTUM</div>',
+            unsafe_allow_html=True,
+        )
+        _d12 = sorted([s for s in sectors if s["ret_12w"] is not None], key=lambda x: x["ret_12w"])
+        fig12 = go.Figure(go.Bar(
+            x=[s["ret_12w"] for s in _d12],
+            y=[s["ticker"] for s in _d12],
+            orientation="h",
+            marker_color=_bar_colors(_d12, "ret_12w"),
+            text=[f"{s['ret_12w']:+.1f}%" for s in _d12],
+            textposition="outside",
+        ))
+        apply_dark_layout(fig12, height=340)
+        fig12.update_layout(
+            margin=dict(l=10, r=55, t=10, b=10),
+            xaxis=dict(ticksuffix="%", gridcolor=COLORS["grid"]),
+            yaxis=dict(gridcolor="rgba(0,0,0,0)"),
+            showlegend=False,
+        )
+        st.plotly_chart(fig12, use_container_width=True)
+
+    st.caption("Bright green/red = regime-aligned sector.  Light green/red = momentum only (no quadrant alignment).")
+
+    # ── Ranked table ──────────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'margin:14px 0 6px 0;">FULL RANKING TABLE</div>',
+        unsafe_allow_html=True,
+    )
+    _tbl = (
+        f'<table style="width:100%;border-collapse:collapse;'
+        f'font-family:JetBrains Mono,monospace;font-size:12px;">'
+        f'<tr style="border-bottom:2px solid {COLORS["bloomberg_orange"]};">'
+    )
+    for _h in ["4W #", "Sector", "ETF", "Price", "4W %", "12W #", "12W %", "26W %", "Regime"]:
+        _tbl += (f'<th style="padding:5px 10px;text-align:left;'
+                 f'color:{COLORS["bloomberg_orange"]};">{_h}</th>')
+    _tbl += "</tr>"
+    for i, s in enumerate(sectors):
+        _bg   = COLORS["surface"] if i % 2 == 0 else COLORS["bg"]
+        _aln  = s["ticker"] in aligned
+        _badge = (
+            '<span style="color:#22c55e;font-size:10px;font-weight:700;">✓ ALIGNED</span>'
+            if _aln else
+            '<span style="color:#475569;font-size:10px;">—</span>'
+        )
+        _4w  = s.get("ret_4w");  _4s  = f"{_4w:+.1f}%"  if _4w  is not None else "—"
+        _12w = s.get("ret_12w"); _12s = f"{_12w:+.1f}%" if _12w is not None else "—"
+        _26w = s.get("ret_26w"); _26s = f"{_26w:+.1f}%" if _26w is not None else "—"
+        _4c  = "#22c55e" if (_4w  or 0) > 0 else "#ef4444"
+        _12c = "#22c55e" if (_12w or 0) > 0 else "#ef4444"
+        _26c = "#22c55e" if (_26w or 0) > 0 else "#ef4444"
+        _rc  = "#22c55e" if (s.get("rank_4w") or 99) <= 3 else COLORS["text_dim"]
+        _r12c = "#22c55e" if (s.get("rank_12w") or 99) <= 3 else COLORS["text_dim"]
+        _tbl += (
+            f'<tr style="background:{_bg};">'
+            f'<td style="padding:5px 10px;color:{_rc};font-weight:700;">#{s.get("rank_4w","?")}</td>'
+            f'<td style="padding:5px 10px;color:{COLORS["text"]};">{s["name"]}</td>'
+            f'<td style="padding:5px 10px;color:{COLORS["bloomberg_orange"]};font-weight:700;">{s["ticker"]}</td>'
+            f'<td style="padding:5px 10px;color:{COLORS["text_dim"]};">${s["price"]:,.2f}</td>'
+            f'<td style="padding:5px 10px;color:{_4c};font-weight:600;">{_4s}</td>'
+            f'<td style="padding:5px 10px;color:{_r12c};font-weight:700;">#{s.get("rank_12w","?")}</td>'
+            f'<td style="padding:5px 10px;color:{_12c};">{_12s}</td>'
+            f'<td style="padding:5px 10px;color:{_26c};">{_26s}</td>'
+            f'<td style="padding:5px 10px;">{_badge}</td>'
+            f'</tr>'
+        )
+    _tbl += "</table>"
+    st.markdown(_tbl, unsafe_allow_html=True)
+
+    # ── Quadrant alignment legend ──────────────────────────────────────────────
+    with st.expander("Quadrant Sector Alignment Guide", expanded=False):
+        st.markdown("""
+| Quadrant | Environment | Favored Sectors |
+|---|---|---|
+| **Goldilocks** | Growth ↑, Inflation ↓ | Tech (XLK), Comm (XLC), Discr (XLY), Industrials (XLI), Financials (XLF) |
+| **Reflation** | Growth ↑, Inflation ↑ | Energy (XLE), Materials (XLB), Financials (XLF), Industrials (XLI), Discr (XLY) |
+| **Stagflation** | Growth ↓, Inflation ↑ | Energy (XLE), Materials (XLB), Utilities (XLU), Staples (XLP), Health Care (XLV) |
+| **Deflation** | Growth ↓, Inflation ↓ | Utilities (XLU), Health Care (XLV), Staples (XLP), Real Estate (XLRE) |
+""")
+
+
 def render():
     st.title("Macro Dashboard")
     st.caption("Global macro monitor — Risk-On / Risk-Off workflow")
@@ -1562,7 +1792,7 @@ def render():
         unsafe_allow_html=True,
     )
 
-    (tab1,) = st.tabs(["📊 Macro Dashboard"])
+    tab1, tab_sector = st.tabs(["📊 Macro Dashboard", "🔄 Sector Rotation"])
 
     with tab1:
         # ── Ticker Bar ──
@@ -2117,3 +2347,6 @@ def render():
             if st.button("Retry SPY Gamma", key="retry_gamma"):
                 st.cache_data.clear()
                 st.rerun()
+
+    with tab_sector:
+        _render_sector_rotation_tab(macro["quadrant"], macro["macro_regime"])
