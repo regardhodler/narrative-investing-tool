@@ -79,6 +79,13 @@ def render():
         "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 8 modules before running Portfolio.",
     }
     _sel = st.radio("Engine", _tier_opts, horizontal=True, key="qr_engine")
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.caption(f"💡 {_rec_map.get(_sel, '')}")
 
     # Show gate status

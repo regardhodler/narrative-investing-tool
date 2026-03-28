@@ -180,6 +180,13 @@ def _render_trending_narratives():
         _eng = st.radio("Engine", _eng_opts, horizontal=True, key="disc_trend_engine")
     with col_t:
         _tf = st.radio("Timeframe", ["1W", "1M", "3M"], horizontal=True, key="disc_trend_tf")
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     _use_claude, _model = _eng_map.get(_eng, (False, None))
 

@@ -25,13 +25,15 @@ def _call_xai(
     key = os.getenv("XAI_API_KEY", "")
     if not key:
         raise ValueError("XAI_API_KEY not set")
+    _is_reasoning = "reasoning" in model
     body: dict = {
         "model": model,
         "messages": ([{"role": "system", "content": system}] if system else []) + messages,
         "max_tokens": max_tokens,
-        "temperature": temperature,
     }
-    if json_mode:
+    if not _is_reasoning:
+        body["temperature"] = temperature
+    if json_mode and not _is_reasoning:
         body["response_format"] = {"type": "json_object"}
     resp = requests.post(
         XAI_API_URL,
@@ -39,7 +41,8 @@ def _call_xai(
         json=body,
         timeout=30,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        raise ValueError(f"xAI {resp.status_code}: {resp.text[:500]}")
     return resp.json()["choices"][0]["message"]["content"].strip()
 
 

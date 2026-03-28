@@ -876,6 +876,13 @@ def render():
         if _pi_has_claude:
             _pi_tier_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
         _sel_pi_tier = st.radio("Analysis Engine", _pi_tier_opts, horizontal=True, key="portfolio_intel_engine")
+        st.markdown(
+            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+            'margin-top:-10px;margin-bottom:2px;">'
+            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         st.caption("💡 👑 Highly Regarded Mode strongly recommended — this is the highest-stakes synthesis task (actual position decisions)")
         if not _pi_has_claude:
             st.markdown(

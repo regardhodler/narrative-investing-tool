@@ -1111,7 +1111,7 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: st
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                  "max_tokens": 8192, "temperature": 0.2},
+                  "max_tokens": 8192},
             timeout=60,
         )
         resp.raise_for_status()
@@ -1266,7 +1266,7 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
             "https://api.x.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                  "max_tokens": 4096, "temperature": 0.2},
+                  "max_tokens": 4096},
             timeout=60,
         )
         resp.raise_for_status()
@@ -1418,7 +1418,7 @@ def _call_claude_custom_event_forecast(event_label: str, context_json: str, mode
                 "https://api.x.ai/v1/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
                 json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                      "max_tokens": 600, "temperature": 0.2},
+                      "max_tokens": 600},
                 timeout=30,
             )
             resp.raise_for_status()

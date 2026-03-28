@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "plays_log.json")
+_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "plays_log.json")
 
 
 def append_play(feature: str, engine: str, data: dict, meta: dict | None = None) -> None:

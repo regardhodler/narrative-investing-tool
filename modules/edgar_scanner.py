@@ -96,6 +96,13 @@ def render():
         "Summary Engine", _edgar_tier_opts, horizontal=True, key="edgar_summary_engine",
         help="Standard = Groq (fast) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
     )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     _use_claude_edgar, _edgar_model = _edgar_tier_map[_sel_edgar_tier]
     _edgar_badge = f" {_sel_edgar_tier.split()[0]}"
     st.subheader(f"AI Filing Summary{_edgar_badge}")

@@ -33,7 +33,6 @@ def _fetch_x_feed_via_grok(queries: list, regime_context: str = "") -> str:
             "model": "grok-4-1-fast-reasoning",
             "messages": [{"role": "user", "content": search_prompt}],
             "max_tokens": 400,
-            "temperature": 0.2,
             "search_parameters": {
                 "mode": "on",
                 "sources": [{"type": "x"}],
@@ -415,6 +414,13 @@ def render():
         key="ce_digest_engine",
         horizontal=True,
         label_visibility="collapsed",
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
     )
     _rec_map = {
         "⚡ Groq (fast)": "Daily routine check — fast, free. Use when markets are calm and you just want a quick brief.",

@@ -695,6 +695,13 @@ def render():
         key="wy_narrative_tier",
         help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides phase)  ·  Highly Regarded = Claude Sonnet",
     )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
 
     # ── Guard: nothing entered ────────────────────────────────────────────────
     if not ticker:

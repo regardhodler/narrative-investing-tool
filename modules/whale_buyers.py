@@ -404,6 +404,13 @@ def _render_ai_summary(df: pd.DataFrame):
         _sel_whale_tier = st.radio(
             "Engine", _whale_tier_opts, horizontal=True, key="whale_summary_engine"
         )
+        st.markdown(
+            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+            'margin-top:-10px;margin-bottom:2px;">'
+            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         st.caption("💡 🧠 Regard (Grok 4.1) sufficient — summarisation task")
         _use_cl_whale, _whale_model = _whale_tier_map[_sel_whale_tier]
 

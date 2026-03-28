@@ -1708,6 +1708,13 @@ def render():
         _ced1, _ced2 = st.columns([2, 2])
         with _ced1:
             _ce_tier = st.radio("Engine", _ce_tier_opts, horizontal=True, key="ce_engine_radio")
+            st.markdown(
+                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+                'margin-top:-10px;margin-bottom:2px;">'
+                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '</div>',
+                unsafe_allow_html=True,
+            )
         with _ced2:
             _ce_run = st.button("🗞 Generate News Digest", key="ce_digest_btn", type="primary")
 
@@ -1955,6 +1962,13 @@ def render():
         _sel_rp_tier = st.radio(
             "Engine", _rp_tier_opts, horizontal=True, key="regime_plays_engine_radio",
             help="Sonnet gives the most nuanced regime play synthesis"
+        )
+        st.markdown(
+            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+            'margin-top:-10px;margin-bottom:2px;">'
+            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+            '</div>',
+            unsafe_allow_html=True,
         )
         st.caption("💡 🧠 Grok 4.1 sufficient here — structured JSON output, Groq also works well")
         _use_cl_rp, _cl_rp_model = _rp_tier_map[_sel_rp_tier]

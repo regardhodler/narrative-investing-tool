@@ -57,10 +57,24 @@ def render():
         with _cre1:
             _regime_tier_sel = st.radio("Risk Regime Engine", _cr_tier_opts, horizontal=True,
                                         key="cr_regime_engine", index=_sel_r_idx)
+            st.markdown(
+                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+                'margin-top:-10px;margin-bottom:2px;">'
+                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '</div>',
+                unsafe_allow_html=True,
+            )
             st.caption("💡 🧠 Grok 4.1 sufficient")
         with _cre2:
             _disc_tier_sel   = st.radio("Discovery Engine",   _cr_tier_opts, horizontal=True,
                                         key="cr_disc_engine",  index=_sel_d_idx)
+            st.markdown(
+                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+                'margin-top:-10px;margin-bottom:2px;">'
+                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '</div>',
+                unsafe_allow_html=True,
+            )
             st.caption("💡 🧠 Grok 4.1 sufficient")
 
         # ── Status cards with orange glow ─────────────────────────────────────
@@ -189,6 +203,13 @@ def render():
     _selected_val_tier = st.radio(
         "Engine", _tier_options, horizontal=True, key="val_engine_radio",
         help="Standard = Groq (fast/free) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
     )
     st.caption("💡 👑 Sonnet recommended — synthesises 20+ signals into conviction rating")
     _use_claude, _cl_model = _tier_map[_selected_val_tier]

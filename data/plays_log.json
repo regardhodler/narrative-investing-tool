@@ -10044,5 +10044,94 @@
       "n_positions": 14,
       "verdict": "REDUCE_RISK"
     }
+  },
+  {
+    "id": "20260328_103840_90",
+    "timestamp": "2026-03-28T10:38:40.905872",
+    "feature": "Whale Summary",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "summary": "- **AI and Semiconductor Conviction**: BlackRock massively boosted NVIDIA (+$62.2B, +37.6%), signaling strong AI hardware bets; Vanguard piled into MICRON (+$12.9B, +73.8%) and BROADCOM (+$9.1B, +5.8%), with institutions converging on chips amid AI demand.\n- **Magnificent 7 Leaders**: Alphabet sees broad conviction with Vanguard (+$40.0B +31.9%, +$31.6B +31.4%), BlackRock (+$13.9B +22.2%, +$11.0B +20.2%), and State Street (+$16.6B +29.8%) all adding; Apple draws BlackRock (+$43.7B +24.5%) and Vanguard (+$31.4B +8.8%) firepower.\n- **Healthcare Momentum**: Eli Lilly attracts Vanguard (+$26.3B +42.6%) and State Street (+$9.2B +49.9%), reflecting conviction in GLP-1 drugs and biotech growth.\n- **Mixed Big Tech Signals**: BlackRock added to Microsoft (+$17.8B +7.8%) and Amazon (+$9.7B +8.4%), but Vanguard (-$16.4B -4.5%) and State Street (-$11.8B -10.9%) trimmed MSFT positions.\n- **Notable Trims Signaling Shifts**: Vanguard slashed Oracle (-$13.4B -28.3%), Netflix (-$9.6B -20.8%), and Meta (-$9.5B -6.7%); State Street cut Meta sharply (-$14.7B -15.4%), indicating reduced exposure to enterprise software, streaming, and social media.\n- **Overall Sentiment**: Institutions (BlackRock, Vanguard, State Street) flow heavily into AI/tech giants and pharma (+$300B+ net buys), trimming laggards; bullish on growth leaders, cautious on mature tech subsectors."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260328_104318_55",
+    "timestamp": "2026-03-28T10:43:18.555127",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Utilities",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 2
+        },
+        {
+          "name": "Healthcare",
+          "conviction": 2
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "Strong commodity trend (z=+1.00) and Iran/Hormuz oil supply shock risks embed a risk premium in stagflation.",
+          "conviction": 3
+        },
+        {
+          "ticker": "CVX",
+          "reason": "Major oil producer benefits from elevated inflation and geopolitical tensions amplifying energy prices.",
+          "conviction": 2
+        },
+        {
+          "ticker": "NEE",
+          "reason": "Utilities provide defensive stability with inflation pass-through in neutral rate stagflation regime.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JNJ",
+          "reason": "Healthcare defensive with resilient earnings amid weak consumer sentiment and risk-off volatility.",
+          "conviction": 2
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Copper exposure leverages top-z commodity trend in materials amid supply-driven inflation.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TIP",
+          "reason": "Direct inflation hedge excels in stagflation with persistent supply shocks and neutral core PCE.",
+          "conviction": 3
+        },
+        {
+          "ticker": "HYG",
+          "reason": "Positive HYG/LQD ratio (z=+0.61) signals credit appetite despite elevated system stress.",
+          "conviction": 2
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term Treasuries offer safety in risk-off with high VIX and regional bank stresses.",
+          "conviction": 2
+        }
+      ],
+      "rationale": "In the True Neutral stagflation regime (-0.04 score), strong commodity trends (z=+1.00) and term premium (z=+1.00) favor real assets like energy and materials, while weak equities (z=-1.00) and high VIX demand defensives such as utilities and healthcare. Fed hold (69% prob) sustains neutral rates supporting inflation-hedges like TIP amid Hormuz/geopolitical risks. Risk-off stress (VIX 31, elevated system) prioritizes stable cash flows and contained credit spreads (HYG/LQD up)."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-Off"
+    }
   }
 ]

@@ -856,6 +856,13 @@ def render():
         disabled=not _has_anthropic_ew,
         help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides wave count)  ·  Highly Regarded = Claude Sonnet",
     )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     if not _has_anthropic_ew:
         st.caption("Set XAI_API_KEY for Regard Mode · ANTHROPIC_API_KEY for Highly Regarded.")
 

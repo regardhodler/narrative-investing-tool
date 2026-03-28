@@ -327,6 +327,13 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
         "Engine", _tier_opts, horizontal=True, key="fed_plays_engine_radio",
         help="Sonnet gives the deepest sector/stock synthesis from the rate path"
     )
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("💡 🧠 Grok 4.1 sufficient here — rate scenario → sector mapping is deterministic")
     _use_cl, _cl_model = _tier_map[_sel_tier]
 
@@ -712,6 +719,13 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                 key="fed_engine_radio",
                 help="Groq = free/fast. Regard Mode = Grok 4.1 (~$0.03). Highly Regarded Mode = Claude Sonnet (~$0.12, most accurate).",
             )
+            st.markdown(
+                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+                'margin-top:-10px;margin-bottom:2px;">'
+                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '</div>',
+                unsafe_allow_html=True,
+            )
         _hint = _tier_hints[_selected_tier]
         if _hint:
             st.caption(f"*{_hint}*")
@@ -931,6 +945,13 @@ def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _sel_cc = st.radio("Transmission Engine", _cc_tier_opts, horizontal=True, key="causal_chain_engine")
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("💡 🧠 Grok 4.1 sufficient · 👑 Sonnet for richer second-order effects (feeds into Valuation & Discovery)")
     _use_cl_cc, _cc_model = _cc_tier_map[_sel_cc]
 
@@ -1356,6 +1377,13 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: b
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _sel_bs_tier = st.radio("Black Swan Engine", _bs_tier_opts, horizontal=True, key="black_swan_engine")
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
     st.caption("💡 🧠 Grok 4.1 sufficient here — scenario probability scoring is pattern-based")
     _use_claude_bs, _bs_model = _bs_tier_map[_sel_bs_tier]
 
