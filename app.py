@@ -50,7 +50,7 @@ with st.sidebar:
         [
             "⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events",
             "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
-            "Signal Scorecard", "Backtesting", "My Regarded Portfolio",
+            "Short Squeeze Radar", "Backtesting", "My Regarded Portfolio",
             "Signal Audit", "Export Hub", "Alerts",
         ],
         key="top_module",
@@ -186,7 +186,7 @@ elif top_level == "Discovery":
         from modules.options_activity import render; render()
     elif sub_module == "Valuation":
         from modules.valuation import render; render()
-elif top_level == "Signal Scorecard":
+elif top_level == "Short Squeeze Radar":
     from modules.signal_scorecard import render; render()
 elif top_level == "Backtesting":
     from modules.backtesting import render; render()
