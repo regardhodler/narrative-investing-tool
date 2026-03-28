@@ -481,6 +481,15 @@ def render():
     if _whale_sum:
         signals_text += f"\nInstitutional Whale Activity: {_whale_sum[:500]}"
 
+    # Inject Trending Narratives (market attention signals from Google Trends + news)
+    _tn_val = st.session_state.get("_trending_narratives")
+    if _tn_val:
+        _tn_lines = [
+            f"- {n['narrative']} ({n.get('conviction','')}) — tickers: {', '.join(n.get('tickers', []))}"
+            for n in _tn_val[:3]
+        ]
+        signals_text += "\n\nTRENDING NARRATIVES (market attention signals):\n" + "\n".join(_tn_lines)
+
     # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
     _regime_ctx_val = st.session_state.get("_regime_context")
     if _regime_ctx_val:

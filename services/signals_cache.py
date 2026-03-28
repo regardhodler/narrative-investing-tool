@@ -70,6 +70,10 @@ _SIGNAL_KEYS = [
     "_factor_analysis",
     "_factor_analysis_ts",
     "_factor_analysis_engine",
+    # Trending Narratives (auto-discovery via Google Trends + news)
+    "_trending_narratives",
+    "_trending_narratives_ts",
+    "_trending_narratives_tf",
 ]
 
 

@@ -888,6 +888,15 @@ def analyze_portfolio(
     current_events = (upstream.get("current_events") or "").strip()
     ce_block = f"\nCURRENT EVENTS:\n{current_events[:1000]}" if current_events else ""
 
+    _tn_pi = upstream.get("trending_narratives") or []
+    _tn_block = ""
+    if _tn_pi:
+        _tn_lines = [
+            f"  - {n['narrative']} ({n.get('conviction','')}) — {', '.join(n.get('tickers', []))}"
+            for n in _tn_pi[:3]
+        ]
+        _tn_block = "\n\nTRENDING NARRATIVES (market attention signals):\n" + "\n".join(_tn_lines)
+
     prompt = f"""You are a portfolio risk manager. Analyze these open positions against current macro conditions.
 
 MACRO ENVIRONMENT:
@@ -899,7 +908,7 @@ MACRO ENVIRONMENT:
 - Risk Briefing: {doom_briefing}
 - Institutional Flow: {whale_summary}
 - AI Favored Sectors: {regime_plays_sectors}
-- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
 {fe_block}

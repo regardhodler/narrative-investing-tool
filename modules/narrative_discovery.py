@@ -646,6 +646,16 @@ def render():
                 if _ce_disc:
                     _enrichment_parts.append(f"[Current Events: {_ce_disc[:400]}]")
 
+                # Trending Narratives (from AI trending scanner)
+                _tn_disc = st.session_state.get("_trending_narratives")
+                if _tn_disc:
+                    _tn_lines = [
+                        f"{n['narrative']} ({n.get('conviction','')}) [{n.get('category','')}]"
+                        f" — {', '.join(n.get('tickers', []))}"
+                        for n in _tn_disc[:3]
+                    ]
+                    _enrichment_parts.append("[Trending Narratives: " + " | ".join(_tn_lines) + "]")
+
                 if _enrichment_parts:
                     _signal_summary += " || UPSTREAM AI CONTEXT: " + " | ".join(_enrichment_parts)
                 _scenario_text = _overlay_scenario.strip()
@@ -842,6 +852,10 @@ def render():
                 + '</div>',
                 unsafe_allow_html=True,
             )
+
+    st.markdown("---")
+    st.markdown("#### Ticker & Narrative Research")
+    st.caption("Look up a specific ticker or explore a named narrative")
 
     mode = st.radio("Mode", ["Manual", "Auto — Trending"], horizontal=True)
 
