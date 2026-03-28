@@ -340,6 +340,64 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict:
     }
 
 
+@st.cache_data(ttl=1800)
+def scan_short_interest(tickers: tuple) -> list[dict]:
+    """Fast parallel short interest scan for a universe of tickers.
+
+    Only fetches shortPercentOfFloat + shortRatio + price + inst ownership.
+    Much faster than full score_ticker(). Returns list sorted by squeeze_score desc.
+    """
+    def _fetch(t: str) -> dict:
+        try:
+            info = yf.Ticker(t).info or {}
+            short_pct = info.get("shortPercentOfFloat") or 0.0
+            days_to_cover = info.get("shortRatio") or 0.0
+            price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+            inst_pct = info.get("heldPercentInstitutions") or 0.0
+            name = info.get("shortName") or info.get("longName") or t
+
+            if short_pct >= 0.30:   base = 90
+            elif short_pct >= 0.20: base = 75
+            elif short_pct >= 0.10: base = 60
+            elif short_pct >= 0.05: base = 45
+            else:                   base = 30
+            dtc_bonus = 10 if days_to_cover > 5 else 5 if days_to_cover > 3 else 0
+            squeeze_score = min(100, base + dtc_bonus)
+
+            return {
+                "ticker": t.upper(),
+                "name": name[:35],
+                "short_pct": short_pct,
+                "days_to_cover": days_to_cover,
+                "price": price,
+                "inst_pct": inst_pct,
+                "squeeze_score": squeeze_score,
+                "checks": {
+                    "short_pct": short_pct >= 0.10,
+                    "days_cover": days_to_cover >= 3.0,
+                    "inst_buying": inst_pct >= 0.30,
+                },
+            }
+        except Exception:
+            return {
+                "ticker": t.upper(), "name": t, "short_pct": 0.0,
+                "days_to_cover": 0.0, "price": 0.0, "inst_pct": 0.0,
+                "squeeze_score": 0, "checks": {},
+            }
+
+    results = []
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        futures = {pool.submit(_fetch, t): t for t in tickers}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except Exception:
+                pass
+
+    results.sort(key=lambda x: x["squeeze_score"], reverse=True)
+    return results
+
+
 def score_multiple(tickers: list[str], weights: dict | None = None,
                    progress_callback=None) -> list[dict]:
     """Score multiple tickers. Uses ThreadPoolExecutor(max_workers=3) for parallelism."""
