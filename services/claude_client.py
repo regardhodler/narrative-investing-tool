@@ -174,28 +174,31 @@ Filing text:
         return f"Error generating summary: {e}"
 
 
-def group_tickers_by_narrative(tickers_json: str) -> list[dict]:
+def group_tickers_by_narrative(tickers_json: str, regime_context: str = "") -> list[dict]:
     """Group a list of trending tickers into narrative themes via Groq.
 
     Input: JSON string of [{symbol, name}, ...]
-    Returns list of dicts: [{narrative, description, tickers: [{symbol, name}]}, ...]
+    Returns list of dicts: [{narrative, description, tickers, conviction, regime_alignment, rationale}, ...]
     """
-    result = _group_tickers_cached(tickers_json)
+    result = _group_tickers_cached(tickers_json, regime_context)
     if not result:
-        # Clear only this function's cache so failures don't stick for 1hr
         _group_tickers_cached.clear()
     return result
 
 
 @st.cache_data(ttl=3600)
-def _group_tickers_cached(tickers_json: str) -> list[dict]:
+def _group_tickers_cached(tickers_json: str, regime_context: str = "") -> list[dict]:
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
         st.warning("GROQ_API_KEY not set — cannot group tickers by narrative.")
         return []
 
-    prompt = f"""You are a financial analyst. Given these trending tickers, group them into 3-6 investment narrative themes.
+    _regime_block = (
+        f"\nCURRENT MACRO REGIME:\n{regime_context}\n"
+        if regime_context else ""
+    )
 
+    prompt = f"""You are a financial analyst. Given these trending tickers, group them into 3-6 investment narrative themes.{_regime_block}
 The list may include stocks, commodity futures (tickers ending in =F), bond ETFs, and currency ETFs. Create cross-asset themes where appropriate (e.g. "Inflation Hedge" grouping gold futures with TIPS ETFs, or "Risk-Off Flight" grouping treasuries with yen).
 
 Tickers:
@@ -203,19 +206,25 @@ Tickers:
 
 For each narrative group, pick a short punchy title (e.g. "AI Infrastructure Boom", "Rate Cut Beneficiaries", "Energy Transition", "Commodity Super-Cycle", "Safe Haven Rotation").
 
+{"Also assess each group against the current macro regime: conviction level and whether it aligns with or contradicts the regime." if regime_context else ""}
+
 Return ONLY valid JSON (no markdown fences) — a list of objects:
 [
   {{
     "narrative": "Theme Title",
     "description": "One sentence explaining why these assets are grouped together",
-    "tickers": ["SYM1", "SYM2"]
+    "tickers": ["SYM1", "SYM2"],
+    "conviction": "HIGH" | "MEDIUM" | "LOW",
+    "regime_alignment": "aligned" | "contrarian" | "neutral",
+    "rationale": "One sentence on why this theme is or isn't consistent with current macro conditions"
   }}
 ]
 
 Rules:
 - Every ticker must appear in exactly one group
 - If a ticker doesn't fit a clear theme, put it in a "Market Movers" catch-all group
-- Sort groups so the strongest/most actionable narrative is first"""
+- Sort groups so the strongest/most actionable narrative is first
+- conviction and regime_alignment are required fields (use "MEDIUM" and "neutral" if macro context is unavailable)"""
 
     try:
         resp = requests.post(

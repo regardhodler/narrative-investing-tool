@@ -924,13 +924,20 @@ def _render_auto():
         # Build a lookup from symbol → item
         ticker_lookup = {item["symbol"]: item for item in yf_trending}
 
-        # Group tickers by narrative theme via AI
+        # Group tickers by narrative theme via AI (with regime context if available)
         import json as _json
         tickers_for_grouping = _json.dumps(
             [{"symbol": t["symbol"], "name": t["name"]} for t in yf_trending]
         )
-        with st.spinner("Grouping tickers by narrative..."):
-            narrative_groups = group_tickers_by_narrative(tickers_for_grouping)
+        _rc_auto = st.session_state.get("_regime_context") or {}
+        _regime_ctx_str = ""
+        if _rc_auto:
+            _regime_ctx_str = (
+                f"Regime: {_rc_auto.get('regime','')} (score {_rc_auto.get('score', 0.0):+.2f})"
+                f" | Quadrant: {_rc_auto.get('quadrant','')}"
+            )
+        with st.spinner("Grouping tickers by narrative + scoring regime fit..."):
+            narrative_groups = group_tickers_by_narrative(tickers_for_grouping, _regime_ctx_str)
 
         from datetime import datetime
         st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
@@ -943,6 +950,27 @@ def _render_auto():
                 description = group.get("description", "")
                 group_tickers = group.get("tickers", [])
 
+                # Conviction + regime alignment badges
+                _conv = group.get("conviction", "")
+                _align = group.get("regime_alignment", "")
+                _rationale = group.get("rationale", "")
+                _conv_color = {"HIGH": "#22c55e", "MEDIUM": "#f59e0b", "LOW": "#ef4444"}.get(_conv, "#64748b")
+                _align_color = {"aligned": "#22c55e", "contrarian": "#ef4444", "neutral": "#94a3b8"}.get(_align, "#64748b")
+                _align_icon = {"aligned": "✓", "contrarian": "✗", "neutral": "~"}.get(_align, "")
+                _badges_html = ""
+                if _conv:
+                    _badges_html += (
+                        f'<span style="background:{_conv_color}22;color:{_conv_color};'
+                        f'font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;'
+                        f'letter-spacing:0.08em;margin-right:6px;">{_conv}</span>'
+                    )
+                if _align:
+                    _badges_html += (
+                        f'<span style="background:{_align_color}22;color:{_align_color};'
+                        f'font-size:10px;font-weight:700;padding:2px 7px;border-radius:3px;'
+                        f'letter-spacing:0.08em;">{_align_icon} {_align.upper()}</span>'
+                    )
+
                 # Narrative header
                 st.markdown(
                     f'<div style="background:{COLORS["surface"]}; padding:12px 16px; '
@@ -950,8 +978,11 @@ def _render_auto():
                     f'margin:16px 0 8px 0;">'
                     f'<div style="color:{COLORS["accent"]}; font-size:18px; font-weight:700;">'
                     f'{narrative_title}</div>'
-                    f'<div style="color:{COLORS["text_dim"]}; font-size:13px; margin-top:2px;">'
-                    f'{description}</div></div>',
+                    f'<div style="margin:4px 0;">{_badges_html}</div>'
+                    f'<div style="color:{COLORS["text_dim"]}; font-size:13px; margin-top:4px;">'
+                    f'{description}</div>'
+                    + (f'<div style="color:#64748b; font-size:11px; margin-top:3px; font-style:italic;">{_rationale}</div>' if _rationale else "")
+                    + '</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1051,60 +1082,6 @@ def _render_auto():
     # --- Trending search interest (auto, no click needed) ---
     if yf_trending:
         _render_trending_interest(yf_trending)
-
-    # --- Google Trends supplement (filtered for financial topics) ---
-    with st.expander("Google Trends (filtered)", expanded=False):
-        try:
-            with st.spinner("Fetching Google Trends..."):
-                topics = get_trending_searches()
-        except Exception:
-            st.caption("Google Trends unavailable — service may be temporarily down.")
-            topics = []
-
-        if not topics:
-            st.caption("No trending topics from Google Trends.")
-        else:
-            st.caption(
-                f"{len(topics)} trending topics · filtering for financial relevance..."
-            )
-            classified = []
-            for topic in topics[:20]:
-                if any(kw in topic.lower() for kw in _NON_FINANCIAL_KEYWORDS):
-                    continue
-                result = classify_narrative(topic)
-                if result.get("market_relevant"):
-                    result["topic"] = topic
-                    classified.append(result)
-
-            if not classified:
-                st.info("No market-relevant narratives in current Google Trends.")
-            else:
-                st.subheader(f"{len(classified)} Market-Relevant Narratives")
-                cols = st.columns(3)
-                for i, item in enumerate(classified):
-                    col = cols[i % 3]
-                    with col:
-                        with st.container(border=True):
-                            st.markdown(f"**{item['topic']}**")
-                            st.caption(item.get("sector", ""))
-                            st.markdown(
-                                item.get("thesis", ""), unsafe_allow_html=False
-                            )
-                            tickers = item.get("suggested_tickers", [])
-                            if tickers:
-                                st.code(", ".join(tickers), language=None)
-                            col_a, col_b = st.columns(2)
-                            with col_a:
-                                if st.button("Track", key=f"gt_track_{i}"):
-                                    set_narrative(item["topic"])
-                                    st.rerun()
-                            with col_b:
-                                if tickers and st.button(
-                                    tickers[0], key=f"gt_ticker_{i}"
-                                ):
-                                    set_narrative(item["topic"])
-                                    set_ticker(tickers[0])
-                                    st.rerun()
 
 
 def _render_manual():
