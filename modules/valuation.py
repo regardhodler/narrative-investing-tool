@@ -25,6 +25,50 @@ def render():
         "👑 Highly Regarded Mode": '<span style="font-size:11px;background:linear-gradient(90deg,#c89b3c,#f0d060);color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">👑 Sonnet</span>',
     }
 
+    # ── Resolve ticker + signals first so DCF can show at the top ─────────────
+    ticker = get_ticker()
+    if not ticker:
+        st.info("Select a ticker in Discovery to view AI valuation.")
+        return
+
+    with st.spinner("Collecting market signals..."):
+        signals = _collect_signals(ticker)
+
+    if not signals:
+        st.warning("Could not collect enough data for valuation.")
+        return
+
+    from datetime import datetime
+
+    # ── Ticker info bar ────────────────────────────────────────────────────────
+    _meta = signals.get("meta", {})
+    _price_data = signals.get("price") or {}
+    _company_name = _meta.get("name", ticker)
+    _sector = _meta.get("sector", "")
+    _current_price = _price_data.get("current")
+    _1y_return = _price_data.get("period_return_pct")
+    _price_str = f"${_current_price:,.2f}" if _current_price else "—"
+    _ret_color = "#22c55e" if (_1y_return or 0) >= 0 else "#ef4444"
+    _ret_str = f"{_1y_return:+.1f}% (1Y)" if _1y_return is not None else ""
+    st.markdown(
+        f'<div style="border:1px solid #1e293b;border-radius:8px;padding:10px 18px;'
+        f'margin-bottom:10px;background:#0f172a;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">'
+        f'<span style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:18px;'
+        f'font-weight:700;color:#f1f5f9;">{_company_name}</span>'
+        f'<span style="font-size:12px;color:#64748b;font-weight:600;letter-spacing:0.06em;">{ticker.upper()}</span>'
+        f'<span style="color:#334155;">·</span>'
+        f'<span style="font-size:16px;font-weight:700;color:#e2e8f0;">{_price_str}</span>'
+        + (f'<span style="font-size:12px;font-weight:600;color:{_ret_color};">{_ret_str}</span>' if _ret_str else "")
+        + (f'<span style="font-size:11px;color:#475569;">{_sector}</span>' if _sector else "")
+        + f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 24H")
+
+    # ── DCF Valuation — shown first ────────────────────────────────────────────
+    _dcf_scenarios = _render_dcf(ticker)
+    st.markdown("---")
+
     # ── Context Readiness ──────────────────────────────────────────────────────
     _regime_tier = st.session_state.get("_regime_plays_tier")
     _disc_tier   = st.session_state.get("_discovery_tier")
@@ -225,45 +269,6 @@ def render():
         f'font-weight:700;margin-bottom:4px;">AI VALUATION &amp; RECOMMENDATION{_badge_html}</h2>',
         unsafe_allow_html=True,
     )
-
-    ticker = get_ticker()
-    if not ticker:
-        st.info("Select a ticker in Discovery to view AI valuation.")
-        return
-
-    with st.spinner("Collecting market signals..."):
-        signals = _collect_signals(ticker)
-
-    if not signals:
-        st.warning("Could not collect enough data for valuation.")
-        return
-
-    from datetime import datetime
-
-    # ── Ticker info bar ────────────────────────────────────────────────────────
-    _meta = signals.get("meta", {})
-    _price_data = signals.get("price") or {}
-    _company_name = _meta.get("name", ticker)
-    _sector = _meta.get("sector", "")
-    _current_price = _price_data.get("current")
-    _1y_return = _price_data.get("period_return_pct")
-    _price_str = f"${_current_price:,.2f}" if _current_price else "—"
-    _ret_color = "#22c55e" if (_1y_return or 0) >= 0 else "#ef4444"
-    _ret_str = f"{_1y_return:+.1f}% (1Y)" if _1y_return is not None else ""
-    st.markdown(
-        f'<div style="border:1px solid #1e293b;border-radius:8px;padding:10px 18px;'
-        f'margin-bottom:10px;background:#0f172a;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">'
-        f'<span style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:18px;'
-        f'font-weight:700;color:#f1f5f9;">{_company_name}</span>'
-        f'<span style="font-size:12px;color:#64748b;font-weight:600;letter-spacing:0.06em;">{ticker.upper()}</span>'
-        f'<span style="color:#334155;">·</span>'
-        f'<span style="font-size:16px;font-weight:700;color:#e2e8f0;">{_price_str}</span>'
-        + (f'<span style="font-size:12px;font-weight:600;color:{_ret_color};">{_ret_str}</span>' if _ret_str else "")
-        + (f'<span style="font-size:11px;color:#475569;">{_sector}</span>' if _sector else "")
-        + f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 24H")
 
     # ── Data Quality Warning ───────────────────────────────────────────────────
     _dq_missing, _dq_stale = [], []
@@ -687,10 +692,6 @@ def render():
     _render_rating_banner(result)
     _render_signal_scorecard(signals)
     _render_analysis(result)
-
-    # DCF Valuation
-    st.markdown("---")
-    _dcf_scenarios = _render_dcf(ticker)
 
     # Kelly Position Sizing
     if _dcf_scenarios and result:
