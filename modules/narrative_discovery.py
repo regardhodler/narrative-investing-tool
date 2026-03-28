@@ -884,6 +884,19 @@ def _fetch_curated_assets(ticker_dict: dict[str, str], asset_class: str) -> list
 
 
 def _render_auto():
+    import os as _os
+    _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
+    _AUTO_ENGINE_OPTIONS = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_claude else ["⚡ Groq"]
+    _AUTO_ENGINE_MAP = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+    _auto_engine_sel = st.radio(
+        "Engine", _AUTO_ENGINE_OPTIONS, horizontal=True, key="auto_trend_engine"
+    )
+    _auto_use_claude, _auto_model = _AUTO_ENGINE_MAP[_auto_engine_sel]
+
     # --- Asset class filter ---
     selected_classes = st.multiselect(
         "Asset Classes", list(ASSET_CLASSES.keys()),
@@ -937,10 +950,19 @@ def _render_auto():
                 f" | Quadrant: {_rc_auto.get('quadrant','')}"
             )
         with st.spinner("Grouping tickers by narrative + scoring regime fit..."):
-            narrative_groups = group_tickers_by_narrative(tickers_for_grouping, _regime_ctx_str)
+            narrative_groups = group_tickers_by_narrative(
+                tickers_for_grouping, _regime_ctx_str, _auto_use_claude, _auto_model
+            )
 
         from datetime import datetime
-        st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 1H")
+        _engine_badge_color = {"⚡ Groq": "#f59e0b", "🧠 Regard Mode": "#3b82f6", "👑 Highly Regarded Mode": "#a855f7"}.get(_auto_engine_sel, "#64748b")
+        st.markdown(
+            f'<span style="color:#475569;font-size:11px;">LAST UPDATE {datetime.now().strftime("%Y-%m-%d %H:%M")} · CACHE 1H</span>'
+            f'&nbsp;&nbsp;<span style="background:{_engine_badge_color}22;color:{_engine_badge_color};'
+            f'font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;letter-spacing:0.06em;">'
+            f'{_auto_engine_sel}</span>',
+            unsafe_allow_html=True,
+        )
 
         if narrative_groups:
             st.subheader(f"{len(yf_trending)} Trending Tickers · {len(narrative_groups)} Narratives")

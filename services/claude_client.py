@@ -174,25 +174,30 @@ Filing text:
         return f"Error generating summary: {e}"
 
 
-def group_tickers_by_narrative(tickers_json: str, regime_context: str = "") -> list[dict]:
-    """Group a list of trending tickers into narrative themes via Groq.
+def group_tickers_by_narrative(
+    tickers_json: str,
+    regime_context: str = "",
+    use_claude: bool = False,
+    model: str | None = None,
+) -> list[dict]:
+    """Group a list of trending tickers into narrative themes.
 
     Input: JSON string of [{symbol, name}, ...]
     Returns list of dicts: [{narrative, description, tickers, conviction, regime_alignment, rationale}, ...]
     """
-    result = _group_tickers_cached(tickers_json, regime_context)
+    result = _group_tickers_cached(tickers_json, regime_context, use_claude, model or "")
     if not result:
         _group_tickers_cached.clear()
     return result
 
 
 @st.cache_data(ttl=3600)
-def _group_tickers_cached(tickers_json: str, regime_context: str = "") -> list[dict]:
-    api_key = os.getenv("GROQ_API_KEY", "")
-    if not api_key:
-        st.warning("GROQ_API_KEY not set — cannot group tickers by narrative.")
-        return []
-
+def _group_tickers_cached(
+    tickers_json: str,
+    regime_context: str = "",
+    use_claude: bool = False,
+    model: str = "",
+) -> list[dict]:
     _regime_block = (
         f"\nCURRENT MACRO REGIME:\n{regime_context}\n"
         if regime_context else ""
@@ -226,26 +231,47 @@ Rules:
 - Sort groups so the strongest/most actionable narrative is first
 - conviction and regime_alignment are required fields (use "MEDIUM" and "neutral" if macro context is unavailable)"""
 
-    try:
-        resp = requests.post(
-            GROQ_API_URL,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 1500,
-                "temperature": 0.3,
-            },
-            timeout=20,
-        )
-        resp.raise_for_status()
-        text = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        st.warning(f"Narrative grouping failed (API error): {e}")
-        return []
+    text = ""
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            _model = model or "claude-haiku-4-5-20251001"
+            msg = client.messages.create(
+                model=_model,
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
+        except Exception as e:
+            st.warning(f"Narrative grouping failed (Claude error): {e}")
+            return []
+    else:
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            st.warning("GROQ_API_KEY not set — cannot group tickers by narrative.")
+            return []
+        try:
+            resp = requests.post(
+                GROQ_API_URL,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1500,
+                    "temperature": 0.3,
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            st.warning(f"Narrative grouping failed (API error): {e}")
+            return []
 
     if text.startswith("```"):
         text = text.split("\n", 1)[1]
