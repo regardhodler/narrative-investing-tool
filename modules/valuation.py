@@ -586,6 +586,11 @@ def render():
             f"{str(_fd['summary'])[:600]}"
         )
 
+    # Inject Sector Rotation context (live momentum + regime alignment for this ticker's sector)
+    _sr_ctx = signals.get("sector_rotation")
+    if _sr_ctx:
+        signals_text += f"\n{_sr_ctx}"
+
     # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
     _regime_ctx_val = st.session_state.get("_regime_context")
     if _regime_ctx_val:
@@ -874,6 +879,18 @@ def _collect_signals(ticker: str) -> dict | None:
 
     # 10. Price action: Elliott Wave + Wyckoff (lightweight, cached)
     signals["price_action"] = _get_price_action_signal(ticker)
+
+    # 11. Sector rotation context (live momentum + regime alignment)
+    try:
+        from services.sector_rotation import get_sector_context_str
+        _quadrant_v = st.session_state.get("_regime_context", {}).get("quadrant", "")
+        _ticker_sector_v = signals.get("fundamentals", {}).get("sector", "") or ""
+        if _quadrant_v:
+            signals["sector_rotation"] = get_sector_context_str(_ticker_sector_v, _quadrant_v)
+        else:
+            signals["sector_rotation"] = None
+    except Exception:
+        signals["sector_rotation"] = None
 
     return signals
 

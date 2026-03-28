@@ -305,6 +305,44 @@ def _render_trending_narratives():
 def render():
     st.header("NARRATIVE DISCOVERY")
 
+    # ── Sector Rotation Strip ──────────────────────────────────────────────
+    try:
+        from services.sector_rotation import get_sector_momentum, QUADRANT_ALIGNMENT
+        from utils.theme import COLORS as _DISC_COLORS
+        _quadrant_disc = st.session_state.get("_regime_context", {}).get("quadrant", "")
+        _sectors_disc  = get_sector_momentum()
+        if _sectors_disc and _quadrant_disc:
+            _aln_disc = set(QUADRANT_ALIGNMENT.get(_quadrant_disc, []))
+            _top_disc  = _sectors_disc[:5]
+            _cells_disc = []
+            for _s in _top_disc:
+                _ret = _s.get("ret_4w")
+                _ret_str = f"{_ret:+.1f}%" if _ret is not None else "—"
+                _is_aln = _s["ticker"] in _aln_disc
+                _ret_col = "#22c55e" if (_ret or 0) >= 0 else "#ef4444"
+                _border  = "1px solid #22c55e66" if _is_aln else "1px solid #1e293b"
+                _cells_disc.append(
+                    f'<div style="display:inline-block;border:{_border};border-radius:4px;'
+                    f'padding:4px 10px;margin-right:6px;background:#0f172a;">'
+                    f'<span style="font-size:11px;font-weight:700;color:#f97316;">{_s["ticker"]}</span>'
+                    f'<span style="font-size:10px;color:#64748b;"> {_s["name"]}</span>'
+                    f'<span style="font-size:11px;color:{_ret_col};font-weight:600;margin-left:4px;">{_ret_str}</span>'
+                    + (' <span style="font-size:9px;color:#22c55e;">✓</span>' if _is_aln else '')
+                    + '</div>'
+                )
+            st.markdown(
+                f'<div style="margin-bottom:10px;">'
+                f'<span style="font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                f'margin-right:8px;">🔄 TOP SECTORS</span>'
+                + "".join(_cells_disc)
+                + f'<span style="font-size:10px;color:#334155;margin-left:6px;">'
+                f'{_quadrant_disc} · ✓ regime-aligned</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
+
     # ── Trending Narratives (AI-powered) ──────────────────────────────────
     _render_trending_narratives()
 

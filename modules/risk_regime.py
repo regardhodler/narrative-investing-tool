@@ -1483,72 +1483,11 @@ def _render_signals_table(signals: list[dict]):
 # ─────────────────────────────────────────────
 
 # ── Sector Rotation Monitor ───────────────────────────────────────────────────
-
-_SECTOR_ETFS = {
-    "XLK":  "Technology",
-    "XLV":  "Health Care",
-    "XLE":  "Energy",
-    "XLF":  "Financials",
-    "XLI":  "Industrials",
-    "XLC":  "Communication",
-    "XLP":  "Consumer Staples",
-    "XLY":  "Consumer Discr.",
-    "XLU":  "Utilities",
-    "XLB":  "Materials",
-    "XLRE": "Real Estate",
-}
-
-# Sectors historically favored in each Dalio quadrant
-_QUADRANT_SECTOR_ALIGNMENT = {
-    "Goldilocks":  ["XLK", "XLC", "XLY", "XLI", "XLF"],
-    "Reflation":   ["XLE", "XLB", "XLF", "XLI", "XLY"],
-    "Stagflation": ["XLE", "XLB", "XLU", "XLP", "XLV"],
-    "Deflation":   ["XLU", "XLV", "XLP", "XLRE"],
-}
-
-
-@st.cache_data(ttl=3600)
-def _fetch_sector_momentum() -> list[dict]:
-    """Download 6-month weekly closes for all 11 SPDR sector ETFs.
-    Returns list sorted by 4W momentum descending."""
-    tickers = list(_SECTOR_ETFS.keys())
-    try:
-        raw = yf.download(tickers, period="6mo", interval="1wk",
-                          progress=False, auto_adjust=True)
-        if raw is None or raw.empty:
-            return []
-        close = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
-        results = []
-        for t in tickers:
-            if t not in close.columns:
-                continue
-            s = close[t].dropna()
-            if len(s) < 5:
-                continue
-            price = float(s.iloc[-1])
-            ret_4w  = (price / float(s.iloc[-5])  - 1) * 100 if len(s) >= 5  else None
-            ret_12w = (price / float(s.iloc[-13]) - 1) * 100 if len(s) >= 13 else None
-            ret_26w = (price / float(s.iloc[0])   - 1) * 100
-            results.append({
-                "ticker": t,
-                "name": _SECTOR_ETFS[t],
-                "price": round(price, 2),
-                "ret_4w":  round(ret_4w,  2) if ret_4w  is not None else None,
-                "ret_12w": round(ret_12w, 2) if ret_12w is not None else None,
-                "ret_26w": round(ret_26w, 2),
-            })
-        # Rank by 4W and 12W (1 = best)
-        v4  = sorted([r for r in results if r["ret_4w"]  is not None], key=lambda x: x["ret_4w"],  reverse=True)
-        v12 = sorted([r for r in results if r["ret_12w"] is not None], key=lambda x: x["ret_12w"], reverse=True)
-        r4m  = {r["ticker"]: i + 1 for i, r in enumerate(v4)}
-        r12m = {r["ticker"]: i + 1 for i, r in enumerate(v12)}
-        for r in results:
-            r["rank_4w"]  = r4m.get(r["ticker"])
-            r["rank_12w"] = r12m.get(r["ticker"])
-        results.sort(key=lambda x: (x["ret_4w"] or -999), reverse=True)
-        return results
-    except Exception:
-        return []
+from services.sector_rotation import (
+    SECTOR_ETFS as _SECTOR_ETFS,
+    QUADRANT_ALIGNMENT as _QUADRANT_SECTOR_ALIGNMENT,
+    get_sector_momentum as _fetch_sector_momentum,
+)
 
 
 def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
@@ -1699,6 +1638,29 @@ def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
         )
     _tbl += "</table>"
     st.markdown(_tbl, unsafe_allow_html=True)
+
+    # ── ETF reference cards ────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'margin:18px 0 6px 0;">SECTOR ETF REFERENCE</div>',
+        unsafe_allow_html=True,
+    )
+    _etf_cols = st.columns(4)
+    _etf_items = list(_SECTOR_ETFS.items())
+    for _i, (_etf, (_name, _desc)) in enumerate(_etf_items):
+        _is_aln = _etf in aligned
+        _border_col = "#22c55e44" if _is_aln else "#1e293b"
+        _etf_cols[_i % 4].markdown(
+            f'<div style="border:1px solid {_border_col};border-radius:6px;'
+            f'padding:7px 10px;background:#0f172a;margin-bottom:6px;">'
+            f'<span style="font-size:13px;font-weight:700;color:{COLORS["bloomberg_orange"]};">{_etf}</span>'
+            + (' <span style="font-size:9px;color:#22c55e;font-weight:700;">✓</span>' if _is_aln else '')
+            + f'<div style="font-size:11px;color:#f1f5f9;margin:1px 0;">{_name}</div>'
+            f'<div style="font-size:10px;color:#475569;">{_desc}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    st.caption("Green border = favored in current regime quadrant.")
 
     # ── Quadrant alignment legend ──────────────────────────────────────────────
     with st.expander("Quadrant Sector Alignment Guide", expanded=False):

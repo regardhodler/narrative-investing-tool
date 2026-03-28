@@ -967,6 +967,11 @@ def render():
                     "congress_bias": st.session_state.get("_congress_bias") or {},
                     "macro_synopsis": st.session_state.get("_macro_synopsis") or {},
                 }
+                try:
+                    from services.sector_rotation import get_sector_context_str as _sr_ctx_fn
+                    _upstream["sector_rotation"] = _sr_ctx_fn("", _rc.get("quadrant", ""))
+                except Exception:
+                    _upstream["sector_rotation"] = ""
                 _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _pi_model = None
                 if _sel_pi_tier == "🧠 Regard Mode":
