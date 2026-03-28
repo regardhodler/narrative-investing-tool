@@ -854,11 +854,24 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["profile"] = None
 
-    # 8. Cross-module: institutional 13F flow + stress signals
+    # 8. MD&A Tone (from session cache — populated by EDGAR Scanner)
+    _cached_mda = st.session_state.get("_mda_sentiment")
+    if _cached_mda and _cached_mda.get("ticker", "").upper() == ticker.upper():
+        signals["mda_tone"] = {
+            "tone": _cached_mda.get("tone"),
+            "tone_score": _cached_mda.get("tone_score"),
+            "forward_outlook": _cached_mda.get("forward_outlook"),
+            "summary": _cached_mda.get("summary", ""),
+            "date": _cached_mda.get("date", ""),
+        }
+    else:
+        signals["mda_tone"] = None
+
+    # 9. Cross-module: institutional 13F flow + stress signals
     signals["whale"] = _collect_whale_signals(ticker)
     signals["stress"] = _collect_stress_signals()
 
-    # 9. Price action: Elliott Wave + Wyckoff (lightweight, cached)
+    # 10. Price action: Elliott Wave + Wyckoff (lightweight, cached)
     signals["price_action"] = _get_price_action_signal(ticker)
 
     return signals

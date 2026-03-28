@@ -1,7 +1,8 @@
 import streamlit as st
-from services.sec_client import get_filings_by_ticker, get_company_info, fetch_filing_text
-from services.claude_client import summarize_filing
+from services.sec_client import get_filings_by_ticker, get_company_info, fetch_filing_text, get_latest_annual_filing, extract_mda_text
+from services.claude_client import summarize_filing, analyze_mda_sentiment
 from utils.session import get_ticker, set_ticker
+from utils.theme import COLORS
 
 
 def render():
@@ -168,3 +169,114 @@ def render():
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    # --- MD&A Tone Sentiment ---
+    st.markdown("---")
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">MD&A TONE ANALYSIS</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("AI reads the Management's Discussion & Analysis from the latest 10-K and scores management tone: confident vs cautious vs defensive. Tone shifts quarter-over-quarter are predictive.")
+
+    _mda_has_xai = bool(__import__("os").getenv("XAI_API_KEY"))
+    _mda_has_claude = bool(__import__("os").getenv("ANTHROPIC_API_KEY"))
+    _mda_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _mda_has_xai else []) + (["👑 Highly Regarded Mode"] if _mda_has_claude else [])
+    _mda_tier_map = {
+        "⚡ Groq": (False, None),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+    _sel_mda_tier = st.radio("Analysis Engine", _mda_tier_opts, horizontal=True, key="mda_engine")
+    st.markdown(
+        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-10px;margin-bottom:2px;">'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+    _use_claude_mda, _mda_model = _mda_tier_map[_sel_mda_tier]
+
+    if st.button("Analyze MD&A Tone", type="primary", key="mda_analyze_btn"):
+        with st.spinner("Fetching latest 10-K from SEC EDGAR..."):
+            filing_meta = get_latest_annual_filing(ticker_input)
+
+        if not filing_meta:
+            st.warning(f"No 10-K filing found for {ticker_input}.")
+        else:
+            st.caption(f"Using 10-K filed {filing_meta['date']}")
+            with st.spinner("Extracting MD&A section..."):
+                full_text = fetch_filing_text(filing_meta["url"], max_chars=80000)
+                mda = extract_mda_text(full_text)
+
+            if len(mda) < 200:
+                st.warning("Could not extract MD&A section — filing may be in XBRL/iXBRL format.")
+            else:
+                with st.spinner("Scoring management tone..."):
+                    result = analyze_mda_sentiment(mda, company_info["name"],
+                                                   use_claude=_use_claude_mda, model=_mda_model)
+                st.session_state["_mda_sentiment"] = {**result, "ticker": ticker_input,
+                                                       "date": filing_meta["date"]}
+
+    mda_result = st.session_state.get("_mda_sentiment")
+    if mda_result and mda_result.get("ticker") == ticker_input:
+        _render_mda_result(mda_result)
+
+
+def _render_mda_result(r: dict) -> None:
+    """Render MD&A tone analysis result card."""
+    tone = r.get("tone", "neutral")
+    score = r.get("tone_score", 50)
+    outlook = r.get("forward_outlook", "mixed")
+    summary = r.get("summary", "")
+    bullish = r.get("bullish_phrases", [])
+    bearish = r.get("bearish_phrases", [])
+    filing_date = r.get("date", "")
+
+    tone_colors = {
+        "confident": COLORS.get("positive", "#22c55e"),
+        "cautious": COLORS.get("yellow", "#f59e0b"),
+        "defensive": COLORS.get("negative", "#ef4444"),
+        "neutral": COLORS.get("text_dim", "#64748b"),
+    }
+    outlook_colors = {"positive": "#22c55e", "mixed": "#f59e0b", "negative": "#ef4444"}
+    tone_color = tone_colors.get(tone, "#94a3b8")
+    outlook_color = outlook_colors.get(outlook, "#94a3b8")
+
+    # Score bar
+    bar_pct = score
+    bar_color = "#22c55e" if score >= 65 else "#f59e0b" if score >= 40 else "#ef4444"
+
+    st.markdown(
+        f'<div style="border:1px solid {tone_color}44;border-left:4px solid {tone_color};'
+        f'border-radius:6px;padding:14px 18px;background:#1A1F2E;margin:8px 0;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
+        f'<span style="font-size:12px;color:#64748b;letter-spacing:0.06em;">10-K MD&A TONE · {filing_date}</span>'
+        f'<span style="font-size:13px;font-weight:700;color:{tone_color};text-transform:uppercase;">{tone}</span>'
+        f'</div>'
+        f'<div style="margin-bottom:8px;">'
+        f'<div style="font-size:10px;color:#64748b;margin-bottom:3px;">CONFIDENCE SCORE {score}/100</div>'
+        f'<div style="background:#0d1117;border-radius:3px;height:6px;">'
+        f'<div style="background:{bar_color};width:{bar_pct}%;height:6px;border-radius:3px;"></div>'
+        f'</div></div>'
+        f'<div style="margin-bottom:8px;">'
+        f'<span style="font-size:11px;color:#64748b;">FORWARD OUTLOOK: </span>'
+        f'<span style="font-size:11px;font-weight:700;color:{outlook_color};text-transform:uppercase;">{outlook}</span>'
+        f'</div>'
+        f'<div style="font-size:13px;color:#cbd5e1;line-height:1.6;margin-bottom:10px;">{summary}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if bullish or bearish:
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            if bullish:
+                st.markdown(f'<div style="font-size:11px;color:#22c55e;font-weight:700;margin-bottom:4px;">BULLISH LANGUAGE</div>', unsafe_allow_html=True)
+                for phrase in bullish[:3]:
+                    st.markdown(f'<div style="font-size:11px;color:#94a3b8;border-left:2px solid #22c55e44;padding-left:8px;margin:3px 0;">&ldquo;{phrase}&rdquo;</div>', unsafe_allow_html=True)
+        with bc2:
+            if bearish:
+                st.markdown(f'<div style="font-size:11px;color:#ef4444;font-weight:700;margin-bottom:4px;">CAUTIOUS LANGUAGE</div>', unsafe_allow_html=True)
+                for phrase in bearish[:3]:
+                    st.markdown(f'<div style="font-size:11px;color:#94a3b8;border-left:2px solid #ef444444;padding-left:8px;margin:3px 0;">&ldquo;{phrase}&rdquo;</div>', unsafe_allow_html=True)

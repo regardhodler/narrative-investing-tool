@@ -220,6 +220,101 @@ Filing text:
         return f"Error generating summary: {e}"
 
 
+@st.cache_data(ttl=86400)
+def analyze_mda_sentiment(
+    mda_text: str,
+    company: str,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict:
+    """Score management tone in a 10-K MD&A section.
+
+    Returns dict with:
+        tone            — "confident" | "cautious" | "defensive" | "neutral"
+        tone_score      — 0-100 (100 = very confident, 0 = very defensive)
+        forward_outlook — "positive" | "mixed" | "negative"
+        bullish_phrases — list of up to 3 confident/bullish language samples
+        bearish_phrases — list of up to 3 cautious/defensive language samples
+        summary         — 2-sentence narrative of the overall management tone
+    """
+    import json as _json
+    import re as _re
+
+    if not mda_text or len(mda_text) < 200:
+        return {"tone": "neutral", "tone_score": 50, "forward_outlook": "mixed",
+                "bullish_phrases": [], "bearish_phrases": [], "summary": "Insufficient MD&A text."}
+
+    prompt = f"""You are a financial NLP analyst. Analyze the management tone in this MD&A section from {company}'s 10-K filing.
+
+Score the tone and return ONLY valid JSON (no markdown, no explanation):
+
+{{
+  "tone": "<confident|cautious|defensive|neutral>",
+  "tone_score": <integer 0-100, 100=very confident, 0=very defensive/alarming>,
+  "forward_outlook": "<positive|mixed|negative>",
+  "bullish_phrases": ["<direct quote 1>", "<direct quote 2>"],
+  "bearish_phrases": ["<direct quote 1>", "<direct quote 2>"],
+  "summary": "<2 sentences summarizing the overall management tone and key tone signals>"
+}}
+
+MD&A text:
+{mda_text[:8000]}"""
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    _fallback = {"tone": "neutral", "tone_score": 50, "forward_outlook": "mixed",
+                 "bullish_phrases": [], "bearish_phrases": [], "summary": "Analysis unavailable."}
+
+    raw = None
+    try:
+        if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai([{"role": "user", "content": prompt}], _cl_model, 600, 0.1,
+                            system=_system, json_mode=True)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            msg = client.messages.create(
+                model=_cl_model or "claude-sonnet-4-6",
+                max_tokens=600,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = msg.content[0].text.strip()
+        else:
+            api_key = os.getenv("GROQ_API_KEY", "")
+            if not api_key:
+                return _fallback
+            resp = requests.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 600, "temperature": 0.1},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return _fallback
+
+    if not raw:
+        return _fallback
+
+    # Strip markdown fences if present
+    raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+    raw = _re.sub(r"\s*```$", "", raw, flags=_re.MULTILINE).strip()
+    try:
+        result = _json.loads(raw)
+        # Ensure all expected keys exist
+        result.setdefault("tone", "neutral")
+        result.setdefault("tone_score", 50)
+        result.setdefault("forward_outlook", "mixed")
+        result.setdefault("bullish_phrases", [])
+        result.setdefault("bearish_phrases", [])
+        result.setdefault("summary", "")
+        return result
+    except Exception:
+        return _fallback
+
+
 def group_tickers_by_narrative(
     tickers_json: str,
     regime_context: str = "",

@@ -536,6 +536,95 @@ def get_institution_holding(institution_cik: str, target_ticker: str) -> dict:
     return {}
 
 
+@st.cache_data(ttl=86400)
+def get_latest_annual_filing(ticker: str) -> dict | None:
+    """Return the primary document URL + metadata for the most recent 10-K filing.
+
+    Returns dict with: url, accession_number, date, cik  — or None if not found.
+    """
+    ticker_upper = ticker.strip().upper()
+    cik_map = get_cik_ticker_map()
+    cik = next((c for c, t in cik_map.items() if t == ticker_upper), None)
+    if cik is None:
+        return None
+
+    submissions = get_company_submissions(cik)
+    recent = submissions.get("filings", {}).get("recent", {})
+    if not recent:
+        return None
+
+    forms = recent.get("form", [])
+    accessions = recent.get("accessionNumber", [])
+    dates = recent.get("filingDate", [])
+    primary_docs = recent.get("primaryDocument", [])
+
+    padded_cik = cik.zfill(10)
+    for i, form in enumerate(forms):
+        if form == "10-K":
+            acc = accessions[i] if i < len(accessions) else ""
+            doc = primary_docs[i] if i < len(primary_docs) else ""
+            if not acc or not doc:
+                continue
+            acc_nodash = acc.replace("-", "")
+            url = f"https://www.sec.gov/Archives/edgar/data/{padded_cik}/{acc_nodash}/{doc}"
+            return {
+                "url": url,
+                "accession_number": acc,
+                "date": dates[i] if i < len(dates) else "",
+                "cik": cik,
+            }
+    return None
+
+
+def extract_mda_text(full_text: str, max_chars: int = 12000) -> str:
+    """Extract the MD&A section from a 10-K filing's plain text.
+
+    Searches for the 'Management's Discussion' header and returns text until
+    the next major section. Falls back to a middle slice of the document.
+    """
+    import re
+
+    # Common MD&A section header patterns
+    start_patterns = [
+        r"MANAGEMENT.{0,10}S DISCUSSION AND ANALYSIS",
+        r"Management.{0,10}s Discussion and Analysis",
+        r"ITEM\s*7[\.\s]+MANAGEMENT",
+        r"Item\s*7[\.\s]+Management",
+    ]
+    # Common next-section patterns that signal MD&A end
+    end_patterns = [
+        r"QUANTITATIVE AND QUALITATIVE",
+        r"Quantitative and Qualitative",
+        r"ITEM\s*7A",
+        r"Item\s*7A",
+        r"ITEM\s*8[\.\s]+FINANCIAL STATEMENTS",
+        r"Item\s*8[\.\s]+Financial Statements",
+        r"CONTROLS AND PROCEDURES",
+    ]
+
+    start_idx = None
+    for pat in start_patterns:
+        m = re.search(pat, full_text)
+        if m:
+            start_idx = m.start()
+            break
+
+    if start_idx is None:
+        # Fallback: grab middle third of the document
+        third = len(full_text) // 3
+        return full_text[third: third + max_chars]
+
+    end_idx = None
+    for pat in end_patterns:
+        m = re.search(pat, full_text[start_idx + 100:])
+        if m:
+            end_idx = start_idx + 100 + m.start()
+            break
+
+    section = full_text[start_idx: end_idx] if end_idx else full_text[start_idx: start_idx + max_chars * 2]
+    return section[:max_chars]
+
+
 def _today() -> str:
     from datetime import date
 
