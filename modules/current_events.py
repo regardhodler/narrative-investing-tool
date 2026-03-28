@@ -50,13 +50,26 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
         return False
 
     context = "\n\n".join(parts)
+
+    _rc = st.session_state.get("_regime_context") or {}
+    _regime_line = ""
+    if _rc.get("regime"):
+        _regime_line = (
+            f"CURRENT MACRO REGIME: {_rc['regime']} "
+            f"(score {_rc.get('score', 0.0):+.2f}) | "
+            f"Quadrant: {_rc.get('quadrant', 'Unknown')}\n"
+            f"Frame your digest within this macro context — note where news confirms "
+            f"or contradicts the regime.\n\n"
+        )
+
     prompt = (
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
         "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
         "Be clinical, specific, and reference actual catalysts.\n\n"
-        f"{context[:5000]}"
+        + _regime_line
+        + f"{context[:5000]}"
     )
 
     digest = None
@@ -105,7 +118,8 @@ def _time_ago(ts_str: str) -> str:
     try:
         dt = datetime.fromisoformat(ts_str)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            # Naive datetime — treat as local time, not UTC
+            dt = dt.astimezone(timezone.utc)
         now = datetime.now(timezone.utc)
         diff = int((now - dt).total_seconds())
         if diff < 60:
@@ -348,11 +362,23 @@ def render():
     existing_digest = st.session_state.get("_current_events_digest", "")
     existing_ts = st.session_state.get("_current_events_digest_ts", "")
     if existing_digest:
+        _rc_disp = st.session_state.get("_regime_context") or {}
+        _regime_badge = ""
+        if _rc_disp.get("regime"):
+            _badge_color = {"Risk-On": "#22c55e", "Risk-Off": "#ef4444"}.get(_rc_disp["regime"], "#f59e0b")
+            _regime_badge = (
+                f'<span style="background:{_badge_color}22;color:{_badge_color};'
+                f'font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;'
+                f'margin-left:8px;letter-spacing:0.06em;">'
+                f'{_rc_disp["regime"]} {_rc_disp.get("score", 0.0):+.2f}</span>'
+            )
         st.markdown(
             f'<div style="border:1px solid {COLORS["bloomberg_orange"]}44;border-radius:4px;'
             f'padding:10px 14px;background:{COLORS["surface"]};margin-bottom:8px;">'
             f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
-            f'color:{COLORS["text_dim"]};margin-bottom:6px;">Generated {_time_ago(existing_ts.isoformat() if hasattr(existing_ts, "isoformat") else existing_ts) if existing_ts else ""}</div>'
+            f'color:{COLORS["text_dim"]};margin-bottom:6px;">'
+            f'Generated {_time_ago(existing_ts.isoformat() if hasattr(existing_ts, "isoformat") else existing_ts) if existing_ts else ""}'
+            f'{_regime_badge}</div>'
             f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13px;'
             f'color:{COLORS["text"]};line-height:1.6;">{existing_digest}</div>'
             f'</div>',
@@ -392,13 +418,26 @@ def _run_digest(headlines, inbox, gist, engine: str):
         return
 
     context = "\n\n".join(parts)
+
+    _rc = st.session_state.get("_regime_context") or {}
+    _regime_line = ""
+    if _rc.get("regime"):
+        _regime_line = (
+            f"CURRENT MACRO REGIME: {_rc['regime']} "
+            f"(score {_rc.get('score', 0.0):+.2f}) | "
+            f"Quadrant: {_rc.get('quadrant', 'Unknown')}\n"
+            f"Frame your digest within this macro context — note where news confirms "
+            f"or contradicts the regime.\n\n"
+        )
+
     prompt = (
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
         "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
         "Be clinical, specific, and reference actual catalysts.\n\n"
-        f"{context[:5000]}"
+        + _regime_line
+        + f"{context[:5000]}"
     )
 
     _tier_model = {

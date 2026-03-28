@@ -47,7 +47,7 @@ def _parse_rss_xml(xml_text: str, source: str) -> list[dict]:
             continue
         try:
             dt = parsedate_to_datetime(pub_date)
-            date_str = dt.strftime("%Y-%m-%d %H:%M")
+            date_str = dt.astimezone().strftime("%Y-%m-%d %H:%M")
             sort_key = dt.timestamp()
         except Exception:
             date_str = pub_date[:16]
