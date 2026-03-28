@@ -26,7 +26,7 @@ from services.indicators import rsi, obv
 from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
+GROQ_MODEL = "llama-3.3-70b-versatile"
 
 _PERIOD_MAP: dict[str, list[str]] = {
     "5m":  ["5d", "10d", "20d", "30d", "60d"],

@@ -1736,7 +1736,7 @@ def render():
                     _gr = _req_ce.post(
                         GROQ_API_URL,
                         headers={"Authorization": f"Bearer {_groq_key}", "Content-Type": "application/json"},
-                        json={"model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                        json={"model": "llama-3.3-70b-versatile",
                               "messages": [{"role": "user", "content": _ce_prompt}],
                               "max_tokens": 400, "temperature": 0.3},
                         timeout=20,

@@ -37,7 +37,7 @@ If not market relevant, set sector to "N/A", thesis to "", and suggested_tickers
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 300,
                 "temperature": 0.3,
@@ -92,7 +92,7 @@ Return ONLY valid JSON (no markdown fences) with these keys:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 400,
                 "temperature": 0.3,
@@ -161,7 +161,7 @@ Filing text:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 600,
                 "temperature": 0.2,
@@ -359,7 +359,7 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."},
                     {"role": "user", "content": prompt},
@@ -457,7 +457,7 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": _system},
                     {"role": "user", "content": prompt},
@@ -555,7 +555,7 @@ Return ONLY valid JSON (no markdown fences) with these keys:
             GROQ_API_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [
                     {"role": "system", "content": _system},
                     {"role": "user", "content": prompt},
@@ -617,7 +617,7 @@ Whale activity data:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 800,
                 "temperature": 0.3,
@@ -690,7 +690,7 @@ Stress Signal Data:
                 "Content-Type": "application/json",
             },
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 1000,
                 "temperature": 0.4,
