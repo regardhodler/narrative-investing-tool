@@ -102,7 +102,16 @@ def _fetch_wyckoff_data(ticker: str, period: str, interval: str) -> pd.DataFrame
 
 @st.cache_data(ttl=3600)
 def _build_claude_narrative(prompt: str, model: str) -> str:
-    """Call Claude to generate a narrative."""
+    """Call xAI or Claude to generate a narrative."""
+    if model and model.startswith("grok-"):
+        _xai_key = os.getenv("XAI_API_KEY", "")
+        if not _xai_key:
+            return "_XAI_API_KEY not set — Grok narrative unavailable._"
+        try:
+            from services.claude_client import _call_xai
+            return _call_xai([{"role": "user", "content": prompt}], model, 500, 0.3)
+        except Exception as e:
+            return f"_Grok narrative failed: {e}_"
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return "_ANTHROPIC_API_KEY not set — Claude narrative unavailable._"
@@ -137,9 +146,13 @@ def _claude_wyckoff_analysis(
     interval: str,
     model: str,
 ) -> dict:
-    """Ask Claude to independently detect Wyckoff phase and return structured JSON."""
+    """Ask Claude or xAI to independently detect Wyckoff phase and return structured JSON."""
     import json
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    _is_grok = model and model.startswith("grok-")
+    if _is_grok:
+        api_key = os.getenv("XAI_API_KEY", "")
+    else:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {}
     n = min(30, len(close_t))
@@ -177,14 +190,18 @@ Return ONLY valid JSON, no other text:
   "rationale": "1-2 sentence explanation referencing specific price/volume evidence"
 }}"""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model=model,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = msg.content[0].text.strip()
+        if _is_grok:
+            from services.claude_client import _call_xai
+            text = _call_xai([{"role": "user", "content": prompt}], model, 400, 0.2)
+        else:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model=model,
+                max_tokens=400,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
@@ -663,8 +680,9 @@ def render():
         st.rerun()
 
     # ── AI Engine tier selector (top-level) ───────────────────────────────────
+    _has_xai_wy = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic_wy = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _wy_tier_options_top = ["⚡ Standard", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _wy_tier_options_top = ["⚡ Standard"] + (["🧠 Regard Mode"] if _has_xai_wy else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_wy else [])
     _wy_default_idx = 0
     _wy_saved = st.session_state.get("wy_narrative_tier", "⚡ Standard")
     if _wy_saved in _wy_tier_options_top:
@@ -675,8 +693,7 @@ def render():
         index=_wy_default_idx,
         horizontal=True,
         key="wy_narrative_tier",
-        disabled=not _has_anthropic_wy,
-        help="Standard = Groq LLaMA  ·  Regard = Claude Haiku (overrides Wyckoff phase)  ·  Highly Regarded = Claude Sonnet",
+        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides phase)  ·  Highly Regarded = Claude Sonnet",
     )
 
     # ── Guard: nothing entered ────────────────────────────────────────────────
@@ -802,11 +819,13 @@ def render():
     # ── Claude AI Wyckoff override (Regard / Highly Regarded) ─────────────────
     _wy_tier_now = st.session_state.get("wy_narrative_tier", "⚡ Standard")
     _claude_wa = {}
-    if _wy_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and bool(os.getenv("ANTHROPIC_API_KEY")) and analysis is not None:
-        _ca_model = "claude-haiku-4-5-20251001" if _wy_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+    _wy_xai_ok = bool(os.getenv("XAI_API_KEY"))
+    _wy_ant_ok = bool(os.getenv("ANTHROPIC_API_KEY"))
+    if _wy_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and (_wy_xai_ok or _wy_ant_ok) and analysis is not None:
+        _ca_model = "grok-4-1-fast-reasoning" if _wy_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
         _cur = analysis.current_phase
         _event_strs = tuple(f"{e.event_type}: {e.description}" for e in _cur.events)
-        with st.spinner(f"✦ Claude ({_ca_model.split('-')[1].capitalize()}) analyzing Wyckoff structure..."):
+        with st.spinner(f"✦ AI ({_ca_model.split('-')[0].capitalize()}) analyzing Wyckoff structure..."):
             _claude_wa = _claude_wyckoff_analysis(
                 ticker,
                 tuple(close.iloc[-60:].round(2).tolist()),
@@ -1031,17 +1050,18 @@ def render():
 
     # AI Narrative
     with st.expander("Wyckoff AI Narrative", expanded=False):
+        _has_xai = bool(os.getenv("XAI_API_KEY"))
         _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
         _wy_tier_map = {
             "⚡ Standard":            (False, None),
-            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }
         _wy_tier = st.session_state.get("wy_narrative_tier", "⚡ Standard")
         st.caption(f"Engine: {_wy_tier} — change at top of page")
         _wy_use_claude, _wy_model = _wy_tier_map.get(_wy_tier, (False, None))
         if not _has_anthropic and _wy_tier != "⚡ Standard":
-            st.caption("Set ANTHROPIC_API_KEY to unlock Regard Mode.")
+            st.caption("Set XAI_API_KEY to unlock Regard Mode · ANTHROPIC_API_KEY for Highly Regarded.")
 
         current_price = float(close.iloc[-1])
         event_strs = tuple(f"{e.event_type}: {e.description}" for e in current.events)
@@ -1072,7 +1092,7 @@ Write your commentary covering:
 Be direct and specific. Do not hedge excessively. Do not repeat the input data verbatim."""
 
         try:
-            if _wy_use_claude and _has_anthropic:
+            if _wy_use_claude and (_has_xai or _has_anthropic):
                 narrative = _build_claude_narrative(_wy_prompt, _wy_model)
                 _model_label = _wy_model
             else:
@@ -1094,7 +1114,7 @@ Be direct and specific. Do not hedge excessively. Do not repeat the input data v
                     _build_groq_narrative.clear()
                     st.rerun()
             else:
-                if _wy_use_claude and _has_anthropic:
+                if _wy_use_claude and (_has_xai or _has_anthropic):
                     st.markdown(
                         '<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
                         'color:#fff;font-size:10px;font-weight:700;letter-spacing:0.06em;'

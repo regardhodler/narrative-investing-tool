@@ -58,30 +58,31 @@ def render():
 
     # ── Engine selector ────────────────────────────────────────────────────────
     import os
-    _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _has_xai      = bool(os.getenv("XAI_API_KEY"))
+    _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
     _hr_unlocked, _hr_reason = _hr_gate_check()
 
     _tier_opts = ["⚡ Groq (fast, free)"]
-    if _has_claude:
+    if _has_xai:
         _tier_opts.append("🧠 Regard Mode")
-        if _hr_unlocked:
-            _tier_opts.append("👑 Highly Regarded Mode")
+    if _has_anthropic and _hr_unlocked:
+        _tier_opts.append("👑 Highly Regarded Mode")
 
     _tier_map = {
         "⚡ Groq (fast, free)":      (False, None),
-        "🧠 Regard Mode":            (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode":            (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode":   (True, "claude-sonnet-4-6"),
     }
     _rec_map = {
         "⚡ Groq (fast, free)":      "Daily routine — all 8 modules in ~90s, completely free.",
-        "🧠 Regard Mode":            "Active day — Haiku gives better synthesis for whale + swans + conviction.",
+        "🧠 Regard Mode":            "Active day — Grok 4.1 reasoning for deeper synthesis + live X feed in Current Events.",
         "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 8 modules before running Portfolio.",
     }
     _sel = st.radio("Engine", _tier_opts, horizontal=True, key="qr_engine")
     st.caption(f"💡 {_rec_map.get(_sel, '')}")
 
     # Show gate status
-    if _has_claude and not _hr_unlocked:
+    if _has_xai and _has_anthropic and not _hr_unlocked:
         st.markdown(
             f'<div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;'
             f'padding:6px 12px;font-size:10px;color:#f59e0b;margin-bottom:4px;">'
@@ -89,11 +90,19 @@ def render():
             f'Stagflation/Deflation quadrant, bearish macro score, or FOMC/CPI/NFP day</div>',
             unsafe_allow_html=True,
         )
-    elif _hr_unlocked and _has_claude:
+    elif _hr_unlocked and _has_anthropic:
         st.markdown(
             f'<div style="background:#1a0d00;border:1px solid #FF881166;border-radius:4px;'
             f'padding:6px 12px;font-size:10px;color:{_oc};margin-bottom:4px;">'
             f'🔓 <b>Highly Regarded Mode unlocked</b> — {_hr_reason}</div>',
+            unsafe_allow_html=True,
+        )
+    elif not _has_xai and not _has_anthropic:
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid #30363d;border-radius:4px;'
+            f'padding:6px 12px;font-size:10px;color:#8b949e;margin-bottom:4px;">'
+            f'ℹ️ Add <b>XAI_API_KEY</b> to unlock Regard Mode (Grok 4.1) · '
+            f'Add <b>ANTHROPIC_API_KEY</b> for Highly Regarded (Sonnet)</div>',
             unsafe_allow_html=True,
         )
 
@@ -103,7 +112,7 @@ def render():
         st.warning("👑 Highly Regarded uses Claude Sonnet — reserve for elevated volatility or high-conviction sessions.")
         _confirmed = st.checkbox("I confirm this is a high-conviction session", key="qr_hr_confirm")
         if not _confirmed:
-            _use_claude, _cl_model = True, "claude-haiku-4-5-20251001"
+            _use_claude, _cl_model = True, "grok-4-1-fast-reasoning"
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────

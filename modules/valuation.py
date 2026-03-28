@@ -11,16 +11,17 @@ from utils.theme import COLORS, apply_dark_layout
 
 def render():
     import os
+    _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_options = ["⚡ Standard", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _tier_options = ["⚡ Standard"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
     _tier_map = {
         "⚡ Standard": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _tier_badges = {
         "⚡ Standard": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Groq</span>',
-        "🧠 Regard Mode": '<span style="font-size:11px;background:#FF8811;color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">🧠 Haiku</span>',
+        "🧠 Regard Mode": '<span style="font-size:11px;background:#FF8811;color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">🧠 Grok 4.1</span>',
         "👑 Highly Regarded Mode": '<span style="font-size:11px;background:linear-gradient(90deg,#c89b3c,#f0d060);color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">👑 Sonnet</span>',
     }
 
@@ -43,10 +44,10 @@ def render():
     _cr_suffix = " ✅" if _both_sonnet else " ⚠️" if not _both_loaded else " 🟡"
     with st.expander(f"📡 Context Readiness{_cr_suffix}", expanded=not _both_loaded):
         # ── Engine selectors ──────────────────────────────────────────────────
-        _cr_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_anthropic else ["⚡ Groq"]
+        _cr_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
         _cr_model_map = {
             "⚡ Groq": (False, None),
-            "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+            "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
         }
         _sel_r_idx = _cr_tier_opts.index(_regime_tier) if _regime_tier in _cr_tier_opts else 0
@@ -56,11 +57,11 @@ def render():
         with _cre1:
             _regime_tier_sel = st.radio("Risk Regime Engine", _cr_tier_opts, horizontal=True,
                                         key="cr_regime_engine", index=_sel_r_idx)
-            st.caption("💡 🧠 Haiku sufficient")
+            st.caption("💡 🧠 Grok 4.1 sufficient")
         with _cre2:
             _disc_tier_sel   = st.radio("Discovery Engine",   _cr_tier_opts, horizontal=True,
                                         key="cr_disc_engine",  index=_sel_d_idx)
-            st.caption("💡 🧠 Haiku sufficient")
+            st.caption("💡 🧠 Grok 4.1 sufficient")
 
         # ── Status cards with orange glow ─────────────────────────────────────
         def _glow_card(title, tier_sel, status_badge, caption_text):
@@ -187,7 +188,7 @@ def render():
     _prev_tier = st.session_state.get("_val_tier_prev")
     _selected_val_tier = st.radio(
         "Engine", _tier_options, horizontal=True, key="val_engine_radio",
-        help="Standard = Groq (fast/free) · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
+        help="Standard = Groq (fast/free) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
     )
     st.caption("💡 👑 Sonnet recommended — synthesises 20+ signals into conviction rating")
     _use_claude, _cl_model = _tier_map[_selected_val_tier]

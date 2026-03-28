@@ -1046,17 +1046,22 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
     return data
 
 
-def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: str = "claude-haiku-4-5-20251001") -> dict:
+def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: str = "grok-4-1-fast-reasoning") -> dict:
     """Use Claude for higher-quality causal chains and asset impact reasoning.
 
     Same schema as _call_groq_core_forecast. Requires ANTHROPIC_API_KEY in env.
-    model: claude-haiku-4-5-20251001 (fast/cheap) or claude-sonnet-4-6 (most accurate).
+    model: grok-4-1-fast-reasoning (fast/cheap) or claude-sonnet-4-6 (most accurate).
     """
-    import anthropic
-
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    _is_grok = model and model.startswith("grok-")
+    if _is_grok:
+        api_key = os.getenv("XAI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("XAI_API_KEY not set")
+    else:
+        import anthropic
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
 
     # Reuse the same enriched prompt logic as Groq version
     _ctx = json.loads(context_json)
@@ -1100,13 +1105,25 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: st
         "bonds_short = 2-year Treasury / SHY proxy\n"
     )
 
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=model,
-        max_tokens=8192,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = message.content[0].text
+    if _is_grok:
+        import requests as _req
+        resp = _req.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 8192, "temperature": 0.2},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+    else:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=model,
+            max_tokens=8192,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text
     data = json.loads(_strip_fences(raw))
 
     # Post-process: ensure causal chains have ≥2 steps
@@ -1191,17 +1208,23 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
     return data
 
 
-def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: str, model: str = "claude-haiku-4-5-20251001") -> dict:
+def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: str, model: str = "grok-4-1-fast-reasoning") -> dict:
     """Use Claude for commodities and international equities forecast.
 
     Same schema as _call_groq_commodities_intl_forecast.
-    model: claude-haiku-4-5-20251001 or claude-sonnet-4-6.
+    model: grok-4-1-fast-reasoning or claude-sonnet-4-6.
     """
     import anthropic
 
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY not set")
+    _is_grok = model and model.startswith("grok-")
+    if _is_grok:
+        api_key = os.getenv("XAI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("XAI_API_KEY not set")
+    else:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
 
     _ctx = json.loads(context_json)
     _fmt = lambda v: f"{v:+.2f}" if isinstance(v, (int, float)) and v is not None else "n/a"
@@ -1237,13 +1260,25 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
         "Use the macro regime context to calibrate direction and magnitude precisely.\n"
     )
 
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model=model,
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = message.content[0].text
+    if _is_grok:
+        import requests as _req
+        resp = _req.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                  "max_tokens": 4096, "temperature": 0.2},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+    else:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model=model,
+            max_tokens=4096,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = message.content[0].text
     data = json.loads(_strip_fences(raw))
 
     # Same flattening post-processor as Groq version
@@ -1355,9 +1390,13 @@ def _call_groq_custom_event_forecast(event_label: str, context_json: str) -> dic
 
 
 def _call_claude_custom_event_forecast(event_label: str, context_json: str, model: str) -> dict | None:
-    """Claude version of custom black swan forecast. Same return schema as Groq version."""
-    import anthropic
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    """xAI/Claude version of custom black swan forecast. Same return schema as Groq version."""
+    _is_grok = model and model.startswith("grok-")
+    if _is_grok:
+        api_key = os.getenv("XAI_API_KEY", "")
+    else:
+        import anthropic
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return None
     prompt = (
@@ -1373,14 +1412,26 @@ def _call_claude_custom_event_forecast(event_label: str, context_json: str, mode
         'Return JSON with exactly these keys: "probability_pct", "narrative", "asset_impacts"'
     )
     try:
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model=model,
-            max_tokens=600,
-            temperature=0.2,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = msg.content[0].text.strip()
+        if _is_grok:
+            import requests as _req
+            resp = _req.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 600, "temperature": 0.2},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
+        else:
+            client = anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model=model,
+                max_tokens=600,
+                temperature=0.2,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = msg.content[0].text.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
@@ -1405,7 +1456,7 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _CLAUDE_MODEL_MAP = {
-    "haiku": "claude-haiku-4-5-20251001",
+    "haiku": "grok-4-1-fast-reasoning",
     "sonnet": "claude-sonnet-4-6",
 }
 
@@ -1414,7 +1465,7 @@ _CLAUDE_MODEL_MAP = {
 def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Run the 2 calls needed for the asset impact matrix + medium-term fan charts.
 
-    model_tier: "groq" (free/fast), "haiku" (Claude Haiku), "sonnet" (Claude Sonnet, most accurate).
+    model_tier: "groq" (free/fast), "grok" (Grok 4.1), "sonnet" (Claude Sonnet, most accurate).
 
     Returns: near_term, medium_term, long_term, _call_status, _core_engine
     """
@@ -1432,7 +1483,7 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
     _claude_model = _CLAUDE_MODEL_MAP.get(model_tier)
 
     try:
-        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
             core = _call_claude_core_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             core = _call_groq_core_forecast(context_json, scenarios_json)
@@ -1451,7 +1502,7 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
         result["_call_status"]["core"] = f"error: {exc}"
 
     try:
-        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
             comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
@@ -1473,7 +1524,7 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
 def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Orchestrate 3 calls and merge into unified expanded forecast dict.
 
-    model_tier: "groq" (free/fast), "haiku" (Claude Haiku), "sonnet" (Claude Sonnet, most accurate).
+    model_tier: "groq" (free/fast), "grok" (Grok 4.1), "sonnet" (Claude Sonnet, most accurate).
 
     Returns:
       near_term: dict[scenario][asset] = list of 7 floats
@@ -1501,7 +1552,7 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tie
 
     # Call 1: Core US assets (all 3 horizons + causal chains)
     try:
-        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
             core = _call_claude_core_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             core = _call_groq_core_forecast(context_json, scenarios_json)
@@ -1522,7 +1573,7 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tie
 
     # Call 2: Commodities + International
     try:
-        if _claude_model and os.getenv("ANTHROPIC_API_KEY"):
+        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
             comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
         else:
             comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)

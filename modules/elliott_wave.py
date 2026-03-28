@@ -141,7 +141,16 @@ def _fetch_ticker_data(ticker: str, interval: str = "1d") -> pd.DataFrame | None
 
 @st.cache_data(ttl=3600)
 def _build_claude_narrative(prompt: str, model: str) -> str:
-    """Call Claude to generate a narrative."""
+    """Call xAI or Claude to generate a narrative."""
+    if model and model.startswith("grok-"):
+        _xai_key = os.getenv("XAI_API_KEY", "")
+        if not _xai_key:
+            return "_XAI_API_KEY not set — Grok narrative unavailable._"
+        try:
+            from services.claude_client import _call_xai
+            return _call_xai([{"role": "user", "content": prompt}], model, 600, 0.3)
+        except Exception as e:
+            return f"_Grok narrative failed: {e}_"
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return "_ANTHROPIC_API_KEY not set — Claude narrative unavailable._"
@@ -171,9 +180,13 @@ def _claude_wave_analysis(
     algo_invalidation: float,
     model: str,
 ) -> dict:
-    """Ask Claude to independently perform Elliott Wave count and return structured JSON."""
+    """Ask Claude or xAI to independently perform Elliott Wave count and return structured JSON."""
     import json
-    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    _is_grok = model and model.startswith("grok-")
+    if _is_grok:
+        api_key = os.getenv("XAI_API_KEY", "")
+    else:
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
         return {}
     # Compact OHLCV — last 30 bars for token efficiency
@@ -208,14 +221,18 @@ Independently evaluate the wave structure. Return ONLY valid JSON, no other text
   "rationale": "1-2 sentence explanation"
 }}"""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model=model,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = msg.content[0].text.strip()
+        if _is_grok:
+            from services.claude_client import _call_xai
+            text = _call_xai([{"role": "user", "content": prompt}], model, 400, 0.2)
+        else:
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            msg = client.messages.create(
+                model=model,
+                max_tokens=400,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
         if "```" in text:
             text = text.split("```")[1]
             if text.startswith("json"):
@@ -823,6 +840,7 @@ def render():
                         st.rerun()
 
     # ── AI Engine Tier (top-level — controls wave count override + narrative) ──
+    _has_xai_ew = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic_ew = bool(os.getenv("ANTHROPIC_API_KEY"))
     _ew_tier_options_top = ["⚡ Standard", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
     _ew_default_idx = 0
@@ -836,10 +854,10 @@ def render():
         horizontal=True,
         key="ew_narrative_tier",
         disabled=not _has_anthropic_ew,
-        help="Standard = Groq LLaMA  ·  Regard = Claude Haiku (overrides wave count)  ·  Highly Regarded = Claude Sonnet",
+        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides wave count)  ·  Highly Regarded = Claude Sonnet",
     )
     if not _has_anthropic_ew:
-        st.caption("Set ANTHROPIC_API_KEY to unlock Regard modes.")
+        st.caption("Set XAI_API_KEY for Regard Mode · ANTHROPIC_API_KEY for Highly Regarded.")
 
     # ── Guard: nothing entered yet ────────────────────────────────────────────
     if not ticker:
@@ -922,8 +940,8 @@ def render():
     # ── Claude AI wave count override (Regard / Highly Regarded) ──────────────
     _ew_tier_now = st.session_state.get("ew_narrative_tier", "⚡ Standard")
     _claude_wa = {}
-    if _ew_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and bool(os.getenv("ANTHROPIC_API_KEY")):
-        _ca_model = "claude-haiku-4-5-20251001" if _ew_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+    if _ew_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and (bool(os.getenv("XAI_API_KEY")) or bool(os.getenv("ANTHROPIC_API_KEY"))):
+        _ca_model = "grok-4-1-fast-reasoning" if _ew_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
         _primary_for_ca = degree_counts.get("Primary") or corrective_counts.get("Primary")
         if _primary_for_ca:
             _deg_sum = tuple((deg, cnt.current_wave_label, cnt.confidence) for deg, cnt in degree_counts.items())
@@ -1179,10 +1197,11 @@ def render():
 
     # ── AI Narrative ──────────────────────────────────────────────────────────
     with st.expander("Elliott Wave AI Narrative", expanded=False):
+        _has_xai = bool(os.getenv("XAI_API_KEY"))
         _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
         _ew_tier_map = {
             "⚡ Standard":            (False, None),
-            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }
         # Tier is set at top of page — show status here

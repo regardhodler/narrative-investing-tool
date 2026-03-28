@@ -313,11 +313,12 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
     st.markdown("<div style='margin-top:14px;'></div>", unsafe_allow_html=True)
 
     # ── AI Regime Plays ────────────────────────────────────────────────────
+    _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_anthropic else ["⚡ Groq"]
+    _tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
     _tier_map  = {
         "⚡ Groq":                (False, None),
-        "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
     }
 
@@ -326,7 +327,7 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
         "Engine", _tier_opts, horizontal=True, key="fed_plays_engine_radio",
         help="Sonnet gives the deepest sector/stock synthesis from the rate path"
     )
-    st.caption("💡 🧠 Haiku is sufficient here — rate scenario → sector mapping is deterministic")
+    st.caption("💡 🧠 Grok 4.1 sufficient here — rate scenario → sector mapping is deterministic")
     _use_cl, _cl_model = _tier_map[_sel_tier]
 
     st.session_state["_fed_plays_tier_prev"] = _sel_tier
@@ -693,12 +694,13 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     context_json   = _json.dumps(context)
     scenarios_json = _json.dumps(adj_probs)
 
+    _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_options = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
-    _tier_hints   = {"⚡ Groq": "", "🧠 Regard Mode": "Haiku", "👑 Highly Regarded Mode": "Sonnet"}
-    _tier_map     = {"⚡ Groq": "groq", "🧠 Regard Mode": "haiku", "👑 Highly Regarded Mode": "sonnet"}
+    _tier_options = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
+    _tier_hints   = {"⚡ Groq": "", "🧠 Regard Mode": "Grok 4.1", "👑 Highly Regarded Mode": "Sonnet"}
+    _tier_map     = {"⚡ Groq": "groq", "🧠 Regard Mode": "grok", "👑 Highly Regarded Mode": "sonnet"}
 
-    if _has_claude:
+    if _has_xai or _has_claude:
         _prev_tier = st.session_state.get("_fed_tier", "⚡ Groq")
         _tier_cols = st.columns([4, 1])
         with _tier_cols[0]:
@@ -708,12 +710,12 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                 index=_tier_options.index(_prev_tier) if _prev_tier in _tier_options else 0,
                 horizontal=True,
                 key="fed_engine_radio",
-                help="Groq = free/fast. Regard Mode = Claude Haiku (~$0.03). Highly Regarded Mode = Claude Sonnet (~$0.12, most accurate).",
+                help="Groq = free/fast. Regard Mode = Grok 4.1 (~$0.03). Highly Regarded Mode = Claude Sonnet (~$0.12, most accurate).",
             )
         _hint = _tier_hints[_selected_tier]
         if _hint:
             st.caption(f"*{_hint}*")
-        st.caption("💡 🧠 Haiku is sufficient here — probability weighting is math-heavy; LLM formats results")
+        st.caption("💡 🧠 Grok 4.1 sufficient here — probability weighting is math-heavy; LLM formats results")
         if _selected_tier != _prev_tier:
             generate_matrix_forecast.clear()
             generate_expanded_forecast.clear()
@@ -759,7 +761,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             status_parts.append(f"✓ {call_name}")
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
-    _engine_badge_map = {"groq": "⚡ Groq", "haiku": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
+    _engine_badge_map = {"groq": "⚡ Groq", "grok": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
     _engine_badge = _engine_badge_map.get(expanded.get("_core_engine", "groq"), "⚡ Groq")
     _exp_status = full_expanded.get("_call_status", {})
     _exp_core_msg = _exp_status.get("core", "ok")
@@ -920,15 +922,16 @@ def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
     """AI narration panel appended to the causal chain section."""
     import json as _json
     st.markdown("---")
+    _cc_has_xai = bool(os.getenv("XAI_API_KEY"))
     _cc_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _cc_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _cc_has_claude else ["⚡ Groq"]
+    _cc_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _cc_has_xai else []) + (["👑 Highly Regarded Mode"] if _cc_has_claude else [])
     _cc_tier_map = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _sel_cc = st.radio("Transmission Engine", _cc_tier_opts, horizontal=True, key="causal_chain_engine")
-    st.caption("💡 🧠 Haiku sufficient · 👑 Sonnet for richer second-order effects (feeds into Valuation & Discovery)")
+    st.caption("💡 🧠 Grok 4.1 sufficient · 👑 Sonnet for richer second-order effects (feeds into Valuation & Discovery)")
     _use_cl_cc, _cc_model = _cc_tier_map[_sel_cc]
 
     _prev_cc_tier = st.session_state.get("_cc_tier_prev")
@@ -1344,15 +1347,16 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: b
     st.markdown("**🔭 Add Custom Black Swan Event**")
     st.caption("Type any tail-risk scenario to get AI probability + asset impact analysis")
 
+    _bs_has_xai = bool(os.getenv("XAI_API_KEY"))
     _bs_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _bs_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _bs_has_claude else ["⚡ Groq"]
+    _bs_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _bs_has_xai else []) + (["👑 Highly Regarded Mode"] if _bs_has_claude else [])
     _bs_tier_map = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _sel_bs_tier = st.radio("Black Swan Engine", _bs_tier_opts, horizontal=True, key="black_swan_engine")
-    st.caption("💡 🧠 Haiku is sufficient here — scenario probability scoring is pattern-based")
+    st.caption("💡 🧠 Grok 4.1 sufficient here — scenario probability scoring is pattern-based")
     _use_claude_bs, _bs_model = _bs_tier_map[_sel_bs_tier]
 
     _prev_fed_tier = st.session_state.get("_fed_plays_tier_prev", "")
@@ -1621,7 +1625,7 @@ def run_quick_swans(use_claude: bool = False, model: str | None = None) -> bool:
     for label in scenarios:
         try:
             if use_claude:
-                result = _call_claude_custom_event_forecast(label, _base_ctx, model or "claude-haiku-4-5-20251001")
+                result = _call_claude_custom_event_forecast(label, _base_ctx, model or "grok-4-1-fast-reasoning")
             else:
                 result = _call_groq_custom_event_forecast(label, _base_ctx)
             if result:

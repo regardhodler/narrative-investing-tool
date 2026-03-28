@@ -16,6 +16,43 @@ from services.news_feed import (
 from utils.theme import COLORS
 
 
+def _fetch_x_feed_via_grok(queries: list, regime_context: str = "") -> str:
+    """Call xAI with X search enabled. Returns live X context string or empty string."""
+    import os, requests as _req
+    key = os.getenv("XAI_API_KEY", "")
+    if not key:
+        return ""
+    search_prompt = (
+        f"Search X (Twitter) for the most important recent posts about: {', '.join(queries)}. "
+        + (f"Current macro regime context: {regime_context}. " if regime_context else "")
+        + "Summarize the key themes, notable views, and any breaking developments in 3-5 bullet points. "
+        "Focus only on macro, financial, and geopolitical content."
+    )
+    try:
+        body = {
+            "model": "grok-4-1-fast-reasoning",
+            "messages": [{"role": "user", "content": search_prompt}],
+            "max_tokens": 400,
+            "temperature": 0.2,
+            "search_parameters": {
+                "mode": "on",
+                "sources": [{"type": "x"}],
+                "return_citations": False,
+            },
+        }
+        resp = _req.post(
+            "https://api.x.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json=body,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return ""
+
+
+
 def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool:
     """
     Background helper for Quick Intel Run.
@@ -76,6 +113,26 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     _use_cl = use_claude
     _model = model
 
+    # Inject X live feed when using Grok (xAI)
+    if _use_cl and _model and _model.startswith("grok-") and os.getenv("XAI_API_KEY"):
+        _x_queries = ["Federal Reserve monetary policy", "macro economy inflation",
+                      "geopolitical risk markets", "financial markets stocks bonds"]
+        _rc_x = st.session_state.get("_regime_context") or {}
+        _regime_str = f"{_rc_x.get('regime','')} {_rc_x.get('quadrant','')}".strip()
+        x_content = _fetch_x_feed_via_grok(_x_queries, _regime_str)
+        if x_content:
+            parts.insert(0, "LIVE X FEED (real-time macro/financial posts):\n" + x_content)
+            context = "\n\n".join(parts)
+            prompt = (
+                "You are a senior macro research analyst. Based on the following current events, "
+                "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
+                "dominant narratives, and flags any actionable risks or opportunities. "
+                "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
+                "Be clinical, specific, and reference actual catalysts.\n\n"
+                + _regime_line
+                + f"{context[:5000]}"
+            )
+
     if not _use_cl:
         try:
             from groq import Groq
@@ -89,22 +146,29 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
                 digest = resp.choices[0].message.content.strip()
         except Exception:
             _use_cl = True
-            _model = _model or "claude-haiku-4-5-20251001"
+            _model = _model or "grok-4-1-fast-reasoning"
 
     if _use_cl or not digest:
+        _cl_model = _model or "grok-4-1-fast-reasoning"
         try:
-            import anthropic
-            msg = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "")).messages.create(
-                model=_model or "claude-haiku-4-5-20251001",
-                max_tokens=300,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            digest = msg.content[0].text.strip()
+            if _cl_model.startswith("grok-") and os.getenv("XAI_API_KEY"):
+                from services.claude_client import _call_xai
+                digest = _call_xai([{"role": "user", "content": prompt}], _cl_model, 300, 0.2)
+            else:
+                import anthropic
+                msg = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "")).messages.create(
+                    model=_cl_model,
+                    max_tokens=300,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                digest = msg.content[0].text.strip()
         except Exception:
             return False
 
     if digest:
         _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Groq")
+    if _use_cl and st.session_state.get("_x_feed_used"):
+        st.session_state.pop("_x_feed_used", None)
         st.session_state["_current_events_digest"] = digest
         st.session_state["_current_events_digest_ts"] = datetime.now()
         st.session_state["_current_events_engine"] = _tier
@@ -354,7 +418,7 @@ def render():
     )
     _rec_map = {
         "⚡ Groq (fast)": "Daily routine check — fast, free. Use when markets are calm and you just want a quick brief.",
-        "🧠 Regard Mode": "Active trading day — Haiku gives better synthesis than Groq. Use when you need the digest to inform Discovery or Valuation.",
+        "🧠 Regard Mode": "Active trading day — Grok 4.1 reasoning + 🐦 live X/Twitter feed for real-time macro posts. Best for market-moving days.",
         "👑 Highly Regarded Mode": "High-conviction sessions — Sonnet reads macro nuance best. Use before running Valuation or Portfolio when volatility is elevated or a major catalyst is live.",
     }
     st.caption(f"💡 {_rec_map.get(engine, '')}")
@@ -442,7 +506,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
 
     _tier_model = {
         "⚡ Groq (fast)": None,
-        "🧠 Regard Mode": "claude-haiku-4-5-20251001",
+        "🧠 Regard Mode": "grok-4-1-fast-reasoning",
         "👑 Highly Regarded Mode": "claude-sonnet-4-6",
     }
     cl_model = _tier_model.get(engine)
@@ -466,18 +530,46 @@ def _run_digest(headlines, inbox, gist, engine: str):
         except Exception as e:
             st.warning(f"Groq failed ({e}), falling back to Regard Mode...")
             use_claude = True
-            cl_model = "claude-haiku-4-5-20251001"
+            cl_model = "grok-4-1-fast-reasoning"
+
+    # Inject X live feed when Regard Mode (Grok)
+    import os
+    if cl_model and cl_model.startswith("grok-") and os.getenv("XAI_API_KEY"):
+        _x_queries = ["Federal Reserve monetary policy", "macro economy inflation",
+                      "geopolitical risk markets", "financial markets stocks bonds"]
+        _rc_x = st.session_state.get("_regime_context") or {}
+        _regime_str = f"{_rc_x.get('regime','')} {_rc_x.get('quadrant','')}".strip()
+        x_content = _fetch_x_feed_via_grok(_x_queries, _regime_str)
+        if x_content:
+            parts.insert(0, "LIVE X FEED (real-time macro/financial posts):\n" + x_content)
+            context = "\n\n".join(parts)
+            prompt = (
+                "You are a senior macro research analyst. Based on the following current events, "
+                "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
+                "dominant narratives, and flags any actionable risks or opportunities. "
+                "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
+                "Be clinical, specific, and reference actual catalysts.\n\n"
+                + _regime_line
+                + f"{context[:5000]}"
+            )
+            st.session_state["_x_feed_injected"] = True
+        else:
+            st.session_state.pop("_x_feed_injected", None)
 
     if use_claude or not digest:
         try:
-            import anthropic, os
-            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
-            msg = client.messages.create(
-                model=cl_model,
-                max_tokens=300,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            digest = msg.content[0].text.strip()
+            if cl_model and cl_model.startswith("grok-") and os.getenv("XAI_API_KEY"):
+                from services.claude_client import _call_xai
+                digest = _call_xai([{"role": "user", "content": prompt}], cl_model, 300, 0.2)
+            else:
+                import anthropic
+                client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+                msg = client.messages.create(
+                    model=cl_model,
+                    max_tokens=300,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                digest = msg.content[0].text.strip()
         except Exception as e:
             st.error(f"AI digest failed: {e}")
             return

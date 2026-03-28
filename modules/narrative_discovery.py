@@ -162,13 +162,16 @@ def _render_trending_narratives():
         unsafe_allow_html=True,
     )
 
+    _has_xai = bool(os.getenv("XAI_API_KEY"))
+
+
     _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
     _eng_opts = ["⚡ Groq (fast)"]
     if _has_claude:
         _eng_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
     _eng_map = {
         "⚡ Groq (fast)":        (False, None),
-        "🧠 Regard Mode":         (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode":         (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
 
@@ -304,7 +307,7 @@ def render():
     _PLAY_MODEL_OPTIONS = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_api_key else ["⚡ Groq"]
     _PLAY_MODEL_MAP = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
 
@@ -366,7 +369,7 @@ def render():
         _selected_play_model = st.radio(
             "Engine", _PLAY_MODEL_OPTIONS, horizontal=True, key="play_engine_radio"
         )
-        st.caption("💡 🧠 Haiku is sufficient here — same structured schema as Regime Plays")
+        st.caption("💡 🧠 Grok 4.1 sufficient here — same structured schema as Regime Plays")
 
         # ── Stress-Test Overlay (optional scenario input) ─────────────────
         st.markdown(
@@ -895,11 +898,13 @@ def _fetch_curated_assets(ticker_dict: dict[str, str], asset_class: str) -> list
 
 def _render_auto():
     import os as _os
+    _has_xai = bool(_os.getenv("XAI_API_KEY"))
+
     _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _AUTO_ENGINE_OPTIONS = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_claude else ["⚡ Groq"]
+    _AUTO_ENGINE_OPTIONS = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
     _AUTO_ENGINE_MAP = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _auto_engine_sel = st.radio(

@@ -1703,8 +1703,8 @@ def render():
                     st.rerun()
 
         # AI News Digest
-        _ce_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-        _ce_tier_opts = ["⚡ Groq", "🧠 Regard Mode"] if _ce_has_claude else ["⚡ Groq"]
+        _ce_has_claude = bool(os.getenv("XAI_API_KEY"))
+        _ce_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _ce_has_claude else [])
         _ced1, _ced2 = st.columns([2, 2])
         with _ced1:
             _ce_tier = st.radio("Engine", _ce_tier_opts, horizontal=True, key="ce_engine_radio")
@@ -1726,7 +1726,7 @@ def render():
                     import anthropic as _ac
                     _ac_client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
                     _digest = _ac_client.messages.create(
-                        model="claude-haiku-4-5-20251001", max_tokens=400, temperature=0.3,
+                        model="grok-4-1-fast-reasoning", max_tokens=400, temperature=0.3,
                         messages=[{"role": "user", "content": _ce_prompt}],
                     ).content[0].text.strip()
                 except Exception as _ace:
@@ -1746,7 +1746,7 @@ def render():
                     elif _gr.status_code == 400 and _ce_has_claude:
                         import anthropic as _ac2
                         _digest = _ac2.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")).messages.create(
-                            model="claude-haiku-4-5-20251001", max_tokens=400, temperature=0.3,
+                            model="grok-4-1-fast-reasoning", max_tokens=400, temperature=0.3,
                             messages=[{"role": "user", "content": _ce_prompt}],
                         ).content[0].text.strip()
                 except Exception as _ge:
@@ -1948,7 +1948,7 @@ def render():
         _rp_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _rp_has_anthropic else ["⚡ Groq"]
         _rp_tier_map  = {
             "⚡ Groq":                (False, None),
-            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }
         _prev_rp_tier = st.session_state.get("_rp_tier_prev")
@@ -1956,7 +1956,7 @@ def render():
             "Engine", _rp_tier_opts, horizontal=True, key="regime_plays_engine_radio",
             help="Sonnet gives the most nuanced regime play synthesis"
         )
-        st.caption("💡 🧠 Haiku is sufficient here — structured JSON output, Groq also works well")
+        st.caption("💡 🧠 Grok 4.1 sufficient here — structured JSON output, Groq also works well")
         _use_cl_rp, _cl_rp_model = _rp_tier_map[_sel_rp_tier]
         st.session_state["_rp_tier_prev"] = _sel_rp_tier
 

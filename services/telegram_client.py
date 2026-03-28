@@ -27,7 +27,20 @@ def send_alert(message: str, parse_mode: str = "HTML") -> bool:
         return False
 
 
-def poll_new_messages(since_message_id: int = 0) -> list[dict]:
+def send_document(filename: str, content: str, caption: str = "") -> bool:
+    """Send a text file as a document to the user via Telegram bot."""
+    if not is_configured():
+        return False
+    try:
+        r = requests.post(
+            f"{_BASE}/sendDocument",
+            data={"chat_id": _CHAT_ID, "caption": caption},
+            files={"document": (filename, content.encode("utf-8"), "text/plain")},
+            timeout=15,
+        )
+        return r.ok
+    except Exception:
+        return False
     """
     Poll getUpdates for messages from the user's chat.
     Returns list of {message_id, text, date_iso} — newest last.

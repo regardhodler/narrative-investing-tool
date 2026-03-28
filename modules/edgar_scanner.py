@@ -82,17 +82,19 @@ def render():
 
     # --- Filing Summary ---
     import os as _os
+    _edgar_has_xai = bool(_os.getenv("XAI_API_KEY"))
+
     _edgar_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _edgar_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _edgar_has_claude else ["⚡ Groq"]
+    _edgar_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _edgar_has_xai else []) + (["👑 Highly Regarded Mode"] if _edgar_has_claude else [])
     _edgar_tier_map = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     st.markdown("---")
     _sel_edgar_tier = st.radio(
         "Summary Engine", _edgar_tier_opts, horizontal=True, key="edgar_summary_engine",
-        help="Standard = Groq (fast) · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
+        help="Standard = Groq (fast) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
     )
     _use_claude_edgar, _edgar_model = _edgar_tier_map[_sel_edgar_tier]
     _edgar_badge = f" {_sel_edgar_tier.split()[0]}"

@@ -4,6 +4,43 @@ import requests
 import streamlit as st
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+XAI_API_URL  = "https://api.x.ai/v1/chat/completions"
+XAI_MODEL_REGARD = "grok-4-1-fast-reasoning"
+
+
+def _is_xai_model(model: str | None) -> bool:
+    """True when the model should be routed to xAI (api.x.ai)."""
+    return bool(model and model.startswith("grok-"))
+
+
+def _call_xai(
+    messages: list,
+    model: str,
+    max_tokens: int,
+    temperature: float,
+    system: str | None = None,
+    json_mode: bool = False,
+) -> str:
+    """Call xAI API (OpenAI-compatible). Raises on error."""
+    key = os.getenv("XAI_API_KEY", "")
+    if not key:
+        raise ValueError("XAI_API_KEY not set")
+    body: dict = {
+        "model": model,
+        "messages": ([{"role": "system", "content": system}] if system else []) + messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
+    resp = requests.post(
+        XAI_API_URL,
+        headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+        json=body,
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"].strip()
 
 
 @st.cache_data(ttl=3600)
@@ -135,12 +172,18 @@ Keep the summary to 4-6 bullet points. Be specific with numbers and dates where 
 Filing text:
 {filing_text}"""
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 600, 0.1)
+        except Exception as e:
+            return f"Error generating summary: {e}"
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=600,
                 temperature=0.1,
                 messages=[{"role": "user", "content": prompt}],
@@ -233,13 +276,19 @@ Rules:
 
     text = ""
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            text = _call_xai([{"role": "user", "content": prompt}], _cl_model, 1500, 0.3)
+        except Exception as e:
+            st.warning(f"Narrative grouping failed (xAI error): {e}")
+            return []
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-            _model = model or "claude-haiku-4-5-20251001"
             msg = client.messages.create(
-                model=_model,
+                model=_cl_model,
                 max_tokens=1500,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -330,15 +379,24 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
         except json.JSONDecodeError:
             return None
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    _val_system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _parse_valuation_json(_call_xai(
+                [{"role": "user", "content": prompt}], _cl_model, 1000, 0.1, system=_val_system))
+        except Exception as e:
+            st.error(f"xAI API error: {e}")
+            return None
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=1000,
                 temperature=0.1,
-                system="You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation.",
+                system=_val_system,
                 messages=[{"role": "user", "content": prompt}],
             )
             return _parse_valuation_json(message.content[0].text.strip())
@@ -429,12 +487,20 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
 
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _parse(_call_xai(
+                [{"role": "user", "content": prompt}], _cl_model, 1200, 0.3, system=_system))
+        except Exception as _e:
+            st.error(f"xAI API error (Regime Plays): {_e}")
+            return _empty
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=1200,
                 temperature=0.3,
                 system=_system,
@@ -530,12 +596,20 @@ Return ONLY valid JSON (no markdown fences) with these keys:
 
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _parse(_call_xai(
+                [{"role": "user", "content": prompt}], _cl_model, 1200, 0.3, system=_system))
+        except Exception as _e:
+            st.error(f"xAI API error (Scenario Plays): {_e}")
+            return _empty
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=1200,
                 temperature=0.3,
                 system=_system,
@@ -590,12 +664,19 @@ Keep the summary to 4-6 bullet points. Be specific about names, dollar amounts, 
 Whale activity data:
 {activity_text}"""
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 800, 0.3)
+        except Exception as _e:
+            st.error(f"xAI API error (Whale Summary): {_e}")
+            return f"Error generating whale summary: {_e}"
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=800,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
@@ -664,12 +745,18 @@ Rules:
 Stress Signal Data:
 {_stress_truncated}"""
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 1000, 0.4)
+        except Exception as e:
+            return f"Error generating doom briefing: {e}"
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=1000,
                 temperature=0.4,
                 messages=[{"role": "user", "content": prompt}],
@@ -704,7 +791,7 @@ Stress Signal Data:
                     import anthropic as _ac
                     _client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
                     _msg = _client.messages.create(
-                        model="claude-haiku-4-5-20251001",
+                        model="grok-4-1-fast-reasoning",
                         max_tokens=1000,
                         temperature=0.4,
                         messages=[{"role": "user", "content": prompt}],
@@ -744,12 +831,18 @@ def narrate_policy_transmission(chains_json: str, adj_probs_json: str, use_claud
         f"Transmission chains: {chains_json}"
     )
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 400, 0.3)
+        except Exception as e:
+            return f"Error generating narration: {e}"
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             msg = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=400,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
@@ -805,12 +898,22 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
         f"SIGNALS:\n{signals_text[:4000]}"
     )
 
-    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            import json as _json, re as _re
+            _raw = _call_xai([{"role": "user", "content": prompt}], _cl_model, 600, 0.3, json_mode=True)
+            _raw = _re.sub(r"^```(?:json)?\s*", "", _raw, flags=_re.MULTILINE)
+            _raw = _re.sub(r"\s*```$", "", _raw, flags=_re.MULTILINE).strip()
+            return _json.loads(_raw)
+        except Exception:
+            pass
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic, json as _json
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             msg = client.messages.create(
-                model=model or "claude-haiku-4-5-20251001",
+                model=_cl_model,
                 max_tokens=600,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
@@ -824,6 +927,7 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
         return {"conviction": "UNCERTAIN", "summary": "GROQ_API_KEY not set.", "key_points": [], "contradictions": []}
     try:
         import json as _json
+        import re as _re
         resp = requests.post(
             GROQ_API_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -832,12 +936,15 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 600,
                 "temperature": 0.3,
-                "response_format": {"type": "json_object"},
             },
             timeout=30,
         )
         resp.raise_for_status()
-        return _json.loads(resp.json()["choices"][0]["message"]["content"].strip())
+        _raw = resp.json()["choices"][0]["message"]["content"].strip()
+        # Strip markdown fences if model wrapped the JSON
+        _raw = _re.sub(r"^```(?:json)?\s*", "", _raw, flags=_re.MULTILINE)
+        _raw = _re.sub(r"\s*```$", "", _raw, flags=_re.MULTILINE).strip()
+        return _json.loads(_raw)
     except Exception as e:
         return {"conviction": "UNCERTAIN", "summary": f"Error: {e}", "key_points": [], "contradictions": []}
 
@@ -878,7 +985,9 @@ Respond ONLY with valid JSON:
 }}"""
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
     try:
-        if use_claude and model:
+        if use_claude and model and _is_xai_model(model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai([{"role": "user", "content": prompt}], model, 700, 0.2, system=_system)
+        elif use_claude and model:
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(
@@ -1095,7 +1204,10 @@ Return ONLY valid JSON:
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation, no preamble. Be extremely concise: rationale = max 15 words, risk_factors = max 2 short items, narrative = max 25 words, priority_actions = max 3 items. Every position in the input MUST appear in the output positions array."
     _model = model or "claude-sonnet-4-6"
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai(
+                [{"role": "user", "content": prompt}], _model, 8000, 0.2, system=_system)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(
@@ -1208,11 +1320,14 @@ Return ONLY valid JSON:
 }}"""
 
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown, no preamble."
-    _model = model or "claude-haiku-4-5-20251001"
+    _model = model or "grok-4-1-fast-reasoning"
     _max_tokens = 1000
 
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai(
+                [{"role": "user", "content": prompt}], _model, _max_tokens, 0.2, system=_system)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(
@@ -1326,11 +1441,14 @@ Return ONLY valid JSON:
         "no explanation. Be concise: headline max 20 words, comments max 12 words, "
         "top_risk max 15 words, suggestions max 20 words each."
     )
-    _model = model or "claude-haiku-4-5-20251001"
+    _model = model or "grok-4-1-fast-reasoning"
     _max_tokens = 3000 if (_model and "sonnet" in _model) else 2000
 
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai(
+                [{"role": "user", "content": prompt}], _model, _max_tokens, 0.2, system=_system)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(
@@ -1489,10 +1607,13 @@ Return ONLY a valid JSON array:
 ]"""
 
     _system = "You are a JSON-only response bot. Return only a valid JSON array, no markdown fences, no explanation."
-    _model = model or "claude-haiku-4-5-20251001"
+    _model = model or "grok-4-1-fast-reasoning"
 
     try:
-        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai(
+                [{"role": "user", "content": prompt}], _model, 2000, 0.3, system=_system)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(

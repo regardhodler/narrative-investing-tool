@@ -9942,5 +9942,107 @@
     "meta": {
       "fed_funds_rate": 3.64
     }
+  },
+  {
+    "id": "20260327_202147_65",
+    "timestamp": "2026-03-27T20:21:47.658704",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 7,
+      "narrative": "Portfolio is overweight commodity/inflation hedges (36% in precious metals + energy) amid stagflation regime with acute geopolitical tail risks (Middle East, yen carry). Yen carry reversal (8.5% black swan) directly threatens XTLH.TO core position; oil shock unwind pressures FCX/CHEV. Consolidate overlapping hedges and trim concentration.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Yen carry hedge conflicts with 8.5% reverse carry black swan; overweight at 5.7%. Trim 40% to lock gains.",
+          "risk_factors": [
+            "yen carry reversal tail risk",
+            "crowded positioning"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage thesis valid in stagflation; helium/chip bottleneck supports commodity premium. Monitor oil shock contagion.",
+          "risk_factors": [
+            "oil volatility spillover",
+            "demand destruction risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage play fits regime; dual position (5.8% weight) acceptable as diversified hedge vs. gold concentration.",
+          "risk_factors": [
+            "rate sensitivity if Fed cuts",
+            "industrial demand weakness"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis weak in stagflation regime (RegimeFit:45); duplicate position at different prices. Consolidate to single 2% position.",
+          "risk_factors": [
+            "regime misalignment",
+            "policy uncertainty"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive appropriate for stagflation; small weight (2.7%) provides portfolio ballast. Consolidate duplicate entries.",
+          "risk_factors": [
+            "regulatory risk",
+            "margin compression"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Gold hedge valid but triple-counted (3.7% aggregate); consolidate to single 3% position. Avoid redundancy with PSLV/XTLH.",
+          "risk_factors": [
+            "real rate sensitivity",
+            "USD strength"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Energy value play fits geopolitical premium; 10.8% weight excessive given oil shock unwind risk. Trim to 7%.",
+          "risk_factors": [
+            "oil price volatility",
+            "geopolitical escalation"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Utilities defensive but RegimeFit:50 weak in stagflation (inflation pressure on margins). 16% weight appropriate as ballast; monitor rate sensitivity.",
+          "risk_factors": [
+            "inflation margin squeeze",
+            "rate path uncertainty"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce XTLH.TO by 40% immediately; yen carry reversal is primary tail risk",
+        "Consolidate duplicate positions (FMKT, UNH.TO, PHYS.TO) to eliminate redundancy; target 38% commodity/hedge allocation",
+        "Trim CHEV.TO to 7% and set stop-loss at -8% if oil shock accelerates; monitor Strait of Hormuz escalation daily"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
   }
 ]

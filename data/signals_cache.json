@@ -6,13 +6,73 @@
     "quadrant": "Stagflation"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-03-27T20:03:43.813533"
+    "__datetime__": "2026-03-27T20:43:03.959015"
   },
   "_rp_plays_result": {
-    "sectors": [],
-    "stocks": [],
-    "bonds": [],
-    "rationale": ""
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
+        "name": "Materials",
+        "conviction": 2
+      },
+      {
+        "name": "Industrials",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "Oil prices are trending upwards, driven by the positive commodity trend signal",
+        "conviction": 3
+      },
+      {
+        "ticker": "FCX",
+        "reason": "Copper prices are rising, driven by the positive commodity trend signal",
+        "conviction": 2
+      },
+      {
+        "ticker": "JPM",
+        "reason": "The HYG/LQD ratio indicates increased credit risk appetite, which can benefit financial stocks",
+        "conviction": 1
+      },
+      {
+        "ticker": "CAT",
+        "reason": "The positive term premium and corporate CAPEX vs liquidity signals can benefit industrial stocks",
+        "conviction": 1
+      },
+      {
+        "ticker": "VLO",
+        "reason": "The energy sector is likely to benefit from the positive commodity trend signal",
+        "conviction": 2
+      },
+      {
+        "ticker": "NUE",
+        "reason": "The materials sector is likely to benefit from the positive commodity trend signal",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "The negative equity trend signal and low VIX may lead to increased demand for long-term bonds",
+        "conviction": 2
+      },
+      {
+        "ticker": "HYG",
+        "reason": "The HYG/LQD ratio indicates increased credit risk appetite, which can benefit high-yield bonds",
+        "conviction": 1
+      },
+      {
+        "ticker": "LQD",
+        "reason": "The positive term premium signal can benefit investment-grade bonds",
+        "conviction": 1
+      }
+    ],
+    "rationale": "The True Neutral regime with a slightly negative aggregate score suggests a cautious approach, but the positive commodity trend and term premium signals indicate opportunities in energy and materials sectors. The low VIX and negative equity trend signal also suggest a potential shift towards bonds. Overall, a selective approach with a focus on energy, materials, and bonds is warranted in this regime."
   },
   "_rp_plays_last_tier": "\u26a1 Groq",
   "_fed_funds_rate": 3.64,
@@ -51,20 +111,84 @@
     }
   ],
   "_rate_path_probs_ts": {
-    "__datetime__": "2026-03-27T20:03:45.299436"
+    "__datetime__": "2026-03-27T20:43:07.520737"
   },
   "_fed_plays_result": {
-    "sectors": [],
-    "stocks": [],
-    "bonds": [],
-    "rationale": ""
+    "sectors": [
+      {
+        "name": "Consumer Staples",
+        "conviction": 2
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      },
+      {
+        "name": "Utilities",
+        "conviction": 1
+      },
+      {
+        "name": "Telecom",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "PG",
+        "reason": "Procter & Gamble's stable consumer staples business makes it a safe haven in stagflationary environments",
+        "conviction": 2
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Johnson & Johnson's diversified healthcare portfolio and strong balance sheet make it a compelling buy",
+        "conviction": 2
+      },
+      {
+        "ticker": "DUK",
+        "reason": "Duke Energy's regulated utility business provides a stable source of income in uncertain times",
+        "conviction": 1
+      },
+      {
+        "ticker": "VZ",
+        "reason": "Verizon's telecom services are essential in any economic environment",
+        "conviction": 1
+      },
+      {
+        "ticker": "MRK",
+        "reason": "Merck's pharmaceutical business is well-positioned to benefit from an aging population and increased healthcare spending",
+        "conviction": 2
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NextEra Energy's renewable energy portfolio and strong track record make it an attractive buy",
+        "conviction": 2
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TIPS",
+        "reason": "Treasury Inflation-Protected Securities provide a hedge against inflation and stagflation",
+        "conviction": 2
+      },
+      {
+        "ticker": "MUB",
+        "reason": "Municipal bonds offer a relatively safe source of income and are less correlated with equity markets",
+        "conviction": 1
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade corporate bonds provide a higher yield than government bonds with relatively low credit risk",
+        "conviction": 1
+      }
+    ],
+    "rationale": "In a True Neutral regime with a stagflationary quadrant, investors should focus on sectors and stocks that provide stability, income, and a hedge against inflation. Consumer staples, healthcare, and utilities are well-positioned to benefit from this environment, while bonds with inflation protection and relatively low credit risk are attractive. A moderate buy conviction is warranted for most picks, with a strong buy conviction reserved for the most compelling opportunities."
   },
   "_fed_plays_result_ts": {
-    "__datetime__": "2026-03-27T20:03:45.790258"
+    "__datetime__": "2026-03-27T20:43:09.642283"
   },
   "_fed_plays_engine": "\u26a1 Groq",
   "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
-  "_chain_narration": "Error generating narration: 400 Client Error: Bad Request for url: https://api.groq.com/openai/v1/chat/completions",
+  "_chain_narration": "The most likely rate path is the \"hold\" scenario, with a probability of 68.29%, which would transmit through credit markets by keeping short rates stable, leading to a flat mortgage market and contained credit spreads. This scenario would benefit asset classes such as mortgage-backed securities (e.g., MBB) and investment-grade corporate bonds (e.g., LQD), while facing headwinds in sectors like growth/tech stocks (e.g., QQQ). In contrast, a rate hike would likely pressure growth/tech stocks (e.g., TSLA, NVDA) and strengthen the USD, benefiting USD-denominated assets like US Treasury bonds (e.g., TLT). The \"hold\" scenario would also support the housing market, benefiting homebuilders like ITB.",
   "_chain_narration_engine": "\u26a1 Groq",
   "_custom_swans": {
     "reverse yen carry trade": {
@@ -101,16 +225,16 @@
   "_custom_swans_ts": {
     "__datetime__": "2026-03-24T20:34:37.003823"
   },
-  "_doom_briefing": "# RISK ASSESSMENT BRIEFING\n**March 27, 2026**\n\n---\n\n## STRESS LEVEL: 4/10\n**Elevated but contained. Localized stress in credit-sensitive and illiquid asset classes; systemic contagion risk remains low.**\n\n---\n\n## KEY STRESS SIGNALS\n\n\u2022 **Regional bank stress is acute and isolated.** Regional bank equities have declined 15.0% over one month with a drawdown of -19.3%, substantially outpacing broader equity weakness. This reflects deposit-flight risk and commercial real estate exposure concentration, but credit spreads remain benign (IG OAS at 0.87, HY OAS at 3.17), indicating the market does not yet price systemic banking failure or contagion to investment-grade borrowers.\n\n\u2022 **Private equity exposure exhibits severe drawdown (-38.1%) despite modest monthly decline (-5.5%).** This suggests concentrated losses in illiquid positions with limited mark-to-market visibility. The asymmetry between monthly and cumulative drawdown indicates either (a) prior period losses now crystallizing, or (b) valuation haircuts on unrealized holdings. Without fund-level leverage data, contagion risk to credit markets cannot be fully assessed, but the magnitude warrants monitoring of LP redemption pressure.\n\n\u2022 **Subprime/consumer credit shows stress (-6.7% monthly, -31.7% drawdown) without corresponding HY spread widening.** The divergence between asset class performance and credit spreads (HY OAS at 3.17, near historical lows for stress environments) suggests either mispricing of default risk or that mark-to-market losses are concentrated in equity-like tranches rather than debt. This creates tail risk if credit events accelerate and spread to senior tranches.\n\n\u2022 **Geopolitical event clustering creates binary tail risk with compressed decision window.** April 6 Iran strike deadline, April 30 leadership transition window, and Kharg Island terminal vulnerability create a 34-day window for multiple simultaneous shocks. Polymarket data (76% Israeli military action probability by April 1, 24% Kharg infrastructure risk) indicates material supply-shock scenarios. Current crude volatility spike (+21.5% in volatility indices) reflects this hedging, but inflation expectations remain anchored (1% March CPI probability priced). A realized energy supply shock would move 2026 inflation expectations from 24% to actionable levels, potentially forcing policy repricing and triggering duration losses.\n\n\u2022 **Yield curve remains inverted but flattening (10Y-2Y at 0.46).** This reflects recession-hedging positioning but does not yet signal acute financial stress. The modest slope leaves room for further flattening without triggering forced deleveraging, though a return to inversion would signal renewed recession fears.\n\n\u2022 **Composite stress score of 28.4/100 indicates elevated but non-crisis conditions.** The score reflects concentrated stress in equity-like and illiquid assets rather than systemic credit or liquidity failure.\n\n---\n\n## FORWARD ASSESSMENT\n\nThe financial system is pricing multiple tail scenarios (geopolitical escalation, energy supply shock, tech capex constraints) without yet incorporating them into core credit or funding markets. The critical vulnerability is the April 6\u201330 event window: if geopolitical escalation materializes and energy prices spike, the 1% inflation probability currently priced would force rapid repricing of duration and leverage, with secondary contagion risk to regional banks and PE-exposed credit. Monitor credit spread widening (trigger: HY OAS >4.5) and regional bank CDS as leading indicators of systemic stress transmission.",
+  "_doom_briefing": "STRESS LEVEL: 6\n\n* The Composite Stress Score of 31.6/100 indicates a moderate level of financial system stress, with the HY Credit Spread (OAS) at 3.21 and IG Credit Spread at 0.88, suggesting a widening gap between high-yield and investment-grade credit.\n* The Yield Curve 10Y-2Y at 0.56 is relatively flat, which may indicate a potential slowdown in economic growth.\n* The Canary Watchlist shows significant drawdowns in Regional Banks (-21.3%) and Commercial Real Estate (-16.4%), which may be indicative of sector-specific stress.\n* The Subprime / Consumer Credit sector has experienced a notable drawdown of -33.8%, which could be a concern for broader consumer credit markets.\n\nLooking forward, the current stagflationary environment, exacerbated by supply shocks and geopolitical tensions, may continue to contribute to financial system stress. The yield curve inversion and policy capitulation signal may also indicate a potential shift in monetary policy, which could have implications for credit markets and overall financial stability. As the situation evolves, it is essential to continue monitoring these stress signals and assessing their potential impact on the financial system.",
   "_doom_briefing_ts": {
-    "__datetime__": "2026-03-26T19:05:00.809785"
+    "__datetime__": "2026-03-27T20:43:33.753324"
   },
-  "_doom_briefing_engine": "\ud83e\udde0 Regard Mode",
-  "_whale_summary": "# Institutional Whale Activity Summary\n\n\u2022 **AI Infrastructure Dominance with Selective Pullback**: The \"Magnificent Seven\" remains the core conviction trade, with BlackRock aggressively loading NVIDIA (+$62.2B, +37.6%) and APPLE (+$43.7B, +24.5%), while Vanguard adds ALPHABET across multiple tranches (+$71.6B combined). However, State Street and Vanguard are *trimming* MICROSOFT (-$28.2B combined) and META (-$24.2B combined), suggesting whales are rotating within mega-cap tech rather than abandoning it\u2014favoring pure-play AI chips and search over advertising/cloud exposure.\n\n\u2022 **Healthcare Conviction Play Emerges**: ELI LILLY sees synchronized buying from both Vanguard (+$26.3B, +42.6%) and State Street (+$9.2B, +49.9%), signaling institutional confidence in the GLP-1 secular trend. This is the only non-tech sector showing multi-whale convergence, indicating a deliberate diversification away from pure tech concentration.\n\n\u2022 **Memory Chip Bet Signals Cycle Inflection**: Vanguard's outsized MICRON addition (+$12.9B, +73.8%) paired with BROADCOM buying (+$9.1B) suggests whales are positioning for semiconductor supply chain normalization and AI infrastructure buildout beyond just GPU makers\u2014a more nuanced play than headline NVIDIA momentum.\n\n\u2022 **Streaming & Social Media Exits Signal Caution**: Vanguard dumping NETFLIX (-$9.6B, -20.8%) and both Vanguard/State Street reducing META positions (-$24.2B combined) indicates institutional skepticism on advertising-dependent models and mature streaming valuations, despite their mega-cap status.\n\n\u2022 **Overall Sentiment = Selective Concentration**: $200B+ in net inflows are clustering into AI infrastructure (NVIDIA, BROADCOM, MICRON), search/cloud (ALPHABET), and healthcare innovation (LILLY), while whales are pruning crowded positions in advertising/streaming. This reflects conviction in structural AI tailwinds but caution on valuation-stretched consumer tech.",
+  "_doom_briefing_engine": "\u26a1 Groq",
+  "_whale_summary": "Here's a concise narrative summary of the quarterly 13F whale position changes:\n\n* The biggest hedge funds and institutions are converging on the technology and healthcare sectors, with notable increases in positions such as NVIDIA (+$62.2B, +37.6% by BlackRock), Apple (+$43.7B, +24.5% by BlackRock), and Alphabet (+$40B, +31.9% by Vanguard Group).\n* Alphabet is seeing the most conviction, with multiple whales buying, including Vanguard Group (+$40B, +31.9% and +$31.6B, +31.4%), BlackRock (+$13.9B, +22.2% and +$10.9B, +20.2%), and State Street Corp (+$16.6B, +29.8%).\n* Notable exits or position closures include Vanguard Group's decrease in Microsoft (-$16.4B, -4.5%) and State Street Corp's decrease in Meta Platforms (-$14.7B, -15.4%), which may signal a shift away from these names.\n* The overall flow pattern suggests that institutional sentiment is positive towards growth-oriented tech stocks and healthcare companies, with Eli Lilly & Co seeing increases from both Vanguard Group (+$26.3B, +42.6%) and State Street Corp (+$9.2B, +49.9%).\n* Other notable increases include Micron Technology (+$12.9B, +73.8% by Vanguard Group) and Broadcom (+$9.1B, +5.8% by Vanguard Group), indicating a bullish outlook on the semiconductor industry.\n* BlackRock's increase in Amazon (+$9.7B, +8.4%) and NVIDIA (+$62.2B, +37.6%) positions suggests a focus on cloud computing and artificial intelligence, which are driving growth in the tech sector.",
   "_whale_summary_ts": {
-    "__datetime__": "2026-03-26T18:42:18.763281"
+    "__datetime__": "2026-03-27T20:44:20.996376"
   },
-  "_whale_summary_engine": "\ud83e\udde0 Regard Mode",
+  "_whale_summary_engine": "\u26a1 Groq",
   "_plays_result": {
     "sectors": [
       {
@@ -390,9 +514,9 @@
     "__datetime__": "2026-03-26T19:08:15.055291"
   },
   "_portfolio_analysis_engine": "\ud83d\udc51 Highly Regarded Mode",
-  "_current_events_digest": "# MACRO DIGEST | 2026-03-27\n\n**REGIME CONFIRMATION: Stagflation Intensifying via Supply Shock**\n\nThe market is pricing a classic oil-driven stagflation cascade: AirGas force majeure on Qatar helium production + elevated Iran strike risk (31% Polymarket odds on Kharg Island by April 30) directly threaten TSMC's semiconductor supply chain (60-70% helium dependency via Strait of Hormuz routes), while Japanese long-end yields spike to 3.9% (40Y) and USD/JPY breaches 160\u2014signaling both reflationary pressure and BOJ intervention risk. Critically, bond markets are front-running policy capitulation: Trump's prior tariff pauses, $200B mortgage purchases, and Iran strike delays all correlate with 10Y yields above 4.30-4.60%, suggesting equity drawdowns (tech down worst week in ~12 months) are forcing executive hand toward stimulus, not tightening. This contradicts the \"true neutral\" regime label\u2014we are now firmly in the **stagflation quadrant's dangerous tail: supply-constrained, geopolitically fragile, with policy ammunition depleting.**\n\n**Key Actionable Risks:** (1) Oracle CDS approaching GFC-era highs signals corporate credit stress spillover; (2)",
+  "_current_events_digest": "# MACRO DIGEST | 2026-03-27\n\n**REGIME CONFIRMATION: Stagflation Accelerating via Supply Shock**\n\nA classic stagflationary pincer is crystallizing. Qatar's helium production collapse\u2014triggering AirGas force majeure and directly threatening TSMC's advanced chip cooling and lithography capacity\u2014represents a *genuine supply constraint* (not demand-driven inflation). This compounds Iran escalation risk (34% leadership change odds by May; Rubio signaling weeks-long conflict; 30% Kharg Island terminal strike probability by April 30), which would compress energy supply precisely when semiconductor and defense industrial bases depend on uninterrupted flow. The field notes correctly flag the 50+ year pattern: oil shocks *precede* gold crashes, not follow them\u2014real rates spike, liquidity evaporates, and equities suffer first. Polymarket assigns only 25% to >5% inflation in 2026, yet geopolitical supply destruction + helium/LNG chokepoints through Strait of Hormuz (Trump's rhetorical \"Strait of Trump\" notwithstanding) suggest consensus is severely underpricing stagflation tail risk.\n\n**Yield Curve Inversion + Policy Capitulation Signal**\n\nJapan's 10Y at 2.37%, 30Y at 3.69%, and",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-03-27T20:03:53.609728"
+    "__datetime__": "2026-03-27T20:43:24.880897"
   },
   "_current_events_engine": "\ud83e\udde0 Regard Mode",
   "_trending_narratives": [
@@ -550,5 +674,21 @@
   "_auto_trending_groups_ts": {
     "__datetime__": "2026-03-27T19:40:05.818208"
   },
-  "_auto_trending_groups_engine": "\ud83e\udde0 Regard Mode"
+  "_auto_trending_groups_engine": "\ud83e\udde0 Regard Mode",
+  "_macro_synopsis": {
+    "conviction": "BEARISH",
+    "summary": "The overall macro conviction is bearish due to signals indicating stagflation, moderate financial system stress, and potential slowdown in economic growth. The regime is in a stagflationary quadrant, and the yield curve is relatively flat. Despite some bullish signals from whale activity, the dominant conviction is bearish.",
+    "key_points": [
+      "Stagflation Accelerating via Supply Shock",
+      "Composite Stress Score of 31.6/100",
+      "Yield Curve 10Y-2Y at 0.56"
+    ],
+    "contradictions": [
+      "Whale activity converging on technology and healthcare sectors, with notable increases in positions such as NVIDIA and Apple"
+    ]
+  },
+  "_macro_synopsis_ts": {
+    "__datetime__": "2026-03-27T20:44:22.086892"
+  },
+  "_macro_synopsis_engine": "\u26a1 Groq"
 }

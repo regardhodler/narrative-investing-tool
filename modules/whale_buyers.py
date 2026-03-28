@@ -393,17 +393,18 @@ def _render_ai_summary(df: pd.DataFrame):
         )
 
         # Engine selector
+        _has_xai_whale = bool(_os.getenv("XAI_API_KEY"))
         _has_anthropic = bool(_os.getenv("ANTHROPIC_API_KEY"))
-        _whale_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _has_anthropic else ["⚡ Groq"]
+        _whale_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _has_xai_whale else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
         _whale_tier_map = {
             "⚡ Groq":                (False, None),
-            "🧠 Regard Mode":         (True,  "claude-haiku-4-5-20251001"),
+            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
             "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
         }
         _sel_whale_tier = st.radio(
             "Engine", _whale_tier_opts, horizontal=True, key="whale_summary_engine"
         )
-        st.caption("💡 🧠 Haiku sufficient — summarisation task, not multi-factor synthesis")
+        st.caption("💡 🧠 Regard (Grok 4.1) sufficient — summarisation task")
         _use_cl_whale, _whale_model = _whale_tier_map[_sel_whale_tier]
 
         # Build text summary of top 20 changes for the AI

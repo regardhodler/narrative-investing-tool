@@ -706,7 +706,7 @@ def render():
         filename = st.session_state.get("_export_filename", "export.txt")
         mime = st.session_state.get("_export_mime", "text/markdown")
 
-        col1, col2 = st.columns([1, 2])
+        col1, col2, col3 = st.columns([1, 1, 2])
         with col1:
             st.download_button(
                 label=f"💾 Download {filename.split('.')[-1].upper()}",
@@ -717,6 +717,19 @@ def render():
                 key="export_download",
             )
         with col2:
+            from services.telegram_client import is_configured as _tg_ok, send_document as _tg_send_doc
+            if _tg_ok():
+                if st.button("📲 Send to Telegram", key="export_telegram"):
+                    with st.spinner("Sending to Telegram..."):
+                        _caption = f"📊 Macro Briefing — {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+                        _ok = _tg_send_doc(filename, content, caption=_caption)
+                    if _ok:
+                        st.success("✅ Sent to Telegram")
+                    else:
+                        st.error("❌ Telegram send failed — check bot token & chat ID")
+            else:
+                st.caption("📲 Telegram not configured")
+        with col3:
             char_count = len(content)
             line_count = content.count("\n")
             st.markdown(

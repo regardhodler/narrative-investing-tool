@@ -968,16 +968,19 @@ def render():
     import os
     from services.claude_client import generate_doom_briefing
 
-    _doom_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _doom_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _doom_has_claude else ["⚡ Groq"]
+    _doom_has_claude = bool(os.getenv("XAI_API_KEY"))
+
+
+    _has_anthropic_doom_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _doom_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _doom_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_doom_has_claude else [])
     _doom_tier_map = {
         "⚡ Groq": (False, None),
-        "🧠 Regard Mode": (True, "claude-haiku-4-5-20251001"),
+        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
     _sel_doom_tier = st.radio(
         "Briefing Engine", _doom_tier_opts, horizontal=True, key="doom_briefing_engine",
-        help="Standard = Groq · Regard Mode = Claude Haiku · Highly Regarded = Claude Sonnet"
+        help="Standard = Groq · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
     )
     st.caption("💡 👑 Sonnet recommended — briefing feeds into Valuation & Discovery; quality affects downstream AI reasoning")
     _use_claude, _doom_model = _doom_tier_map[_sel_doom_tier]

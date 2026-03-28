@@ -869,6 +869,8 @@ def render():
             unsafe_allow_html=True,
         )
         import os as _os
+        _pi_has_xai = bool(_os.getenv("XAI_API_KEY"))
+
         _pi_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
         _pi_tier_opts = ["⚡ Groq"]
         if _pi_has_claude:
@@ -961,7 +963,7 @@ def render():
                 _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _pi_model = None
                 if _sel_pi_tier == "🧠 Regard Mode":
-                    _pi_model = "claude-haiku-4-5-20251001"
+                    _pi_model = "grok-4-1-fast-reasoning"
                 elif _sel_pi_tier == "👑 Highly Regarded Mode":
                     _pi_model = "claude-sonnet-4-6"
                 with st.spinner("Analyzing portfolio against macro conditions..."):
@@ -1495,14 +1497,17 @@ def render():
                     unsafe_allow_html=True,
                 )
 
-            _fa_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-            _fa_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _fa_has_claude else ["⚡ Groq"]
+            _fa_has_claude = bool(os.getenv("XAI_API_KEY"))
+
+
+            _has_anthropic_fa_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+            _fa_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _fa_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_fa_has_claude else [])
             _fa_col1, _fa_col2 = st.columns([4, 2])
             with _fa_col1:
                 _fa_tier = st.radio(
                     "Factor Engine", _fa_tier_opts, horizontal=True,
                     key="factor_analysis_engine",
-                    help="Regard = Haiku (fast, concise) · Highly Regarded = Sonnet (richer, specific)",
+                    help="Regard = Grok 4.1 (fast, reasoning) · Highly Regarded = Sonnet (richer, specific)",
                 )
             # Change A — engine recommendation caption
             st.caption("💡 **Regard** for daily checks · **👑 Highly Regarded** for rebalancing decisions (position-specific suggestions)")
@@ -1513,7 +1518,7 @@ def render():
                 _fa_use_claude = _fa_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _fa_model = None
                 if _fa_tier == "🧠 Regard Mode":
-                    _fa_model = "claude-haiku-4-5-20251001"
+                    _fa_model = "grok-4-1-fast-reasoning"
                 elif _fa_tier == "👑 Highly Regarded Mode":
                     _fa_model = "claude-sonnet-4-6"
                 try:
@@ -1647,7 +1652,20 @@ def render():
                         except Exception:
                             pass
                 with _sim_col2:
+                    _sim_direction = st.selectbox("Direction", ["Long", "Short"], key="sim_direction")
                     _sim_amount = st.number_input("Dollar Amount ($)", min_value=100, max_value=500000, value=5000, step=500, key="sim_amount")
+
+                # Alignment badge — shown as soon as ticker is entered
+                if _sim_ticker:
+                    _sim_badge_text, _sim_badge_color = _regime_badge(_sim_direction, _cur_regime)
+                    _sim_regime_label = _cur_regime or "No Regime"
+                    st.markdown(
+                        f'<div style="margin:6px 0 2px 0;">'
+                        f'<span style="color:{_sim_badge_color};font-weight:700;font-size:13px;">{_sim_badge_text}</span>'
+                        f'<span style="color:#64748b;font-size:11px;margin-left:8px;">— {_sim_direction} {_sim_ticker} vs current regime: <b style="color:#94a3b8;">{_sim_regime_label}</b></span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
 
                 if st.button("Simulate Trade", key="sim_run") and _sim_ticker:
                     with st.spinner(f"Analyzing {_sim_ticker} impact on portfolio..."):
@@ -1714,14 +1732,16 @@ def render():
 
                     # ── AI Verdict Engine ──────────────────────────────────────
                     st.markdown(f'<div style="margin-top:12px;border-top:1px solid #1E3A4A;padding-top:10px;"></div>', unsafe_allow_html=True)
-                    _sv_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-                    _sv_tier_opts = ["⚡ Groq", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _sv_has_claude else ["⚡ Groq"]
+                    _sv_has_claude = bool(os.getenv("XAI_API_KEY"))
+
+                    _has_anthropic_sv_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+                    _sv_tier_opts = ["⚡ Groq"] + (["🧠 Regard Mode"] if _sv_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_sv_has_claude else [])
                     _sv_col1, _sv_col2 = st.columns([4, 2])
                     with _sv_col1:
                         _sv_tier = st.radio(
                             "Verdict Engine", _sv_tier_opts, horizontal=True,
                             key="sim_verdict_engine",
-                            help="Regard = Haiku (fast) · Highly Regarded = Sonnet (deeper regime reasoning)",
+                            help="Regard = Grok 4.1 (fast) · Highly Regarded = Sonnet (deeper regime reasoning)",
                         )
                     st.caption("💡 **Regard** sufficient · **👑 Highly Regarded** for high-conviction sizing decisions")
                     with _sv_col2:
@@ -1731,7 +1751,7 @@ def render():
                         _sv_use_claude = _sv_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                         _sv_model = None
                         if _sv_tier == "🧠 Regard Mode":
-                            _sv_model = "claude-haiku-4-5-20251001"
+                            _sv_model = "grok-4-1-fast-reasoning"
                         elif _sv_tier == "👑 Highly Regarded Mode":
                             _sv_model = "claude-sonnet-4-6"
                         from services.claude_client import analyze_sim_verdict as _asv
