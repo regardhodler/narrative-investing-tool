@@ -78,6 +78,12 @@ _SIGNAL_KEYS = [
     "_auto_trending_groups",
     "_auto_trending_groups_ts",
     "_auto_trending_groups_engine",
+    # Ticker-level smart money signals (set when user visits each module)
+    "_options_sentiment",
+    "_unusual_activity_sentiment",
+    "_institutional_bias",
+    "_insider_net_flow",
+    "_congress_bias",
 ]
 
 

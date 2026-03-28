@@ -326,11 +326,11 @@ def render():
   </div>
   <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
     <span style="color:#f59e0b;font-weight:700;">Discovery</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · trending narratives · auto-trending groups (feeds Cross-Signal Plays)</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups (feeds Cross-Signal Plays)</span>
   </div>
   <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
     <span style="color:#3b82f6;font-weight:700;">Valuation</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · plays · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff</span>
   </div>
 </div>
 

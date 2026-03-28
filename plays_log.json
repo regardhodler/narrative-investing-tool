@@ -8637,5 +8637,1085 @@
       "n_positions": 14,
       "verdict": "HOLD_ALL"
     }
+  },
+  {
+    "id": "20260326_202037_51",
+    "timestamp": "2026-03-26T20:20:37.517682",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 7,
+      "narrative": "Portfolio is overweight defensive/commodity hedges (47% in precious metals, utilities, energy) misaligned with neutral-risk-off regime and hawkish rate hold bias. Geopolitical tail risks (Iran, Strait of Hormuz) and yen carry reversal (8.5% black swan) create acute drawdown exposure despite quality positioning. Reduce commodity concentration and trim duplicate positions.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Yen carry hedge redundant; 8.5% reversal risk already embedded. Neutral regime doesn't justify 5.8% weight.",
+          "risk_factors": [
+            "yen carry reversal tail",
+            "regime drift to risk-on"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage thesis valid; energy constraint narrative supports. Maintain 7.5% as inflation hedge.",
+          "risk_factors": [
+            "geopolitical supply shock",
+            "demand destruction risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Duplicate silver position (5.6% + 5.6%). Consolidate to single 5% tranche; liquidity drag.",
+          "risk_factors": [
+            "position redundancy",
+            "low regime fit at 57"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis weak in stagflation; regime fit 45. Hold 3.7% as tactical bet, monitor policy shifts.",
+          "risk_factors": [
+            "low regime alignment",
+            "policy uncertainty"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive appropriate; consolidate duplicate positions into single 2.8% holding.",
+          "risk_factors": [
+            "rate sensitivity",
+            "regulatory risk"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Triple position (3.6% + 3.6% + 3.6%) = 10.8% gold overweight. Consolidate to 5%; inflation hedge redundant with commodities.",
+          "risk_factors": [
+            "position concentration",
+            "rate headwind on gold"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "10.8% energy weight excessive given geopolitical Strait of Hormuz risk (8.5% black swan). Trim to 7%.",
+          "risk_factors": [
+            "geopolitical supply shock",
+            "Iran escalation by April 6"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive fit stagflation; 16.2% weight appropriate. AI energy demand supports long-term thesis.",
+          "risk_factors": [
+            "rate hold bias limits upside",
+            "yen carry reversal spillover"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Consolidate PHYS.TO triple position to single 5% tranche; redeploy $3.6B to liquidity buffer for April geopolitical volatility window.",
+        "Reduce XTLH.TO to 3% and CHEV.TO to 7%; reallocate 4.3% to AI-energy infrastructure plays (NEE, PG) aligned with whale flows and energy constraint narrative.",
+        "Monitor Iran deadline (April 6) and Kharg Island risk; set stop-loss at -8% on energy/commodity cluster if Strait closure probability exceeds 35%."
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260326_202143_27",
+    "timestamp": "2026-03-26T20:21:43.275783",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 5,
+      "narrative": "Portfolio is defensively positioned with gold, silver, utilities, and healthcare dominating. Stagflation regime favors real assets and defensives. Geopolitical tail risk via Iran/energy is partially hedged through CHEV and precious metals.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO @ $36.81",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Direct yen carry unwind hedge; black swan coverage justifies position.",
+          "risk_factors": [
+            "low liquidity",
+            "binary event timing"
+          ]
+        },
+        {
+          "ticker": "FCX @ $59.92",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Copper thesis valid long-term but stagflation and risk-off pressure industrial metals near-term.",
+          "risk_factors": [
+            "growth slowdown",
+            "China demand risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO @ $15.44",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver benefits from inflation regime and industrial demand; stagflation supportive.",
+          "risk_factors": [
+            "liquidity thin",
+            "volatility spike risk"
+          ]
+        },
+        {
+          "ticker": "FMKT @ $20.69",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis is policy-dependent; stagflation and risk-off reduce small-cap appetite.",
+          "risk_factors": [
+            "regime misfit",
+            "rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "UNH.TO @ $14.35",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive aligns with AI-favored sectors and risk-off lean.",
+          "risk_factors": [
+            "policy/regulatory risk",
+            "USD translation"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $26.38",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge against debt and inflation is core stagflation play.",
+          "risk_factors": [
+            "rate hike tail risk",
+            "USD strength"
+          ]
+        },
+        {
+          "ticker": "FMKT @ $23.00",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Duplicate deregulation position; combined weight excessive given regime misalignment.",
+          "risk_factors": [
+            "regime misfit",
+            "concentrated thesis"
+          ]
+        },
+        {
+          "ticker": "UNH.TO @ $16.65",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive healthcare; duplicate entry but thesis intact in stagflation.",
+          "risk_factors": [
+            "policy risk",
+            "duplicate cost basis"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO @ $22.20",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage thesis supported by AI energy/industrial demand.",
+          "risk_factors": [
+            "volatility",
+            "duplicate position management"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $43.42",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Inflation hedge with debt overhang; stagflation regime strongly supportive.",
+          "risk_factors": [
+            "rate hike tail",
+            "USD strength"
+          ]
+        },
+        {
+          "ticker": "XTLH.TO @ $32.75",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry hedge; 8.5% black swan probability warrants maintained exposure.",
+          "risk_factors": [
+            "event timing uncertainty",
+            "low liquidity"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO @ $20.34",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Largest position; Iran/Hormuz risk and energy inflation directly supportive.",
+          "risk_factors": [
+            "geopolitical binary",
+            "Venezuela policy risk"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $50.00",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Third gold tranche; inflation hedge concentration is intentional and regime-appropriate.",
+          "risk_factors": [
+            "over-concentration in gold",
+            "rate hike pressure"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO @ $28.79",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Largest single position; utilities are AI-favored, defensive, and stagflation-resilient.",
+          "risk_factors": [
+            "rate sensitivity at 16% weight",
+            "crowded defensive trade"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce both FMKT positions; deregulation thesis misaligned with stagflation and risk-off regime",
+        "Trim FCX to under 5%; industrial metals vulnerable to growth slowdown in stagflation quadrant",
+        "Monitor ZUT.TO rate sensitivity closely; 16% weight exposed if 19% hike tail risk materializes"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260326_202527_11",
+    "timestamp": "2026-03-26T20:25:27.115846",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 5,
+      "narrative": "Portfolio is defensively positioned with gold, silver, utilities, and healthcare dominating. Stagflation regime favors real assets and defensives. Geopolitical tail risk via Iran/energy supports commodity hedges.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO @ $36.81",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Direct yen carry unwind hedge; black swan coverage justified at 8.5% probability.",
+          "risk_factors": [
+            "Low liquidity if carry unwind is orderly",
+            "Small position size limits impact"
+          ]
+        },
+        {
+          "ticker": "FCX @ $59.92",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Copper shortage thesis valid but stagflation and risk-off pressure industrial metals near-term.",
+          "risk_factors": [
+            "Risk-off regime headwind",
+            "China demand uncertainty"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO @ $15.44",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver benefits from inflation factor exposure and geopolitical stress; stagflation supportive.",
+          "risk_factors": [
+            "Industrial demand softness in slowdown",
+            "Duplicate position concentration"
+          ]
+        },
+        {
+          "ticker": "FMKT @ $20.69",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis is cyclical/growth; stagflation and risk-off regime are headwinds. Low regime fit score of 45.",
+          "risk_factors": [
+            "Regime misalignment",
+            "Duplicate position doubles concentration risk"
+          ]
+        },
+        {
+          "ticker": "UNH.TO @ $14.35",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive aligns with AI-favored sectors and risk-off lean; cross-signal confirmed.",
+          "risk_factors": [
+            "US healthcare policy risk",
+            "Duplicate position at different cost basis"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $26.38",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge against debt and inflation is core stagflation play; highest score in portfolio.",
+          "risk_factors": [
+            "Three tranches create heavy concentration",
+            "Rate hike tail risk pressures gold"
+          ]
+        },
+        {
+          "ticker": "FMKT @ $23.00",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Duplicate deregulation position; combined weight excessive given regime misalignment.",
+          "risk_factors": [
+            "Regime misalignment",
+            "Growth factor dependency in stagflation"
+          ]
+        },
+        {
+          "ticker": "UNH.TO @ $16.65",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second healthcare tranche; defensive character valid but consolidate cost basis tracking.",
+          "risk_factors": [
+            "Policy headline risk",
+            "Duplicate tracking complexity"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO @ $22.20",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second silver tranche; combined PSLV weight elevated but thesis intact in stagflation.",
+          "risk_factors": [
+            "Combined silver overweight",
+            "Industrial demand drag"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $43.42",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second gold tranche; debt and inflation hedge remains valid with hawkish rate skew.",
+          "risk_factors": [
+            "Concentration across three tranches",
+            "19.2% hike tail risk"
+          ]
+        },
+        {
+          "ticker": "XTLH.TO @ $32.75",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second yen carry hedge tranche; combined weight appropriate for 8.5% black swan probability.",
+          "risk_factors": [
+            "Carry unwind timing unpredictable",
+            "Illiquidity in stress scenario"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO @ $20.34",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Largest position; Iran/Hormuz risk and energy AI demand support. Geopolitical premium justified.",
+          "risk_factors": [
+            "Venezuela political risk",
+            "Kharg Island disruption scenario"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO @ $50.00",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Third gold tranche; inflation hedge thesis strongest of three given stagflation quadrant.",
+          "risk_factors": [
+            "Heavy gold concentration across portfolio",
+            "Rate hike tail erodes gold appeal"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO @ $28.79",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Largest single position; utilities top AI-favored and cross-signal sector. NEE-type exposure ideal.",
+          "risk_factors": [
+            "Rate sensitivity if hike tail materializes",
+            "16.2% weight is outsized concentration"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Consolidate or reduce duplicate FMKT positions; regime fit 45 is lowest in book and thesis misaligned with stagflation",
+        "Monitor ZUT.TO 16.2% weight closely; rate hike tail at 19.2% is primary risk to largest position",
+        "Trim combined PHYS.TO exposure if gold breaks below key support; three tranches create outsized single-asset risk"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260326_205546_30",
+    "timestamp": "2026-03-26T20:55:46.303356",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Groq",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6713805177677491,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.10240420731604796,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0009875047942582776,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2252277701219446,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.1
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260326_205621_95",
+    "timestamp": "2026-03-26T20:56:21.959801",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6713805177677491,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.10240420731604796,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0009875047942582776,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2252277701219446,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.1
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260326_205623_75",
+    "timestamp": "2026-03-26T20:56:23.754360",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6713805177677491,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.10240420731604796,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0009875047942582776,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2252277701219446,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.1
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260326_205628_27",
+    "timestamp": "2026-03-26T20:56:28.275084",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6713805177677491,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.10240420731604796,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0009875047942582776,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2252277701219446,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.1
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260326_205630_07",
+    "timestamp": "2026-03-26T20:56:30.074472",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6713805177677491,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.10240420731604796,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0009875047942582776,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2252277701219446,
+          "implied_rate": 3.660003662109375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.1
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260326_211935_56",
+    "timestamp": "2026-03-26T21:19:35.564155",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Utilities",
+          "conviction": 3
+        },
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 3
+        },
+        {
+          "name": "Healthcare",
+          "conviction": 2
+        },
+        {
+          "name": "Treasuries (Long Duration)",
+          "conviction": 3
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "NEE",
+          "reason": "Utility with stable cash flows and pricing power; outperforms in stagflation while yen-carry unwind drives safe-haven flows.",
+          "conviction": 3
+        },
+        {
+          "ticker": "XOM",
+          "reason": "Energy supermajor benefits from Strait of Hormuz closure risk premium embedded in oil; stagflation regime supports energy real assets.",
+          "conviction": 3
+        },
+        {
+          "ticker": "PG",
+          "reason": "Consumer staple with pricing power and dividend yield; defensive hedge against equity volatility and yen-carry deleveraging.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JNJ",
+          "reason": "Healthcare defensive with stable earnings; insulated from growth collapse and benefits from risk-off rotation.",
+          "conviction": 2
+        },
+        {
+          "ticker": "VZ",
+          "reason": "Telecom with 6%+ dividend yield and essential services; provides downside protection in yen-carry unwind scenario.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CVX",
+          "reason": "Energy exposure to Hormuz closure supply shock with strong balance sheet; captures geopolitical premium without cyclical equity risk.",
+          "conviction": 3
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TLT",
+          "reason": "Long-duration Treasury captures safe-haven flows from yen-carry unwind and Hormuz closure; term premium at +1.0 z-score supports duration.",
+          "conviction": 3
+        },
+        {
+          "ticker": "LQD",
+          "reason": "Investment-grade credit quality preferred over high-yield in elevated credit risk regime; yen-carry unwind triggers flight-to-quality.",
+          "conviction": 3
+        },
+        {
+          "ticker": "TIP",
+          "reason": "TIPS hedge stagflation tail; oil supply shock from Hormuz closure supports inflation expectations while real rates remain elevated.",
+          "conviction": 2
+        }
+      ],
+      "rationale": "Reverse yen-carry trade closure combined with Strait of Hormuz shutdown creates a dual shock: deleveraging forces (yen strength, margin calls) collide with supply-driven inflation (oil scarcity). This stagflation scenario demands defensive real assets (utilities, energy, staples) with pricing power and stable cash flows, while long-duration Treasuries and investment-grade credit capture safe-haven flows and term-premium support. Energy stocks explicitly benefit from the embedded Hormuz closure risk premium, while utilities and staples provide downside protection during the yen-carry unwind volatility spike.",
+      "avoid": [
+        "QQQ",
+        "IWM",
+        "HYG",
+        "MSFT"
+      ]
+    },
+    "meta": {
+      "overlay": "reverse yen carry trade, closure straight of hormuz",
+      "regime": "Risk-Off"
+    }
+  },
+  {
+    "id": "20260326_212429_69",
+    "timestamp": "2026-03-26T21:24:29.698988",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 7,
+      "narrative": "Portfolio is overweight defensive/commodity hedges (47% in PHYS, PSLV, XTLH, ZUT) with strong yen-carry and inflation convictions, but stagflation regime + hawkish rate skew (19.2% hike tail) creates duration and liquidity drag. Helium supply shock and geopolitical volatility amplify black swan exposure; reduce concentration in illiquid Canadian ETFs and trim duplicative positions.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Yen-carry hedge well-positioned for black swan (8.5% risk), but 5.8% weight duplicated across portfolio. Trim to 3% and redeploy.",
+          "risk_factors": [
+            "yen-carry reversal tail risk",
+            "illiquidity in CAD ETF"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage thesis valid under stagflation; helium shock supports industrial scarcity narrative. Maintain 7.5% weight.",
+          "risk_factors": [
+            "China margin compression if oil shock propagates",
+            "cyclical downturn risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Silver shortage credible, but 5.6% weight + duplicate PHYS positions (3.6% \u00d7 3) create 18.8% precious-metals concentration. Consolidate to single 4% position.",
+          "risk_factors": [
+            "rate hike tail erodes real-asset demand",
+            "illiquidity"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "EXIT",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis weak in stagflation regime (RegimeFit 45); duplicated at two prices ($20.69, $23.00). Exit both tranches; redeploy to higher-conviction trades.",
+          "risk_factors": [
+            "poor regime fit",
+            "regulatory uncertainty"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive appropriate for risk-off lean; modest 2.8% weight. Consolidate duplicate entries into single position.",
+          "risk_factors": [
+            "inflation pressure on healthcare costs",
+            "policy risk"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Gold hedge valid for 39T debt/inflation, but 3.6% \u00d7 3 entries (10.8% total) + PSLV overlap creates 18.8% precious-metals overweight. Consolidate to single 5% position.",
+          "risk_factors": [
+            "hawkish rate tail erodes gold carry",
+            "illiquidity"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Energy value play + Venezuelan upside fit stagflation; 10.8% weight appropriate. Monitor geopolitical escalation and Strait of Hormuz closure tail (8.5%).",
+          "risk_factors": [
+            "geopolitical tail risk (Hormuz closure)",
+            "oil-shock margin compression"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Utilities defensive but 16.2% weight is excessive; RegimeFit 50 signals weak alignment to stagflation. Trim to 10%, redeploy to higher-conviction hedges.",
+          "risk_factors": [
+            "rate hike tail pressures utility valuations",
+            "stagflation misalignment"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Consolidate 3\u00d7 PHYS.TO + PSLV.TO entries into single 5% gold + 4% silver position; exit 10.8% precious-metals overlap.",
+        "Exit both FMKT tranches (7.4% combined); redeploy to FCX or energy to strengthen scarcity thesis.",
+        "Trim ZUT.TO from 16.2% to 10% and XTLH.TO from 5.8% to 3%; rebalance to 8% cash buffer for black swan liquidity."
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260326_212530_69",
+    "timestamp": "2026-03-26T21:25:30.698702",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "DEFENSIVE",
+      "risk_score": 6,
+      "narrative": "Portfolio skews defensively with gold, silver, utilities, and yen hedges appropriate for stagflation. FCX and FMKT are regime misfits. Duplicate positions need consolidation.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Direct yen carry unwind hedge; 8.5% black swan tail justifies full weight.",
+          "risk_factors": [
+            "low liquidity",
+            "binary event risk"
+          ]
+        },
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second tranche reinforces black swan coverage; combined weight acceptable.",
+          "risk_factors": [
+            "duplicate position",
+            "low liquidity"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Copper is cyclical; stagflation regime and risk-off lean pressure industrial metals demand.",
+          "risk_factors": [
+            "China demand skepticism",
+            "risk-off regime"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage thesis plus inflation hedge fits stagflation quad well.",
+          "risk_factors": [
+            "duplicate tranche",
+            "volatile spread to gold"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second tranche; consolidate with first for cleaner sizing.",
+          "risk_factors": [
+            "duplicate position",
+            "liquidity risk"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis is policy-dependent; stagflation and hawkish Fed undermine small-cap growth.",
+          "risk_factors": [
+            "regime misfit",
+            "rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Duplicate deregulation position; combined weight unjustified in current regime.",
+          "risk_factors": [
+            "duplicate position",
+            "hawkish tail risk"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive fits AI-favored sectors and risk-off lean.",
+          "risk_factors": [
+            "regulatory headline risk",
+            "duplicate tranche"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second tranche; consolidate entries for cleaner book management.",
+          "risk_factors": [
+            "duplicate position",
+            "policy risk"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge against debt monetization and inflation is core stagflation trade.",
+          "risk_factors": [
+            "three duplicate tranches",
+            "crowded gold trade"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Second tranche; consolidate all three PHYS entries into single position.",
+          "risk_factors": [
+            "duplicate position",
+            "execution fragmentation"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Third tranche; consolidation into single PHYS position is priority.",
+          "risk_factors": [
+            "duplicate position",
+            "book complexity"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Energy fits stagflation quad and AI-favored sectors; Middle East volatility supports oil.",
+          "risk_factors": [
+            "Venezuela political risk",
+            "oil demand uncertainty"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities top AI-favored and cross-signal list; largest position is well-placed defensively.",
+          "risk_factors": [
+            "rate sensitivity if hike materializes",
+            "concentration at 16.2%"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Consolidate all duplicate positions (PHYS.TO x3, PSLV.TO x2, FMKT x2, UNH.TO x2) into single entries to reduce book complexity",
+        "Reduce FCX and FMKT by 40-50%; stagflation regime and hawkish Fed path are headwinds to cyclical and deregulation plays",
+        "Monitor ZUT.TO concentration at 16.2%; trim if 25bp hike tail risk rises above 25%"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "DEFENSIVE"
+    }
+  },
+  {
+    "id": "20260327_190513_94",
+    "timestamp": "2026-03-27T19:05:13.942219",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Utilities",
+          "conviction": 3
+        },
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 3
+        },
+        {
+          "name": "Healthcare",
+          "conviction": 2
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "NEE",
+          "reason": "Defensive utility with stable cash flows and pricing power; outperforms in stagflation with elevated term premium supporting long-duration assets.",
+          "conviction": 3
+        },
+        {
+          "ticker": "XOM",
+          "reason": "Energy major benefits from Middle East geopolitical risk premium and commodity strength (z=+0.82); embedded Hormuz closure upside.",
+          "conviction": 3
+        },
+        {
+          "ticker": "PG",
+          "reason": "Consumer staples leader with pricing power and dividend yield; defensive hedge against equity weakness and consumer sentiment deterioration.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JNJ",
+          "reason": "Healthcare defensive with stable cash flows; insulated from equity volatility and economic slowdown in stagflation regime.",
+          "conviction": 2
+        },
+        {
+          "ticker": "VZ",
+          "reason": "Telecom defensive with high dividend yield and stable cash flows; provides downside protection in risk-off environment.",
+          "conviction": 2
+        },
+        {
+          "ticker": "GLD",
+          "reason": "Safe-haven gold benefits from elevated geopolitical risk, term premium support, and broad market correction acceleration narrative.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TLT",
+          "reason": "Long-duration Treasury captures safe-haven flows and elevated term premium (z=+1.00); stagflation with Fed hold supports duration demand.",
+          "conviction": 3
+        },
+        {
+          "ticker": "LQD",
+          "reason": "Investment-grade credit quality preferred over high-yield in risk-off regime; elevated credit risk and HYG/LQD ratio deterioration favor IG.",
+          "conviction": 2
+        }
+      ],
+      "rationale": "Stagflation regime with elevated system stress, high credit risk, and geopolitical tail risks demands defensive real assets with pricing power and stable cash flows. Utilities, energy, and staples provide downside protection while energy explicitly captures Middle East risk premium and commodity strength (z=+0.82). Long-duration Treasuries benefit from elevated term premium (+1.0 z-score) and safe-haven flows as equity weakness (SPY -1.71%, VIX 31.0) and consumer sentiment collapse (z=-0.83) accelerate market correction narratives."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-Off"
+    }
   }
 ]

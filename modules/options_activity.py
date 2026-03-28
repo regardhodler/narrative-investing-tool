@@ -74,6 +74,15 @@ def render():
         unsafe_allow_html=True,
     )
 
+    # Persist P/C ratio signal for downstream use (valuation, portfolio intelligence)
+    st.session_state["_options_sentiment"] = {
+        "ticker": ticker,
+        "sentiment": sentiment,
+        "pc_ratio": round(pc_ratio, 3),
+        "call_vol": int(call_vol),
+        "put_vol": int(put_vol),
+    }
+
     # --- Volume by expiration ---
     _render_volume_by_expiration(df)
 
@@ -90,7 +99,7 @@ def render():
     _render_options_treemap(df, ticker)
 
     # --- Unusual activity ---
-    _render_unusual_activity(df)
+    _render_unusual_activity(df, ticker)
 
     # --- Highest OI concentration ---
     _render_oi_concentration(df)
@@ -242,7 +251,7 @@ def _render_options_treemap(df: pd.DataFrame, ticker: str):
     st.caption("Block size = volume · Green = calls · Red = puts")
 
 
-def _render_unusual_activity(df: pd.DataFrame):
+def _render_unusual_activity(df: pd.DataFrame, ticker: str = ""):
     """Table of contracts with unusually high volume relative to open interest,
     plus an overall sentiment verdict and visualization chart."""
     active = df[(df["volume"] > 0) & (df["openInterest"] > 0)].copy()
@@ -281,6 +290,15 @@ def _render_unusual_activity(df: pd.DataFrame):
     else:
         ua_sentiment, ua_color, ua_icon = "MIXED", COLORS["yellow"], "🟡"
         ua_detail = "Unusual activity split between calls and puts — no clear directional bias"
+
+    if ticker:
+        st.session_state["_unusual_activity_sentiment"] = {
+            "ticker": ticker,
+            "sentiment": ua_sentiment,
+            "call_pct": round(call_pct, 1),
+            "put_pct": round(put_pct, 1),
+            "flagged_contracts": len(unusual),
+        }
 
     st.markdown(
         f'<div style="background:rgba(0,0,0,0.3); border:2px solid {ua_color}; '

@@ -77,35 +77,35 @@
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.6766906242611412,
-      "implied_rate": 3.660003662109375,
+      "prob": 0.6774951920654675,
+      "implied_rate": 3.6500015258789062,
       "source": "yfinance",
       "delta": 0.0
     },
     {
       "scenario": "cut_25",
-      "prob": 0.09965236430662508,
-      "implied_rate": 3.660003662109375,
+      "prob": 0.11712463849435005,
+      "implied_rate": 3.6500015258789062,
       "source": "yfinance",
       "delta": 0.0
     },
     {
       "scenario": "cut_50",
-      "prob": 0.0009633181162845007,
-      "implied_rate": 3.660003662109375,
+      "prob": 0.0011641936939815391,
+      "implied_rate": 3.6500015258789062,
       "source": "yfinance",
       "delta": 0.0
     },
     {
       "scenario": "hike_25",
-      "prob": 0.22269369331594926,
-      "implied_rate": 3.660003662109375,
+      "prob": 0.2042159757462009,
+      "implied_rate": 3.6500015258789062,
       "source": "yfinance",
       "delta": 0.0
     }
   ],
   "_rate_path_probs_ts": {
-    "__datetime__": "2026-03-26T19:04:38.430154"
+    "__datetime__": "2026-03-27T18:29:29.970836"
   },
   "_fed_plays_result": {
     "sectors": [
@@ -226,6 +226,10 @@
         "conviction": 3
       },
       {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
         "name": "Consumer Staples",
         "conviction": 3
       },
@@ -234,96 +238,107 @@
         "conviction": 2
       },
       {
-        "name": "Energy",
-        "conviction": 2
+        "name": "Treasuries (Long Duration)",
+        "conviction": 3
       }
     ],
     "stocks": [
       {
         "ticker": "NEE",
-        "reason": "Utility leader with stable dividend yield and inflation-hedged cash flows; defensive positioning in stagflation with geopolitical oil premium tailwind.",
+        "reason": "Utility with stable cash flows and pricing power; outperforms in stagflation while yen-carry unwind drives safe-haven flows.",
+        "conviction": 3
+      },
+      {
+        "ticker": "XOM",
+        "reason": "Energy supermajor benefits from Strait of Hormuz closure risk premium embedded in oil; stagflation regime supports energy real assets.",
         "conviction": 3
       },
       {
         "ticker": "PG",
-        "reason": "Consumer staples with pricing power to navigate stagflation; dividend stability and real-asset hedge against deflation spiral risk.",
+        "reason": "Consumer staple with pricing power and dividend yield; defensive hedge against equity volatility and yen-carry deleveraging.",
         "conviction": 3
       },
       {
         "ticker": "JNJ",
-        "reason": "Healthcare defensive with non-cyclical revenue streams; benefits from risk-off flows and elevated term premium supporting dividend yields.",
+        "reason": "Healthcare defensive with stable earnings; insulated from growth collapse and benefits from risk-off rotation.",
         "conviction": 2
       },
       {
-        "ticker": "KO",
-        "reason": "Staples with global pricing power and inflation resilience; lower volatility in risk-off regime with geopolitical energy premium supporting margins.",
+        "ticker": "VZ",
+        "reason": "Telecom with 6%+ dividend yield and essential services; provides downside protection in yen-carry unwind scenario.",
         "conviction": 2
       },
       {
-        "ticker": "XLE",
-        "reason": "Energy sector ETF capturing 30% tail risk of Strait of Hormuz disruption and $70-90/bbl oil scenario; stagflation real-asset hedge.",
-        "conviction": 2
+        "ticker": "CVX",
+        "reason": "Energy exposure to Hormuz closure supply shock with strong balance sheet; captures geopolitical premium without cyclical equity risk.",
+        "conviction": 3
       }
     ],
     "bonds": [
       {
         "ticker": "TLT",
-        "reason": "Long-duration Treasury benefits from elevated term premium (+1.0 z-score), safe-haven flows in risk-off regime, and yen-carry unwind tail risk.",
+        "reason": "Long-duration Treasury captures safe-haven flows from yen-carry unwind and Hormuz closure; term premium at +1.0 z-score supports duration.",
         "conviction": 3
       },
       {
         "ticker": "LQD",
-        "reason": "Investment-grade corporate bonds offer quality duration with contained spreads (0.87 OAS); defensive positioning without high-yield credit risk.",
-        "conviction": 2
+        "reason": "Investment-grade credit quality preferred over high-yield in elevated credit risk regime; yen-carry unwind triggers flight-to-quality.",
+        "conviction": 3
       },
       {
         "ticker": "TIP",
-        "reason": "TIPS hedge stagflation and deflation spiral tail risks; real-asset protection with carry-unwind safe-haven demand in yen-reversal scenario.",
+        "reason": "TIPS hedge stagflation tail; oil supply shock from Hormuz closure supports inflation expectations while real rates remain elevated.",
         "conviction": 2
       }
     ],
-    "rationale": "Stagflation regime with elevated system stress, high credit risk, and 30% geopolitical tail risk (Strait of Hormuz) demands defensive real-asset positioning: utilities and staples provide stable cash flows and pricing power, while long-duration Treasuries and TIPS capture both term-premium support and safe-haven flows from potential yen-carry unwind or energy disruption. Energy exposure via XLE captures the embedded oil premium without cyclical equity risk; avoid growth tech and high-yield credit until risk regime decisively shifts risk-on."
+    "rationale": "Reverse yen-carry trade closure combined with Strait of Hormuz shutdown creates a dual shock: deleveraging forces (yen strength, margin calls) collide with supply-driven inflation (oil scarcity). This stagflation scenario demands defensive real assets (utilities, energy, staples) with pricing power and stable cash flows, while long-duration Treasuries and investment-grade credit capture safe-haven flows and term-premium support. Energy stocks explicitly benefit from the embedded Hormuz closure risk premium, while utilities and staples provide downside protection during the yen-carry unwind volatility spike.",
+    "avoid": [
+      "QQQ",
+      "IWM",
+      "HYG",
+      "MSFT"
+    ]
   },
   "_plays_engine": "\ud83e\udde0 Regard Mode",
   "_calibrated_rate_probs": [
     {
       "scenario": "hold",
       "label": "Fed Holds",
-      "market_pct": 62.7,
-      "structural_pct": 61.3,
-      "posterior_pct": 63.1,
-      "posterior": 0.6305932548872605,
+      "market_pct": 66.5,
+      "structural_pct": 67.4,
+      "posterior_pct": 67.7,
+      "posterior": 0.6774951920654675,
       "band_pct": 3.0,
       "rationale": "PCE sticky at 128.4% with contained unemployment limits Fed's ability to cut."
     },
     {
       "scenario": "cut_25",
       "label": "Cut 25bp",
-      "market_pct": 8.5,
-      "structural_pct": 5.9,
-      "posterior_pct": 6.0,
-      "posterior": 0.06040290684756615,
-      "band_pct": 4.0,
+      "market_pct": 14.8,
+      "structural_pct": 10.7,
+      "posterior_pct": 11.7,
+      "posterior": 0.11712463849435005,
+      "band_pct": 6.0,
       "rationale": "Softening growth indicators provide basis for a 25bp cut if inflation cooperates."
     },
     {
       "scenario": "cut_50",
       "label": "Cut 50bp",
-      "market_pct": 0.1,
+      "market_pct": 0.2,
       "structural_pct": 0.1,
       "posterior_pct": 0.1,
-      "posterior": 0.0006089237670886619,
+      "posterior": 0.0011641936939815391,
       "band_pct": 3.0,
       "rationale": "Softening growth indicators provide basis for a 50bp emergency cut if inflation cooperates."
     },
     {
       "scenario": "hike_25",
       "label": "Hike 25bp",
-      "market_pct": 28.8,
-      "structural_pct": 32.7,
-      "posterior_pct": 30.8,
-      "posterior": 0.30839491449808465,
-      "band_pct": 6.0,
+      "market_pct": 18.5,
+      "structural_pct": 21.8,
+      "posterior_pct": 20.4,
+      "posterior": 0.2042159757462009,
+      "band_pct": 5.0,
       "rationale": "Core PCE at 128.4% \u2014 well above target \u2014 keeps re-acceleration risk on the table."
     }
   ],
@@ -483,9 +498,85 @@
     "__datetime__": "2026-03-26T19:08:15.055291"
   },
   "_portfolio_analysis_engine": "\ud83d\udc51 Highly Regarded Mode",
-  "_current_events_digest": "# MARKET DIGEST: March 27, 2026\n\n**Core Narrative:** Markets are pricing acute geopolitical tail-risk alongside structural tech energy constraints, with Iran negotiations emerging as the dominant short-term volatility driver. Trump's extension of the Iran strike deadline to April 6 (76% probability of Israeli military action in Greater Beirut by April 1 per Polymarket suggests imminent escalation risk) has temporarily arrested the selloff, but the 55% probability of US-Iran talks and 24% risk to Kharg Island oil infrastructure indicate traders are hedging multiple scenarios\u2014evidenced by crude's volatility spike. The harder constraint is Big Tech's AI capex wall: nuclear power and skilled labor shortages are creating a genuine capacity ceiling, not just sentiment, which explains software's outperformance (margin-light vs. GPU-constrained hardware plays).\n\n**Actionable Risks:** The April 30 deadline clustering (Iran talks, Kharg terminal vulnerability, leadership transition at 30-47%) creates a compressed decision window with asymmetric payoff. Energy complex is vulnerable to supply shocks with only 1% inflation probability priced for March CPI data\u2014if energy shocks materialize, 5% 2026 inflation moves from 24% to actionable. Domestic policy drift (TSA pay executive orders, Target boycott friction) suggests execution risk",
+  "_current_events_digest": "# MACRO DIGEST | 2026-03-27\n\n**Iran geopolitical escalation and commodity supply shocks are colliding with nascent inflation re-acceleration, forcing a simultaneous unwind across risk assets and duration.** AirGas's force majeure on helium shipments following Qatar production collapse signals supply-chain fragility in specialty gases critical to semiconductor and healthcare sectors\u2014a second-order shock amplifying existing Middle East tensions. Oil has breached $112 as Trump's 10-day pause fails to contain Iran risk (59% Polymarket odds on Israel action in Greater Beirut by April 8; 30% on Kharg Island terminal strike), while Fed pivot expectations have inverted sharply: markets now price rate *hikes* not cuts, with inflation reaching 5%+ assigned only 24% probability but clearly the consensus tail risk. Stocks and bonds are slumping in tandem\u2014the classic \"nowhere to hide\" environment\u2014amid higher-income consumer capitulation and a visible erosion of Trump-trade momentum, creating a dangerous setup where geopolitical de-escalation (52% US-Iran meeting odds) is now the marginal catalyst keeping risk premium anchored.\n\n**Actionable risks:** Watch helium/specialty gas spot prices and semiconductor cost pass-through; monitor Kharg Island and Iranian leadership change timelines (50% by year-end);",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-03-26T19:04:49.108789"
+    "__datetime__": "2026-03-27T18:32:48.113767"
   },
-  "_current_events_engine": "\ud83e\udde0 Regard Mode"
+  "_current_events_engine": "\ud83e\udde0 Regard Mode",
+  "_trending_narratives": [
+    {
+      "narrative": "Middle East Geopolitical War Premium",
+      "evidence": "Multiple FT headlines warn of Iran conflict stretching weeks, Gulf officials seeking to calm investors, and stocks/bonds slumping in tandem as 'Iran shock leaves investors nowhere to hide.' Trump's Strait of Hormuz rhetoric amplifies energy security concerns.",
+      "tickers": [
+        "USO",
+        "XLE",
+        "CVX",
+        "COP",
+        "IEF"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "short",
+      "category": "geopolitical"
+    },
+    {
+      "narrative": "Oil Shock Driving Broad Tech Selloff",
+      "evidence": "Cramer explicitly states 'Oil shock is driving this sell-off and tech won't bottom until it ends.' Tech stocks suffered worst week in nearly a year, with war worries cited as primary driver alongside Meta legal issues.",
+      "tickers": [
+        "QQQ",
+        "XLK",
+        "NVDA",
+        "META",
+        "TSLA"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "short",
+      "category": "sector"
+    },
+    {
+      "narrative": "AI Chip Shortage Trade Unwind",
+      "evidence": "Memory chip stocks shed $100bn as AI-driven shortage trade unwinds, signaling reversal of the AI supply constraint narrative that drove semiconductor valuations higher.",
+      "tickers": [
+        "SMH",
+        "NVDA",
+        "AMD",
+        "QCOM",
+        "MU"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "medium",
+      "category": "tech"
+    },
+    {
+      "narrative": "Broad Market Correction Contagion Risk",
+      "evidence": "More than half of S&P 500 industry sectors are in correction territory with analyst questioning 'how much longer until the index itself succumbs.' Multiple headlines confirm sustained declines across equities.",
+      "tickers": [
+        "SPY",
+        "IVV",
+        "VOO",
+        "VTI",
+        "TLT"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "short",
+      "category": "macro"
+    },
+    {
+      "narrative": "UK Economic Slowdown & Job Cuts",
+      "evidence": "KPMG cutting almost 600 UK jobs as slowdown persists, and UK diesel stockpiles at risk warn traders. Evidence of stagflation pressures materializing in labor market and energy supply chains.",
+      "tickers": [
+        "EWU",
+        "IUAG",
+        "BP",
+        "SHELL",
+        "FTSE"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "medium",
+      "category": "macro"
+    }
+  ],
+  "_trending_narratives_ts": {
+    "__datetime__": "2026-03-27T18:35:58.611526"
+  },
+  "_trending_narratives_tf": "1M"
 }

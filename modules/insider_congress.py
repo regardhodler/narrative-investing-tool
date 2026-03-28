@@ -89,6 +89,16 @@ def _render_insider(ticker: str):
         ins_bias = "NEUTRAL"
         ins_color = COLORS["yellow"]
 
+    # Persist for downstream use (valuation, portfolio intelligence)
+    st.session_state["_insider_net_flow"] = {
+        "ticker": ticker,
+        "bias": ins_bias,
+        "buy_pct": round(insider_buy_pct, 1),
+        "buy_value": int(buy_value),
+        "sell_value": int(sell_value),
+        "n_trades": len(df),
+    }
+
     st.markdown(
         f"<div style='text-align:center; padding:10px; border:1px solid {ins_color}; border-radius:8px; margin-bottom:10px;'>"
         f"<span style='font-size:2em; color:{ins_color}; font-weight:bold;'>{insider_buy_pct:.1f}%</span>"
@@ -396,6 +406,13 @@ def _render_congress_charts(df: pd.DataFrame, ticker: str):
     else:
         bias_label = "NEUTRAL"
         bias_color = COLORS["yellow"]
+
+    # Persist for downstream use
+    st.session_state["_congress_bias"] = {
+        "ticker": ticker,
+        "bias": bias_label,
+        "buy_pct": round(latest_buy_pct, 1),
+    }
 
     st.markdown(
         f"<div style='text-align:center; padding:10px; border:1px solid {bias_color}; border-radius:8px; margin-bottom:10px;'>"

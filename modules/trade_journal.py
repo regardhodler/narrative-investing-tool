@@ -949,6 +949,11 @@ def render():
                     ),
                     "trending_narratives": st.session_state.get("_trending_narratives") or [],
                     "auto_trending_groups": st.session_state.get("_auto_trending_groups") or [],
+                    "options_sentiment": st.session_state.get("_options_sentiment") or {},
+                    "unusual_activity": st.session_state.get("_unusual_activity_sentiment") or {},
+                    "institutional_bias": st.session_state.get("_institutional_bias") or {},
+                    "insider_net_flow": st.session_state.get("_insider_net_flow") or {},
+                    "congress_bias": st.session_state.get("_congress_bias") or {},
                 }
                 _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _pi_model = None

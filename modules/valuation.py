@@ -499,6 +499,43 @@ def render():
         ]
         signals_text += "\n\nTRENDING PRICE MOVERS (Yahoo Finance themes):\n" + "\n".join(_atg_lines)
 
+    # Inject ticker-level smart money signals (only if they match the current ticker)
+    _opt_s = st.session_state.get("_options_sentiment") or {}
+    if _opt_s.get("ticker", "").upper() == ticker.upper():
+        signals_text += (
+            f"\nOptions Sentiment (P/C {_opt_s.get('pc_ratio', 0):.2f}): {_opt_s.get('sentiment', '')}"
+            f" | Call Vol {_opt_s.get('call_vol', 0):,} vs Put Vol {_opt_s.get('put_vol', 0):,}"
+        )
+
+    _ua_s = st.session_state.get("_unusual_activity_sentiment") or {}
+    if _ua_s.get("ticker", "").upper() == ticker.upper():
+        signals_text += (
+            f"\nUnusual Options Activity: {_ua_s.get('sentiment', '')} "
+            f"({_ua_s.get('call_pct', 0):.0f}% calls / {_ua_s.get('put_pct', 0):.0f}% puts, "
+            f"{_ua_s.get('flagged_contracts', 0)} flagged contracts)"
+        )
+
+    _inst_b = st.session_state.get("_institutional_bias") or {}
+    if _inst_b.get("ticker", "").upper() == ticker.upper():
+        signals_text += (
+            f"\nInstitutional Bias: {_inst_b.get('bias', '')} "
+            f"(weighted position change {_inst_b.get('weighted_pct', 0):+.1f}%)"
+        )
+
+    _ins_f = st.session_state.get("_insider_net_flow") or {}
+    if _ins_f.get("ticker", "").upper() == ticker.upper():
+        signals_text += (
+            f"\nInsider Net Flow: {_ins_f.get('bias', '')} "
+            f"({_ins_f.get('buy_pct', 50):.0f}% buys by $ value, {_ins_f.get('n_trades', 0)} trades)"
+        )
+
+    _cong_b = st.session_state.get("_congress_bias") or {}
+    if _cong_b.get("ticker", "").upper() == ticker.upper():
+        signals_text += (
+            f"\nCongress Trading Bias: {_cong_b.get('bias', '')} "
+            f"({_cong_b.get('buy_pct', 50):.0f}% cumulative buy bias)"
+        )
+
     # Inject Macro Regime context (the most critical signal — regime determines sector rotation)
     _regime_ctx_val = st.session_state.get("_regime_context")
     if _regime_ctx_val:

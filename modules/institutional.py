@@ -150,6 +150,13 @@ def _render_bias_chart(holders: pd.DataFrame, ticker: str):
     else:
         bias_label, bias_color = "NEUTRAL", COLORS["yellow"]
 
+    # Persist for downstream use (valuation, portfolio intelligence)
+    st.session_state["_institutional_bias"] = {
+        "ticker": ticker,
+        "bias": bias_label,
+        "weighted_pct": round(weighted_avg_pct, 2),
+    }
+
     # Abbreviate holder names
     short_names = df["Holder"].apply(lambda n: n[:15] + "…" if len(str(n)) > 15 else str(n))
     pct_values = df["pctChange"] * 100

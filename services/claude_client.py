@@ -941,6 +941,22 @@ def analyze_portfolio(
         ]
         _atg_block = "\n\nTRENDING PRICE MOVERS (Yahoo Finance themes):\n" + "\n".join(_atg_lines)
 
+    # Smart money signals (ticker-level — show for any position ticker that matches)
+    _sm_lines = []
+    for _sig_key, _label in [
+        ("options_sentiment", "Options P/C"),
+        ("unusual_activity", "Unusual Options"),
+        ("institutional_bias", "Institutional"),
+        ("insider_net_flow", "Insider Flow"),
+        ("congress_bias", "Congress"),
+    ]:
+        _sig = upstream.get(_sig_key) or {}
+        if _sig.get("ticker") and _sig.get("bias") or _sig.get("sentiment"):
+            _val = _sig.get("bias") or _sig.get("sentiment", "")
+            _tk = _sig.get("ticker", "")
+            _sm_lines.append(f"  - {_tk} {_label}: {_val}")
+    _sm_block = ("\n\nSMART MONEY SIGNALS (from last module visit):\n" + "\n".join(_sm_lines)) if _sm_lines else ""
+
     prompt = f"""You are a portfolio risk manager. Analyze these open positions against current macro conditions.
 
 MACRO ENVIRONMENT:
@@ -952,7 +968,7 @@ MACRO ENVIRONMENT:
 - Risk Briefing: {doom_briefing}
 - Institutional Flow: {whale_summary}
 - AI Favored Sectors: {regime_plays_sectors}
-- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}{_sm_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
 {fe_block}

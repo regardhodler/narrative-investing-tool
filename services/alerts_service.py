@@ -109,6 +109,32 @@ def _check_options_pc(cfg: dict) -> list[str]:
     return alerts
 
 
+def _check_stress_threshold(cfg: dict) -> str | None:
+    """Trigger when regime score crosses into stress territory (score < -1.0 = strong Risk-Off)."""
+    import json
+    import os
+    history_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json")
+    if not os.path.exists(history_file):
+        return None
+    try:
+        with open(history_file) as f:
+            history = json.load(f)
+        if not history:
+            return None
+        latest = sorted(history, key=lambda x: x.get("date", ""))[-1]
+        score = float(latest.get("score", 0))
+        threshold = float(cfg.get("thresholds", {}).get("stress_score", 70))
+        # stress_score threshold of 70 maps to regime score < -1.0
+        # (score ranges ~-3 to +3; below -1.0 is meaningfully stressed)
+        stress_score_normalized = max(0, min(100, 50 - score * 20))
+        if stress_score_normalized >= threshold:
+            regime = latest.get("regime", "")
+            return f"STRESS ALERT: Regime score {score:+.2f} (stress level {stress_score_normalized:.0f}/100) — {regime}"
+    except Exception:
+        pass
+    return None
+
+
 def check_and_send_alerts() -> list[str]:
     """Main entry point. Check all triggers and send alerts. Returns list of alert messages sent."""
     cfg = load_config()
@@ -140,6 +166,11 @@ def check_and_send_alerts() -> list[str]:
 
     if triggers.get("options_pc_ratio"):
         all_alerts.extend(_check_options_pc(cfg))
+
+    if triggers.get("stress_threshold"):
+        msg = _check_stress_threshold(cfg)
+        if msg:
+            all_alerts.append(msg)
 
     # Send via Telegram
     sent = []
