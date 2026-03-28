@@ -14,6 +14,8 @@ from services.backtest_engine import (
     backtest_vix_spike,
     backtest_regime_flip,
     backtest_insider_cluster,
+    walk_forward_sma,
+    walk_forward_vix,
     BacktestResult,
 )
 
@@ -297,6 +299,197 @@ def _render_results(result: BacktestResult):
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
+def _render_walk_forward():
+    """Walk-forward validation panel."""
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">WALK-FORWARD VALIDATION</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Splits history into N sliding windows (train → test). "
+        "Measures out-of-sample (OOS) performance to test whether the signal generalizes "
+        "or is overfit to the sample. Industry standard: walk-forward is the minimum "
+        "bar before trusting any backtest."
+    )
+
+    # ── Controls ──────────────────────────────────────────────────────────────
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        _wf_signal = st.radio("Strategy", ["SMA Crossover", "VIX Spike"],
+                              horizontal=True, key="wf_signal")
+    with c2:
+        _wf_lb = st.slider("Total Lookback (years)", 3, 10, 5, key="wf_lb")
+
+    if _wf_signal == "SMA Crossover":
+        p1, p2, p3, p4 = st.columns(4)
+        with p1: _wf_ticker  = st.text_input("Ticker", value="SPY", key="wf_ticker").upper().strip()
+        with p2: _wf_short   = st.number_input("Short SMA", value=50, min_value=5, max_value=100, key="wf_short")
+        with p3: _wf_long    = st.number_input("Long SMA", value=200, min_value=50, max_value=400, key="wf_long")
+        with p4: _wf_hold    = st.number_input("Hold Days", value=20, min_value=1, max_value=252, key="wf_hold_sma")
+    else:
+        p1, p2 = st.columns(2)
+        with p1: _wf_thresh  = st.number_input("VIX Threshold", value=25.0, min_value=15.0, max_value=50.0, step=1.0, key="wf_vix_thresh")
+        with p2: _wf_hold    = st.number_input("Hold Days", value=20, min_value=1, max_value=252, key="wf_hold_vix")
+
+    w1, w2 = st.columns(2)
+    with w1: _train_m = st.slider("Train Window (months)", 6, 24, 12, key="wf_train")
+    with w2: _test_m  = st.slider("Test Window (months)",  1, 6,  3,  key="wf_test")
+
+    if st.button("RUN WALK-FORWARD", type="primary", key="wf_run"):
+        with st.spinner("Running walk-forward validation..."):
+            if _wf_signal == "SMA Crossover":
+                _wf_res = walk_forward_sma(_wf_ticker, _wf_short, _wf_long, _wf_hold,
+                                           _train_m, _test_m, _wf_lb)
+            else:
+                _wf_res = walk_forward_vix(_wf_thresh, _wf_hold, _train_m, _test_m, _wf_lb)
+        st.session_state["wf_result"] = _wf_res
+
+    _wf = st.session_state.get("wf_result")
+    if not _wf or not _wf.get("windows"):
+        if _wf and not _wf.get("windows"):
+            st.warning("Not enough data or no signals fired in the selected period. "
+                       "Try a longer lookback or lower VIX threshold.")
+        else:
+            st.info("Configure parameters above and click **RUN WALK-FORWARD**.")
+        return
+
+    _windows  = _wf["windows"]
+    _conf     = _wf.get("confidence", "INSUFFICIENT DATA")
+    _oos_wr   = _wf.get("oos_win_rate", 0)
+    _oos_ret  = _wf.get("oos_avg_return", 0)
+    _oos_n    = _wf.get("oos_total_trades", 0)
+    _is_wr    = _wf.get("in_sample_win_rate", 0)
+    _is_ret   = _wf.get("in_sample_avg_return", 0)
+
+    # ── Confidence verdict ─────────────────────────────────────────────────────
+    _conf_color = {
+        "HIGH": "#22c55e", "MODERATE": "#f59e0b",
+        "LOW": "#ef4444", "INSUFFICIENT DATA": "#64748b",
+    }.get(_conf, "#64748b")
+    _conf_bg = {
+        "HIGH": "#0a2218", "MODERATE": "#1a1200",
+        "LOW": "#1f0a0a", "INSUFFICIENT DATA": "#0f172a",
+    }.get(_conf, "#0f172a")
+    _conf_msg = {
+        "HIGH":   "Signal generalizes well out-of-sample. OOS win rate ≥55% and positive avg return.",
+        "MODERATE": "Signal shows some OOS edge but not consistently. Use with caution.",
+        "LOW":    "Signal appears overfit to in-sample data. OOS performance is poor.",
+        "INSUFFICIENT DATA": f"Only {_oos_n} OOS trades — need at least 5 to assess. Try longer lookback.",
+    }.get(_conf, "")
+
+    st.markdown(
+        f'<div style="border:1px solid {_conf_color}44;border-radius:8px;'
+        f'padding:12px 18px;background:{_conf_bg};margin:10px 0;">'
+        f'<span style="font-size:11px;color:{_conf_color};font-weight:700;letter-spacing:0.08em;">'
+        f'OOS CONFIDENCE: {_conf}</span><br>'
+        f'<span style="font-size:13px;color:#f1f5f9;">{_conf_msg}</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── OOS vs IS comparison metrics ──────────────────────────────────────────
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Windows", len(_windows))
+    m2.metric("OOS Trades", _oos_n)
+    m3.metric("OOS Win Rate", f"{_oos_wr:.1f}%",
+              delta=f"{_oos_wr - _is_wr:+.1f}% vs IS")
+    m4.metric("OOS Avg Return", f"{_oos_ret:+.2f}%",
+              delta=f"{_oos_ret - _is_ret:+.2f}% vs IS")
+    _final_eq = _wf["oos_equity"][-1] if _wf.get("oos_equity") else 10000
+    m5.metric("OOS $10k→", f"${_final_eq:,.0f}")
+
+    st.caption(
+        "OOS = out-of-sample (test period). IS = in-sample (train period). "
+        "Large IS→OOS gap = overfit. Small gap = signal generalizes."
+    )
+
+    # ── OOS equity curve ──────────────────────────────────────────────────────
+    _eq = _wf.get("oos_equity", [])
+    if len(_eq) > 1:
+        _eq_color = COLORS["positive"] if _eq[-1] >= _eq[0] else COLORS["negative"]
+        fig_eq = go.Figure()
+        fig_eq.add_hline(y=10000, line_dash="dash", line_color=COLORS["text_dim"])
+        fig_eq.add_trace(go.Scatter(
+            y=_eq,
+            mode="lines",
+            line=dict(color=_eq_color, width=2),
+            fill="tozeroy",
+            fillcolor=f"{'rgba(34,197,94,0.08)' if _eq[-1] >= _eq[0] else 'rgba(239,68,68,0.08)'}",
+            name="OOS Equity",
+        ))
+        apply_dark_layout(fig_eq, title="Concatenated Out-of-Sample Equity Curve",
+                          yaxis_title="Portfolio Value ($)", height=280)
+        fig_eq.update_layout(margin=dict(t=40, b=20, l=60, r=20))
+        st.plotly_chart(fig_eq, use_container_width=True)
+
+    # ── Per-window bar chart ──────────────────────────────────────────────────
+    _wf_with_trades = [w for w in _windows if w["test_trades"] > 0]
+    if _wf_with_trades:
+        _wlabels = [f"W{w['n']}\n{w['test_start'][:7]}" for w in _wf_with_trades]
+        _oos_wrs  = [w["test_win_rate"]  for w in _wf_with_trades]
+        _oos_rets = [w["test_avg_return"] for w in _wf_with_trades]
+
+        fig_bars = go.Figure()
+        fig_bars.add_trace(go.Bar(
+            name="OOS Win Rate %",
+            x=_wlabels,
+            y=_oos_wrs,
+            marker_color=[COLORS["positive"] if v >= 50 else COLORS["negative"] for v in _oos_wrs],
+            text=[f"{v:.0f}%" for v in _oos_wrs],
+            textposition="outside",
+        ))
+        fig_bars.add_hline(y=50, line_dash="dash", line_color=COLORS["text_dim"],
+                           annotation_text="50% baseline")
+        apply_dark_layout(fig_bars, title="OOS Win Rate by Window", height=280)
+        fig_bars.update_layout(
+            yaxis=dict(range=[0, 110], ticksuffix="%"),
+            margin=dict(t=40, b=30, l=50, r=20),
+            showlegend=False,
+        )
+        st.plotly_chart(fig_bars, use_container_width=True)
+
+    # ── Per-window table ──────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'margin:12px 0 6px 0;">WINDOW-BY-WINDOW RESULTS</div>',
+        unsafe_allow_html=True,
+    )
+    _tbl_rows = []
+    for w in _windows:
+        _tbl_rows.append({
+            "Window":         f"W{w['n']}",
+            "Test Period":    f"{w['test_start']} → {w['test_end']}",
+            "IS Trades":      w["train_trades"],
+            "IS Win %":       f"{w['train_win_rate']:.0f}%",
+            "IS Avg Ret":     f"{w['train_avg_return']:+.2f}%",
+            "OOS Trades":     w["test_trades"],
+            "OOS Win %":      f"{w['test_win_rate']:.0f}%",
+            "OOS Avg Ret":    f"{w['test_avg_return']:+.2f}%",
+        })
+    if _tbl_rows:
+        st.dataframe(pd.DataFrame(_tbl_rows), use_container_width=True, hide_index=True)
+
+    with st.expander("What is Walk-Forward Validation?", expanded=False):
+        st.markdown("""
+**Why single backtests lie:**
+A single backtest uses ALL the data to measure performance — but the parameters were often chosen
+*because* they looked good on that same data. This is overfitting.
+
+**How walk-forward works:**
+1. Split history into N windows of (train + test) months each
+2. On each window: the strategy runs only on the **train period** to validate signal firing
+3. Performance is measured on the **test period** — data the strategy never "saw"
+4. Repeat across all windows, concatenate out-of-sample results
+
+**Reading the output:**
+- **HIGH confidence**: OOS win rate ≥ 55% and positive OOS avg return → signal likely generalizes
+- **MODERATE**: Borderline — reduce position size, watch live
+- **LOW**: Signal is overfit — don't trade it live
+- **Small IS→OOS gap**: The signal is robust. Large gap = overfit.
+""")
+
+
 def render():
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
@@ -304,10 +497,13 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab_bt, tab_history = st.tabs(["⚙ Strategy Backtest", "📈 Regime Signal History"])
+    tab_bt, tab_wf, tab_history = st.tabs(["⚙ Strategy Backtest", "📊 Walk-Forward Validation", "📈 Regime Signal History"])
 
     with tab_history:
         _render_regime_history()
+
+    with tab_wf:
+        _render_walk_forward()
 
     with tab_bt:
         signal = st.selectbox(

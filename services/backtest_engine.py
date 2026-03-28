@@ -281,3 +281,260 @@ def backtest_insider_cluster(ticker: str = "AAPL", min_buys: int = 3,
     result.signal_name = f"Insider Cluster ({min_buys}+ buys/{cluster_days}d)"
     result.ticker = ticker
     return result
+
+
+# ── Walk-Forward Validation ────────────────────────────────────────────────────
+
+def _window_metrics(trades: list[dict]) -> dict:
+    """Compute win rate and avg return for a slice of trades."""
+    if not trades:
+        return {"win_rate": 0.0, "avg_return": 0.0, "num_trades": 0}
+    returns = [t["return_pct"] for t in trades]
+    wins = [r for r in returns if r > 0]
+    return {
+        "win_rate": round(len(wins) / len(returns) * 100, 1) if returns else 0.0,
+        "avg_return": round(float(np.mean(returns)), 2) if returns else 0.0,
+        "num_trades": len(returns),
+    }
+
+
+def _oos_confidence(oos_win_rate: float, oos_avg_return: float, oos_trades: int) -> str:
+    if oos_trades < 5:
+        return "INSUFFICIENT DATA"
+    if oos_win_rate >= 55 and oos_avg_return > 0:
+        return "HIGH"
+    if oos_win_rate >= 50 or oos_avg_return > 0:
+        return "MODERATE"
+    return "LOW"
+
+
+@st.cache_data(ttl=3600)
+def walk_forward_sma(
+    ticker: str,
+    short_w: int,
+    long_w: int,
+    hold_days: int,
+    train_months: int,
+    test_months: int,
+    lookback_years: int,
+) -> dict:
+    """Walk-forward validation for SMA crossover strategy.
+
+    Slides a (train_months + test_months) window across lookback_years of data,
+    stepping by test_months each time. Measures out-of-sample performance per window.
+
+    Returns dict with: windows, oos_equity, oos_win_rate, oos_avg_return,
+                       oos_total_trades, in_sample_win_rate, in_sample_avg_return,
+                       signal_name, ticker, confidence.
+    """
+    total_years = lookback_years + train_months / 12
+    raw = yf.download(ticker, period=f"{int(total_years) + 1}y", interval="1d",
+                      progress=False, auto_adjust=True)
+    if raw is None or raw.empty:
+        return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw = raw.droplevel("Ticker", axis=1)
+
+    close = raw["Close"].dropna()
+    if len(close) < long_w + hold_days + 20:
+        return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
+
+    # Generate all crossover signals on the full series (no lookahead — SMAs are backward-looking)
+    sma_s = close.rolling(short_w).mean()
+    sma_l = close.rolling(long_w).mean()
+    cross = (sma_s > sma_l) & (sma_s.shift(1) <= sma_l.shift(1))
+    signal_dates = cross[cross].index
+
+    # Build all trades over the full history
+    all_trades = []
+    for entry_date in signal_dates:
+        idx = close.index.get_loc(entry_date)
+        exit_idx = min(idx + hold_days, len(close) - 1)
+        entry_price = float(close.iloc[idx])
+        exit_price  = float(close.iloc[exit_idx])
+        ret = (exit_price / entry_price - 1) * 100
+        all_trades.append({
+            "entry_date": entry_date,
+            "exit_date":  close.index[exit_idx],
+            "entry_price": round(entry_price, 2),
+            "exit_price":  round(exit_price, 2),
+            "return_pct":  round(ret, 2),
+        })
+
+    if not all_trades:
+        return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
+
+    # Slide the window
+    start = close.index[0]
+    end   = close.index[-1]
+    td_train = pd.DateOffset(months=train_months)
+    td_test  = pd.DateOffset(months=test_months)
+
+    windows = []
+    win_num = 1
+    cursor = start
+
+    while True:
+        train_start = cursor
+        train_end   = cursor + td_train
+        test_start  = train_end
+        test_end    = test_start + td_test
+        if test_end > end:
+            break
+
+        train_trades = [t for t in all_trades if train_start <= t["entry_date"] < train_end]
+        test_trades  = [t for t in all_trades if test_start  <= t["entry_date"] < test_end]
+
+        win_m = _window_metrics(train_trades)
+        oos_m = _window_metrics(test_trades)
+        windows.append({
+            "n":                  win_num,
+            "train_start":        train_start.strftime("%Y-%m-%d"),
+            "train_end":          train_end.strftime("%Y-%m-%d"),
+            "test_start":         test_start.strftime("%Y-%m-%d"),
+            "test_end":           test_end.strftime("%Y-%m-%d"),
+            "train_win_rate":     win_m["win_rate"],
+            "train_avg_return":   win_m["avg_return"],
+            "train_trades":       win_m["num_trades"],
+            "test_win_rate":      oos_m["win_rate"],
+            "test_avg_return":    oos_m["avg_return"],
+            "test_trades":        oos_m["num_trades"],
+            "test_trade_list":    [{"return_pct": t["return_pct"]} for t in test_trades],
+        })
+
+        cursor += td_test
+        win_num += 1
+
+    # Build concatenated OOS equity curve
+    oos_equity = [10000.0]
+    for w in windows:
+        for t in w.get("test_trade_list", []):
+            oos_equity.append(oos_equity[-1] * (1 + t["return_pct"] / 100))
+
+    # Aggregate OOS stats
+    all_oos = [t for w in windows for t in w.get("test_trade_list", [])]
+    agg = _window_metrics([{"return_pct": t["return_pct"]} for t in all_oos])
+    all_is = [{"win_rate": w["train_win_rate"], "avg_return": w["train_avg_return"]} for w in windows if w["train_trades"] > 0]
+    is_win  = round(float(np.mean([x["win_rate"] for x in all_is])), 1) if all_is else 0.0
+    is_ret  = round(float(np.mean([x["avg_return"] for x in all_is])), 2) if all_is else 0.0
+
+    return {
+        "windows":             windows,
+        "oos_equity":          oos_equity,
+        "oos_win_rate":        agg["win_rate"],
+        "oos_avg_return":      agg["avg_return"],
+        "oos_total_trades":    agg["num_trades"],
+        "in_sample_win_rate":  is_win,
+        "in_sample_avg_return": is_ret,
+        "signal_name":         f"SMA {short_w}/{long_w} Walk-Forward",
+        "ticker":              ticker,
+        "confidence":          _oos_confidence(agg["win_rate"], agg["avg_return"], agg["num_trades"]),
+    }
+
+
+@st.cache_data(ttl=3600)
+def walk_forward_vix(
+    vix_threshold: float,
+    hold_days: int,
+    train_months: int,
+    test_months: int,
+    lookback_years: int,
+) -> dict:
+    """Walk-forward validation for VIX spike strategy."""
+    total_years = lookback_years + train_months / 12
+    vix_raw = yf.download("^VIX", period=f"{int(total_years) + 1}y", interval="1d",
+                          progress=False, auto_adjust=True)
+    spy_raw = yf.download("SPY",  period=f"{int(total_years) + 1}y", interval="1d",
+                          progress=False, auto_adjust=True)
+    if vix_raw is None or spy_raw is None or vix_raw.empty or spy_raw.empty:
+        return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
+    for _r in (vix_raw, spy_raw):
+        if isinstance(_r.columns, pd.MultiIndex):
+            _r.columns = _r.columns.droplevel("Ticker")
+
+    vix_c = vix_raw["Close"].dropna()
+    spy_c = spy_raw["Close"].dropna()
+
+    above = vix_c > vix_threshold
+    cross = above & (~above.shift(1).fillna(False))
+    signal_dates = cross[cross].index
+
+    all_trades = []
+    for entry_date in signal_dates:
+        valid = spy_c.index[spy_c.index >= entry_date]
+        if len(valid) < 2:
+            continue
+        entry_idx = spy_c.index.get_loc(valid[0])
+        exit_idx  = min(entry_idx + hold_days, len(spy_c) - 1)
+        entry_price = float(spy_c.iloc[entry_idx])
+        exit_price  = float(spy_c.iloc[exit_idx])
+        ret = (exit_price / entry_price - 1) * 100
+        all_trades.append({
+            "entry_date":  valid[0],
+            "return_pct":  round(ret, 2),
+        })
+
+    if not all_trades:
+        return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
+
+    start = vix_c.index[0]
+    end   = vix_c.index[-1]
+    td_train = pd.DateOffset(months=train_months)
+    td_test  = pd.DateOffset(months=test_months)
+
+    windows = []
+    win_num = 1
+    cursor  = start
+
+    while True:
+        train_start = cursor
+        train_end   = cursor + td_train
+        test_start  = train_end
+        test_end    = test_start + td_test
+        if test_end > end:
+            break
+
+        train_trades = [t for t in all_trades if train_start <= t["entry_date"] < train_end]
+        test_trades  = [t for t in all_trades if test_start  <= t["entry_date"] < test_end]
+
+        win_m = _window_metrics(train_trades)
+        oos_m = _window_metrics(test_trades)
+        windows.append({
+            "n": win_num,
+            "train_start": train_start.strftime("%Y-%m-%d"),
+            "test_start":  test_start.strftime("%Y-%m-%d"),
+            "test_end":    test_end.strftime("%Y-%m-%d"),
+            "train_win_rate":   win_m["win_rate"],
+            "train_avg_return": win_m["avg_return"],
+            "train_trades":     win_m["num_trades"],
+            "test_win_rate":    oos_m["win_rate"],
+            "test_avg_return":  oos_m["avg_return"],
+            "test_trades":      oos_m["num_trades"],
+            "test_trade_list":  [{"return_pct": t["return_pct"]} for t in test_trades],
+        })
+        cursor += td_test
+        win_num += 1
+
+    oos_equity = [10000.0]
+    for w in windows:
+        for t in w.get("test_trade_list", []):
+            oos_equity.append(oos_equity[-1] * (1 + t["return_pct"] / 100))
+
+    all_oos = [t for w in windows for t in w.get("test_trade_list", [])]
+    agg = _window_metrics([{"return_pct": t["return_pct"]} for t in all_oos])
+    all_is = [{"win_rate": w["train_win_rate"], "avg_return": w["train_avg_return"]} for w in windows if w["train_trades"] > 0]
+    is_win = round(float(np.mean([x["win_rate"] for x in all_is])), 1) if all_is else 0.0
+    is_ret = round(float(np.mean([x["avg_return"] for x in all_is])), 2) if all_is else 0.0
+
+    return {
+        "windows":              windows,
+        "oos_equity":           oos_equity,
+        "oos_win_rate":         agg["win_rate"],
+        "oos_avg_return":       agg["avg_return"],
+        "oos_total_trades":     agg["num_trades"],
+        "in_sample_win_rate":   is_win,
+        "in_sample_avg_return": is_ret,
+        "signal_name":          f"VIX Spike (>{vix_threshold}) Walk-Forward",
+        "ticker":               "SPY",
+        "confidence":           _oos_confidence(agg["win_rate"], agg["avg_return"], agg["num_trades"]),
+    }
