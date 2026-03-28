@@ -13,7 +13,7 @@ def render():
         unsafe_allow_html=True,
     )
     st.caption(
-        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans in sequence. "
+        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis in sequence. "
         "Navigate to Portfolio Intelligence when done."
     )
 
@@ -73,9 +73,9 @@ def render():
         "👑 Highly Regarded Mode":   (True, "claude-sonnet-4-6"),
     }
     _rec_map = {
-        "⚡ Groq (fast, free)":      "Daily routine — all 7 modules in ~60s, completely free.",
-        "🧠 Regard Mode":            "Active day — Haiku gives better synthesis for whale + swans + transmission.",
-        "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 7 modules before running Portfolio.",
+        "⚡ Groq (fast, free)":      "Daily routine — all 8 modules in ~90s, completely free.",
+        "🧠 Regard Mode":            "Active day — Haiku gives better synthesis for whale + swans + conviction.",
+        "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 8 modules before running Portfolio.",
     }
     _sel = st.radio("Engine", _tier_opts, horizontal=True, key="qr_engine")
     st.caption(f"💡 {_rec_map.get(_sel, '')}")
@@ -107,8 +107,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary"]
-    _signal_labels = ["Regime", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity"]
+    _signal_keys = ["_regime_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_macro_synopsis"]
+    _signal_labels = ["Regime", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Macro Synopsis"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -218,9 +218,56 @@ def render():
                 _results["swans"] = False
                 st.error(f"❌ Black Swans failed: {e}")
 
+        # Step 7: Macro Conviction Synopsis (cross-signal coherence check)
+        with st.spinner("🧠 Synthesizing signals → macro conviction..."):
+            try:
+                import datetime as _syndt
+                from services.claude_client import generate_macro_synopsis as _gen_synopsis
+
+                # Build signal summary from session state
+                _rc = st.session_state.get("_regime_context") or {}
+                _dp = st.session_state.get("_dominant_rate_path") or {}
+                _dp_labels = {"cut_25": "25bp Cut", "cut_50": "50bp Cut", "hold": "Hold", "hike_25": "25bp Hike"}
+                _sig_parts = []
+                if _rc.get("regime"):
+                    _sig_parts.append(f"REGIME: {_rc['regime']} (score {_rc.get('score',0):+.2f}) | Quadrant: {_rc.get('quadrant','')}")
+                if _dp.get("scenario"):
+                    _sig_parts.append(f"FED RATE PATH: {_dp_labels.get(_dp['scenario'], _dp['scenario'])} ({_dp.get('prob_pct',0):.0f}% probability)")
+                _doom = st.session_state.get("_doom_briefing", "")
+                if _doom:
+                    _sig_parts.append(f"DOOM BRIEFING: {_doom[:400]}")
+                _digest = st.session_state.get("_current_events_digest", "")
+                if _digest:
+                    _sig_parts.append(f"NEWS DIGEST: {_digest[:400]}")
+                _chain = st.session_state.get("_chain_narration", "")
+                if _chain:
+                    _sig_parts.append(f"POLICY TRANSMISSION: {_chain[:300]}")
+                _whale = st.session_state.get("_whale_summary", "")
+                if _whale:
+                    _sig_parts.append(f"WHALE ACTIVITY: {_whale[:300]}")
+                _bs = st.session_state.get("_custom_swans", {})
+                if _bs:
+                    _bs_summary = "; ".join(
+                        f"{k} ({v.get('probability_pct', 0):.1f}% annual)"
+                        for k, v in list(_bs.items())[:3]
+                    )
+                    _sig_parts.append(f"BLACK SWANS: {_bs_summary}")
+
+                _synopsis = _gen_synopsis("\n\n".join(_sig_parts), use_claude=_use_claude, model=_cl_model)
+                _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
+                    else ("🧠 Regard Mode" if _use_claude else "⚡ Groq")
+                st.session_state["_macro_synopsis"] = _synopsis
+                st.session_state["_macro_synopsis_ts"] = _syndt.datetime.now()
+                st.session_state["_macro_synopsis_engine"] = _syn_tier
+                _results["synopsis"] = True
+                st.success(f"✅ Macro Conviction Synopsis — {_synopsis.get('conviction', '?')}")
+            except Exception as e:
+                _results["synopsis"] = False
+                st.error(f"❌ Synopsis failed: {e}")
+
         # ── Completion summary ─────────────────────────────────────────────────
         _n_ok = sum(1 for v in _results.values() if v)
-        if _n_ok == 7:
+        if _n_ok == 8:
             st.markdown(
                 f'<div style="background:#052e16;border:1px solid #22c55e;border-radius:6px;'
                 f'padding:12px 16px;margin-top:10px;">'
@@ -231,7 +278,7 @@ def render():
                 unsafe_allow_html=True,
             )
         else:
-            st.warning(f"{_n_ok}/7 modules completed — check errors above.")
+            st.warning(f"{_n_ok}/8 modules completed — check errors above.")
 
         # ── Signal Coverage Panel ──────────────────────────────────────────────
         from datetime import datetime as _dt2
@@ -288,6 +335,39 @@ def render():
         _digest = st.session_state.get("_current_events_digest", "")
         _doom = st.session_state.get("_doom_briefing", "")
         _plays = st.session_state.get("_rp_plays_result") or {}
+
+        _synopsis = st.session_state.get("_macro_synopsis") or {}
+        if _synopsis.get("conviction"):
+            _conv = _synopsis["conviction"]
+            _conv_color = {"BULLISH": "#22c55e", "BEARISH": "#ef4444", "MIXED": "#f59e0b", "UNCERTAIN": "#94a3b8"}.get(_conv, "#94a3b8")
+            _conv_bg   = {"BULLISH": "#052e16", "BEARISH": "#1a0000", "MIXED": "#1a1200", "UNCERTAIN": "#0d1117"}.get(_conv, "#0d1117")
+            _kp_html = "".join(
+                f'<div style="color:#94a3b8;font-size:11px;padding:2px 0;"> · {kp}</div>'
+                for kp in _synopsis.get("key_points", [])
+            )
+            _ct_html = ""
+            for ct in _synopsis.get("contradictions", []):
+                _ct_html += (
+                    f'<div style="color:#f59e0b;font-size:10px;padding:2px 0;">'
+                    f'⚠ {ct}</div>'
+                )
+            _syn_eng = st.session_state.get("_macro_synopsis_engine", "")
+            _eng_span = f'<span style="font-size:10px;color:#555;margin-left:auto;">{_syn_eng}</span>' if _syn_eng else ""
+            st.markdown(
+                f'<div style="background:{_conv_bg};border:2px solid {_conv_color};border-radius:8px;'
+                f'padding:14px 18px;margin-top:14px;">'
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                f'<span style="background:{_conv_color};color:black;font-weight:800;font-size:12px;'
+                f'padding:3px 12px;border-radius:4px;letter-spacing:0.08em;">{_conv}</span>'
+                f'<span style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.08em;">MACRO CONVICTION</span>'
+                f'{_eng_span}'
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:12px;line-height:1.6;margin-bottom:6px;">{_synopsis.get("summary","")}</div>'
+                f'{_kp_html}'
+                f'{_ct_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
         if _digest or _doom or _plays or st.session_state.get("_chain_narration") or st.session_state.get("_whale_summary"):
             st.markdown(

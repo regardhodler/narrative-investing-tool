@@ -956,6 +956,7 @@ def render():
                     "institutional_bias": st.session_state.get("_institutional_bias") or {},
                     "insider_net_flow": st.session_state.get("_insider_net_flow") or {},
                     "congress_bias": st.session_state.get("_congress_bias") or {},
+                    "macro_synopsis": st.session_state.get("_macro_synopsis") or {},
                 }
                 _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
                 _pi_model = None

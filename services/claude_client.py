@@ -779,6 +779,69 @@ def narrate_policy_transmission(chains_json: str, adj_probs_json: str, use_claud
         return f"Error generating narration: {e}"
 
 
+def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: str = None) -> dict:
+    """Synthesize all QIR signals into a macro conviction assessment.
+
+    Returns dict with keys:
+      conviction: "BULLISH" | "BEARISH" | "MIXED" | "UNCERTAIN"
+      summary: 2-3 sentence synthesis
+      key_points: list of 3-4 supporting bullet strings
+      contradictions: list of contradiction strings (may be empty)
+    """
+    prompt = (
+        "You are a senior macro strategist synthesizing multiple independent signal sources. "
+        "Based on the signals below, assess overall macro conviction.\n\n"
+        "Return ONLY valid JSON (no markdown fences) with this exact structure:\n"
+        '{"conviction": "BULLISH|BEARISH|MIXED|UNCERTAIN", '
+        '"summary": "<2-3 sentence synthesis>", '
+        '"key_points": ["<point 1>", "<point 2>", "<point 3>"], '
+        '"contradictions": ["<contradiction if any>"]}\n\n'
+        "Rules:\n"
+        "- conviction = BULLISH if ≥3 signals align bullish, BEARISH if ≥3 align bearish, "
+        "MIXED if signals conflict, UNCERTAIN if data is sparse\n"
+        "- key_points: cite specific data from the signals (numbers, labels, names)\n"
+        "- contradictions: list any signals that contradict the dominant conviction; empty list if none\n"
+        "- Be clinical and specific — no vague generalities\n\n"
+        f"SIGNALS:\n{signals_text[:4000]}"
+    )
+
+    if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic, json as _json
+            client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            msg = client.messages.create(
+                model=model or "claude-haiku-4-5-20251001",
+                max_tokens=600,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _json.loads(msg.content[0].text.strip())
+        except Exception:
+            pass
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return {"conviction": "UNCERTAIN", "summary": "GROQ_API_KEY not set.", "key_points": [], "contradictions": []}
+    try:
+        import json as _json
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 600,
+                "temperature": 0.3,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return _json.loads(resp.json()["choices"][0]["message"]["content"].strip())
+    except Exception as e:
+        return {"conviction": "UNCERTAIN", "summary": f"Error: {e}", "key_points": [], "contradictions": []}
+
+
 def assess_macro_fit(
     ticker: str,
     company_name: str,
@@ -923,6 +986,17 @@ def analyze_portfolio(
     current_events = (upstream.get("current_events") or "").strip()
     ce_block = f"\nCURRENT EVENTS:\n{current_events[:1000]}" if current_events else ""
 
+    _ms = upstream.get("macro_synopsis") or {}
+    _ms_block = ""
+    if _ms.get("conviction"):
+        _ms_pts = "; ".join(_ms.get("key_points", [])[:3])
+        _ms_contra = "; ".join(_ms.get("contradictions", [])[:2])
+        _ms_block = (
+            f"\nMACRO CONVICTION SYNOPSIS: {_ms['conviction']} — {_ms.get('summary', '')[:200]}"
+            f"\n  Key Points: {_ms_pts}"
+            + (f"\n  Contradictions: {_ms_contra}" if _ms_contra else "")
+        )
+
     _tn_pi = upstream.get("trending_narratives") or []
     _tn_block = ""
     if _tn_pi:
@@ -988,7 +1062,7 @@ MACRO ENVIRONMENT:
 - Risk Briefing: {doom_briefing}
 - Institutional Flow: {whale_summary}
 - AI Favored Sectors: {regime_plays_sectors}
-- Cross-Signal Discovery Plays: {discovery_plays_str}{ce_block}{_tn_block}{_atg_block}{_pm_block}{_fd_block}{_sm_block}
+- Cross-Signal Discovery Plays: {discovery_plays_str}{_ms_block}{ce_block}{_tn_block}{_atg_block}{_pm_block}{_fd_block}{_sm_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
 {fe_block}
