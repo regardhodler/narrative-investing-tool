@@ -443,14 +443,14 @@ def _render_ai_summary(df: pd.DataFrame):
         # Append recent activism filings (SC 13D) to the prompt
         try:
             from services.activism_screener import get_activism_filings
-            _activism = get_activism_filings(days_back=30, include_13g=False)
+            _activism = get_activism_filings(days_back=90, include_13g=False)
             if _activism:
                 _act_lines = [
                     f"{r['filer']} filed {r['form_type']} on {r['file_date']} — target: {r['subject']}"
                     for r in _activism[:10]
                 ]
                 activity_text += (
-                    "\n\nRECENT ACTIVISM FILINGS (SC 13D — last 30 days):\n"
+                    "\n\nRECENT ACTIVISM FILINGS (SC 13D — last 90 days):\n"
                     + "\n".join(_act_lines)
                 )
         except Exception:
