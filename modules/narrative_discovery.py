@@ -148,8 +148,140 @@ def _conviction_stars(n: int) -> str:
     return "★" * n + "☆" * (3 - n)
 
 
+def _render_trending_narratives():
+    """AI-powered trending narrative discovery — Google Trends + news frequency synthesis."""
+    import os
+    from services.claude_client import discover_trending_narratives
+    from services.news_feed import fetch_financial_headlines
+    from services.trends_client import get_trending_searches
+
+    _oc = COLORS["bloomberg_orange"]
+    st.markdown(
+        f'<div style="font-size:13px;color:{_oc};font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:4px;">🔥 TRENDING NARRATIVES</div>',
+        unsafe_allow_html=True,
+    )
+
+    _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
+    _eng_opts = ["⚡ Groq (fast)"]
+    if _has_claude:
+        _eng_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
+    _eng_map = {
+        "⚡ Groq (fast)":        (False, None),
+        "🧠 Regard Mode":         (True, "claude-haiku-4-5-20251001"),
+        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    }
+
+    col_e, col_t = st.columns([2, 1])
+    with col_e:
+        _eng = st.radio("Engine", _eng_opts, horizontal=True, key="disc_trend_engine")
+    with col_t:
+        _tf = st.radio("Timeframe", ["1W", "1M"], horizontal=True, key="disc_trend_tf")
+
+    _use_claude, _model = _eng_map.get(_eng, (False, None))
+
+    # Show cached result if available
+    _cached = st.session_state.get("_trending_narratives")
+    _cached_ts = st.session_state.get("_trending_narratives_ts")
+    _cached_tf = st.session_state.get("_trending_narratives_tf")
+
+    if _cached_ts:
+        from datetime import datetime as _dt2
+        _age_m = int((_dt2.now() - _cached_ts).total_seconds() / 60)
+        _age_str = f"{_age_m}m ago" if _age_m < 60 else f"{_age_m // 60}h ago"
+        st.caption(f"Last scan {_age_str} · {_cached_tf or _tf}")
+
+    if st.button("🔥 Scan Trending Narratives", key="disc_trend_scan", type="primary"):
+        with st.spinner("Fetching headlines + Google Trends..."):
+            _headlines_raw = fetch_financial_headlines()
+            _headline_strs = [f"[{h['source']}] {h['title']}" for h in _headlines_raw[:40]]
+            try:
+                _trends = get_trending_searches()
+                # Filter out obvious non-financial terms
+                _trends = [t for t in _trends if not any(
+                    kw in t.lower() for kw in _NON_FINANCIAL_KEYWORDS
+                )][:25]
+            except Exception:
+                _trends = []
+
+        _macro = st.session_state.get("_regime_context") or {}
+
+        with st.spinner("AI synthesizing top narratives..."):
+            _result = discover_trending_narratives(
+                headlines=_headline_strs,
+                trends=_trends,
+                macro_context=_macro,
+                timeframe=_tf,
+                use_claude=_use_claude,
+                model=_model,
+            )
+
+        if _result:
+            from datetime import datetime as _dt2
+            st.session_state["_trending_narratives"] = _result
+            st.session_state["_trending_narratives_ts"] = _dt2.now()
+            st.session_state["_trending_narratives_tf"] = _tf
+            _cached = _result
+        else:
+            st.error("Narrative scan failed — check API keys or try Groq.")
+
+    if _cached:
+        _conv_colors = {"HIGH": "#22c55e", "MEDIUM": "#f59e0b", "LOW": "#64748b"}
+        _cat_colors = {
+            "macro": "#3b82f6", "sector": _oc, "commodity": "#f59e0b",
+            "geopolitical": "#ef4444", "tech": "#8b5cf6",
+        }
+        for _n in _cached:
+            _name = _n.get("narrative", "")
+            _ev = _n.get("evidence", "")
+            _tks = _n.get("tickers", [])
+            _conv = _n.get("conviction", "MEDIUM")
+            _tf_label = "Short-term" if _n.get("timeframe") == "short" else "Medium-term"
+            _cat = _n.get("category", "macro")
+            _cc = _conv_colors.get(_conv, "#888")
+            _catc = _cat_colors.get(_cat, "#888")
+
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid #1e293b;border-left:3px solid {_catc};'
+                f'border-radius:4px;padding:10px 14px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+                f'<span style="color:{_oc};font-weight:700;font-size:13px;">{_name}</span>'
+                f'<div style="display:flex;gap:6px;">'
+                f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:{_catc};">{_cat}</span>'
+                f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:{_cc};">{_conv}</span>'
+                f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:#475569;">{_tf_label}</span>'
+                f'</div></div>'
+                f'<div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">{_ev}</div>'
+                f'<div style="display:flex;flex-wrap:wrap;gap:4px;">'
+                + "".join(
+                    f'<span style="background:#1e293b;border:1px solid {_oc}44;border-radius:3px;'
+                    f'padding:2px 8px;font-size:11px;font-weight:700;color:{_oc};cursor:pointer;">{t}</span>'
+                    for t in _tks
+                )
+                + f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            # Clickable ticker buttons
+            if _tks:
+                _btn_cols = st.columns(len(_tks[:5]))
+                for _bi, _bt in enumerate(_tks[:5]):
+                    with _btn_cols[_bi]:
+                        if st.button(_bt, key=f"tn_tk_{_name[:8]}_{_bi}"):
+                            set_ticker(_bt)
+                            set_narrative(_name)
+                            st.rerun()
+
+    st.markdown(
+        f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render():
     st.header("NARRATIVE DISCOVERY")
+
+    # ── Trending Narratives (AI-powered) ──────────────────────────────────
+    _render_trending_narratives()
 
     # ── Cross-Signal Macro Plays ───────────────────────────────────────────
     import os

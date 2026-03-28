@@ -1269,3 +1269,94 @@ def _empty_result() -> dict:
         "thesis": "",
         "suggested_tickers": [],
     }
+
+
+def discover_trending_narratives(
+    headlines: list[str],
+    trends: list[str],
+    macro_context: dict,
+    timeframe: str = "1W",
+    use_claude: bool = False,
+    model: str | None = None,
+) -> list[dict] | None:
+    """
+    Synthesize top 5 emerging investment narratives from news headlines,
+    Google Trends data, and macro context.
+
+    Returns list of {narrative, evidence, tickers, conviction, timeframe, category}
+    or None on failure.
+    """
+    regime = macro_context.get("regime", "Unknown")
+    score = macro_context.get("score", 0.0)
+    quadrant = macro_context.get("quadrant", "Unknown")
+    tf_label = "past 7 days" if timeframe == "1W" else "past 30 days"
+
+    headlines_text = "\n".join(f"- {h}" for h in headlines[:40])
+    trends_text = "\n".join(f"- {t}" for t in trends[:30]) if trends else "- (unavailable)"
+
+    prompt = f"""You are a macro narrative analyst. Based on the data below, identify the TOP 5 EMERGING INVESTMENT NARRATIVES of the {tf_label}.
+
+MACRO CONTEXT:
+- Regime: {regime} (score {score:+.2f})
+- Quadrant: {quadrant}
+
+RISING GOOGLE TRENDS (finance-related searches gaining momentum):
+{trends_text}
+
+NEWS HEADLINES (most recent, {tf_label}):
+{headlines_text}
+
+Instructions:
+- Identify narratives that are GAINING momentum — not just perennial themes
+- Each narrative must have concrete evidence from the data above
+- Prioritize narratives that are investable with liquid tickers
+- Suggest 3-5 specific tickers per narrative (include ETFs where applicable)
+- Be specific: "Helium supply shock" not just "Commodities"
+
+Return ONLY a valid JSON array:
+[
+  {{
+    "narrative": "3-5 word narrative name",
+    "evidence": "1-2 sentences citing specific data points from above",
+    "tickers": ["TICK1", "TICK2", "TICK3"],
+    "conviction": "HIGH|MEDIUM|LOW",
+    "timeframe": "short|medium",
+    "category": "macro|sector|commodity|geopolitical|tech"
+  }}
+]"""
+
+    _system = "You are a JSON-only response bot. Return only a valid JSON array, no markdown fences, no explanation."
+    _model = model or "claude-haiku-4-5-20251001"
+
+    try:
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=_model, max_tokens=2000, temperature=0.3,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY', '')}",
+                         "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile",
+                      "messages": [{"role": "system", "content": _system},
+                                   {"role": "user", "content": prompt}],
+                      "max_tokens": 2000, "temperature": 0.3},
+                timeout=45,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+
+        import re as _re
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+        raw = _re.sub(r"```\s*$", "", raw, flags=_re.MULTILINE).strip()
+        result = json.loads(raw)
+        if isinstance(result, list):
+            return result[:5]
+        return None
+    except Exception:
+        return None
