@@ -10133,5 +10133,15 @@
       "overlay": null,
       "regime": "Risk-Off"
     }
+  },
+  {
+    "id": "20260328_120537_05",
+    "timestamp": "2026-03-28T12:05:37.050970",
+    "feature": "Whale Summary",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "summary": "- **AI and Big Tech Convergence**: Mega-institutions like BlackRock and Vanguard aggressively piled into AI leaders, with BlackRock adding $62.2B to NVIDIA (+37.6%)\u2014its largest move\u2014and $13.9B/$11.0B to Alphabet (+22.2%/+20.2%); Vanguard boosted Alphabet by $40.0B (+31.9%) and $31.6B (+31.4%), signaling strong consensus on AI infrastructure.\n- **High-Conviction Names**: Alphabet sees multi-whale buying from Vanguard (>$71B total), BlackRock ($25B), and State Street ($16.6B/+29.8%); Apple draws BlackRock ($43.7B/+24.5%) and Vanguard ($31.4B/+8.8%); Eli Lilly attracts Vanguard ($26.3B/+42.6%) and State Street ($9.2B/+49.9%), highlighting pharma/AI drug conviction.\n- **Semiconductor Surge**: Vanguard massively increased Micron ($12.9B/+73.8%) and Broadcom ($9.1B/+5.8%), complementing NVIDIA's blowout, indicating rotation into memory/AI chip enablers amid BlackRock's tech adds.\n- **Notable Exits Signaling Shifts**: State Street slashed Meta ($14.7B/-15.4%) and Microsoft ($11.8B/-10.9%); Vanguard trimmed Microsoft ($16.4B/-4.5%), Meta ($9.5B/-6.7%), Netflix ($9.6B/-20.8%), and Oracle ($13.4B/-28.3%), suggesting de-risking from cloud/social/streaming.\n- **Overall Sentiment**: Net bullish on AI ecosystem (tech/semis/pharma) with ~$300B+ inflows to top names vs. ~$75B outflows; institutions favor growth leaders like NVDA/GOOGL over prior Magnificent 7 laggards, implying optimistic AI capex outlook."
+    },
+    "meta": {}
   }
 ]

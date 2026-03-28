@@ -396,7 +396,7 @@ def _render_ai_summary(df: pd.DataFrame):
         st.markdown(
             f'<div style="background:{COLORS["surface"]};padding:8px 14px;border-radius:6px;">'
             f'<span style="color:{COLORS["blue"]};font-weight:700;font-family:{FONT_FAMILY};">'
-            "AI WHALE ACTIVITY SUMMARY</span></div>",
+            "AI WHALE & ACTIVISM SUMMARY</span></div>",
             unsafe_allow_html=True,
         )
 

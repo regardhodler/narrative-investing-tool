@@ -218,20 +218,34 @@ def get_company_info(ticker: str) -> dict | None:
 def fetch_filing_text(url: str, max_chars: int = 50000) -> str:
     """Fetch the text content of a SEC filing, truncated to max_chars.
 
-    Strips HTML tags for a rough plain-text extraction.
+    Uses BeautifulSoup to properly strip HTML/iXBRL tags, preserving readable text.
     """
     import re
+    from bs4 import BeautifulSoup
 
     _rate_limit()
     try:
         resp = requests.get(url, headers=SEC_HEADERS, timeout=20)
         resp.raise_for_status()
-        text = resp.text
+        raw = resp.text
     except Exception:
         return ""
 
-    # Strip HTML tags
-    text = re.sub(r"<[^>]+>", " ", text)
+    # Use BeautifulSoup for proper HTML/iXBRL parsing
+    try:
+        soup = BeautifulSoup(raw, "html.parser")
+        # Remove script/style/hidden elements
+        for tag in soup(["script", "style", "head"]):
+            tag.decompose()
+        # Remove XBRL inline tags but keep their text content
+        for tag in soup.find_all(True):
+            if tag.name and tag.name.startswith("ix:"):
+                tag.unwrap()
+        text = soup.get_text(separator=" ")
+    except Exception:
+        # Fallback: naive regex strip
+        text = re.sub(r"<[^>]+>", " ", raw)
+
     # Collapse whitespace
     text = re.sub(r"\s+", " ", text).strip()
 
@@ -576,7 +590,7 @@ def get_latest_annual_filing(ticker: str) -> dict | None:
     return None
 
 
-def extract_mda_text(full_text: str, max_chars: int = 12000) -> str:
+def extract_mda_text(full_text: str, max_chars: int = 15000) -> str:
     """Extract the MD&A section from a 10-K filing's plain text.
 
     Searches for the 'Management's Discussion' header and returns text until
@@ -590,6 +604,8 @@ def extract_mda_text(full_text: str, max_chars: int = 12000) -> str:
         r"Management.{0,10}s Discussion and Analysis",
         r"ITEM\s*7[\.\s]+MANAGEMENT",
         r"Item\s*7[\.\s]+Management",
+        r"Item\s*7\.",
+        r"ITEM\s*7\.",
     ]
     # Common next-section patterns that signal MD&A end
     end_patterns = [
@@ -600,6 +616,8 @@ def extract_mda_text(full_text: str, max_chars: int = 12000) -> str:
         r"ITEM\s*8[\.\s]+FINANCIAL STATEMENTS",
         r"Item\s*8[\.\s]+Financial Statements",
         r"CONTROLS AND PROCEDURES",
+        r"Item\s*8\.",
+        r"ITEM\s*8\.",
     ]
 
     start_idx = None
@@ -615,11 +633,15 @@ def extract_mda_text(full_text: str, max_chars: int = 12000) -> str:
         return full_text[third: third + max_chars]
 
     end_idx = None
+    search_from = start_idx + 200  # skip past the header itself
     for pat in end_patterns:
-        m = re.search(pat, full_text[start_idx + 100:])
+        m = re.search(pat, full_text[search_from:])
         if m:
-            end_idx = start_idx + 100 + m.start()
-            break
+            candidate = search_from + m.start()
+            # Must be at least 1000 chars of content
+            if candidate - start_idx > 1000:
+                end_idx = candidate
+                break
 
     section = full_text[start_idx: end_idx] if end_idx else full_text[start_idx: start_idx + max_chars * 2]
     return section[:max_chars]
