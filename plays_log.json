@@ -9717,5 +9717,230 @@
       "overlay": null,
       "regime": "Risk-Off"
     }
+  },
+  {
+    "id": "20260327_194731_41",
+    "timestamp": "2026-03-27T19:47:31.417712",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Groq",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6774951920654675,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.11712463849435005,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0011641936939815391,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2042159757462009,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260327_194915_69",
+    "timestamp": "2026-03-27T19:49:15.695444",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6774951920654675,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.11712463849435005,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0011641936939815391,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2042159757462009,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260327_194917_50",
+    "timestamp": "2026-03-27T19:49:17.505014",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6774951920654675,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.11712463849435005,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0011641936939815391,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2042159757462009,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260327_194921_52",
+    "timestamp": "2026-03-27T19:49:21.529767",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6774951920654675,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.11712463849435005,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0011641936939815391,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2042159757462009,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260327_194923_37",
+    "timestamp": "2026-03-27T19:49:23.373809",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6774951920654675,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.11712463849435005,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0011641936939815391,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.2042159757462009,
+          "implied_rate": 3.6500015258789062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 67.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
   }
 ]

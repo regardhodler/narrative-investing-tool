@@ -632,6 +632,7 @@ def render():
         "Ticker Symbol",
         value=st.session_state["wy_ticker"],
         placeholder="SPY · GC=F · RY.TO · BTC-USD · ^FTSE · ZN=F",
+        key="wy_ticker_input",
         help=(
             "Any yfinance-compatible symbol. "
             "Append .TO for TSX, =F for futures, -USD for crypto, ^ for indices. "
@@ -654,9 +655,10 @@ def render():
                         help=_TICKER_LABELS.get(_t, _t),
                     ):
                         st.session_state["wy_ticker"] = _t
+                        st.session_state["wy_ticker_input"] = _t
                         st.rerun()
 
-    if st.button("Refresh Data"):
+    if st.button("Refresh Data", key="wy_refresh_data"):
         st.cache_data.clear()
         st.rerun()
 
@@ -752,6 +754,7 @@ def render():
             "Chart Interval",
             ["5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
             index=4,
+            key="wy_interval",
             help="Drives the detail chart and trade setup below. The MTF snapshot above always shows all TFs.",
         )
         if interval == "15m":
@@ -759,7 +762,7 @@ def render():
     with _lk_col:
         period_choices = _PERIOD_MAP.get(interval, ["2y"])
         default_idx = len(period_choices) // 2
-        period = st.selectbox("Lookback", period_choices, index=default_idx,
+        period = st.selectbox("Lookback", period_choices, index=default_idx, key="wy_period",
                               help="Amount of history to fetch for the detail chart")
 
     with st.spinner(f"Fetching {ticker} {interval} data and analyzing Wyckoff phases..."):
@@ -1087,7 +1090,7 @@ Be direct and specific. Do not hedge excessively. Do not repeat the input data v
 
             if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ") or narrative.startswith("_Claude") or narrative.startswith("_ANTHROPIC"):
                 st.warning("AI narrative unavailable.")
-                if st.button("Retry Narrative", key="retry_narrative"):
+                if st.button("Retry Narrative", key="wy_retry_narrative"):
                     _build_groq_narrative.clear()
                     st.rerun()
             else:
@@ -1103,6 +1106,6 @@ Be direct and specific. Do not hedge excessively. Do not repeat the input data v
                 st.caption(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')} · Model: {_model_label}")
         except Exception:
             st.warning("AI narrative unavailable.")
-            if st.button("Retry Narrative", key="retry_narrative_err"):
+            if st.button("Retry Narrative", key="wy_retry_narrative_err"):
                 st.cache_data.clear()
                 st.rerun()

@@ -13,6 +13,42 @@ from services.claude_client import summarize_whale_activity
 from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
 
 
+def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
+    """
+    Background helper for Quick Intel Run.
+    Scans top 100 whale 13F filings (1 quarter lookback), generates AI summary.
+    Stores _whale_summary, _whale_summary_ts, _whale_summary_engine to session_state.
+    """
+    import datetime as _dt
+    from services.whale_screener import screen_whale_buyers
+    from services.claude_client import summarize_whale_activity
+
+    df = screen_whale_buyers(top_n=100, whale_only=True, exclude_etfs=True, lookback_quarters=1)
+    if df is None or df.empty:
+        return False
+
+    df_sorted = df.copy()
+    df_sorted["_abs_change"] = df_sorted["value_change"].abs()
+    top20 = df_sorted.nlargest(20, "_abs_change")
+    lines = []
+    for _, row in top20.iterrows():
+        filer = str(row.get("filer", "Unknown"))[:30]
+        issuer = str(row.get("issuer", "Unknown"))[:30]
+        val_m = row["value_change"] / 1000
+        pct = row.get("pct_change", 0)
+        status = row.get("status", "")
+        category = row.get("whale_category", "")
+        lines.append(f"{filer} ({category}): {status} {issuer} — ${val_m:+,.0f}M change ({pct:+.1f}%)")
+
+    summary = summarize_whale_activity("\n".join(lines), use_claude=use_claude, model=model)
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    st.session_state["_whale_summary"] = summary
+    st.session_state["_whale_summary_ts"] = _dt.datetime.now()
+    st.session_state["_whale_summary_engine"] = _tier
+    return True
+
+
 def render():
     st.header("13F WHALE MOVEMENT")
     st.caption(

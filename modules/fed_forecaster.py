@@ -1547,6 +1547,96 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
     return True
 
 
+def run_quick_chain(use_claude: bool = False, model: str | None = None) -> bool:
+    """
+    Background helper for Quick Intel Run.
+    Generates policy transmission narration from stored _rate_path_probs.
+    Stores _chain_narration + _chain_narration_engine to session_state.
+    """
+    import json as _json
+    from services.claude_client import narrate_policy_transmission
+
+    probs = st.session_state.get("_rate_path_probs", [])
+    if not probs:
+        return False
+
+    probs_json = _json.dumps([{"scenario": r.get("scenario"), "prob": r.get("prob")} for r in probs])
+
+    _rc = st.session_state.get("_regime_context") or {}
+    chains = {
+        "hold": ["Fed holds → short rates stable → mortgage market flat → credit spreads contained"],
+        "cut_25": ["Fed cuts 25bp → front-end rally → credit spreads tighten → housing activity improves"],
+        "cut_50": ["Fed cuts 50bp → equities surge → USD weakens → EM bid → commodities lift"],
+        "hike_25": ["Fed hikes → front-end selloff → growth/tech pressure → USD strengthens"],
+    }
+    if _rc.get("quadrant"):
+        chains["_regime"] = [f"Current quadrant: {_rc['quadrant']} — {_rc.get('regime', '')}"]
+
+    chains_json = _json.dumps(chains)
+    narration = narrate_policy_transmission(chains_json, probs_json, use_claude=use_claude, model=model)
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    st.session_state["_chain_narration"] = narration
+    st.session_state["_chain_narration_engine"] = _tier
+    return True
+
+
+def run_quick_swans(use_claude: bool = False, model: str | None = None) -> bool:
+    """
+    Background helper for Quick Intel Run.
+    Auto-generates 3 regime-relevant black swan scenarios.
+    Skips if _custom_swans already populated and fresh (< 24h).
+    Stores _custom_swans + _custom_swans_ts to session_state.
+    """
+    import json as _json
+    import datetime as _dt
+
+    _existing = st.session_state.get("_custom_swans", {})
+    _ts = st.session_state.get("_custom_swans_ts")
+    if _existing and _ts:
+        _age_h = (_dt.datetime.now() - _ts).total_seconds() / 3600
+        if _age_h < 24:
+            return True  # Already fresh, skip
+
+    _rc = st.session_state.get("_regime_context") or {}
+    _dp = st.session_state.get("_dominant_rate_path") or {}
+    _base_ctx = _json.dumps({
+        "regime": _rc.get("regime", ""),
+        "quadrant": _rc.get("quadrant", ""),
+        "score": _rc.get("score", 0),
+        "dominant_rate_path": _dp.get("scenario", ""),
+    })
+
+    quadrant = _rc.get("quadrant", "")
+    if quadrant in ("Stagflation", "Overheating"):
+        scenarios = ["Inflation Spiral", "Fed Policy Error", "Dollar Collapse"]
+    elif quadrant in ("Deflation", "Recession"):
+        scenarios = ["Credit Market Freeze", "US Recession Deepens", "Fed Emergency Rate Cut"]
+    else:
+        scenarios = ["Geopolitical Black Swan", "US Credit Downgrade", "Oil Supply Shock"]
+
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+        else ("🧠 Regard Mode" if use_claude else "⚡ Groq")
+    _new_swans = {}
+    for label in scenarios:
+        try:
+            if use_claude:
+                result = _call_claude_custom_event_forecast(label, _base_ctx, model or "claude-haiku-4-5-20251001")
+            else:
+                result = _call_groq_custom_event_forecast(label, _base_ctx)
+            if result:
+                result["_engine_tier"] = _tier
+                _new_swans[label] = result
+        except Exception:
+            pass
+
+    if _new_swans:
+        st.session_state["_custom_swans"] = _new_swans
+        st.session_state["_custom_swans_ts"] = _dt.datetime.now()
+        return True
+    return False
+
+
 # ── Public entry point ────────────────────────────────────────────────────────
 
 def render():

@@ -13,7 +13,7 @@ def render():
         unsafe_allow_html=True,
     )
     st.caption(
-        "Runs Risk Regime + Rate-Path Plays + Current Events Digest + Doom Briefing in sequence. "
+        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans in sequence. "
         "Navigate to Portfolio Intelligence when done."
     )
 
@@ -73,9 +73,9 @@ def render():
         "👑 Highly Regarded Mode":   (True, "claude-sonnet-4-6"),
     }
     _rec_map = {
-        "⚡ Groq (fast, free)":      "Daily routine — all 4 modules in ~30s, completely free.",
-        "🧠 Regard Mode":            "Active day — Haiku gives better synthesis for Discovery + Valuation.",
-        "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 4 modules before running Portfolio.",
+        "⚡ Groq (fast, free)":      "Daily routine — all 7 modules in ~60s, completely free.",
+        "🧠 Regard Mode":            "Active day — Haiku gives better synthesis for whale + swans + transmission.",
+        "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 7 modules before running Portfolio.",
     }
     _sel = st.radio("Engine", _tier_opts, horizontal=True, key="qr_engine")
     st.caption(f"💡 {_rec_map.get(_sel, '')}")
@@ -107,8 +107,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing"]
-    _signal_labels = ["Regime", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing"]
+    _signal_keys = ["_regime_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary"]
+    _signal_labels = ["Regime", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -150,6 +150,20 @@ def render():
                 _results["fed"] = False
                 st.error(f"❌ Fed Rate Path failed: {e}")
 
+        # Step 2b: Policy Transmission (uses _rate_path_probs from step 2)
+        with st.spinner("🔗 Narrating policy transmission path..."):
+            try:
+                from modules.fed_forecaster import run_quick_chain
+                ok = run_quick_chain(use_claude=_use_claude, model=_cl_model)
+                _results["chain"] = ok
+                if ok:
+                    st.success("✅ Policy Transmission — done")
+                else:
+                    st.warning("⚠ Policy Transmission skipped — rate path not available")
+            except Exception as e:
+                _results["chain"] = False
+                st.error(f"❌ Policy Transmission failed: {e}")
+
         # Step 3: Current Events Digest
         with st.spinner("🗞 Fetching headlines + generating digest..."):
             try:
@@ -175,9 +189,38 @@ def render():
                 _results["doom"] = False
                 st.error(f"❌ Doom Briefing failed: {e}")
 
+        # Step 5: Whale Activity (13F scan + AI summary)
+        with st.spinner("🐋 Scanning 13F whale filings..."):
+            try:
+                from modules.whale_buyers import run_quick_whale
+                ok = run_quick_whale(use_claude=_use_claude, model=_cl_model)
+                _results["whale"] = ok
+                if ok:
+                    st.success("✅ Whale Activity — done")
+                else:
+                    st.warning("⚠ Whale scan returned no data — SEC EDGAR may be slow")
+            except Exception as e:
+                _results["whale"] = False
+                st.error(f"❌ Whale Activity failed: {e}")
+
+        # Step 6: Black Swans (auto-generate regime-relevant scenarios)
+        with st.spinner("🦢 Generating regime-relevant black swan scenarios..."):
+            try:
+                from modules.fed_forecaster import run_quick_swans
+                ok = run_quick_swans(use_claude=_use_claude, model=_cl_model)
+                _results["swans"] = ok
+                if ok:
+                    _bs_count = len(st.session_state.get("_custom_swans", {}))
+                    st.success(f"✅ Black Swans — {_bs_count} scenarios ready")
+                else:
+                    st.warning("⚠ Black Swan generation returned no results")
+            except Exception as e:
+                _results["swans"] = False
+                st.error(f"❌ Black Swans failed: {e}")
+
         # ── Completion summary ─────────────────────────────────────────────────
         _n_ok = sum(1 for v in _results.values() if v)
-        if _n_ok == 4:
+        if _n_ok == 7:
             st.markdown(
                 f'<div style="background:#052e16;border:1px solid #22c55e;border-radius:6px;'
                 f'padding:12px 16px;margin-top:10px;">'
@@ -188,7 +231,7 @@ def render():
                 unsafe_allow_html=True,
             )
         else:
-            st.warning(f"{_n_ok}/4 modules completed — check errors above.")
+            st.warning(f"{_n_ok}/7 modules completed — check errors above.")
 
         # ── Signal Coverage Panel ──────────────────────────────────────────────
         from datetime import datetime as _dt2
@@ -246,7 +289,7 @@ def render():
         _doom = st.session_state.get("_doom_briefing", "")
         _plays = st.session_state.get("_rp_plays_result") or {}
 
-        if _digest or _doom or _plays:
+        if _digest or _doom or _plays or st.session_state.get("_chain_narration") or st.session_state.get("_whale_summary"):
             st.markdown(
                 f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px 0;"></div>',
                 unsafe_allow_html=True,
@@ -296,6 +339,36 @@ def render():
                     f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_doom}</div>',
                     unsafe_allow_html=True,
                 )
+
+        _chain = st.session_state.get("_chain_narration", "")
+        if _chain:
+            with st.expander("🔗 Policy Transmission", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_chain}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _whale = st.session_state.get("_whale_summary", "")
+        if _whale:
+            with st.expander("🐋 Whale Activity", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_whale}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _bs = st.session_state.get("_custom_swans", {})
+        if _bs:
+            _bs_names = " · ".join(list(_bs.keys())[:3])
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid #4B5EAA44;border-radius:4px;'
+                f'padding:8px 12px;font-size:11px;color:{COLORS["text_dim"]};margin-top:6px;">'
+                f'🦢 <b style="color:#8899CC">Black Swans</b> — '
+                f'{len(_bs)} scenarios: <span style="color:{COLORS["text"]}">{_bs_names}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):

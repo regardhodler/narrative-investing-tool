@@ -766,7 +766,7 @@ def narrate_policy_transmission(chains_json: str, adj_probs_json: str, use_claud
             GROQ_API_URL,
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
             json={
-                "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 400,
                 "temperature": 0.3,

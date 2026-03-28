@@ -786,6 +786,7 @@ def render():
             "Ticker Symbol",
             value=st.session_state["ew_ticker"],
             placeholder="SPY · GC=F · RY.TO · BTC-USD · ZB=F · ^TNX",
+            key="ew_ticker_input",
             help=(
                 "Any yfinance-compatible symbol. "
                 "Append .TO for TSX (e.g. RY.TO), =F for futures (GC=F), "
@@ -798,6 +799,7 @@ def render():
             "Interval",
             options=["1d", "1wk", "1mo", "1h", "15m", "5m"],
             index=0,
+            key="ew_interval",
             label_visibility="collapsed",
         )
 
@@ -817,6 +819,7 @@ def render():
                         help=_TICKER_LABELS.get(_t, _t),
                     ):
                         st.session_state["ew_ticker"] = _t
+                        st.session_state["ew_ticker_input"] = _t
                         st.rerun()
 
     # ── AI Engine Tier (top-level — controls wave count override + narrative) ──
@@ -869,10 +872,11 @@ def render():
 
     chart_height = st.slider(
         "Chart Height", min_value=500, max_value=1400, value=860, step=50,
+        key="ew_chart_height",
         help="Drag to expand/compress the chart. You can also drag the price axis on the right to zoom Y."
     )
 
-    if st.button("Refresh Data"):
+    if st.button("Refresh Data", key="ew_refresh_data"):
         st.cache_data.clear()
         st.rerun()
 
@@ -1246,7 +1250,7 @@ Be direct and specific. Reference degree notation properly ([[I]] for Grand Supe
 
                 if narrative.startswith("_Narrative generation failed") or narrative.startswith("_GROQ") or narrative.startswith("_Claude") or narrative.startswith("_ANTHROPIC"):
                     st.warning("AI narrative unavailable.")
-                    if st.button("Retry Narrative", key="retry_narrative"):
+                    if st.button("Retry Narrative", key="ew_retry_narrative"):
                         _build_groq_narrative.clear()
                         st.rerun()
                 else:
@@ -1265,7 +1269,7 @@ Be direct and specific. Reference degree notation properly ([[I]] for Grand Supe
                     )
             except Exception:
                 st.warning("AI narrative unavailable.")
-                if st.button("Retry Narrative", key="retry_narrative_err"):
+                if st.button("Retry Narrative", key="ew_retry_narrative_err"):
                     st.cache_data.clear()
                     st.rerun()
 

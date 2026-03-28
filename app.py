@@ -339,7 +339,7 @@ with st.sidebar:
 
     top_level = st.radio(
         "Module",
-        ["⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events", "Discovery", "Elliott Wave", "Wyckoff", "Whale Movement", "Stress Signals",
+        ["⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events", "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
          "Signal Scorecard", "Backtesting", "My Regarded Portfolio", "Signal Audit", "Export Hub", "Alerts"],
         key="top_module",
     )
@@ -439,12 +439,14 @@ elif top_level == "Fed Forecaster":
 elif top_level == "Current Events":
     from modules.current_events import render
     render()
-elif top_level == "Elliott Wave":
-    from modules.elliott_wave import render
-    render()
-elif top_level == "Wyckoff":
-    from modules.wyckoff import render
-    render()
+elif top_level == "Technical Analysis":
+    _ew_tab, _wy_tab = st.tabs(["📈 Elliott Wave", "🔬 Wyckoff"])
+    with _ew_tab:
+        from modules.elliott_wave import render as _ew_render
+        _ew_render()
+    with _wy_tab:
+        from modules.wyckoff import render as _wy_render
+        _wy_render()
 elif top_level == "Whale Movement":
     from modules.whale_buyers import render
     render()
