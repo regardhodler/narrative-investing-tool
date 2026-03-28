@@ -749,15 +749,16 @@ def summarize_whale_activity(activity_text: str, use_claude: bool = False, model
 
     Returns a markdown-formatted narrative string about big money themes this quarter.
     """
-    prompt = f"""You are a top-tier institutional equity analyst. Analyze these quarterly 13F whale position changes and write a concise narrative summary.
+    prompt = f"""You are a top-tier institutional equity analyst. Analyze these quarterly 13F whale position changes and recent activism filings, then write a narrative summary.
 
 Focus on:
 - What themes or sectors are the biggest hedge funds and institutions converging on?
 - Which names are seeing the most conviction (multiple whales buying)?
 - Are there notable exits or position closures that signal a shift?
 - What does the overall flow pattern suggest about institutional sentiment?
+- If SC 13D activism filings are included: name the activist, the target company, and what campaign they likely intend.
 
-Keep the summary to 4-6 bullet points. Be specific about names, dollar amounts, and the whales involved.
+Write in clear paragraphs with a blank line between each section. Be specific about names, dollar amounts, and the whales involved.
 
 Whale activity data:
 {activity_text}"""
@@ -765,7 +766,7 @@ Whale activity data:
     _cl_model = model or "grok-4-1-fast-reasoning"
     if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
         try:
-            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 800, 0.3)
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 1000, 0.3)
         except Exception as _e:
             st.error(f"xAI API error (Whale Summary): {_e}")
             return f"Error generating whale summary: {_e}"
@@ -775,7 +776,7 @@ Whale activity data:
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
                 model=_cl_model,
-                max_tokens=800,
+                max_tokens=1000,
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -798,7 +799,7 @@ Whale activity data:
             json={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 800,
+                "max_tokens": 1000,
                 "temperature": 0.3,
             },
             timeout=30,
