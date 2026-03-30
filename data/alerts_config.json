@@ -5,13 +5,22 @@
     "regime_flip": true,
     "insider_cluster": true,
     "options_pc_ratio": true,
-    "stress_threshold": true
+    "stress_threshold": true,
+    "tactical_threshold": true,
+    "data_quality_alert": true
   },
   "thresholds": {
     "pc_ratio": 1.5,
-    "stress_score": 70
+    "stress_score": 70,
+    "tactical_risk_off": 38,
+    "tactical_entry": 65
   },
-  "last_check": "1774720728.2279987",
-  "last_regime": "True Neutral",
-  "alert_history": []
+  "last_check": "1774820898.5395818",
+  "last_regime": "Neutral \u2014 Leaning Risk-Off",
+  "alert_history": [],
+  "price_targets": [],
+  "current_tactical_score": 30,
+  "last_tactical_score": 30,
+  "current_data_quality_score": 70,
+  "data_quality_alerted": false
 }

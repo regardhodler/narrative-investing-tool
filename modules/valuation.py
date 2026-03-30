@@ -13,14 +13,9 @@ def render():
     import os
     _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_options = ["⚡ Standard"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
-    _tier_map = {
-        "⚡ Standard": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
+    from utils.ai_tier import TIER_OPTS as _VAL_MAIN_OPTS, TIER_MAP as _VAL_MAIN_MAP
     _tier_badges = {
-        "⚡ Standard": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Freeloader Mode</span>',
+        "⚡ Freeloader Mode": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Freeloader Mode</span>',
         "🧠 Regard Mode": '<span style="font-size:11px;background:#FF8811;color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">🧠 Grok 4.1</span>',
         "👑 Highly Regarded Mode": '<span style="font-size:11px;background:linear-gradient(90deg,#c89b3c,#f0d060);color:#000;padding:2px 7px;border-radius:3px;font-weight:700;">👑 Sonnet</span>',
     }
@@ -65,6 +60,10 @@ def render():
     )
     st.caption(f"LAST UPDATE {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | CACHE TTL 24H")
 
+    # ── Signal Coverage ────────────────────────────────────────────────────────
+    from utils.components import render_signal_coverage as _render_sig_cov_val
+    _render_sig_cov_val()
+
     # ── DCF Valuation — shown first ────────────────────────────────────────────
     _dcf_scenarios = _render_dcf(ticker)
     st.markdown("---")
@@ -87,39 +86,29 @@ def render():
     )
     _cr_suffix = " ✅" if _both_sonnet else " ⚠️" if not _both_loaded else " 🟡"
     with st.expander(f"📡 Context Readiness{_cr_suffix}", expanded=not _both_loaded):
+        from utils.ai_tier import render_ai_tier_selector as _val_ai_tier, TIER_OPTS as _VAL_TIER_OPTS, TIER_MAP as _VAL_TIER_MAP
         # ── Engine selectors ──────────────────────────────────────────────────
-        _cr_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
-        _cr_model_map = {
-            "⚡ Freeloader Mode": (False, None),
-            "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-        }
-        _sel_r_idx = _cr_tier_opts.index(_regime_tier) if _regime_tier in _cr_tier_opts else 0
-        _sel_d_idx = _cr_tier_opts.index(_disc_tier)   if _disc_tier   in _cr_tier_opts else 0
+        _cr_model_map = _VAL_TIER_MAP
+        _sel_r_idx = next((i for i, o in enumerate(_VAL_TIER_OPTS) if o == _regime_tier), 0)
+        _sel_d_idx = next((i for i, o in enumerate(_VAL_TIER_OPTS) if o == _disc_tier), 0)
 
         _cre1, _cre2 = st.columns(2)
         with _cre1:
-            _regime_tier_sel = st.radio("Risk Regime Engine", _cr_tier_opts, horizontal=True,
-                                        key="cr_regime_engine", index=_sel_r_idx)
-            st.markdown(
-                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-                'margin-top:-10px;margin-bottom:2px;">'
-                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-                '</div>',
-                unsafe_allow_html=True,
+            _r_use_cl_cr, _r_model_cr = _val_ai_tier(
+                key="cr_regime_engine",
+                label="Risk Regime Engine",
+                recommendation="🧠 Grok 4.1 sufficient for regime context",
+                default=_sel_r_idx,
             )
-            st.caption("💡 🧠 Grok 4.1 sufficient")
+            _regime_tier_sel = st.session_state.get("cr_regime_engine", "⚡ Freeloader Mode")
         with _cre2:
-            _disc_tier_sel   = st.radio("Discovery Engine",   _cr_tier_opts, horizontal=True,
-                                        key="cr_disc_engine",  index=_sel_d_idx)
-            st.markdown(
-                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-                'margin-top:-10px;margin-bottom:2px;">'
-                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-                '</div>',
-                unsafe_allow_html=True,
+            _d_use_cl_cr, _d_model_cr = _val_ai_tier(
+                key="cr_disc_engine",
+                label="Discovery Engine",
+                recommendation="🧠 Grok 4.1 sufficient for narrative discovery context",
+                default=_sel_d_idx,
             )
-            st.caption("💡 🧠 Grok 4.1 sufficient")
+            _disc_tier_sel = st.session_state.get("cr_disc_engine", "⚡ Freeloader Mode")
 
         # ── Status cards with orange glow ─────────────────────────────────────
         def _glow_card(title, tier_sel, status_badge, caption_text):
@@ -203,7 +192,7 @@ def render():
         # ── Action buttons ────────────────────────────────────────────────────
         _ab1, _ab2 = st.columns(2)
         with _ab1:
-            _r_use_cl, _r_model = _cr_model_map[_regime_tier_sel]
+            _r_use_cl, _r_model = _r_use_cl_cr, _r_model_cr
             _r_icon = _regime_tier_sel.split()[0]
             _r_btn_label = f"{'▶ ' if _step1_done and not _regime_tier else ''}Run {_r_icon} Regime Plays"
             if st.button(_r_btn_label, key="cr_run_regime",
@@ -220,7 +209,7 @@ def render():
             if not _regime_ctx:
                 st.caption("⚠ Load Risk Regime → Fed Forecaster first")
         with _ab2:
-            _d_use_cl, _d_model = _cr_model_map[_disc_tier_sel]
+            _d_use_cl, _d_model = _d_use_cl_cr, _d_model_cr
             _d_icon = _disc_tier_sel.split()[0]
             if st.button(f"Run {_d_icon} Discovery Plays", key="cr_run_disc"):
                 from services.claude_client import suggest_regime_plays as _srp_disc
@@ -244,26 +233,16 @@ def render():
     # ──────────────────────────────────────────────────────────────────────────
 
     _prev_tier = st.session_state.get("_val_tier_prev")
-    _selected_val_tier = st.radio(
-        "Engine", _tier_options, horizontal=True, key="val_engine_radio",
-        help="Standard = Groq (fast/free) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
+    from utils.ai_tier import render_ai_tier_selector as _val_main_tier
+    _use_claude, _cl_model = _val_main_tier(
+        key="val_engine_radio",
+        label="Engine",
+        recommendation="🧠 Regard recommended for valuation · 👑 Highly Regarded for high-conviction positions",
     )
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption("💡 👑 Sonnet recommended — synthesises 20+ signals into conviction rating")
-    _use_claude, _cl_model = _tier_map[_selected_val_tier]
-    if not _has_anthropic and _use_claude:
-        st.caption("⚠ ANTHROPIC_API_KEY not set — falling back to Groq.")
-        _use_claude, _cl_model = False, None
-
+    _selected_val_tier = st.session_state.get("val_engine_radio", "⚡ Freeloader Mode")
     st.session_state["_val_tier_prev"] = _selected_val_tier
 
-    _badge_html = f' {_tier_badges[_selected_val_tier]}'
+    _badge_html = f' {_tier_badges.get(_selected_val_tier, "")}'
     st.markdown(
         f'<h2 style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:20px;'
         f'font-weight:700;margin-bottom:4px;">AI VALUATION &amp; RECOMMENDATION{_badge_html}</h2>',
@@ -563,6 +542,27 @@ def render():
             f"({_cong_b.get('buy_pct', 50):.0f}% cumulative buy bias)"
         )
 
+    # Inject StockTwits crowd sentiment
+    _st_val = st.session_state.get("_stocktwits_digest") or {}
+    if _st_val:
+        _st_ticker_item = next(
+            (t for t in _st_val.get("trending_tickers", [])
+             if t.get("symbol", "").upper() == ticker.upper()),
+            None
+        )
+        if _st_ticker_item:
+            _st_why = (_st_ticker_item.get("trending_summary") or "")[:120]
+            signals_text += (
+                f"\nStockTwits Crowd ({ticker}): {_st_ticker_item.get('sentiment_label','Neutral')} "
+                f"({_st_ticker_item.get('sentiment_score', 50)}/100 sentiment score)"
+                + (f" — {_st_why}" if _st_why else "")
+            )
+        else:
+            signals_text += (
+                f"\nStockTwits Market Mood: {_st_val.get('avg_sentiment_score', _st_val.get('overall_bull_pct','?'))}/100 "
+                f"({_st_val.get('market_mood','?')}) — {ticker} not in top social trending"
+            )
+
     # Inject Price Momentum signal (from Narrative Pulse)
     _pm = st.session_state.get("_price_momentum") or {}
     if _pm.get("ticker", "").upper() == ticker.upper():
@@ -668,6 +668,25 @@ def render():
             f" | {_fed_plays_val.get('rationale', '')[:200]}"
         )
 
+    # Inject Portfolio Risk Snapshot (from Quick Intel Run or Trade Journal risk matrix)
+    _port_risk = st.session_state.get("_portfolio_risk_snapshot") or {}
+    if _port_risk:
+        _pr_parts = []
+        if _port_risk.get("beta") is not None:
+            _pr_parts.append(f"Portfolio Beta {_port_risk['beta']} | VaR95 {_port_risk.get('var_95_pct')}% | CVaR95 {_port_risk.get('cvar_95_pct')}%")
+        _sw = _port_risk.get("sector_weights") or {}
+        if _sw:
+            _pr_parts.append("Sector weights: " + ", ".join(f"{s} {w}%" for s, w in sorted(_sw.items(), key=lambda x: -x[1])[:4]))
+        _rf = _port_risk.get("risk_flags") or []
+        if _rf:
+            _pr_parts.append("Portfolio risk flags: " + "; ".join(f.replace("⚠ ", "") for f in _rf))
+        _stress = _port_risk.get("stress_scenarios") or []
+        if _stress:
+            _worst = min(_stress, key=lambda s: s["port_impact_pct"])
+            _pr_parts.append(f"Worst stress scenario: {_worst['scenario']} {_worst['port_impact_pct']:+.1f}%")
+        if _pr_parts:
+            signals_text += "\n\nPORTFOLIO RISK CONTEXT:\n" + "\n".join(f"- {l}" for l in _pr_parts)
+
     # Full signal transparency expander
     with st.expander("📊 Full Signal Transparency (AI Inputs)", expanded=False):
         _render_signal_transparency(signals)
@@ -675,7 +694,9 @@ def render():
     with st.spinner("Generating AI valuation..."):
         from services.claude_client import generate_valuation
         _ce_val = st.session_state.get("_current_events_digest", "")
-        result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model, current_events=_ce_val)
+        from services.claude_client import _fmt_tactical_ctx
+        _tac_val = _fmt_tactical_ctx(st.session_state.get("_tactical_context"))
+        result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model, current_events=_ce_val, tactical_context=_tac_val)
 
     if not result:
         has_key = bool(os.getenv("GROQ_API_KEY", ""))
@@ -716,6 +737,7 @@ def render():
 # Data collection
 # ---------------------------------------------------------------------------
 
+@st.cache_data(ttl=3600)
 def _collect_signals(ticker: str) -> dict | None:
     """Gather signals from yfinance and existing services into a structured dict."""
     try:
@@ -738,6 +760,7 @@ def _collect_signals(ticker: str) -> dict | None:
         hist = stock.history(period="1y")
         if not hist.empty:
             close = hist["Close"]
+            volume = hist["Volume"] if "Volume" in hist.columns else None
             current = close.iloc[-1]
             sma20 = close.rolling(20).mean().iloc[-1]
             sma50 = close.rolling(50).mean().iloc[-1]
@@ -747,8 +770,40 @@ def _collect_signals(ticker: str) -> dict | None:
             delta = close.diff()
             gain = delta.where(delta > 0, 0).rolling(14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-            rs = gain.iloc[-1] / loss.iloc[-1] if loss.iloc[-1] != 0 else 100
-            rsi = 100 - (100 / (1 + rs))
+            _g, _l = gain.iloc[-1], loss.iloc[-1]
+            if np.isnan(_g) or np.isnan(_l):
+                rsi = None
+            else:
+                rs = _g / _l if _l != 0 else 100
+                rsi = round(100 - (100 / (1 + rs)), 1)
+
+            # Volume analysis
+            vol_20d_avg = None
+            vol_ratio = None
+            unusual_volume = False
+            if volume is not None and len(volume) >= 21:
+                vol_20d_avg = round(float(volume.iloc[-21:-1].mean()), 0)
+                today_vol = float(volume.iloc[-1])
+                if vol_20d_avg and vol_20d_avg > 0:
+                    vol_ratio = round(today_vol / vol_20d_avg, 2)
+                    unusual_volume = vol_ratio >= 2.0
+
+            # Relative strength vs SPY (1-month)
+            rs_vs_spy = None
+            try:
+                import yfinance as _yf
+                spy_hist = _yf.download("SPY", period="1mo", interval="1d",
+                                        progress=False, auto_adjust=True)
+                if not spy_hist.empty:
+                    spy_close = spy_hist["Close"]
+                    if isinstance(spy_close.columns if hasattr(spy_close, 'columns') else None, object):
+                        spy_close = spy_close.iloc[:, 0]
+                    spy_ret = float(spy_close.iloc[-1] / spy_close.iloc[0] - 1) * 100
+                    stock_1m = close.iloc[-1] / close.iloc[-22] - 1 if len(close) >= 22 else None
+                    if stock_1m is not None:
+                        rs_vs_spy = round(float(stock_1m) * 100 - spy_ret, 1)
+            except Exception:
+                pass
 
             signals["price"] = {
                 "current": round(current, 2),
@@ -760,11 +815,44 @@ def _collect_signals(ticker: str) -> dict | None:
                 "above_sma20": current > sma20,
                 "above_sma50": current > sma50,
                 "above_sma200": current > sma200,
-                "rsi14": round(rsi, 1),
+                "rsi14": rsi,
                 "period_return_pct": round((current / close.iloc[0] - 1) * 100, 1),
+                "vol_20d_avg": vol_20d_avg,
+                "vol_ratio": vol_ratio,
+                "unusual_volume": unusual_volume,
+                "rs_vs_spy_1m": rs_vs_spy,
             }
     except Exception:
         signals["price"] = None
+
+    # 1b. Earnings Intelligence (last 4Q surprise trend + analyst consensus)
+    try:
+        from services.market_data import fetch_earnings_intelligence
+        ei = fetch_earnings_intelligence(ticker)
+        eps_hist = ei.get("eps_history", [])
+        analyst = ei.get("analyst", {})
+        next_earn = ei.get("next_earnings")
+        # Compute beat streak and surprise acceleration
+        beats = [q["beat"] for q in eps_hist if q.get("beat") is not None]
+        surprises = [q["surprise_pct"] for q in eps_hist if q.get("surprise_pct") is not None]
+        beat_streak = sum(1 for b in beats if b) if beats else 0
+        surprise_trend = None
+        if len(surprises) >= 2:
+            surprise_trend = "accelerating" if surprises[0] > surprises[-1] else "decelerating"
+        signals["earnings"] = {
+            "eps_history": eps_hist,
+            "beat_streak": beat_streak,
+            "total_quarters": len(beats),
+            "surprise_trend": surprise_trend,
+            "analyst_buy": analyst.get("strong_buy", 0) + analyst.get("buy", 0),
+            "analyst_hold": analyst.get("hold", 0),
+            "analyst_sell": analyst.get("sell", 0) + analyst.get("strong_sell", 0),
+            "mean_target": analyst.get("mean_target"),
+            "upside_pct": analyst.get("upside_pct"),
+            "next_earnings": next_earn,
+        }
+    except Exception:
+        signals["earnings"] = None
 
     # 2. Fundamentals
     try:
@@ -814,13 +902,22 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["insider"] = None
 
-    # 5. Short Interest
+    # 5. Short Interest + trend
     try:
         short_pct = info.get("shortPercentOfFloat") or 0.0
         days_to_cover = info.get("shortRatio") or 0.0
+        shares_short = info.get("sharesShort") or 0
+        shares_short_prior = info.get("sharesShortPriorMonth") or 0
+        short_chg_pct = None
+        short_trend = "unknown"
+        if shares_short_prior and shares_short_prior > 0:
+            short_chg_pct = round((shares_short - shares_short_prior) / shares_short_prior * 100, 1)
+            short_trend = "increasing" if short_chg_pct > 5 else ("decreasing" if short_chg_pct < -5 else "stable")
         signals["short_interest"] = {
             "short_pct_float": round(short_pct * 100, 1),
             "days_to_cover": round(days_to_cover, 1),
+            "short_chg_pct": short_chg_pct,
+            "short_trend": short_trend,
             "squeeze_potential": (
                 "extreme" if short_pct >= 0.30 else
                 "high" if short_pct >= 0.20 else
@@ -831,19 +928,69 @@ def _collect_signals(ticker: str) -> dict | None:
     except Exception:
         signals["short_interest"] = None
 
+    # 5b. Analyst revisions (recent upgrades/downgrades) + buyback yield
+    try:
+        upgrades_df = stock.upgrades_downgrades
+        upgrades = downgrades = 0
+        if upgrades_df is not None and not upgrades_df.empty:
+            # Last 90 days
+            cutoff = pd.Timestamp.now() - pd.Timedelta(days=90)
+            if upgrades_df.index.tz is not None:
+                cutoff = cutoff.tz_localize(upgrades_df.index.tz)
+            recent = upgrades_df[upgrades_df.index >= cutoff]
+            if "ToGrade" in recent.columns and "FromGrade" in recent.columns:
+                _pos = {"Buy", "Strong Buy", "Outperform", "Overweight", "Market Outperform"}
+                _neg = {"Sell", "Strong Sell", "Underperform", "Underweight", "Market Underperform"}
+                for _, row in recent.iterrows():
+                    to_g = str(row.get("ToGrade", ""))
+                    fr_g = str(row.get("FromGrade", ""))
+                    if to_g in _pos and fr_g not in _pos:
+                        upgrades += 1
+                    elif to_g in _neg and fr_g not in _neg:
+                        downgrades += 1
+        revision_bias = "positive" if upgrades > downgrades else ("negative" if downgrades > upgrades else "neutral")
+
+        # Buyback yield: (repurchase of capital stock / market cap)
+        buyback_yield = None
+        try:
+            cf = stock.cashflow
+            if cf is not None and not cf.empty:
+                repurchase_row = next((r for r in cf.index if "Repurchase" in str(r) or "Buyback" in str(r)), None)
+                if repurchase_row is not None:
+                    repurchase = abs(float(cf.loc[repurchase_row].iloc[0]))
+                    mkt_cap = info.get("marketCap")
+                    if mkt_cap and mkt_cap > 0:
+                        buyback_yield = round(repurchase / mkt_cap * 100, 2)
+        except Exception:
+            pass
+
+        signals["revisions"] = {
+            "upgrades_90d": upgrades,
+            "downgrades_90d": downgrades,
+            "revision_bias": revision_bias,
+            "buyback_yield_pct": buyback_yield,
+        }
+    except Exception:
+        signals["revisions"] = None
+
     # 6. Options Sentiment
     try:
         expirations = stock.options
         if expirations:
             chain = stock.option_chain(expirations[0])
-            call_vol = chain.calls["volume"].sum()
-            put_vol = chain.puts["volume"].sum()
-            pc_ratio = put_vol / call_vol if call_vol > 0 else 0
+            call_vol = int(chain.calls["volume"].sum())
+            put_vol = int(chain.puts["volume"].sum())
+            if call_vol == 0 and put_vol == 0:
+                pc_ratio = None
+                pc_sentiment = "N/A (no options data)"
+            else:
+                pc_ratio = round(put_vol / call_vol, 2) if call_vol > 0 else None
+                pc_sentiment = "bearish" if pc_ratio and pc_ratio > 1.0 else ("bullish" if pc_ratio and pc_ratio < 0.7 else "neutral")
             signals["options"] = {
-                "put_call_ratio": round(pc_ratio, 2),
-                "call_volume": int(call_vol),
-                "put_volume": int(put_vol),
-                "sentiment": "bearish" if pc_ratio > 1.0 else "bullish" if pc_ratio < 0.7 else "neutral",
+                "put_call_ratio": pc_ratio,
+                "call_volume": call_vol,
+                "put_volume": put_vol,
+                "sentiment": pc_sentiment,
             }
         else:
             signals["options"] = None
@@ -1033,12 +1180,26 @@ def _format_signals_text(ticker: str, signals: dict) -> str:
         lines.append(f"SMA20: ${p['sma20']} ({'above' if p['above_sma20'] else 'below'}) | "
                       f"SMA50: ${p['sma50']} ({'above' if p['above_sma50'] else 'below'}) | "
                       f"SMA200: ${p['sma200']} ({'above' if p['above_sma200'] else 'below'})")
-        lines.append(f"RSI(14): {p['rsi14']} | 1Y Return: {p['period_return_pct']}%\n")
+        _rsi = p['rsi14']
+        rsi_str = f"{_rsi}" if _rsi is not None and not (isinstance(_rsi, float) and np.isnan(_rsi)) else "N/A"
+        vol_str = (f"Vol Ratio vs 20d avg: {p['vol_ratio']}x" +
+                   (" ⚠️ UNUSUAL VOLUME" if p.get("unusual_volume") else "")
+                   ) if p.get("vol_ratio") is not None else ""
+        rs_str = f"RS vs SPY (1M): {p['rs_vs_spy_1m']:+.1f}%" if p.get("rs_vs_spy_1m") is not None else ""
+        lines.append(f"RSI(14): {rsi_str} | 1Y Return: {p['period_return_pct']}%")
+        if vol_str or rs_str:
+            lines.append(" | ".join(x for x in [vol_str, rs_str] if x) + "\n")
+        else:
+            lines.append("")
 
     if signals.get("fundamentals"):
         f = signals["fundamentals"]
         lines.append("## Fundamentals")
-        lines.append(f"P/E: {f['pe_ratio']} | Fwd P/E: {f['forward_pe']} | P/S: {f['ps_ratio']} | P/B: {f['pb_ratio']}")
+        pe  = f['pe_ratio']   if f['pe_ratio']   is not None else "N/A"
+        fpe = f['forward_pe'] if f['forward_pe'] is not None else "N/A"
+        ps  = f['ps_ratio']   if f['ps_ratio']   is not None else "N/A"
+        pb  = f['pb_ratio']   if f['pb_ratio']   is not None else "N/A"
+        lines.append(f"P/E: {pe} | Fwd P/E: {fpe} | P/S: {ps} | P/B: {pb}")
         mc = f['market_cap']
         cap_str = f"${mc / 1e9:.1f}B" if mc and mc > 1e9 else f"${mc / 1e6:.0f}M" if mc else "N/A"
         lines.append(f"Market Cap: {cap_str} | Sector: {f['sector']} | Industry: {f['industry']}")
@@ -1053,7 +1214,8 @@ def _format_signals_text(ticker: str, signals: dict) -> str:
         inst = f"{i['inst_pct'] * 100:.1f}%" if i['inst_pct'] else "N/A"
         ins = f"{i['insider_pct'] * 100:.1f}%" if i['insider_pct'] else "N/A"
         lines.append("## Institutional Ownership")
-        lines.append(f"Institutional: {inst} | Insider: {ins} | # Institutions: {i['num_institutions']}\n")
+        n_inst = i['num_institutions'] if i['num_institutions'] is not None else "N/A"
+        lines.append(f"Institutional: {inst} | Insider: {ins} | # Institutions: {n_inst}\n")
 
     if signals.get("insider"):
         ins = signals["insider"]
@@ -1062,10 +1224,51 @@ def _format_signals_text(ticker: str, signals: dict) -> str:
                       f"Sells: {ins['sell_count']} (${ins['sell_value']:,.0f}) | "
                       f"Net: {ins['net_sentiment']}\n")
 
+    if signals.get("short_interest"):
+        si = signals["short_interest"]
+        chg_str = f" | MoM change: {si['short_chg_pct']:+.1f}% ({si['short_trend']})" if si.get("short_chg_pct") is not None else ""
+        lines.append("## Short Interest")
+        lines.append(f"Short % Float: {si['short_pct_float']}% | Days-to-Cover: {si['days_to_cover']}d | Squeeze potential: {si['squeeze_potential']}{chg_str}\n")
+
+    if signals.get("revisions"):
+        rv = signals["revisions"]
+        by_str = f" | Buyback yield: {rv['buyback_yield_pct']:.2f}%" if rv.get("buyback_yield_pct") is not None else ""
+        lines.append("## Analyst Revisions (90d)")
+        lines.append(f"Upgrades: {rv['upgrades_90d']} | Downgrades: {rv['downgrades_90d']} | Revision bias: {rv['revision_bias']}{by_str}\n")
+
+    if signals.get("earnings"):
+        e = signals["earnings"]
+        lines.append("## Earnings & Analyst")
+        if e.get("eps_history"):
+            hist_parts = []
+            for q in e["eps_history"]:
+                beat_str = "BEAT" if q.get("beat") else ("MISS" if q.get("beat") is False else "?")
+                surp = f" ({q['surprise_pct']:+.1f}%)" if q.get("surprise_pct") is not None else ""
+                hist_parts.append(f"{q['period']}: {beat_str}{surp}")
+            lines.append("EPS last 4Q: " + " | ".join(hist_parts))
+        streak = e.get("beat_streak", 0)
+        total = e.get("total_quarters", 0)
+        trend = e.get("surprise_trend")
+        streak_str = f"Beat streak: {streak}/{total}" if total else "N/A"
+        trend_str = f" — surprise trend {trend}" if trend else ""
+        lines.append(f"{streak_str}{trend_str}")
+        ab = e.get("analyst_buy", 0)
+        ah = e.get("analyst_hold", 0)
+        as_ = e.get("analyst_sell", 0)
+        tgt = f"${e['mean_target']:.2f}" if e.get("mean_target") else "N/A"
+        upside = f" ({e['upside_pct']:+.1f}% upside)" if e.get("upside_pct") is not None else ""
+        lines.append(f"Analyst: {ab} Buy / {ah} Hold / {as_} Sell | Target: {tgt}{upside}")
+        if e.get("next_earnings"):
+            ne = e["next_earnings"]
+            lines.append(f"Next earnings: {ne['date']} ({ne['days_away']}d away)\n")
+        else:
+            lines.append("")
+
     if signals.get("options"):
         o = signals["options"]
         lines.append("## Options Sentiment")
-        lines.append(f"P/C Ratio: {o['put_call_ratio']} | Call Vol: {o['call_volume']:,} | "
+        pc_str = f"{o['put_call_ratio']}" if o['put_call_ratio'] is not None else "N/A"
+        lines.append(f"P/C Ratio: {pc_str} | Call Vol: {o['call_volume']:,} | "
                       f"Put Vol: {o['put_volume']:,} | Sentiment: {o['sentiment']}\n")
 
     if signals.get("profile"):
@@ -1268,7 +1471,72 @@ def _render_signal_transparency(signals: dict):
     else:
         _signal_tile(r3c2, "Smart Money / 13F", "unavailable", ["No 13F data"])
 
-    # Spacer column (r3c3 intentionally empty)
+    # Tile 9: Tactical Timing
+    _tac_ctx = st.session_state.get("_tactical_context") or {}
+    if _tac_ctx:
+        _ts = _tac_ctx.get("tactical_score", 50)
+        _tlabel = _tac_ctx.get("label", "")
+        _tbias = _tac_ctx.get("action_bias", "")
+        _tac_sentiment = "bullish" if _ts >= 65 else ("bearish" if _ts < 38 else "neutral")
+        _tac_sigs = _tac_ctx.get("signals", [])
+        _sig_lines = []
+        for _sr in _tac_sigs:
+            _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+            _sig_lines.append(f"{_arrow} {_sr['Signal'].split('(')[0].strip()}: {_sr['Value']}")
+        _signal_tile(r3c3, f"Tactical Timing · {_ts}/100", _tac_sentiment,
+                     [_tlabel, _tbias[:60] + ("…" if len(_tbias) > 60 else "")] + _sig_lines[:3])
+    else:
+        _signal_tile(r3c3, "Tactical Timing", "unavailable", ["Run QIR to populate"])
+
+    # ── Row 4 ──
+    r4c1, r4c2, r4c3 = st.columns(3)
+
+    # Tile 10: Options Flow Sentiment
+    _of_ctx = st.session_state.get("_options_flow_context") or {}
+    if _of_ctx:
+        _os = _of_ctx.get("options_score", 50)
+        _of_sentiment = "bullish" if _os >= 65 else ("bearish" if _os < 38 else "neutral")
+        _of_sig_lines = []
+        for _sr in _of_ctx.get("signals", [])[:3]:
+            _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+            _of_sig_lines.append(f"{_arrow} {_sr['Signal']}: {_sr['Value']}")
+        _of_bias = _of_ctx.get("action_bias", "")
+        _signal_tile(r4c1, f"Options Flow Sentiment · {_os}/100", _of_sentiment,
+                     [_of_ctx["label"], _of_bias[:60] + ("…" if len(_of_bias) > 60 else "")]
+                     + _of_sig_lines)
+    else:
+        _signal_tile(r4c1, "Options Flow Sentiment", "unavailable", ["Run QIR to populate"])
+
+    # Tile 11: StockTwits Crowd Sentiment
+    _st_ctx = st.session_state.get("_stocktwits_digest") or {}
+    if _st_ctx:
+        _st_avg = _st_ctx.get("avg_sentiment_score", _st_ctx.get("overall_bull_pct", 50))
+        _st_mood = _st_ctx.get("market_mood", "mixed")
+        _st_sentiment = "bullish" if _st_mood == "bullish" else ("bearish" if _st_mood == "bearish" else "neutral")
+        # Check if the current ticker is in the trending list
+        _st_ticker_data = next(
+            (t for t in _st_ctx.get("trending_tickers", [])
+             if t.get("symbol", "").upper() == ticker.upper()),
+            None
+        )
+        if _st_ticker_data:
+            _t_score = _st_ticker_data.get("sentiment_score", 50)
+            _t_label = _st_ticker_data.get("sentiment_label", "Neutral")
+            _t_why = (_st_ticker_data.get("trending_summary") or "")[:80]
+            _t_sentiment = "bullish" if _t_score >= 60 else ("bearish" if _t_score <= 40 else "neutral")
+            _signal_tile(r4c2, f"Crowd Sentiment · {ticker} · {_t_score}/100", _t_sentiment, [
+                f"📊 {_t_label} (StockTwits score)",
+                _t_why if _t_why else f"Market-wide: {_st_avg}/100 ({_st_mood})",
+                f"Top trending: {', '.join(_st_ctx.get('top_bullish', [])[:3])}",
+            ])
+        else:
+            _signal_tile(r4c2, f"Crowd Sentiment · {_st_avg}/100 (market)", _st_sentiment, [
+                f"{ticker} not in top social trending",
+                f"Market mood: {_st_mood}",
+                f"Top bullish crowd: {', '.join(_st_ctx.get('top_bullish', [])[:3])}",
+            ])
+    else:
+        _signal_tile(r4c2, "Crowd Sentiment", "unavailable", ["Run QIR to populate"])
 
 
 def _render_rating_banner(result: dict):
@@ -1656,6 +1924,7 @@ def _get_risk_free_rate() -> float:
     return 0.04  # fallback
 
 
+@st.cache_data(ttl=3600)
 def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg_adj: float = 0.0) -> dict | None:
     """
     2-stage levered DCF following Simply Wall St methodology.

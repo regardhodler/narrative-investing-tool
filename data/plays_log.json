@@ -10143,5 +10143,877 @@
       "summary": "- **AI and Big Tech Convergence**: Mega-institutions like BlackRock and Vanguard aggressively piled into AI leaders, with BlackRock adding $62.2B to NVIDIA (+37.6%)\u2014its largest move\u2014and $13.9B/$11.0B to Alphabet (+22.2%/+20.2%); Vanguard boosted Alphabet by $40.0B (+31.9%) and $31.6B (+31.4%), signaling strong consensus on AI infrastructure.\n- **High-Conviction Names**: Alphabet sees multi-whale buying from Vanguard (>$71B total), BlackRock ($25B), and State Street ($16.6B/+29.8%); Apple draws BlackRock ($43.7B/+24.5%) and Vanguard ($31.4B/+8.8%); Eli Lilly attracts Vanguard ($26.3B/+42.6%) and State Street ($9.2B/+49.9%), highlighting pharma/AI drug conviction.\n- **Semiconductor Surge**: Vanguard massively increased Micron ($12.9B/+73.8%) and Broadcom ($9.1B/+5.8%), complementing NVIDIA's blowout, indicating rotation into memory/AI chip enablers amid BlackRock's tech adds.\n- **Notable Exits Signaling Shifts**: State Street slashed Meta ($14.7B/-15.4%) and Microsoft ($11.8B/-10.9%); Vanguard trimmed Microsoft ($16.4B/-4.5%), Meta ($9.5B/-6.7%), Netflix ($9.6B/-20.8%), and Oracle ($13.4B/-28.3%), suggesting de-risking from cloud/social/streaming.\n- **Overall Sentiment**: Net bullish on AI ecosystem (tech/semis/pharma) with ~$300B+ inflows to top names vs. ~$75B outflows; institutions favor growth leaders like NVDA/GOOGL over prior Magnificent 7 laggards, implying optimistic AI capex outlook."
     },
     "meta": {}
+  },
+  {
+    "id": "20260328_131220_02",
+    "timestamp": "2026-03-28T13:12:20.021258",
+    "feature": "AI Regime Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 2
+        },
+        {
+          "name": "Utilities",
+          "conviction": 2
+        },
+        {
+          "name": "Healthcare",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "Strong oil trend in commodities signal supports integrated majors with resilient dividends.",
+          "conviction": 3
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Copper strength in commodity trend favors copper miners poised for industrial recovery.",
+          "conviction": 2
+        },
+        {
+          "ticker": "NEE",
+          "reason": "Defensive utility benefits from low VIX stability despite weak consumer sentiment.",
+          "conviction": 2
+        },
+        {
+          "ticker": "JNJ",
+          "reason": "Healthcare staple offers downside protection in neutral regime with equity weakness.",
+          "conviction": 1
+        },
+        {
+          "ticker": "PG",
+          "reason": "Consumer staples provide steady demand amid low sentiment and neutral risk backdrop.",
+          "conviction": 1
+        },
+        {
+          "ticker": "COP",
+          "reason": "Independent oil producer leverages positive oil z-score for outsized gains.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "SHY",
+          "reason": "Short-term Treasuries suit high term premium environment avoiding duration risk.",
+          "conviction": 2
+        },
+        {
+          "ticker": "TIP",
+          "reason": "Inflation-linked bonds hedge strong commodity trends in neutral regime.",
+          "conviction": 2
+        },
+        {
+          "ticker": "LQD",
+          "reason": "Investment-grade corporates gain from low VIX despite equity trend weakness.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "True Neutral regime (-0.04) features strong commodity trends (z=+1.00) clashing with weak equity momentum (z=-1.00) and low consumer sentiment (z=-0.82), favoring energy/materials for upside and defensives for stability. Low VIX (z=-1.00) supports credit and low-vol sectors, while elevated term premium (z=+1.00) warrants short-duration and inflation-protected bonds over long Treasuries."
+    },
+    "meta": {
+      "regime": "True Neutral",
+      "score": -0.04
+    }
+  },
+  {
+    "id": "20260328_134038_92",
+    "timestamp": "2026-03-28T13:40:38.925244",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Portfolio aligns with stagflation via inflation hedges (gold, silver, copper) and defensives (utilities, health). Yen carry hedge mitigates black swan. Moderate stress, institutional tech divergence noted.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Hedges yen carry unwind black swan in stagflation.",
+          "risk_factors": [
+            "Yen carry reverse",
+            "Liquidity shock"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage benefits from materials/AI favored sectors.",
+          "risk_factors": [
+            "Supply shocks",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver inflation hedge fits stagflation regime.",
+          "risk_factors": [
+            "Industrial demand",
+            "Volatility"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis vulnerable in stagflation policy hold.",
+          "risk_factors": [
+            "Rate sensitivity",
+            "Credit spreads"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive suits moderate stress environment.",
+          "risk_factors": [
+            "Sector rotation",
+            "Policy risk"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedges debt/inflation in stagflation quadrant.",
+          "risk_factors": [
+            "Opportunity cost",
+            "Deflation scare"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Venezuela value play exposed to geopolitical risks.",
+          "risk_factors": [
+            "Geopolitics",
+            "Oil volatility"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive with flat rates, regime fit.",
+          "risk_factors": [
+            "Rate path",
+            "Energy shocks"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "HOLD PHYS.TO, PSLV.TO",
+        "REDUCE FMKT, CHEV.TO",
+        "Monitor yen carry"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260328_134145_44",
+    "timestamp": "2026-03-28T13:41:45.442350",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Portfolio aligns well with stagflation via inflation hedges (gold, silver, copper) and defensives (utilities, healthcare). Metals protect against supply shocks like helium/chips; yen carry hedge fits black swans. Moderate stress favors holding over aggressive changes.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Direct hedge against yen carry unwind black swan in stagflation. Regime fit 57 supports risks-off positioning.",
+          "risk_factors": [
+            "Yen carry reversal",
+            "Liquidity drawdown"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage play fits supply shocks in stagflation. Inflation factor +0.36x exposure benefits.",
+          "risk_factors": [
+            "Commodity volatility",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver as inflation/shortage hedge aligns with regime. Strong regime fit 57.",
+          "risk_factors": [
+            "Industrial demand",
+            "Silver price swings"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis less relevant in stagflation; lower regime fit 45 amid stress.",
+          "risk_factors": [
+            "Policy uncertainty",
+            "Growth slowdown"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive suits stagflation slowdown. Steady employment supports.",
+          "risk_factors": [
+            "Regulatory risks",
+            "Sector rotation"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge against debt/inflation perfect for stagflation. High score 64, regime fit 61.",
+          "risk_factors": [
+            "Opportunity cost",
+            "Rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Value/Venezuelan play exposed to geopolitics; moderate fit 56 but untested in stress.",
+          "risk_factors": [
+            "Geopolitical",
+            "Emerging market"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities thrive in stagflation. High score 64 despite regime fit 50.",
+          "risk_factors": [
+            "Rate path",
+            "Energy costs"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Hold metals core",
+        "Reduce FMKT/CHEV",
+        "Monitor Hormuz/yen"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260328_185454_69",
+    "timestamp": "2026-03-28T18:54:54.695583",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 6\n\n* The Composite Stress Score of 31.6/100 indicates a moderate level of financial system stress, with the HY OAS at 3.21 and IG OAS at 0.88 suggesting a degree of credit market tension.\n* The 10Y-2Y Spread of 0.56 is relatively low, indicating a flat yield curve, which may be a concern for banks' profitability and potentially contributing to the average 1M return of -10.1% and average drawdown of -21.3% for Regional Banks.\n* The Canary Watchlist Summary shows significant drawdowns in Commercial Real Estate (-16.4%) and Subprime / Consumer Credit (-33.8%), which may be indicative of underlying stress in these sectors.\n* The number of distress filings (332) and whale exits (20 positions, total $-129,883,591M closed/reduced) over the last 30 days suggests some level of market participants' concern and potential for contagion risk.\n* The average 1M return of +25.5% for Volatility / Fear indicates increased market uncertainty and risk appetite.\n\nLooking forward, the current geopolitical risks and sector rotation signals may lead to increased volatility and potential inflationary pressures, which could further stress the financial system. The moderate stress level and observed data suggest that investors should be cautious and prepared for potential market disruptions. The user's open trades, including LONG positions in XTLH.TO, FCX, and PSLV.TO, may be vulnerable to these market developments, and it is essential to monitor their performance closely."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260328_185515_11",
+    "timestamp": "2026-03-28T18:55:15.110724",
+    "feature": "Doom Briefing",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "briefing": "**STRESS LEVEL 4/10**\n\n- Composite Stress Score at 31.6/100 indicates moderate overall stress.\n- Regional Banks average 1M return -10.1% and average drawdown -21.3%, signaling sector-specific pressure.\n- Private Equity Exposure average drawdown -39.1% reflects significant illiquidity risks.\n- Subprime/Consumer Credit average drawdown -33.8% points to consumer credit deterioration.\n- Distress filings reached 332 in the last 30 days.\n- Whale exits totaled 20 positions with $-129,883,591M closed/reduced, indicating large-scale position unwinds.\n\nElevated drawdowns in Regional Banks (-21.3%), Private Equity (-39.1%), and Subprime/Consumer Credit (-33.8%) suggest potential contagion across leveraged sectors if 1M returns deteriorate further from current levels. HY OAS at 3.21 and IG OAS at 0.88 show widened credit spreads consistent with moderate stress persistence. Limited data on interconnected failures prevents fuller assessment of cascading default risks."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260328_202829_24",
+    "timestamp": "2026-03-28T20:28:29.240145",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Portfolio aligns with stagflation via inflation hedges (gold/silver) and defensives (utilities/healthcare). Low beta and positive inflation exposure mitigate moderate stress. High metals correlation limits diversification but suits supply shocks.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits black swan risks and neutral regime.",
+          "risk_factors": [
+            "Yen intervention",
+            "Carry reversal"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper play benefits from materials sector favor in AI and shortages.",
+          "risk_factors": [
+            "Commodity volatility",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage hedge supports inflation in stagflation quadrant.",
+          "risk_factors": [
+            "High correlation to PHYS",
+            "Industrial demand drop"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis uncertain in stagflation; lacks clear regime fit.",
+          "risk_factors": [
+            "Policy risk",
+            "Illiquidity"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive stable in neutral rates and stagflation.",
+          "risk_factors": [
+            "Consumer credit stress",
+            "Rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge excels in inflation, debt risks, and safe haven trends.",
+          "risk_factors": [
+            "Concentration risk",
+            "Gold-oil inverse"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Venezuelan exposure adds geopolitical/illiquidity risks in stress environment.",
+          "risk_factors": [
+            "Country risk",
+            "Liquidity drawdown"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive amid rate hold and stagflation persistence.",
+          "risk_factors": [
+            "Rate path shift",
+            "Energy shocks"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Monitor metals correlation",
+        "Reduce FMKT/CHEV.TO",
+        "Watch Hormuz/yen swans"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260328_212626_05",
+    "timestamp": "2026-03-28T21:26:26.057534",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Defensive tilt with gold/silver hedges and utilities aligns stagflation risk-off. Low beta/VaR shows resilience. Metals correlation limits diversification.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits risk-off stagflation black swan.",
+          "risk_factors": [
+            "FX volatility",
+            "carry trade unwind"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Copper materials play amid shortages, favored in AI/energy.",
+          "risk_factors": [
+            "China demand",
+            "commodity vol"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage hedge against inflation/debt.",
+          "risk_factors": [
+            "metals correlation",
+            "industrial demand"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis weak in stagflation hold rates.",
+          "risk_factors": [
+            "policy risk",
+            "sector rotation"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive suits subdued employment.",
+          "risk_factors": [
+            "credit spreads",
+            "subprime contagion"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold inflation/debt hedge strong in stagflation.",
+          "risk_factors": [
+            "gold-oil crash",
+            "metals correlation"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis weak in stagflation hold rates.",
+          "risk_factors": [
+            "policy risk",
+            "sector rotation"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive suits subdued employment.",
+          "risk_factors": [
+            "credit spreads",
+            "subprime contagion"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage hedge against inflation/debt.",
+          "risk_factors": [
+            "metals correlation",
+            "industrial demand"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold inflation/debt hedge strong in stagflation.",
+          "risk_factors": [
+            "gold-oil crash",
+            "metals correlation"
+          ]
+        },
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits risk-off stagflation black swan.",
+          "risk_factors": [
+            "FX volatility",
+            "carry trade unwind"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Energy value play amid oil disruptions.",
+          "risk_factors": [
+            "geopolitical",
+            "Hormuz closure"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold inflation/debt hedge strong in stagflation.",
+          "risk_factors": [
+            "gold-oil crash",
+            "metals correlation"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Utilities defensive in stable rates stagflation.",
+          "risk_factors": [
+            "yield pressure",
+            "sector drawdown"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Monitor PHYS/PSLV correlation",
+        "Hold yen/energy hedges",
+        "Reduce FMKT exposure"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260328_212707_33",
+    "timestamp": "2026-03-28T21:27:07.331690",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Portfolio defensive tilt with gold, silver, utilities aligns well with stagflation and risk-off regime. Low beta (0.37) and moderate stress tolerance mitigate drawdowns. Precious metals concentration (PHYS.TO/PSLV.TO corr 0.82) is key watchpoint amid black swans.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits reverse yen black swan risk in stagflation.",
+          "risk_factors": [
+            "Yen intervention",
+            "Liquidity trap"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Copper shortage play benefits materials in inflation quadrant despite neutral fit.",
+          "risk_factors": [
+            "China demand",
+            "Supply shocks"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver hedge supports inflation exposure (+0.36x) in risk-off environment.",
+          "risk_factors": [
+            "Gold corr (0.82)",
+            "Industrial demand"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis weak in stagflation hold-rate path; low regime fit (45).",
+          "risk_factors": [
+            "Policy delay",
+            "Credit spread"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive suits subdued employment and stable rates.",
+          "risk_factors": [
+            "Subprime spillover",
+            "Rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "rationale": "Gold inflation/debt hedge excels in stagflation; top position (20.6%) resilient.",
+          "risk_factors": [
+            "Concentration risk",
+            "Gold crash pattern"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Value play with decent fit; Venezuelan exposure adds emerging risk.",
+          "risk_factors": [
+            "Geopolitical",
+            "Oil linkage"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive (16%) thrives in rate-hold stagflation quadrant.",
+          "risk_factors": [
+            "Yield surge",
+            "Energy costs"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Monitor PHYS.TO/PSLV correlation",
+        "Reduce FMKT exposure",
+        "Watch Hormuz/yen black swans"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260328_224348_11",
+    "timestamp": "2026-03-28T22:43:48.119404",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 6,
+      "narrative": "Defensive portfolio with inflation hedges aligns to stagflation risk-off but heavy gold/silver concentration vulnerable to oil shock patterns recommending gold shorts. Energy and utilities benefit from disruptions and cross-signals. Low beta mitigates but high PHYS.TO weight limits diversification.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Strong hedge against yen carry unwind black swan amid USDJPY 160 and BOJ risks.",
+          "risk_factors": [
+            "Yen intervention",
+            "Carry trade reversal"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "rationale": "Copper shortage play fits materials cross-signal despite growth concerns in flat yield curve.",
+          "risk_factors": [
+            "Economic slowdown",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Silver hedge good for stagflation but high correlation to PHYS.TO reduces diversification.",
+          "risk_factors": [
+            "Gold correlation",
+            "Oil crisis gold crash"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Low regime fit score amid bearish macro; deregulation thesis unproven in risk-off.",
+          "risk_factors": [
+            "Regime mismatch",
+            "Volatility spike"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive suits risk-off and institutional healthcare flows.",
+          "risk_factors": [
+            "Sector rotation",
+            "Credit spreads"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Gold inflation/debt hedge trending safe haven but actionable short per oil crises history.",
+          "risk_factors": [
+            "Oil shock",
+            "Concentration 20.6%"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "ADD",
+          "alignment": "aligned",
+          "rationale": "Energy value play boosted by Iran-Houthi disruptions and trending oil narratives.",
+          "risk_factors": [
+            "Geopolitical escalation",
+            "Hormuz closure"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities fit cross-signals and stagflation quadrant.",
+          "risk_factors": [
+            "Rate hold",
+            "Yield curve flat"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce PHYS.TO exposure",
+        "Trim PSLV.TO/FMKT",
+        "Add to CHEV.TO energy"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260328_224431_25",
+    "timestamp": "2026-03-28T22:44:31.258356",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 7,
+      "narrative": "Portfolio holds stagflation-relevant assets but suffers from high PHYS/PSLV correlation and duplicate entries inflating apparent diversification. VIX at 31 and bearish macro conviction demand trimming weakest regime fits.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge directly addresses black swan scenario at 8.5% probability.",
+          "risk_factors": [
+            "BOJ intervention timing uncertain",
+            "low liquidity in CAD-listed ETF"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Copper thesis valid long-term but stagflation crushes industrial demand near-term; regime fit 50 confirms misalignment.",
+          "risk_factors": [
+            "China demand slowdown",
+            "risk-off crushes cyclicals"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage thesis intact; inflation factor exposure supports. Reduce if PHYS overlap becomes excessive.",
+          "risk_factors": [
+            "0.82 correlation with PHYS.TO",
+            "industrial silver demand drops in slowdown"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "EXIT",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis is regime-misaligned in stagflation/risk-off; lowest regime fit at 45. Duplicate position compounds exposure.",
+          "risk_factors": [
+            "stagflation kills deregulation momentum",
+            "duplicate entry doubles unintended weight"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive rationale holds in risk-off but UNH faces sector-specific regulatory headwinds.",
+          "risk_factors": [
+            "US healthcare policy risk",
+            "duplicate entries distort true weight"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold physical trust is top regime fit at 61; largest position justified as inflation and debt hedge.",
+          "risk_factors": [
+            "gold historically sells off in acute oil crises",
+            "20.6% concentration risk"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "ADD",
+          "alignment": "aligned",
+          "rationale": "Energy directly benefits from Iran-Houthi disruption narrative; cross-signal discovery confirms energy sector.",
+          "risk_factors": [
+            "Hormuz closure tail risk cuts supply unpredictably",
+            "Venezuelan political risk"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Utilities defensive in stagflation but 16% weight is oversized; rate sensitivity a concern with flat yield curve.",
+          "risk_factors": [
+            "rate sensitivity at 3.64% hold",
+            "oversized single-position weight"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "EXIT both FMKT positions immediately \u2014 deregulation thesis misaligned with stagflation regime and VIX at 31",
+        "Consolidate duplicate PHYS.TO and PSLV.TO entries; trim combined gold/silver to under 25% to reduce correlation drag",
+        "ADD to CHEV.TO on Iran-Houthi escalation confirmation; energy is highest-conviction cross-signal discovery play"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
   }
 ]

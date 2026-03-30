@@ -135,6 +135,44 @@ def _check_stress_threshold(cfg: dict) -> str | None:
     return None
 
 
+def _check_tactical_threshold(cfg: dict) -> list[str]:
+    """Fire when tactical score crosses below 38 (Risk-Off) or above 65 (Favorable Entry)."""
+    last = cfg.get("last_tactical_score")
+    curr = cfg.get("current_tactical_score")
+    if last is None or curr is None:
+        return []
+    alerts = []
+    risk_off_th = cfg.get("thresholds", {}).get("tactical_risk_off", 38)
+    entry_th    = cfg.get("thresholds", {}).get("tactical_entry", 65)
+    if last >= risk_off_th and curr < risk_off_th:
+        alerts.append(
+            f"⚠️ <b>TACTICAL: Risk-Off Threshold Crossed</b>\n"
+            f"Score dropped {last} → {curr}/100 (below {risk_off_th}). Consider defensive posture."
+        )
+    if last <= entry_th and curr > entry_th:
+        alerts.append(
+            f"✅ <b>TACTICAL: Favorable Entry Signal</b>\n"
+            f"Score rose {last} → {curr}/100 (above {entry_th}). Conditions support adding risk."
+        )
+    return alerts
+
+
+def _check_data_quality(cfg: dict) -> str | None:
+    """Fire once when data quality score drops below 60. Resets latch when score recovers."""
+    score = cfg.get("current_data_quality_score")
+    if score is None:
+        return None
+    if score < 60 and not cfg.get("data_quality_alerted", False):
+        cfg["data_quality_alerted"] = True
+        return (
+            f"🔴 <b>DATA QUALITY WARNING</b>\n"
+            f"Score: {score}/100 — AI analysis may be unreliable. Check FRED/yfinance connectivity."
+        )
+    if score >= 60:
+        cfg["data_quality_alerted"] = False
+    return None
+
+
 def check_and_send_alerts() -> list[str]:
     """Main entry point. Check all triggers and send alerts. Returns list of alert messages sent."""
     cfg = load_config()
@@ -172,6 +210,14 @@ def check_and_send_alerts() -> list[str]:
         if msg:
             all_alerts.append(msg)
 
+    if triggers.get("tactical_threshold"):
+        all_alerts.extend(_check_tactical_threshold(cfg))
+
+    if triggers.get("data_quality_alert"):
+        msg = _check_data_quality(cfg)
+        if msg:
+            all_alerts.append(msg)
+
     # Send via Telegram
     sent = []
     for msg in all_alerts:
@@ -182,3 +228,160 @@ def check_and_send_alerts() -> list[str]:
 
     save_config(cfg)
     return sent
+
+
+# ── Background Worker ──────────────────────────────────────────────────────────
+
+def _check_price_alerts(cfg: dict) -> list[str]:
+    """Check price targets — fires when ticker crosses target. Safe to call outside Streamlit."""
+    import yfinance as yf
+    alerts = []
+    targets = cfg.get("price_targets", [])
+    changed = False
+    for i, pt in enumerate(targets):
+        if not pt.get("active", True):
+            continue
+        ticker = pt.get("ticker", "")
+        target = float(pt.get("target", 0))
+        direction = pt.get("direction", "above")
+        if not ticker or not target:
+            continue
+        try:
+            info = yf.Ticker(ticker).info or {}
+            price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
+            if not price:
+                continue
+            hit = (direction == "above" and price >= target) or \
+                  (direction == "below" and price <= target)
+            if hit:
+                alerts.append(
+                    f"PRICE ALERT: {ticker} ${price:.2f} — "
+                    f"{'above' if direction == 'above' else 'below'} target ${target:.2f}"
+                )
+                cfg["price_targets"][i]["active"] = False  # deactivate to prevent repeats
+                changed = True
+        except Exception:
+            continue
+    if changed:
+        save_config(cfg)
+    return alerts
+
+
+def _write_heartbeat(sent: int = 0) -> None:
+    """Write worker heartbeat to data/worker_heartbeat.json."""
+    import json as _json
+    import os as _os
+    _hb = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "worker_heartbeat.json")
+    try:
+        _existing = {}
+        if _os.path.exists(_hb):
+            with open(_hb) as _f:
+                _existing = _json.load(_f)
+        _existing["last_run"] = datetime.now().isoformat()
+        _existing["checks_run"] = _existing.get("checks_run", 0) + 1
+        _existing["alerts_sent"] = _existing.get("alerts_sent", 0) + sent
+        _os.makedirs(_os.path.dirname(_hb), exist_ok=True)
+        with open(_hb, "w") as _f:
+            _json.dump(_existing, _f, indent=2)
+    except Exception:
+        pass
+
+
+def run_worker_cycle() -> list[str]:
+    """Run one full alert check cycle. No cooldown — designed for background worker use.
+
+    Returns list of alert messages that were sent via Telegram.
+    Skips any check that requires a Streamlit context (insider cluster may fail — caught silently).
+    """
+    cfg = load_config()
+    triggers = cfg.get("triggers", {})
+    bot_token = cfg.get("telegram_bot_token", "")
+    chat_id   = cfg.get("telegram_chat_id", "")
+
+    all_alerts: list[str] = []
+
+    # Regime flip — pure json/os, always safe
+    if triggers.get("regime_flip"):
+        try:
+            msg = _check_regime_flip(cfg)
+            if msg:
+                all_alerts.append(msg)
+        except Exception:
+            pass
+
+    # Stress threshold — pure json/os, always safe
+    if triggers.get("stress_threshold"):
+        try:
+            msg = _check_stress_threshold(cfg)
+            if msg:
+                all_alerts.append(msg)
+        except Exception:
+            pass
+
+    # Price targets — yfinance only, always safe
+    try:
+        all_alerts.extend(_check_price_alerts(cfg))
+    except Exception:
+        pass
+
+    # Options P/C — raw yfinance, usually safe outside Streamlit
+    if triggers.get("options_pc_ratio"):
+        try:
+            all_alerts.extend(_check_options_pc(cfg))
+        except Exception:
+            pass
+
+    # Insider cluster — calls sec_client with @st.cache_data, may fail outside Streamlit
+    if triggers.get("insider_cluster"):
+        try:
+            all_alerts.extend(_check_insider_clusters(cfg))
+        except Exception:
+            pass  # silently skip — will still run on page load
+
+    # Tactical threshold — reads from alerts_config (persisted by QIR), always safe
+    if triggers.get("tactical_threshold"):
+        try:
+            all_alerts.extend(_check_tactical_threshold(cfg))
+        except Exception:
+            pass
+
+    # Data quality — reads from alerts_config (persisted by QIR), always safe
+    if triggers.get("data_quality_alert"):
+        try:
+            msg = _check_data_quality(cfg)
+            if msg:
+                all_alerts.append(msg)
+        except Exception:
+            pass
+
+    # Send via Telegram
+    sent = []
+    for msg in all_alerts:
+        full_msg = f"📡 <b>HRT Alert</b>\n\n{msg}\n\n<i>{datetime.now().strftime('%Y-%m-%d %H:%M')}</i>"
+        if send_telegram(bot_token, chat_id, full_msg):
+            sent.append(msg)
+        add_alert_history(msg)
+
+    save_config(cfg)
+    _write_heartbeat(sent=len(sent))
+    return sent
+
+
+def run_alert_worker(interval_minutes: int = 15) -> None:
+    """Infinite loop — run alert checks every interval_minutes. Call from tools/alert_worker.py."""
+    import time as _time
+    print(f"[HRT Alert Worker] Started — checking every {interval_minutes} minutes. Ctrl+C to stop.")
+    while True:
+        try:
+            _sent = run_worker_cycle()
+            _ts = datetime.now().strftime("%H:%M:%S")
+            if _sent:
+                print(f"[{_ts}] {len(_sent)} alert(s) sent: {_sent[0][:60]}{'…' if len(_sent[0]) > 60 else ''}")
+            else:
+                print(f"[{_ts}] No alerts triggered. Next check in {interval_minutes}m.")
+        except KeyboardInterrupt:
+            print("\n[HRT Alert Worker] Stopped.")
+            break
+        except Exception as _e:
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Worker error: {_e}")
+        _time.sleep(interval_minutes * 60)

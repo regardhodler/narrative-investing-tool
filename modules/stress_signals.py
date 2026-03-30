@@ -457,10 +457,11 @@ def run_quick_doom(use_claude: bool = False, model: str | None = None) -> bool:
         use_claude=use_claude, model=model, current_events=_ce,
     )
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
-    st.session_state["_doom_briefing"] = briefing
-    st.session_state["_doom_briefing_ts"] = _dt.datetime.now()
-    st.session_state["_doom_briefing_engine"] = _tier
-    return True
+    return {
+        "_doom_briefing": briefing,
+        "_doom_briefing_ts": _dt.datetime.now(),
+        "_doom_briefing_engine": _tier,
+    }
 
 
 def render():
@@ -967,23 +968,13 @@ def render():
 
     import os
     from services.claude_client import generate_doom_briefing
+    from utils.ai_tier import render_ai_tier_selector
 
-    _doom_has_claude = bool(os.getenv("XAI_API_KEY"))
-
-
-    _has_anthropic_doom_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _doom_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _doom_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_doom_has_claude else [])
-    _doom_tier_map = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
-    _sel_doom_tier = st.radio(
-        "Briefing Engine", _doom_tier_opts, horizontal=True, key="doom_briefing_engine",
-        help="Standard = Groq · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
+    _use_claude, _doom_model = render_ai_tier_selector(
+        key="doom_briefing_engine",
+        label="Briefing Engine",
+        recommendation="🧠 Regard recommended for stress briefings · 👑 Highly Regarded for regime-change sessions",
     )
-    st.caption("💡 👑 Sonnet recommended — briefing feeds into Valuation & Discovery; quality affects downstream AI reasoning")
-    _use_claude, _doom_model = _doom_tier_map[_sel_doom_tier]
     with st.spinner("Generating risk intelligence briefing..."):
         try:
             _ce_digest = st.session_state.get("_current_events_digest", "")
@@ -992,14 +983,15 @@ def render():
             briefing = f"Unable to generate briefing: {e}"
     st.session_state["_doom_briefing"] = briefing
     st.session_state["_doom_briefing_ts"] = __import__("datetime").datetime.now()
-    st.session_state["_doom_briefing_engine"] = _sel_doom_tier
+    st.session_state["_doom_briefing_engine"] = st.session_state.get("doom_briefing_engine", "⚡ Freeloader Mode")
     from services.play_log import append_play as _append_play
-    _append_play("Doom Briefing", _sel_doom_tier, {"briefing": briefing})
+    _append_play("Doom Briefing", st.session_state.get("doom_briefing_engine", "⚡ Freeloader Mode"), {"briefing": briefing})
 
     _doom_border = COLORS["bloomberg_orange"] if _use_claude else DOOM_RED
+    _doom_engine_label = st.session_state.get("doom_briefing_engine", "⚡ Freeloader Mode")
     _regard_badge = (
         f' &nbsp;<span style="font-size:10px;background:#FF8811;color:#000;'
-        f'padding:1px 5px;border-radius:3px;font-weight:700;">{_sel_doom_tier}</span>'
+        f'padding:1px 5px;border-radius:3px;font-weight:700;">{_doom_engine_label}</span>'
         if _use_claude else ""
     )
     st.markdown(

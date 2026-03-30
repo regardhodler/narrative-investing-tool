@@ -31,6 +31,7 @@ from services.market_data import (
     fetch_fred_series_safe, warm_fred_cache,
 )
 from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
+from utils.ai_tier import render_ai_tier_selector as _ff_ai_tier
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────
@@ -315,27 +316,14 @@ def _render_fed_sector_rotation_panel(macro: dict, adj_probs: list[dict]):
     # ── AI Regime Plays ────────────────────────────────────────────────────
     _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
-    _tier_map  = {
-        "⚡ Freeloader Mode":                (False, None),
-        "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
-    }
 
     _prev_fp_tier = st.session_state.get("_fed_plays_tier_prev")
-    _sel_tier = st.radio(
-        "Engine", _tier_opts, horizontal=True, key="fed_plays_engine_radio",
-        help="Sonnet gives the deepest sector/stock synthesis from the rate path"
+    _use_cl, _cl_model = _ff_ai_tier(
+        key="fed_plays_engine_radio",
+        label="Engine",
+        recommendation="🧠 Regard Mode recommended for rate path analysis — Grok 4.1 reasoning handles Fed dot plots well",
     )
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption("💡 🧠 Grok 4.1 sufficient here — rate scenario → sector mapping is deterministic")
-    _use_cl, _cl_model = _tier_map[_sel_tier]
+    _sel_tier = st.session_state.get("fed_plays_engine_radio", "⚡ Freeloader Mode")
 
     st.session_state["_fed_plays_tier_prev"] = _sel_tier
 
@@ -722,7 +710,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             st.markdown(
                 '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
                 'margin-top:-10px;margin-bottom:2px;">'
-                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -936,24 +924,12 @@ def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
     """AI narration panel appended to the causal chain section."""
     import json as _json
     st.markdown("---")
-    _cc_has_xai = bool(os.getenv("XAI_API_KEY"))
-    _cc_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _cc_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _cc_has_xai else []) + (["👑 Highly Regarded Mode"] if _cc_has_claude else [])
-    _cc_tier_map = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
-    _sel_cc = st.radio("Transmission Engine", _cc_tier_opts, horizontal=True, key="causal_chain_engine")
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
+    _use_cl_cc, _cc_model = _ff_ai_tier(
+        key="causal_chain_engine",
+        label="Transmission Engine",
+        recommendation="⚡ Freeloader sufficient for causal chain mapping · 🧠 Regard for complex multi-step transmission paths",
     )
-    st.caption("💡 🧠 Grok 4.1 sufficient · 👑 Sonnet for richer second-order effects (feeds into Valuation & Discovery)")
-    _use_cl_cc, _cc_model = _cc_tier_map[_sel_cc]
+    _sel_cc = st.session_state.get("causal_chain_engine", "⚡ Freeloader Mode")
 
     _prev_cc_tier = st.session_state.get("_cc_tier_prev")
     if _prev_cc_tier and _prev_cc_tier != _sel_cc:
@@ -974,7 +950,6 @@ def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
         st.session_state["_chain_narration_engine"] = _sel_cc
         from services.play_log import append_play as _append_play
         _append_play("Transmission Path", _sel_cc, {"narration": _narration})
-
     if st.session_state.get("_chain_narration"):
         _eng = st.session_state.get("_chain_narration_engine", "")
         _border = "2px solid #FF8811" if "👑" in _eng else "1px solid #334155"
@@ -1368,27 +1343,16 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: b
     st.markdown("**🔭 Add Custom Black Swan Event**")
     st.caption("Type any tail-risk scenario to get AI probability + asset impact analysis")
 
-    _bs_has_xai = bool(os.getenv("XAI_API_KEY"))
-    _bs_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _bs_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _bs_has_xai else []) + (["👑 Highly Regarded Mode"] if _bs_has_claude else [])
-    _bs_tier_map = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
-    _sel_bs_tier = st.radio("Black Swan Engine", _bs_tier_opts, horizontal=True, key="black_swan_engine")
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
+    _use_claude_bs, _bs_model = _ff_ai_tier(
+        key="black_swan_engine",
+        label="Black Swan Engine",
+        recommendation="👑 Highly Regarded recommended — tail risk scenarios benefit most from Sonnet's reasoning depth",
     )
-    st.caption("💡 🧠 Grok 4.1 sufficient here — scenario probability scoring is pattern-based")
-    _use_claude_bs, _bs_model = _bs_tier_map[_sel_bs_tier]
+    _sel_bs_tier = st.session_state.get("black_swan_engine", "⚡ Freeloader Mode")
 
     _prev_fed_tier = st.session_state.get("_fed_plays_tier_prev", "")
-    if _prev_fed_tier and _prev_fed_tier in _bs_tier_opts and _prev_fed_tier != _sel_bs_tier:
+    from utils.ai_tier import TIER_OPTS as _TIER_OPTS_BS
+    if _prev_fed_tier and _prev_fed_tier in _TIER_OPTS_BS and _prev_fed_tier != _sel_bs_tier:
         _sync_icon = _prev_fed_tier.split()[0]
         if st.button(
             f"Sync to Fed Forecaster ({_sync_icon})",
@@ -1531,6 +1495,9 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
     )
     from services.claude_client import suggest_regime_plays
 
+    macro = macro or {}
+    fred_data = fred_data or {}
+
     base_probs = fetch_zq_probabilities()
     tone_result = _neutral_tone_fallback()  # neutral tone — no Groq call for speed
     adj_probs = adjust_probabilities(base_probs, tone_result, macro=macro)
@@ -1550,16 +1517,15 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
         return False
 
     dominant = max(final_probs, key=lambda r: r.get("prob", 0))
-    st.session_state["_rate_path_probs"] = final_probs
-    st.session_state["_rate_path_probs_ts"] = _dt.datetime.now()
-    st.session_state["_dominant_rate_path"] = {
+    _dominant_rp = {
         "scenario": dominant.get("scenario", "hold"),
         "prob_pct": round(dominant.get("prob", 0) * 100, 1),
     }
 
+    _fed_funds_rate = None
     ff_series = fred_data.get("fedfunds")
     if ff_series is not None and not ff_series.empty:
-        st.session_state["_fed_funds_rate"] = float(ff_series.dropna().iloc[-1])
+        _fed_funds_rate = float(ff_series.dropna().iloc[-1])
 
     # Fed Rate-Path Plays using dominant scenario as context
     _labels = {"cut_25": "25bp cut", "cut_50": "50bp cut", "hold": "Hold", "hike_25": "25bp hike"}
@@ -1573,10 +1539,17 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
     )
     _plays = suggest_regime_plays(regime, norm_score, sig, use_claude=use_claude, model=model)
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
-    st.session_state["_fed_plays_result"] = _plays
-    st.session_state["_fed_plays_result_ts"] = _dt.datetime.now()
-    st.session_state["_fed_plays_engine"] = _tier
-    return True
+    result = {
+        "_rate_path_probs": final_probs,
+        "_rate_path_probs_ts": _dt.datetime.now(),
+        "_dominant_rate_path": _dominant_rp,
+        "_fed_plays_result": _plays,
+        "_fed_plays_result_ts": _dt.datetime.now(),
+        "_fed_plays_engine": _tier,
+    }
+    if _fed_funds_rate is not None:
+        result["_fed_funds_rate"] = _fed_funds_rate
+    return result
 
 
 def run_quick_chain(use_claude: bool = False, model: str | None = None) -> bool:
@@ -1663,10 +1636,11 @@ def run_quick_swans(use_claude: bool = False, model: str | None = None) -> bool:
             pass
 
     if _new_swans:
-        st.session_state["_custom_swans"] = _new_swans
-        st.session_state["_custom_swans_ts"] = _dt.datetime.now()
-        return True
-    return False
+        return {
+            "_custom_swans": _new_swans,
+            "_custom_swans_ts": _dt.datetime.now(),
+        }
+    return None
 
 
 # ── Public entry point ────────────────────────────────────────────────────────

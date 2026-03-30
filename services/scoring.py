@@ -340,6 +340,72 @@ def score_ticker(ticker: str, weights: dict | None = None) -> dict:
     }
 
 
+@st.cache_data(ttl=86400)
+def fetch_short_interest_history(ticker: str) -> pd.DataFrame:
+    """Fetch bi-monthly short interest history from Nasdaq public API.
+
+    Returns DataFrame with columns: date, short_interest (shares), days_to_cover, short_pct_float.
+    Empty DataFrame on failure.
+    """
+    import requests
+    try:
+        url = (
+            f"https://api.nasdaq.com/api/quote/{ticker.upper()}/short-interest"
+            f"?type=SHORT_INTEREST&limit=24&offset=0&fromdate=&todate=&action=getdata"
+        )
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Accept": "application/json",
+        }
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code != 200:
+            return pd.DataFrame()
+
+        payload = resp.json()
+        rows = (
+            payload.get("data", {})
+            .get("shortInterestTable", {})
+            .get("rows", [])
+        )
+        if not rows:
+            return pd.DataFrame()
+
+        records = []
+        for row in rows:
+            try:
+                date_str = row.get("settlementDate", "")
+                si_str = str(row.get("interest", "0")).replace(",", "")
+                dtc_str = str(row.get("daysToCover", "0")).replace(",", "")
+                records.append({
+                    "date": pd.to_datetime(date_str, format="%m/%d/%Y"),
+                    "short_interest": float(si_str),
+                    "days_to_cover": float(dtc_str),
+                })
+            except Exception:
+                continue
+
+        if not records:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(records).sort_values("date")
+
+        # Compute short % float using yfinance shares float
+        try:
+            info = yf.Ticker(ticker).info or {}
+            float_shares = info.get("floatShares") or info.get("sharesOutstanding") or 0
+            if float_shares:
+                df["short_pct_float"] = (df["short_interest"] / float_shares * 100).clip(0, 100)
+            else:
+                df["short_pct_float"] = None
+        except Exception:
+            df["short_pct_float"] = None
+
+        return df.reset_index(drop=True)
+
+    except Exception:
+        return pd.DataFrame()
+
+
 @st.cache_data(ttl=1800)
 def scan_short_interest(tickers: tuple) -> list[dict]:
     """Fast parallel short interest scan for a universe of tickers.

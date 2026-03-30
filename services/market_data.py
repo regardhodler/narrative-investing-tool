@@ -58,6 +58,20 @@ def _fetch_single(ticker: str, period: str = "1y", interval: str = "1d") -> pd.D
     return None
 
 
+@st.cache_data(ttl=3600)
+def get_yf_info_safe(ticker: str) -> dict:
+    """Cached yfinance .info fetch. Single source of truth for ticker metadata.
+
+    Avoids redundant yfinance calls when the same ticker is referenced by
+    multiple modules in the same Streamlit session. Returns {} on failure.
+    """
+    try:
+        info = yf.Ticker(ticker).info or {}
+        return info
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=86400)
 def fetch_earnings_date(ticker: str) -> dict | None:
     """Return next earnings date and days away for a ticker. None if unavailable.
@@ -461,7 +475,67 @@ def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
         return None
 
 
-def warm_fred_cache(series_ids: list[str]):
+def compute_data_quality_score(snaps: dict, fred_data: dict) -> dict:
+    """Score data freshness 0-100. Pure function — safe in background threads.
+
+    Market signals (50 pts): SPY, ^VIX, TLT, GLD, DXY — 10 pts each.
+    FRED signals (50 pts): DGS10, BAMLH0A0HYM2, T10Y2Y, SAHMREALTIME, PCEPILFE — 10 pts each.
+    Returns {"score", "label", "stale_market", "stale_fred", "total_signals", "fresh_signals"}.
+    """
+    _market_keys = ["SPY", "^VIX", "TLT", "GLD", "DXY"]
+    _fred_keys   = ["dgs10", "credit_spread", "yield_curve", "sahm", "core_pce"]
+
+    stale_market, stale_fred = [], []
+    market_pts = 0
+    for tk in _market_keys:
+        snap = snaps.get(tk)
+        if snap and snap.latest_price is not None and not snap.stale:
+            market_pts += 10
+        else:
+            stale_market.append(tk)
+
+    fred_pts = 0
+    _cutoff = pd.Timestamp.now(tz=None).normalize() - pd.offsets.BDay(5)
+    for fk in _fred_keys:
+        s = fred_data.get(fk)
+        if s is not None and len(s) > 0:
+            _last = s.index[-1]
+            if hasattr(_last, "tz_localize"):
+                _last = _last.tz_localize(None) if _last.tzinfo is not None else _last
+            if _last >= _cutoff:
+                fred_pts += 10
+            else:
+                stale_fred.append(fk)
+        else:
+            stale_fred.append(fk)
+
+    score = market_pts + fred_pts
+    if score >= 80:
+        label = "High Confidence"
+    elif score >= 60:
+        label = "Moderate — some signals stale"
+    else:
+        label = "Low — AI reasoning may be unreliable"
+
+    fresh = (len(_market_keys) - len(stale_market)) + (len(_fred_keys) - len(stale_fred))
+    return {
+        "score": score,
+        "label": label,
+        "stale_market": stale_market,
+        "stale_fred": stale_fred,
+        "total_signals": len(_market_keys) + len(_fred_keys),
+        "fresh_signals": fresh,
+    }
+
+
+_DEFAULT_FRED_IDS = [
+    "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
+    "PCEPILFE", "PNFI", "THREEFYTP10", "INDPRO", "NFCI", "DGS10",
+    "ICSA", "USSLIND", "UMCSENT", "PERMIT", "FEDFUNDS", "DFII10", "MANEMP", "TOTBKCR", "DGS2",
+]
+
+
+def warm_fred_cache(series_ids: list[str] | None = None):
     """Pre-fetch FRED series in staggered mini-batches to warm disk cache.
 
     Uses batches of 4 with 0.5s delay between batches to avoid FRED rate limits.
@@ -469,6 +543,8 @@ def warm_fred_cache(series_ids: list[str]):
     """
     import time
     from concurrent.futures import ThreadPoolExecutor
+    if series_ids is None:
+        series_ids = _DEFAULT_FRED_IDS
     cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "fred_cache")
     os.makedirs(cache_dir, exist_ok=True)
     batch_size = 4

@@ -3,6 +3,7 @@ from services.sec_client import get_filings_by_ticker, get_company_info, fetch_f
 from services.claude_client import summarize_filing, analyze_mda_sentiment
 from utils.session import get_ticker, set_ticker
 from utils.theme import COLORS
+from utils.ai_tier import render_ai_tier_selector
 
 
 def render():
@@ -82,30 +83,13 @@ def render():
     )
 
     # --- Filing Summary ---
-    import os as _os
-    _edgar_has_xai = bool(_os.getenv("XAI_API_KEY"))
-
-    _edgar_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _edgar_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _edgar_has_xai else []) + (["👑 Highly Regarded Mode"] if _edgar_has_claude else [])
-    _edgar_tier_map = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
     st.markdown("---")
-    _sel_edgar_tier = st.radio(
-        "Summary Engine", _edgar_tier_opts, horizontal=True, key="edgar_summary_engine",
-        help="Standard = Groq (fast) · Regard Mode = Grok 4.1 · Highly Regarded = Claude Sonnet"
+    _use_claude_edgar, _edgar_model = render_ai_tier_selector(
+        key="edgar_summary_engine",
+        label="Summary Engine",
+        recommendation="🧠 Regard (Grok 4.1) recommended for filing summaries — fast and accurate",
     )
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    _use_claude_edgar, _edgar_model = _edgar_tier_map[_sel_edgar_tier]
-    _edgar_badge = f" {_sel_edgar_tier.split()[0]}"
+    _edgar_badge = f" {'👑' if (_use_claude_edgar and _edgar_model == 'claude-sonnet-4-6') else ('🧠' if _use_claude_edgar else '⚡')}"
     st.subheader(f"AI Filing Summary{_edgar_badge}")
 
     summarizable = filtered[filtered["form_type"].isin(["8-K", "8-K/A", "10-K", "10-Q"])].reset_index(drop=True)
@@ -179,23 +163,11 @@ def render():
     )
     st.caption("AI reads the Management's Discussion & Analysis from the latest 10-K and scores management tone: confident vs cautious vs defensive. Tone shifts quarter-over-quarter are predictive.")
 
-    _mda_has_xai = bool(__import__("os").getenv("XAI_API_KEY"))
-    _mda_has_claude = bool(__import__("os").getenv("ANTHROPIC_API_KEY"))
-    _mda_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _mda_has_xai else []) + (["👑 Highly Regarded Mode"] if _mda_has_claude else [])
-    _mda_tier_map = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
-    _sel_mda_tier = st.radio("Analysis Engine", _mda_tier_opts, horizontal=True, key="mda_engine")
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
+    _use_claude_mda, _mda_model = render_ai_tier_selector(
+        key="mda_engine",
+        label="Analysis Engine",
+        recommendation="👑 Highly Regarded recommended for MD&A tone — deeper interpretation of management language",
     )
-    _use_claude_mda, _mda_model = _mda_tier_map[_sel_mda_tier]
 
     if st.button("Analyze MD&A Tone", type="primary", key="mda_analyze_btn"):
         with st.spinner("Fetching latest 10-K from SEC EDGAR..."):

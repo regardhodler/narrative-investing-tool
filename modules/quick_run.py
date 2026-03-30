@@ -1,7 +1,185 @@
 ﻿"""Quick Intel Run — one button runs Regime + Rate-Path Plays + Current Events + Doom Briefing."""
 
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.theme import COLORS
+from utils.ai_tier import TIER_OPTS, TIER_MAP, MODEL_HINT_HTML
+
+
+# ── QIR Dashboard helpers ────────────────────────────────────────────────────
+
+_PATTERNS = {
+    "BULLISH_CONFIRMATION": {
+        "label": "BULLISH CONFIRMATION",
+        "color": "#22c55e",
+        "interpretation": "All three timing layers aligned bullish — highest-conviction long entry.",
+        "buy_tier": "STRONG",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("QQQ / SPY", "Broad market long — simplest expression of risk-on"),
+            ("XLK", "Tech leads in risk-on / Goldilocks — amplified beta"),
+            ("SPY Calls", "ATM or 5% OTM, 30–60 DTE — leveraged with defined risk"),
+            ("TQQQ / UPRO", "Max leverage for highest-conviction only — short duration"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Enter on pullbacks to 20d MA or prior breakout level — not at all-time highs\n"
+            "Confirm with breadth: >60% of S&P 500 above 50d MA\n"
+            "Stop: close below 20d MA or -5% from entry, whichever is tighter\n"
+            "Scale: 50% at entry, add 25% on first successful retest"
+        ),
+        "entry_short": "All layers lean bullish — avoid net short exposure.\nIf forced: only extreme overbought bounces, very tight stops.",
+    },
+    "BEARISH_CONFIRMATION": {
+        "label": "BEARISH CONFIRMATION",
+        "color": "#ef4444",
+        "interpretation": "All three layers aligned bearish — highest-conviction short or cash environment.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "STRONG",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SH", "1× inverse S&P 500 — no decay, suits multi-week holds"),
+            ("SPY Puts", "ATM or 5% OTM, 30–60 DTE — defined risk, leverage"),
+            ("SDS", "2× inverse S&P — short duration only (decay risk)"),
+            ("SQQQ", "3× inverse Nasdaq — tech-led selloff only, size small"),
+        ],
+        "entry_buy": "No layers confirm bullish conditions — hold cash or hedge.\nNo new longs until at least Tactical turns.",
+        "entry_short": (
+            "Enter on dead-cat bounces into resistance — not into freefall\n"
+            "Confirm with failed rally: rejection at 50d MA on volume\n"
+            "Stop: close above last swing high or 50d MA\n"
+            "Scale out: 50% at first target, trail stop on remainder"
+        ),
+    },
+    "PULLBACK_IN_UPTREND": {
+        "label": "PULLBACK IN UPTREND",
+        "color": "#f59e0b",
+        "interpretation": "Regime and Options Flow confirm bull trend — Tactical dip is a buy-the-dip setup.",
+        "buy_tier": "STRONG",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("QQQ / SPY", "Broad market — buy the dip in the uptrend"),
+            ("Sector leaders", "XLK, XLY — highest-momentum sectors in the current regime"),
+            ("SPY Calls", "30–60 DTE calls capture the bounce with defined risk"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Scale in on red days — Tactical weakness is your entry window\n"
+            "Stop: close below 20d MA\n"
+            "Target: prior swing high / all-time high\n"
+            "Wait for Tactical to turn ≥55 before adding full size"
+        ),
+        "entry_short": "Trend is up — pullbacks are entries, not reversals.\nAvoiding fighting the regime.",
+    },
+    "OPTIONS_FLOW_DIVERGENCE": {
+        "label": "OPTIONS FLOW DIVERGENCE",
+        "color": "#f59e0b",
+        "interpretation": "Regime and Tactical bullish but options crowd is hedging — smart money buying protection.",
+        "buy_tier": "MODERATE",
+        "short_tier": "SELECTIVE",
+        "instruments_buy": [
+            ("SPY", "Broad market — reduced size until Options Flow confirms"),
+            ("MSFT / GOOGL", "Defensive growth — quality names hold up if crowd is right"),
+        ],
+        "instruments_short": [
+            ("Weak sector ETFs", "XLE, XLU — hedge only, not directional short"),
+        ],
+        "entry_buy": (
+            "Smaller position size — wait for Options Flow to confirm ≥65\n"
+            "Prefer quality (MSFT, GOOGL) over high-beta names\n"
+            "Stop: tighter than normal — -3% from entry"
+        ),
+        "entry_short": "Treat as hedge only — not a directional short setup.\nOptions crowd may be wrong; regime and tactical are bullish.",
+    },
+    "BEAR_MARKET_BOUNCE": {
+        "label": "BEAR MARKET BOUNCE",
+        "color": "#f97316",
+        "interpretation": "Short-term momentum against the macro trend — take profits quickly, don't chase.",
+        "buy_tier": "SELECTIVE",
+        "short_tier": "MODERATE",
+        "instruments_buy": [
+            ("QQQ / ARKK", "Momentum names — bounce candidates, not trend reversals"),
+        ],
+        "instruments_short": [
+            ("SH", "1× inverse S&P — size for the eventual trend resumption"),
+            ("XLE / XLF Puts", "Weak sectors underperform when the bounce fades"),
+        ],
+        "entry_buy": (
+            "Tight stops — this is a counter-trend trade\n"
+            "Take 50% profits at first resistance\n"
+            "Do not add to winners — the macro trend is down"
+        ),
+        "entry_short": (
+            "Wait for the bounce to fade — sell into strength, not freefall\n"
+            "Stop: above the bounce high\n"
+            "Scale in: build position in tranches as momentum rolls over"
+        ),
+    },
+    "LATE_CYCLE_SQUEEZE": {
+        "label": "LATE CYCLE SQUEEZE",
+        "color": "#ef4444",
+        "interpretation": "Options crowd squeezing higher against a bearish regime and tactical — high risk of reversal.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "STRONG",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SH / SDS", "Build short in tranches — fade the squeeze"),
+            ("QQQ Puts", "45–60 DTE — defined risk on the squeeze reversal"),
+        ],
+        "entry_buy": "Don't chase the squeeze — regime and tactical are bearish.\nWait for regime to confirm before entering longs.",
+        "entry_short": (
+            "Build short position in tranches — don't front-run the squeeze\n"
+            "Stop: above squeeze high\n"
+            "Target: regime-implied support level\n"
+            "Patience required — squeezes can persist 1–3 sessions"
+        ),
+    },
+    "GENUINE_UNCERTAINTY": {
+        "label": "GENUINE UNCERTAINTY",
+        "color": "#475569",
+        "interpretation": "No edge — signals are conflicting with no clear majority direction.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [],
+        "instruments_short": [],
+        "entry_buy": "Wait for at least 2 of 3 layers to align before committing capital.",
+        "entry_short": "No directional edge in either direction — stay patient.",
+    },
+}
+
+
+def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
+    """Map three timing signal contexts to one of 7 dashboard patterns.
+
+    Uses identical direction thresholds to the existing Short/Buy panel logic.
+    Returns full pattern dict with label, color, tiers, instruments, and entry rules.
+    """
+    regime_ctx = regime_ctx or {}
+    tac_ctx    = tac_ctx    or {}
+    of_ctx     = of_ctx     or {}
+
+    score        = regime_ctx.get("score", 0.0)
+    regime_label = regime_ctx.get("regime", "")
+    tac_score    = tac_ctx.get("tactical_score", 50) if tac_ctx else 50
+    of_score     = of_ctx.get("options_score", 50)   if of_ctx  else 50
+
+    # Thresholds match existing lines 221–226 of quick_run.py
+    r_bull = "Risk-On"  in regime_label or score >  0.3
+    r_bear = "Risk-Off" in regime_label or score < -0.3
+    t_bull = tac_score >= 65
+    t_bear = tac_score <  38
+    o_bull = of_score  >= 65
+    o_bear = of_score  <  38
+
+    if   r_bull and t_bull and o_bull: pattern = "BULLISH_CONFIRMATION"
+    elif r_bear and t_bear and o_bear: pattern = "BEARISH_CONFIRMATION"
+    elif r_bull and t_bear and o_bull: pattern = "PULLBACK_IN_UPTREND"
+    elif r_bull and t_bull and o_bear: pattern = "OPTIONS_FLOW_DIVERGENCE"
+    elif r_bear and t_bull and o_bull: pattern = "BEAR_MARKET_BOUNCE"
+    elif r_bear and t_bear and o_bull: pattern = "LATE_CYCLE_SQUEEZE"
+    else:                              pattern = "GENUINE_UNCERTAINTY"
+
+    return {"pattern": pattern, **_PATTERNS[pattern]}
 
 
 def render():
@@ -13,7 +191,7 @@ def render():
         unsafe_allow_html=True,
     )
     st.caption(
-        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis in sequence. "
+        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis + Portfolio Risk Snapshot in sequence. "
         "Navigate to Portfolio Intelligence when done."
     )
 
@@ -62,30 +240,13 @@ def render():
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
     _hr_unlocked, _hr_reason = _hr_gate_check()
 
-    _tier_opts = ["⚡ Freeloader Mode"]
-    if _has_xai:
-        _tier_opts.append("🧠 Regard Mode")
-    if _has_anthropic and _hr_unlocked:
-        _tier_opts.append("👑 Highly Regarded Mode")
-
-    _tier_map = {
-        "⚡ Freeloader Mode":      (False, None),
-        "🧠 Regard Mode":            (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode":   (True, "claude-sonnet-4-6"),
-    }
     _rec_map = {
         "⚡ Freeloader Mode":      "Daily routine — all 8 modules in ~90s, completely free.",
         "🧠 Regard Mode":            "Active day — Grok 4.1 reasoning for deeper synthesis + live X feed in Current Events.",
         "👑 Highly Regarded Mode":   "High conviction — Sonnet on all 8 modules before running Portfolio.",
     }
-    _sel = st.radio("Engine", _tier_opts, horizontal=True, key="qr_engine")
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    _sel = st.radio("Engine", TIER_OPTS, horizontal=True, key="qr_engine")
+    st.markdown(MODEL_HINT_HTML, unsafe_allow_html=True)
     st.caption(f"💡 {_rec_map.get(_sel, '')}")
 
     # Show gate status
@@ -114,7 +275,7 @@ def render():
         )
 
     # Confirmation gate when Highly Regarded is selected
-    _use_claude, _cl_model = _tier_map[_sel]
+    _use_claude, _cl_model = TIER_MAP[_sel]
     if _sel == "👑 Highly Regarded Mode":
         st.warning("👑 Highly Regarded uses Claude Sonnet — reserve for elevated volatility or high-conviction sessions.")
         _confirmed = st.checkbox("I confirm this is a high-conviction session", key="qr_hr_confirm")
@@ -123,8 +284,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_macro_synopsis"]
-    _signal_labels = ["Regime", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Macro Synopsis"]
+    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
+    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -134,45 +295,490 @@ def render():
             for _, l in _populated
         )
         st.markdown(
-            f'<div style="margin:6px 0 10px 0;">{_badges}</div>',
+            f'<div style="margin:6px 0 6px 0;">{_badges}</div>',
             unsafe_allow_html=True,
         )
+        _dq_persistent = st.session_state.get("_data_quality") or {}
+        if _dq_persistent:
+            _dqp_col = "#22c55e" if _dq_persistent["score"] >= 80 else ("#f59e0b" if _dq_persistent["score"] >= 60 else "#ef4444")
+            _dqp_bg  = "#052e16" if _dq_persistent["score"] >= 80 else ("#1a1200" if _dq_persistent["score"] >= 60 else "#2d0a0a")
+            _dqp_label = _dq_persistent.get("label", "")
+            _dqp_stale = _dq_persistent.get("stale_market", []) + _dq_persistent.get("stale_fred", [])
+            _dqp_detail = f" · Stale: {', '.join(_dqp_stale[:4])}" if _dqp_stale else ""
+            st.markdown(
+                f'<div style="background:{_dqp_bg};border:1px solid {_dqp_col}66;border-radius:5px;'
+                f'padding:7px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px;">'
+                f'<span style="color:{_dqp_col};font-weight:800;font-size:15px;font-family:monospace;">'
+                f'{_dq_persistent["score"]}/100</span>'
+                f'<span style="color:{_dqp_col};font-size:11px;font-weight:700;letter-spacing:0.06em;">DATA QUALITY</span>'
+                f'<span style="color:#94a3b8;font-size:11px;">{_dqp_label}{_dqp_detail}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        _of_persistent = st.session_state.get("_options_flow_context") or {}
+        if _of_persistent:
+            _ofp_score = _of_persistent.get("options_score", 50)
+            _ofp_col = "#22c55e" if _ofp_score >= 65 else ("#f59e0b" if _ofp_score >= 38 else "#ef4444")
+            _ofp_bg  = "#052e16" if _ofp_score >= 65 else ("#1a1200" if _ofp_score >= 38 else "#2d0a0a")
+            st.markdown(
+                f'<div style="background:{_ofp_bg};border:1px solid {_ofp_col}66;border-radius:5px;'
+                f'padding:7px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;">'
+                f'<span style="color:{_ofp_col};font-weight:800;font-size:15px;font-family:monospace;">'
+                f'{_ofp_score}/100</span>'
+                f'<span style="color:{_ofp_col};font-size:11px;font-weight:700;letter-spacing:0.06em;">OPTIONS FLOW</span>'
+                f'<span style="color:#94a3b8;font-size:11px;">{_of_persistent.get("label","")} — {_of_persistent.get("action_bias","")[:60]}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Score Interpretation Reference ─────────────────────────────────────────
+    with st.expander("📖 How to read Tactical + Options Flow scores", expanded=False):
+        st.markdown("""
+**Both scores run 0–100. Higher = more bullish conditions.**
+
+---
+
+### Tactical Score (days/weeks layer)
+Measures near-term market internals: momentum, breadth, credit spreads, bond yields, volatility.
+
+| Score | Label | What to do |
+|-------|-------|------------|
+| ≥65 | Favorable Entry | Conditions support adding risk |
+| 52–64 | Neutral | Hold existing positions, wait for clearer signal |
+| 38–51 | Caution | Reduce new buys, tighten stops |
+| <38 | Risk-Off | Defensive posture — consider exits or hedges |
+
+---
+
+### Options Flow Score (hours/days layer)
+Measures what SPY options participants are doing *right now*: put/call ratio, gamma positioning, IV skew, and unusual flow.
+
+| Score | Label | What it means |
+|-------|-------|---------------|
+| ≥65 | Call-Skewed Flow | Crowd positioned bullish — calls dominant, low fear skew |
+| 52–64 | Neutral Flow | Mixed positioning, no strong lean |
+| 38–51 | Put-Skewed Flow | Elevated hedging, cautious tone |
+| <38 | Bearish Hedging | Heavy put buying, fear premium elevated |
+
+**Sub-signals:**
+- **P/C Ratio** (weight 3×) — Put vol ÷ call vol. Below 0.9 = bullish crowd. Above 1.2 = hedging.
+- **Gamma Zone** (1.5×) — Positive gamma stabilizes prices (dealers fade moves). Negative gamma amplifies them (dealers chase).
+- **IV Skew** (2×) — OTM put IV ÷ OTM call IV. Skew > 1.4 = expensive tail hedges = fear.
+- **Unusual Activity Bias** (1.5×) — Vol/OI > 2× = unusual. Call-heavy unusual flow = bullish. Put-heavy = defensive.
+
+---
+
+### Reading them together
+
+| Tactical | Opt Flow | Interpretation |
+|----------|----------|----------------|
+| ≥65 | ≥65 | **Strong alignment — highest conviction long entry** |
+| ≥65 | 38–64 | Tactical setup good, crowd cautious — enter smaller |
+| 38–64 | ≥65 | Options bullish but macro not yet confirmed — wait |
+| <38 | <38 | **Avoid new longs — both layers warn** |
+| <38 | ≥65 | Crowd complacent in a weak tape — possible contrarian short setup |
+
+> **Rule of thumb:** Tactical tells you *when* to enter. Options Flow tells you *what the crowd is doing today*. Alignment between both = higher conviction. Divergence = reduce size or wait.
+        """)
+
+    # ── Buy / Short Market Timing Panels (side by side) ────────────────────────
+    _sh_rc  = st.session_state.get("_regime_context") or {}
+    _sh_tac = st.session_state.get("_tactical_context") or {}
+    _sh_of  = st.session_state.get("_options_flow_context") or {}
+
+    if _sh_rc or _sh_tac or _sh_of:
+        # ── Shared scored inputs ──────────────────────────────────────────────
+        _sh_regime_score = _sh_rc.get("score", 0)
+        _sh_regime_label = _sh_rc.get("regime", "")
+        _sh_quadrant     = _sh_rc.get("quadrant", "")
+        _sh_tac_score    = _sh_tac.get("tactical_score", 50) if _sh_tac else 50
+        _sh_of_score     = _sh_of.get("options_score", 50)   if _sh_of  else 50
+
+        _sh_regime_bearish = "Risk-Off" in _sh_regime_label or _sh_regime_score < -0.3
+        _sh_regime_bullish = "Risk-On"  in _sh_regime_label or _sh_regime_score >  0.3
+        _sh_tac_bearish    = _sh_tac_score < 38
+        _sh_tac_bullish    = _sh_tac_score >= 65
+        _sh_of_bearish     = _sh_of_score  < 38
+        _sh_of_bullish     = _sh_of_score  >= 65
+        _sh_tac_weak       = _sh_tac_score < 52
+        _sh_of_weak        = _sh_of_score  < 52
+
+        _sh_layers_bearish = sum([_sh_regime_bearish, _sh_tac_bearish, _sh_of_bearish])
+        _sh_layers_bullish = sum([_sh_regime_bullish, _sh_tac_bullish, _sh_of_bullish])
+        _sh_layers_weak    = sum([_sh_regime_bearish, _sh_tac_weak,    _sh_of_weak])
+
+        # ── Extract VIX once ──────────────────────────────────────────────────
+        _sh_vix = None
+        try:
+            import re as _re
+            _vix_raw = (_sh_tac.get("signals") or [{}])[0].get("Value", "") if _sh_tac else ""
+            _vix_m = _re.search(r"(\d+\.?\d*)", str(_vix_raw))
+            if _vix_m:
+                _sh_vix = float(_vix_m.group(1))
+        except Exception:
+            pass
+
+        # ── Shared layer status (rendered once above both panels) ────────────────
+        def _layer_html_row(icon, label, score_str, bullish, bearish, available):
+            if not available:
+                return (f'<div style="color:#475569;font-size:11px;padding:2px 0;">'
+                        f'◌ {icon} {label} — <span style="color:#374151;">run QIR to populate</span></div>')
+            if bullish:
+                _c, _arrow = "#22c55e", "▲"
+            elif bearish:
+                _c, _arrow = "#ef4444", "▼"
+            else:
+                _c, _arrow = "#f59e0b", "◆"
+            return (f'<div style="color:{_c};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;padding:2px 0;">{_arrow} {icon} {label}: {score_str}</div>')
+
+        _regime_str = f"{_sh_regime_label} (score {_sh_regime_score:+.2f}, {_sh_quadrant})" if _sh_rc else ""
+        _tac_str    = f"{_sh_tac.get('label','') if _sh_tac else ''} ({_sh_tac_score}/100)" if _sh_tac else ""
+        _of_str     = f"{_sh_of.get('label','') if _sh_of else ''} ({_sh_of_score}/100)" if _sh_of else ""
+
+        _shared_layers_html = (
+            _layer_html_row("📡", "Risk Regime", _regime_str,
+                            _sh_regime_bullish, _sh_regime_bearish, bool(_sh_rc))
+            + _layer_html_row("⚡", "Tactical",  _tac_str,
+                              _sh_tac_bullish,   _sh_tac_bearish,   bool(_sh_tac))
+            + _layer_html_row("📊", "Opt Flow",  _of_str,
+                              _sh_of_bullish,    _sh_of_bearish,    bool(_sh_of))
+        )
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid #1e293b;border-radius:5px;'
+            f'padding:8px 14px;margin-bottom:8px;">{_shared_layers_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        _col_short, _col_buy = st.columns(2)
+
+        # ════════════════════════════════════════════════════════════════════════
+        # SHORT PANEL
+        # ════════════════════════════════════════════════════════════════════════
+        with _col_short:
+            if _sh_layers_bearish == 3:
+                _sh_v = "STRONG SHORT SETUP";     _sh_vc = "#ef4444"; _sh_vbg = "#2d0a0a"
+                _sh_cv = "All three layers aligned bearish. Highest-conviction short window."
+                _sh_exp = True
+            elif _sh_layers_bearish == 2:
+                _sh_v = "MODERATE SHORT SETUP";   _sh_vc = "#f97316"; _sh_vbg = "#1f1000"
+                _sh_cv = "Two of three layers bearish. Consider partial short position."
+                _sh_exp = True
+            elif _sh_layers_bearish == 1 or _sh_layers_weak >= 2:
+                _sh_v = "WEAK / SPECULATIVE SHORT"; _sh_vc = "#f59e0b"; _sh_vbg = "#1a1200"
+                _sh_cv = "Only one layer clearly bearish. High-risk, small size only."
+                _sh_exp = False
+            else:
+                _sh_v = "NOT A SHORTING ENVIRONMENT"; _sh_vc = "#22c55e"; _sh_vbg = "#0c1a0c"
+                _sh_cv = "All layers lean bullish or neutral. Avoid net short exposure."
+                _sh_exp = False
+
+            _sh_instruments = []
+            if _sh_layers_bearish >= 2:
+                _sh_instruments += [
+                    ("SH",       "1× inverse S&P 500 — no decay, suits multi-week holds"),
+                    ("SPY Puts", "ATM or 5% OTM, 30–60 DTE — defined risk, leverage"),
+                ]
+            if _sh_layers_bearish == 3:
+                _sh_instruments += [
+                    ("SDS",  "2× inverse S&P — short duration only (decay risk)"),
+                    ("SQQQ", "3× inverse Nasdaq — tech-led selloff only, size small"),
+                ]
+            if _sh_quadrant == "Stagflation":
+                _sh_instruments += [
+                    ("XLY Puts", "Consumer discretionary crushed by stagflation"),
+                    ("QQQ Puts", "Growth multiples compress fastest under stagflation"),
+                ]
+            elif _sh_quadrant in ("Deflation", "Recession"):
+                _sh_instruments += [
+                    ("XLF Puts", "Credit losses mount in deflation/recession"),
+                    ("XLE Puts", "Demand collapses before supply adjusts"),
+                ]
+            elif _sh_quadrant == "Overheating":
+                _sh_instruments += [
+                    ("TLT Puts / TBF", "Overheating → rate hikes crush duration"),
+                    ("XLU Puts",       "Utilities underperform in tightening cycle"),
+                ]
+            elif _sh_layers_bearish >= 2:
+                _sh_instruments += [
+                    ("IEF / TLT", "Flight-to-quality if not inflationary"),
+                    ("GLD",       "Gold outperforms in macro stress"),
+                ]
+
+            _sh_vix_warn = ""
+            if _sh_vix and _sh_vix > 28:
+                _sh_vix_warn = f"⚠ VIX {_sh_vix:.0f} — premiums elevated. Prefer ETFs over puts. If puts, go 45–60 DTE."
+
+            _sh_icon = "🔴" if _sh_layers_bearish == 3 else ("🟠" if _sh_layers_bearish == 2 else ("🟡" if _sh_layers_bearish == 1 else "🟢"))
+            with st.expander(f"{_sh_icon} Short — {_sh_v}", expanded=_sh_exp):
+                st.markdown(
+                    f'<div style="background:{_sh_vbg};border:1px solid {_sh_vc}44;border-radius:6px;padding:10px 14px;margin-bottom:10px;">'
+                    f'<span style="background:{_sh_vc};color:black;font-weight:800;font-size:10px;padding:2px 8px;border-radius:3px;">{_sh_v}</span>'
+                    f'<div style="color:{COLORS["text"]};font-size:11px;margin-top:6px;">{_sh_cv}</div>'
+                    f'</div>', unsafe_allow_html=True)
+                if _sh_vix_warn:
+                    st.markdown(f'<div style="background:#1a1200;border-left:3px solid #f59e0b;padding:7px 10px;font-size:10px;color:#f59e0b;margin-bottom:10px;">{_sh_vix_warn}</div>', unsafe_allow_html=True)
+                if _sh_instruments:
+                    st.markdown(f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.06em;margin-bottom:4px;">INSTRUMENTS</div>', unsafe_allow_html=True)
+                    _ih = "".join(
+                        f'<div style="padding:3px 0;border-bottom:1px solid #1e293b;">'
+                        f'<span style="color:#f1f5f9;font-weight:700;font-size:10px;">{t}</span>'
+                        f'<span style="color:#94a3b8;font-size:10px;"> — {d}</span></div>'
+                        for t, d in _sh_instruments)
+                    st.markdown(f'<div style="margin-bottom:10px;">{_ih}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.06em;margin-bottom:4px;">ENTRY / RISK RULES</div>', unsafe_allow_html=True)
+                st.markdown("".join(
+                    f'<div style="color:#94a3b8;font-size:10px;padding:1px 0;">· {r}</div>'
+                    for r in [
+                        "Enter on dead-cat bounces into resistance — not into freefall",
+                        "Confirm with failed rally: rejection at 50d MA on volume",
+                        "Stop: close above last swing high or 50d MA (3–5% above entry)",
+                        "Target: prior support shelf projected down from breakdown",
+                        "Scale out: 50% at first target, trail stop on remainder",
+                        "Avoid holding through FOMC, CPI, NFP — gap risk blows stops",
+                    ]), unsafe_allow_html=True)
+
+        # ════════════════════════════════════════════════════════════════════════
+        # BUY PANEL
+        # ════════════════════════════════════════════════════════════════════════
+        with _col_buy:
+            if _sh_layers_bullish == 3:
+                _by_v = "STRONG BUY SETUP";        _by_vc = "#22c55e"; _by_vbg = "#0c1a0c"
+                _by_cv = "All three layers aligned bullish. Highest-conviction long entry."
+                _by_exp = True
+            elif _sh_layers_bullish == 2:
+                _by_v = "MODERATE BUY SETUP";      _by_vc = "#22c55e"; _by_vbg = "#0c1a0c"
+                _by_cv = "Two of three layers bullish. Good risk/reward — standard size."
+                _by_exp = True
+            elif _sh_layers_bullish == 1:
+                _by_v = "SELECTIVE / CAUTIOUS BUY"; _by_vc = "#f59e0b"; _by_vbg = "#1a1200"
+                _by_cv = "Only one layer bullish. Favour high-quality names, tight stops."
+                _by_exp = False
+            else:
+                _by_v = "NOT A BUYING ENVIRONMENT"; _by_vc = "#ef4444"; _by_vbg = "#2d0a0a"
+                _by_cv = "No layers confirm bullish conditions. Hold cash or hedge."
+                _by_exp = False
+
+            _by_instruments = []
+            if _sh_layers_bullish >= 2:
+                _by_instruments += [
+                    ("SPY / QQQ",  "Broad market long — simplest expression of risk-on"),
+                    ("SPY Calls",  "ATM or 5% OTM calls 30–60 DTE — leveraged with defined risk"),
+                ]
+            if _sh_layers_bullish == 3:
+                _by_instruments += [
+                    ("TQQQ",  "3× Nasdaq — max leverage, short duration only (decay risk)"),
+                    ("UPRO",  "3× S&P 500 — highest conviction broad market entry"),
+                ]
+            if _sh_quadrant == "Goldilocks":
+                _by_instruments += [
+                    ("XLK / QQQ", "Tech leads in Goldilocks — low rates, strong growth"),
+                    ("XLY",       "Consumer discretionary benefits from spending confidence"),
+                ]
+            elif _sh_quadrant == "Overheating":
+                _by_instruments += [
+                    ("XLE",  "Energy outperforms in overheating / commodity-driven growth"),
+                    ("XLB",  "Materials benefit from rising input prices and demand"),
+                ]
+            elif _sh_quadrant == "Reflation":
+                _by_instruments += [
+                    ("XLE / XLB",  "Commodity producers lead in reflation"),
+                    ("XLF",        "Financials benefit from steepening yield curve"),
+                ]
+            elif _sh_layers_bullish >= 2:
+                _by_instruments += [
+                    ("SPY Equal Weight (RSP)", "Broad participation — not just mega-cap"),
+                    ("IWM",                    "Small-caps outperform in early risk-on recovery"),
+                ]
+
+            _by_vix_note = ""
+            if _sh_vix and _sh_vix > 25:
+                _by_vix_note = f"⚠ VIX {_sh_vix:.0f} — elevated vol. Scale in over 2–3 sessions rather than all-in. Use calls to cap downside."
+            elif _sh_vix and _sh_vix < 15:
+                _by_vix_note = f"ℹ VIX {_sh_vix:.0f} — low vol. Options cheap: consider calls over ETFs for leverage efficiency."
+
+            _by_icon = "🟢" if _sh_layers_bullish == 3 else ("🟡" if _sh_layers_bullish == 2 else ("🟠" if _sh_layers_bullish == 1 else "🔴"))
+            with st.expander(f"{_by_icon} Buy — {_by_v}", expanded=_by_exp):
+                st.markdown(
+                    f'<div style="background:{_by_vbg};border:1px solid {_by_vc}44;border-radius:6px;padding:10px 14px;margin-bottom:10px;">'
+                    f'<span style="background:{_by_vc};color:black;font-weight:800;font-size:10px;padding:2px 8px;border-radius:3px;">{_by_v}</span>'
+                    f'<div style="color:{COLORS["text"]};font-size:11px;margin-top:6px;">{_by_cv}</div>'
+                    f'</div>', unsafe_allow_html=True)
+                if _by_vix_note:
+                    st.markdown(f'<div style="background:#0f1f2d;border-left:3px solid #3b82f6;padding:7px 10px;font-size:10px;color:#60a5fa;margin-bottom:10px;">{_by_vix_note}</div>', unsafe_allow_html=True)
+                if _by_instruments:
+                    st.markdown(f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.06em;margin-bottom:4px;">INSTRUMENTS</div>', unsafe_allow_html=True)
+                    _ih2 = "".join(
+                        f'<div style="padding:3px 0;border-bottom:1px solid #1e293b;">'
+                        f'<span style="color:#f1f5f9;font-weight:700;font-size:10px;">{t}</span>'
+                        f'<span style="color:#94a3b8;font-size:10px;"> — {d}</span></div>'
+                        for t, d in _by_instruments)
+                    st.markdown(f'<div style="margin-bottom:10px;">{_ih2}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.06em;margin-bottom:4px;">ENTRY / RISK RULES</div>', unsafe_allow_html=True)
+                st.markdown("".join(
+                    f'<div style="color:#94a3b8;font-size:10px;padding:1px 0;">· {r}</div>'
+                    for r in [
+                        "Enter on pullbacks to the 20d MA or prior breakout level — not at all-time highs",
+                        "Confirm with breadth: >60% of S&P 500 stocks above 50d MA",
+                        "Stop: close below 20d MA or -5% from entry, whichever is tighter",
+                        "Target: measured move from base (height of consolidation projected up)",
+                        "Scale in: 50% at entry, add 25% on first successful retest",
+                        "Avoid chasing: if SPY up >2% on the day, wait for next session",
+                    ]), unsafe_allow_html=True)
 
     # ── Run button ─────────────────────────────────────────────────────────────
     if st.button("⚡ RUN ALL INTEL MODULES", type="primary", key="qr_run_all", use_container_width=True):
 
+        # Clear ALL cached data so every module fetches fresh on this run
+        st.cache_data.clear()
+
         _results = {}
         _macro_ctx, _fred_data = {}, {}
 
-        # Step 1: Risk Regime + Rate-Path Plays
-        with st.spinner("📡 Fetching market + FRED data, computing regime..."):
-            try:
-                from modules.risk_regime import run_quick_regime
-                _macro_ctx, _fred_data = run_quick_regime(use_claude=_use_claude, model=_cl_model)
-                _results["regime"] = True
-                st.success("✅ Risk Regime + Rate-Path Plays — done")
-            except Exception as e:
-                _results["regime"] = False
-                st.error(f"❌ Regime failed: {e}")
+        # ── Round 1 (parallel): Regime + Current Events + Whale + Options Flow + StockTwits ──
+        # These five are fully independent — run concurrently to save time.
+        from modules.risk_regime import run_quick_regime
+        from modules.current_events import run_quick_digest
+        from modules.whale_buyers import run_quick_whale
+        from modules.options_activity import run_quick_options_flow
+        from services.stocktwits_client import run_quick_stocktwits
 
-        # Step 2: Fed Rate Path (uses regime data from step 1)
-        with st.spinner("📈 Computing Fed rate path + sector plays..."):
-            try:
-                from modules.fed_forecaster import run_quick_fed
-                run_quick_fed(_macro_ctx, _fred_data, use_claude=_use_claude, model=_cl_model)
-                _results["fed"] = True
-                st.success("✅ Fed Rate Path — done")
-            except Exception as e:
-                _results["fed"] = False
-                st.error(f"❌ Fed Rate Path failed: {e}")
+        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Options Flow · Social (parallel)..."):
+            _r1_errors = {}
+            _macro_ctx, _fred_data = None, None
+            import datetime as _dt_qir
+            with ThreadPoolExecutor(max_workers=5) as _pool:
+                _fut_regime = _pool.submit(run_quick_regime, _use_claude, _cl_model)
+                _fut_digest = _pool.submit(run_quick_digest, _use_claude, _cl_model)
+                _fut_whale  = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
+                _fut_opts   = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
+                _fut_stwit  = _pool.submit(run_quick_stocktwits)
+                for _fut, _key in (
+                    (_fut_regime, "regime"),
+                    (_fut_digest, "digest"),
+                    (_fut_whale,  "whale"),
+                    (_fut_opts,   "opts"),
+                    (_fut_stwit,  "social"),
+                ):
+                    try:
+                        _val = _fut.result()
+                        if _key == "regime" and _val:
+                            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq = _val
+                            # Write ALL regime data from main thread
+                            st.session_state["_regime_context"] = _regime_ctx
+                            st.session_state["_regime_context_ts"] = _dt_qir.datetime.now()
+                            st.session_state["_rp_plays_result"] = _plays
+                            st.session_state["_rp_plays_last_tier"] = _tier
+                            if _tac_data:
+                                st.session_state["_tactical_context"] = _tac_data
+                                st.session_state["_tactical_context_ts"] = _dt_qir.datetime.now()
+                            if _tac_text:
+                                st.session_state["_tactical_analysis"] = _tac_text
+                                st.session_state["_tactical_analysis_ts"] = _dt_qir.datetime.now()
+                            if _dq:
+                                st.session_state["_data_quality"] = _dq
+                                st.session_state["_data_quality_ts"] = _dt_qir.datetime.now()
+                                # Persist to alerts_config so background worker and alert checks can read it
+                                try:
+                                    from utils.alerts_config import load_config as _lc, save_config as _sc
+                                    _ac = _lc()
+                                    _ac["current_data_quality_score"] = _dq["score"]
+                                    _ac["last_tactical_score"] = _ac.get("current_tactical_score")
+                                    if _tac_data:
+                                        _ac["current_tactical_score"] = _tac_data["tactical_score"]
+                                    _sc(_ac)
+                                except Exception:
+                                    pass
+                        elif _key == "digest" and _val:
+                            for _k, _v in _val.items():
+                                st.session_state[_k] = _v
+                        elif _key == "whale" and _val:
+                            for _k, _v in _val.items():
+                                st.session_state[_k] = _v
+                        elif _key == "opts" and _val:
+                            st.session_state["_options_flow_context"] = _val
+                            st.session_state["_options_flow_context_ts"] = _dt_qir.datetime.now()
+                        elif _key == "social" and _val:
+                            st.session_state["_stocktwits_digest"] = _val
+                            st.session_state["_stocktwits_digest_ts"] = _dt_qir.datetime.now()
+                        _results[_key] = bool(_val)
+                    except Exception as _e:
+                        _results[_key] = False
+                        _r1_errors[_key] = str(_e)
 
-        # Step 2b: Policy Transmission (uses _rate_path_probs from step 2)
-        with st.spinner("🔗 Narrating policy transmission path..."):
+        _regime_ok = _results.get("regime", False)
+        if _regime_ok:
+            st.success("✅ Risk Regime + Rate-Path Plays — done")
+        else:
+            st.error(f"❌ Regime failed: {_r1_errors.get('regime', '?')}")
+        if _results.get("digest"):
+            st.success("✅ Current Events Digest — done")
+        else:
+            st.warning(f"⚠ Digest skipped — {_r1_errors.get('digest', 'no content available')}")
+        if _results.get("whale"):
+            st.success("✅ Whale Activity — done")
+        else:
+            st.warning(f"⚠ Whale scan: {_r1_errors.get('whale', 'no data returned')}")
+        if _results.get("opts"):
+            _of_r1 = st.session_state.get("_options_flow_context") or {}
+            st.success(f"✅ Options Flow — {_of_r1.get('label','?')} ({_of_r1.get('options_score','?')}/100)")
+        else:
+            st.warning(f"⚠ Options Flow: {_r1_errors.get('opts', 'SPY chain unavailable')}")
+        if _results.get("social"):
+            _st_r1 = st.session_state.get("_stocktwits_digest") or {}
+            _st_mood = _st_r1.get("market_mood", "?")
+            _st_bull = _st_r1.get("overall_bull_pct", "?")
+            _st_top = ", ".join(_st_r1.get("top_bullish", [])[:3])
+            st.success(f"✅ Social Sentiment — {_st_mood} ({_st_bull}% bull) · trending: {_st_top}")
+        else:
+            st.warning(f"⚠ Social Sentiment: {_r1_errors.get('social', 'StockTwits unavailable')}")
+
+        # ── Round 2 (parallel): Fed + Doom + Black Swans ──────────────────────
+        # Fed uses regime output from Round 1. Doom reads digest from session_state.
+        # Black Swans are fully independent.
+        from modules.fed_forecaster import run_quick_fed, run_quick_swans
+        from modules.stress_signals import run_quick_doom
+
+        with st.spinner("📈 Round 2/4 — Fed Rate Path · Doom Briefing · Black Swans (parallel)..."):
+            _r2_errors = {}
+            with ThreadPoolExecutor(max_workers=3) as _pool2:
+                _fut_fed   = _pool2.submit(run_quick_fed, _macro_ctx, _fred_data, _use_claude, _cl_model)
+                _fut_doom  = _pool2.submit(run_quick_doom, _use_claude, _cl_model)
+                _fut_swans = _pool2.submit(run_quick_swans, _use_claude, _cl_model)
+                for _fut, _key in ((_fut_fed, "fed"), (_fut_doom, "doom"), (_fut_swans, "swans")):
+                    try:
+                        _val = _fut.result()
+                        if _val and isinstance(_val, dict):
+                            for _k, _v in _val.items():
+                                st.session_state[_k] = _v
+                        _results[_key] = bool(_val)
+                    except Exception as _e:
+                        _results[_key] = False
+                        _r2_errors[_key] = str(_e)
+
+        if _results.get("fed"):
+            st.success("✅ Fed Rate Path — done")
+        else:
+            st.error(f"❌ Fed Rate Path failed: {_r2_errors.get('fed', '?')}")
+        if _results.get("doom"):
+            st.success("✅ Doom Briefing — done")
+        else:
+            st.error(f"❌ Doom Briefing failed: {_r2_errors.get('doom', '?')}")
+        if _results.get("swans"):
+            _bs_count = len(st.session_state.get("_custom_swans", {}))
+            st.success(f"✅ Black Swans — {_bs_count} scenarios ready")
+        else:
+            st.warning(f"⚠ Black Swans: {_r2_errors.get('swans', 'no results')}")
+
+        # ── Round 3: Policy Transmission (needs Fed output from Round 2) ───────
+        with st.spinner("🔗 Round 3/4 — Policy transmission path..."):
             try:
                 from modules.fed_forecaster import run_quick_chain
                 ok = run_quick_chain(use_claude=_use_claude, model=_cl_model)
                 _results["chain"] = ok
                 if ok:
+                    import datetime as _cdt
+                    st.session_state["_chain_narration_ts"] = _cdt.datetime.now()
                     st.success("✅ Policy Transmission — done")
                 else:
                     st.warning("⚠ Policy Transmission skipped — rate path not available")
@@ -180,62 +786,8 @@ def render():
                 _results["chain"] = False
                 st.error(f"❌ Policy Transmission failed: {e}")
 
-        # Step 3: Current Events Digest
-        with st.spinner("🗞 Fetching headlines + generating digest..."):
-            try:
-                from modules.current_events import run_quick_digest
-                ok = run_quick_digest(use_claude=_use_claude, model=_cl_model)
-                _results["digest"] = ok
-                if ok:
-                    st.success("✅ Current Events Digest — done")
-                else:
-                    st.warning("⚠ Digest skipped — no content available (check Gist URL + RSS)")
-            except Exception as e:
-                _results["digest"] = False
-                st.error(f"❌ Digest failed: {e}")
-
-        # Step 4: Doom Briefing (uses current events context from step 3)
-        with st.spinner("💀 Fetching stress signals + generating briefing..."):
-            try:
-                from modules.stress_signals import run_quick_doom
-                run_quick_doom(use_claude=_use_claude, model=_cl_model)
-                _results["doom"] = True
-                st.success("✅ Doom Briefing — done")
-            except Exception as e:
-                _results["doom"] = False
-                st.error(f"❌ Doom Briefing failed: {e}")
-
-        # Step 5: Whale Activity (13F scan + AI summary)
-        with st.spinner("🐋 Scanning 13F whale filings..."):
-            try:
-                from modules.whale_buyers import run_quick_whale
-                ok = run_quick_whale(use_claude=_use_claude, model=_cl_model)
-                _results["whale"] = ok
-                if ok:
-                    st.success("✅ Whale Activity — done")
-                else:
-                    st.warning("⚠ Whale scan returned no data — SEC EDGAR may be slow")
-            except Exception as e:
-                _results["whale"] = False
-                st.error(f"❌ Whale Activity failed: {e}")
-
-        # Step 6: Black Swans (auto-generate regime-relevant scenarios)
-        with st.spinner("🦢 Generating regime-relevant black swan scenarios..."):
-            try:
-                from modules.fed_forecaster import run_quick_swans
-                ok = run_quick_swans(use_claude=_use_claude, model=_cl_model)
-                _results["swans"] = ok
-                if ok:
-                    _bs_count = len(st.session_state.get("_custom_swans", {}))
-                    st.success(f"✅ Black Swans — {_bs_count} scenarios ready")
-                else:
-                    st.warning("⚠ Black Swan generation returned no results")
-            except Exception as e:
-                _results["swans"] = False
-                st.error(f"❌ Black Swans failed: {e}")
-
-        # Step 7: Macro Conviction Synopsis (cross-signal coherence check)
-        with st.spinner("🧠 Synthesizing signals → macro conviction..."):
+        # ── Round 4: Macro Conviction Synopsis (cross-signal coherence check) ───
+        with st.spinner("🧠 Round 4/4 — Macro Conviction Synopsis..."):
             try:
                 import datetime as _syndt
                 from services.claude_client import generate_macro_synopsis as _gen_synopsis
@@ -245,8 +797,43 @@ def render():
                 _dp = st.session_state.get("_dominant_rate_path") or {}
                 _dp_labels = {"cut_25": "25bp Cut", "cut_50": "50bp Cut", "hold": "Hold", "hike_25": "25bp Hike"}
                 _sig_parts = []
+                _dq_ctx = st.session_state.get("_data_quality") or {}
+                if _dq_ctx:
+                    _sig_parts.append(f"DATA QUALITY: {_dq_ctx['score']}/100 — {_dq_ctx['label']}")
+
+                # ── Tactical Regime first — actionable timeframe, highest weight ──
+                _tac = st.session_state.get("_tactical_context")
+                if _tac:
+                    _tac_sigs = _tac.get("signals", [])
+                    _tac_sig_str = "  |  ".join(
+                        f"{s['Signal'].split('(')[0].strip()}: {s['Value']} ({s['Direction']})"
+                        for s in _tac_sigs
+                    ) if _tac_sigs else ""
+                    _tac_block = (
+                        f"TACTICAL REGIME: {_tac['tactical_score']}/100 ({_tac['label']}) — {_tac['action_bias']}"
+                    )
+                    if _tac_sig_str:
+                        _tac_block += f"\n  Signals: {_tac_sig_str}"
+                    _tac_ai_text = st.session_state.get("_tactical_analysis", "")
+                    if _tac_ai_text:
+                        _tac_block += f"\n  AI Analysis: {_tac_ai_text[:500]}"
+                    _sig_parts.append(_tac_block)
+
+                # ── Options Flow (hours/days layer) ──────────────────────────────
+                _of = st.session_state.get("_options_flow_context")
+                if _of:
+                    _of_block = f"OPTIONS FLOW: {_of['options_score']}/100 ({_of['label']}) — {_of['action_bias']}"
+                    _of_sigs = "  |  ".join(
+                        f"{s['Signal']}: {s['Value']} ({s['Direction']})"
+                        for s in _of.get("signals", [])
+                    )
+                    if _of_sigs:
+                        _of_block += f"\n  Signals: {_of_sigs}"
+                    _sig_parts.append(_of_block)
+
+                # ── Macro Regime ──────────────────────────────────────────────────
                 if _rc.get("regime"):
-                    _sig_parts.append(f"REGIME: {_rc['regime']} (score {_rc.get('score',0):+.2f}) | Quadrant: {_rc.get('quadrant','')}")
+                    _sig_parts.append(f"MACRO REGIME: {_rc['regime']} (score {_rc.get('score',0):+.2f}) | Quadrant: {_rc.get('quadrant','')}")
                 if _dp.get("scenario"):
                     _sig_parts.append(f"FED RATE PATH: {_dp_labels.get(_dp['scenario'], _dp['scenario'])} ({_dp.get('prob_pct',0):.0f}% probability)")
                 _doom = st.session_state.get("_doom_briefing", "")
@@ -281,9 +868,30 @@ def render():
                 _results["synopsis"] = False
                 st.error(f"❌ Synopsis failed: {e}")
 
+        # ── Round 5: Portfolio Risk Snapshot (headless risk matrix) ──────────
+        with st.spinner("📊 Round 5/5 — Portfolio Risk Snapshot + AI Interpretation..."):
+            try:
+                from modules.trade_journal import run_quick_risk_snapshot
+                _risk_ok = run_quick_risk_snapshot(use_claude=_use_claude, model=_cl_model)
+                _results["risk_snapshot"] = _risk_ok
+                if _risk_ok:
+                    import datetime as _rsdt
+                    st.session_state["_portfolio_risk_snapshot_ts"] = _rsdt.datetime.now()
+                    _snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+                    _interp = st.session_state.get("_risk_matrix_interpretation") or {}
+                    _alert = _interp.get("alert_level", "")
+                    _alert_str = f" · Risk Alert: {_alert}" if _alert else ""
+                    _beta = _snap.get("beta", "?")
+                    st.success(f"✅ Portfolio Risk Snapshot — Beta {_beta}{_alert_str}")
+                else:
+                    st.info("ℹ️ Risk Snapshot skipped — no open positions in Trade Journal")
+            except Exception as e:
+                _results["risk_snapshot"] = False
+                st.error(f"❌ Risk Snapshot failed: {e}")
+
         # ── Completion summary ─────────────────────────────────────────────────
         _n_ok = sum(1 for v in _results.values() if v)
-        if _n_ok == 8:
+        if _n_ok == 9:
             st.markdown(
                 f'<div style="background:#052e16;border:1px solid #22c55e;border-radius:6px;'
                 f'padding:12px 16px;margin-top:10px;">'
@@ -293,59 +901,39 @@ def render():
                 f'</div></div>',
                 unsafe_allow_html=True,
             )
+            try:
+                from services.telegram_client import send_alert as _tg_qir
+                _rc_f  = st.session_state.get("_regime_context") or {}
+                _tac_f = st.session_state.get("_tactical_context") or {}
+                _dq_f  = st.session_state.get("_data_quality") or {}
+                _of_f = st.session_state.get("_options_flow_context") or {}
+                _tg_qir(
+                    f"⚡ <b>Quick Intel Run Complete</b>\n"
+                    f"Regime: {_rc_f.get('regime','?')} | {_rc_f.get('quadrant','?')}\n"
+                    f"Tactical: {_tac_f.get('tactical_score','?')}/100 — {_tac_f.get('label','?')}\n"
+                    f"Options Flow: {_of_f.get('options_score','?')}/100 — {_of_f.get('label','')}\n"
+                    f"Data Quality: {_dq_f.get('score','?')}/100 — {_dq_f.get('label','')}"
+                )
+            except Exception:
+                pass
         else:
-            st.warning(f"{_n_ok}/8 modules completed — check errors above.")
+            st.warning(f"{_n_ok}/9 modules completed — check errors above.")
 
         # ── Signal Coverage Panel ──────────────────────────────────────────────
-        from datetime import datetime as _dt2
-        _coverage_signals = [
-            ("Regime",             "_regime_context",        "_regime_context_ts"),
-            ("Fed Rate Path",      "_dominant_rate_path",    "_rate_path_probs_ts"),
-            ("Fed Funds Rate",     "_fed_funds_rate",        None),
-            ("Rate-Path Plays",    "_fed_plays_result",      "_fed_plays_result_ts"),
-            ("Regime Plays",       "_rp_plays_result",       None),
-            ("Doom Briefing",      "_doom_briefing",         "_doom_briefing_ts"),
-            ("Policy Trans.",      "_chain_narration",       None),
-            ("Black Swans",        "_custom_swans",          "_custom_swans_ts"),
-            ("Whale Activity",     "_whale_summary",         "_whale_summary_ts"),
-            ("Current Events",     "_current_events_digest", "_current_events_digest_ts"),
-        ]
-        _now2 = _dt2.now()
-        _n_loaded = sum(1 for _, k, _ in _coverage_signals if st.session_state.get(k))
-        _bar_pct = int(_n_loaded / len(_coverage_signals) * 100)
-        _bar_color = "#22c55e" if _n_loaded == len(_coverage_signals) else ("#f59e0b" if _n_loaded >= 7 else "#ef4444")
-
-        _left = _coverage_signals[:5]
-        _right = _coverage_signals[5:]
-        _rows_html = ""
-        for (lbl_l, k_l, ts_l), (lbl_r, k_r, ts_r) in zip(_left, _right):
-            def _sig_cell(lbl, k, ts_k):
-                ok = bool(st.session_state.get(k))
-                icon = f'<span style="color:#22c55e;">✓</span>' if ok else '<span style="color:#ef4444;">✗</span>'
-                age = ""
-                if ok and ts_k:
-                    _ts = st.session_state.get(ts_k)
-                    if _ts:
-                        _m = int((_now2 - _ts).total_seconds() / 60)
-                        age = f' <span style="color:#555;font-size:10px;">· {"just now" if _m < 1 else (f"{_m}m ago" if _m < 60 else f"{_m//60}h ago")}</span>'
-                color = "#e2e8f0" if ok else "#475569"
-                return f'<td style="padding:2px 12px 2px 0;white-space:nowrap;">{icon} <span style="color:{color};">{lbl}</span>{age}</td>'
-            _rows_html += f"<tr>{_sig_cell(lbl_l, k_l, ts_l)}{_sig_cell(lbl_r, k_r, ts_r)}</tr>"
-
-        st.markdown(
-            f'<div style="border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-top:10px;">'
-            f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
-            f'<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;">Prompt Context</span>'
-            f'<span style="font-size:10px;color:{_bar_color};font-weight:600;">{_n_loaded}/{len(_coverage_signals)} signals loaded</span>'
-            f'</div>'
-            f'<div style="height:2px;background:#1e293b;border-radius:1px;margin-bottom:8px;">'
-            f'<div style="height:2px;width:{_bar_pct}%;background:{_bar_color};border-radius:1px;"></div>'
-            f'</div>'
-            f'<table style="width:100%;font-size:11px;font-family:monospace;border-collapse:collapse;">'
-            f'{_rows_html}</table>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+        from utils.components import render_signal_coverage
+        render_signal_coverage()
+        _dq_disp = st.session_state.get("_data_quality") or {}
+        if _dq_disp:
+            _dq_col = "#22c55e" if _dq_disp["score"] >= 80 else ("#f59e0b" if _dq_disp["score"] >= 60 else "#ef4444")
+            _dq_stale = ""
+            if _dq_disp.get("stale_market") or _dq_disp.get("stale_fred"):
+                _all_stale = _dq_disp.get("stale_market", []) + _dq_disp.get("stale_fred", [])
+                _dq_stale = f' · Stale: {", ".join(_all_stale[:4])}'
+            st.markdown(
+                f'<div style="font-size:10px;color:{_dq_col};font-weight:600;margin-top:4px;">'
+                f'DATA QUALITY: {_dq_disp["score"]}/100 — {_dq_disp["label"]}{_dq_stale}</div>',
+                unsafe_allow_html=True,
+            )
 
         # ── Previews ───────────────────────────────────────────────────────────
         _digest = st.session_state.get("_current_events_digest", "")
@@ -384,6 +972,83 @@ def render():
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+        # ── Tactical Regime Preview ────────────────────────────────────────────
+        _tac_ctx = st.session_state.get("_tactical_context", {})
+        _tac_ai_prev = st.session_state.get("_tactical_analysis", "")
+        if _tac_ctx:
+            _ts_val  = _tac_ctx.get("tactical_score", 50)
+            _tlabel  = _tac_ctx.get("label", "")
+            _tbias   = _tac_ctx.get("action_bias", "")
+            _tac_color = "#22c55e" if _ts_val >= 65 else ("#f59e0b" if _ts_val >= 38 else "#ef4444")
+            _tac_bg    = "#0c1a0c" if _ts_val >= 65 else ("#1a1200" if _ts_val >= 38 else "#1a0000")
+            with st.expander(f"⚡ Tactical Regime — {_tlabel} ({_ts_val}/100)", expanded=True):
+                # Score + label badge
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    f'<span style="background:{_tac_color};color:black;font-weight:800;font-size:11px;'
+                    f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_tlabel.upper()}</span>'
+                    f'<span style="color:{_tac_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;">{_ts_val}/100</span>'
+                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_tbias}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                # Signal breakdown
+                _tac_sigs_prev = _tac_ctx.get("signals", [])
+                if _tac_sigs_prev:
+                    _sigs_html = ""
+                    for _sr in _tac_sigs_prev:
+                        _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
+                        _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+                        _sigs_html += (
+                            f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
+                            f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
+                            f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
+                        )
+                    st.markdown(f'<div style="margin-bottom:8px;">{_sigs_html}</div>', unsafe_allow_html=True)
+                # AI narrative
+                if _tac_ai_prev:
+                    st.markdown(
+                        f'<div style="background:{_tac_bg};border-left:3px solid {_tac_color};'
+                        f'padding:10px 14px;font-size:12px;color:{COLORS["text"]};'
+                        f'line-height:1.8;white-space:pre-line;">{_tac_ai_prev}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        # ── Options Flow Preview ───────────────────────────────────────────────
+        _of_ctx = st.session_state.get("_options_flow_context") or {}
+        if _of_ctx:
+            _os_val   = _of_ctx.get("options_score", 50)
+            _of_label = _of_ctx.get("label", "")
+            _of_bias  = _of_ctx.get("action_bias", "")
+            _of_color = "#22c55e" if _os_val >= 65 else ("#f59e0b" if _os_val >= 38 else "#ef4444")
+            _of_bg    = "#0c1a0c" if _os_val >= 65 else ("#1a1200" if _os_val >= 38 else "#1a0000")
+            with st.expander(f"📊 Options Flow — {_of_label} ({_os_val}/100)", expanded=True):
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    f'<span style="background:{_of_color};color:black;font-weight:800;font-size:11px;'
+                    f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_of_label.upper()}</span>'
+                    f'<span style="color:{_of_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;">{_os_val}/100</span>'
+                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_of_bias}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                _of_sigs_prev = _of_ctx.get("signals", [])
+                if _of_sigs_prev:
+                    _of_sigs_html = ""
+                    for _sr in _of_sigs_prev:
+                        _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
+                        _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+                        _of_sigs_html += (
+                            f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
+                            f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
+                            f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
+                        )
+                    st.markdown(f'<div style="margin-bottom:8px;">{_of_sigs_html}</div>', unsafe_allow_html=True)
 
         if _digest or _doom or _plays or st.session_state.get("_chain_narration") or st.session_state.get("_whale_summary"):
             st.markdown(
@@ -482,7 +1147,7 @@ def render():
 
 <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL LAYER <span style="font-weight:400;color:#475569;">(Quick Intel Run generates these)</span></div>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:14px;">
-  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission','Trending Narratives','Auto-Trending Groups'])}
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Tactical Regime (days-to-weeks)','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission','Trending Narratives','Auto-Trending Groups','Portfolio Risk Snapshot'])}
 </div>
 
 <div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
@@ -491,7 +1156,7 @@ def render():
 <div style="display:flex;flex-direction:column;gap:4px;">
   <div style="background:#0c1a0c;border:1px solid #22c55e44;border-radius:4px;padding:6px 10px;">
     <span style="color:#22c55e;font-weight:700;">Portfolio Intelligence</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events · trending narratives · auto-trending groups</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events · trending narratives · auto-trending groups · <b style="color:#22c55e88;">portfolio risk snapshot</b></span>
   </div>
   <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
     <span style="color:#f59e0b;font-weight:700;">Discovery</span>
@@ -499,7 +1164,7 @@ def render():
   </div>
   <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
     <span style="color:#3b82f6;font-weight:700;">Valuation</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff · <b style="color:#3b82f688;">portfolio risk snapshot</b></span>
   </div>
 </div>
 

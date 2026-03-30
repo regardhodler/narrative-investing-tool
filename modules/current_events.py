@@ -17,36 +17,37 @@ from utils.theme import COLORS
 
 
 def _fetch_x_feed_via_grok(queries: list, regime_context: str = "") -> str:
-    """Call xAI with X search enabled. Returns live X context string or empty string."""
+    """Call xAI Responses API with x_search tool. Returns live X context string or empty string."""
     import os, requests as _req
     key = os.getenv("XAI_API_KEY", "")
     if not key:
         return ""
     search_prompt = (
-        f"Search X (Twitter) for the most important recent posts about: {', '.join(queries)}. "
-        + (f"Current macro regime context: {regime_context}. " if regime_context else "")
+        f"Search X for the most important recent posts about: {', '.join(queries)}. "
+        + (f"Current macro regime: {regime_context}. " if regime_context else "")
         + "Summarize the key themes, notable views, and any breaking developments in 3-5 bullet points. "
-        "Focus only on macro, financial, and geopolitical content."
+        "Focus only on macro, financial, and geopolitical content. Strip citation links from output."
     )
     try:
-        body = {
-            "model": "grok-4-1-fast-reasoning",
-            "messages": [{"role": "user", "content": search_prompt}],
-            "max_tokens": 400,
-            "search_parameters": {
-                "mode": "on",
-                "sources": [{"type": "x"}],
-                "return_citations": False,
-            },
-        }
         resp = _req.post(
-            "https://api.x.ai/v1/chat/completions",
+            "https://api.x.ai/v1/responses",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            json=body,
-            timeout=30,
+            json={
+                "model": "grok-4-1-fast-reasoning",
+                "input": [{"role": "user", "content": search_prompt}],
+                "max_output_tokens": 500,
+                "tools": [{"type": "x_search"}],
+            },
+            timeout=45,
         )
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        for item in resp.json().get("output", []):
+            if item.get("type") == "message":
+                for c in item.get("content", []):
+                    if c.get("type") == "output_text":
+                        import re
+                        return re.sub(r'\[\[\d+\]\]\(https?://\S+\)', '', c["text"]).strip()
+        return ""
     except Exception:
         return ""
 
@@ -131,6 +132,11 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
                 + _regime_line
                 + f"{context[:5000]}"
             )
+            st.session_state["_x_feed_injected"] = True
+            st.session_state["_x_feed_content"] = x_content
+        else:
+            st.session_state.pop("_x_feed_injected", None)
+            st.session_state.pop("_x_feed_content", None)
 
     if not _use_cl:
         try:
@@ -166,13 +172,12 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
 
     if digest:
         _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
-    if _use_cl and st.session_state.get("_x_feed_used"):
-        st.session_state.pop("_x_feed_used", None)
-        st.session_state["_current_events_digest"] = digest
-        st.session_state["_current_events_digest_ts"] = datetime.now()
-        st.session_state["_current_events_engine"] = _tier
-        return True
-    return False
+        return {
+            "_current_events_digest": digest,
+            "_current_events_digest_ts": datetime.now(),
+            "_current_events_engine": _tier,
+        }
+    return None
 
 
 def _time_ago(ts_str: str) -> str:
@@ -415,13 +420,8 @@ def render():
         horizontal=True,
         label_visibility="collapsed",
     )
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
+    from utils.ai_tier import MODEL_HINT_HTML
+    st.markdown(MODEL_HINT_HTML, unsafe_allow_html=True)
     _rec_map = {
         "⚡ Freeloader Mode": "Daily routine check — fast, free. Use when markets are calm and you just want a quick brief.",
         "🧠 Regard Mode": "Active trading day — Grok 4.1 reasoning + 🐦 live X/Twitter feed for real-time macro posts. Best for market-moving days.",
@@ -442,18 +442,37 @@ def render():
                 f'margin-left:8px;letter-spacing:0.06em;">'
                 f'{_rc_disp["regime"]} {_rc_disp.get("score", 0.0):+.2f}</span>'
             )
+        _x_injected = st.session_state.get("_x_feed_injected", False)
+        _x_badge = (
+            '<span style="background:#1a1a2e;color:#1d9bf0;border:1px solid #1d9bf044;'
+            'font-size:10px;font-weight:700;padding:1px 7px;border-radius:3px;'
+            'margin-left:8px;letter-spacing:0.04em;">𝕏 Live Feed ✓</span>'
+            if _x_injected else
+            '<span style="background:#1a1a1a;color:#555;border:1px solid #33333344;'
+            'font-size:10px;padding:1px 7px;border-radius:3px;margin-left:8px;">'
+            '𝕏 RSS only</span>'
+        )
         st.markdown(
             f'<div style="border:1px solid {COLORS["bloomberg_orange"]}44;border-radius:4px;'
             f'padding:10px 14px;background:{COLORS["surface"]};margin-bottom:8px;">'
             f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
-            f'color:{COLORS["text_dim"]};margin-bottom:6px;">'
+            f'color:{COLORS["text_dim"]};margin-bottom:6px;display:flex;align-items:center;flex-wrap:wrap;gap:4px;">'
             f'Generated {_time_ago(existing_ts.isoformat() if hasattr(existing_ts, "isoformat") else existing_ts) if existing_ts else ""}'
-            f'{_regime_badge}</div>'
+            f'{_regime_badge}{_x_badge}</div>'
             f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:13px;'
             f'color:{COLORS["text"]};line-height:1.6;">{existing_digest}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
+        # Show raw X feed content so user can verify what was fetched
+        _x_content = st.session_state.get("_x_feed_content", "")
+        if _x_content:
+            with st.expander("𝕏 View raw X feed injected into digest", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+                    f'color:{COLORS["text_dim"]};line-height:1.8;white-space:pre-wrap;">{_x_content}</div>',
+                    unsafe_allow_html=True,
+                )
 
     if st.button("🗞 Generate News Digest", key="ce_gen_digest", type="primary"):
         with st.spinner("Generating digest..."):
@@ -559,8 +578,10 @@ def _run_digest(headlines, inbox, gist, engine: str):
                 + f"{context[:5000]}"
             )
             st.session_state["_x_feed_injected"] = True
+            st.session_state["_x_feed_content"] = x_content
         else:
             st.session_state.pop("_x_feed_injected", None)
+            st.session_state.pop("_x_feed_content", None)
 
     if use_claude or not digest:
         try:

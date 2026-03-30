@@ -5,7 +5,8 @@ import streamlit as st
 import plotly.graph_objects as go
 from utils.theme import COLORS, apply_dark_layout
 from utils.watchlist import load_watchlist
-from services.scoring import score_ticker, scan_short_interest
+from utils.ai_tier import render_ai_tier_selector
+from services.scoring import score_ticker, scan_short_interest, fetch_short_interest_history
 
 # Curated list of historically high short-interest names across sectors
 _CURATED = [
@@ -217,6 +218,123 @@ def _render_squeeze_screen():
     _render_squeeze_detail(_drill, _scan_row)
 
 
+def _render_short_history(ticker: str, current_short_pct: float, current_dtc: float) -> None:
+    """Fetch and render historical short interest trend chart."""
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'margin:16px 0 6px 0;">SHORT INTEREST HISTORY</div>',
+        unsafe_allow_html=True,
+    )
+
+    with st.spinner(f"Loading short interest history for {ticker}..."):
+        df = fetch_short_interest_history(ticker)
+
+    if df.empty:
+        st.caption("⚠️ Historical short interest data unavailable for this ticker.")
+        return
+
+    # ── Elevated duration badge ───────────────────────────────────────────────
+    _threshold = 10.0  # % float — "elevated" threshold
+    if "short_pct_float" in df.columns and df["short_pct_float"].notna().any():
+        _elevated_periods = (df["short_pct_float"] >= _threshold).sum()
+        _total_periods = len(df)
+        _latest_pct = df["short_pct_float"].iloc[-1]
+        _prev_pct = df["short_pct_float"].iloc[-2] if len(df) > 1 else _latest_pct
+        _trend = "↑ Building" if _latest_pct > _prev_pct else "↓ Cooling off"
+        _trend_col = "#ef4444" if _latest_pct > _prev_pct else "#22c55e"
+
+        # Consecutive elevated periods from most recent
+        _consec = 0
+        for _v in reversed(df["short_pct_float"].tolist()):
+            if _v is not None and _v >= _threshold:
+                _consec += 1
+            else:
+                break
+        _approx_months = _consec * 2  # bi-monthly = ~2 months per period
+
+        b1, b2, b3 = st.columns(3)
+        b1.markdown(
+            f'<div style="border:1px solid #1e293b;border-radius:6px;padding:8px 12px;'
+            f'background:#0f172a;text-align:center;">'
+            f'<div style="font-size:10px;color:#64748b;">ELEVATED PERIODS</div>'
+            f'<div style="font-size:18px;font-weight:700;color:#ef4444;">'
+            f'{_elevated_periods} / {_total_periods}</div>'
+            f'<div style="font-size:10px;color:#64748b;">above {_threshold:.0f}% threshold</div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+        b2.markdown(
+            f'<div style="border:1px solid #1e293b;border-radius:6px;padding:8px 12px;'
+            f'background:#0f172a;text-align:center;">'
+            f'<div style="font-size:10px;color:#64748b;">CONSECUTIVE ELEVATED</div>'
+            f'<div style="font-size:18px;font-weight:700;color:#ef4444;">'
+            f'~{_approx_months} months</div>'
+            f'<div style="font-size:10px;color:#64748b;">{_consec} reporting periods</div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+        b3.markdown(
+            f'<div style="border:1px solid #1e293b;border-radius:6px;padding:8px 12px;'
+            f'background:#0f172a;text-align:center;">'
+            f'<div style="font-size:10px;color:#64748b;">TREND</div>'
+            f'<div style="font-size:18px;font-weight:700;color:{_trend_col};">{_trend}</div>'
+            f'<div style="font-size:10px;color:#64748b;">vs prior period</div>'
+            f'</div>', unsafe_allow_html=True,
+        )
+
+    # ── Chart ─────────────────────────────────────────────────────────────────
+    _fig = go.Figure()
+
+    # Short % Float line (primary)
+    if "short_pct_float" in df.columns and df["short_pct_float"].notna().any():
+        _fig.add_trace(go.Scatter(
+            x=df["date"], y=df["short_pct_float"],
+            name="Short % Float",
+            line=dict(color="#ef4444", width=2),
+            fill="tozeroy",
+            fillcolor="rgba(239,68,68,0.08)",
+            yaxis="y1",
+        ))
+        # Threshold line
+        _fig.add_hline(
+            y=_threshold, line_dash="dot",
+            line_color="#f59e0b", opacity=0.6,
+            annotation_text="10% threshold",
+            annotation_font_color="#f59e0b",
+        )
+
+    # Days-to-Cover on secondary axis
+    if "days_to_cover" in df.columns:
+        _fig.add_trace(go.Scatter(
+            x=df["date"], y=df["days_to_cover"],
+            name="Days-to-Cover",
+            line=dict(color="#818cf8", width=1.5, dash="dot"),
+            yaxis="y2",
+        ))
+
+    # Current value marker
+    if "short_pct_float" in df.columns and df["short_pct_float"].notna().any():
+        _fig.add_trace(go.Scatter(
+            x=[df["date"].iloc[-1]], y=[df["short_pct_float"].iloc[-1]],
+            mode="markers",
+            marker=dict(size=10, color="#ef4444", symbol="circle"),
+            name="Latest",
+            yaxis="y1",
+        ))
+
+    apply_dark_layout(
+        _fig,
+        title=f"{ticker} — Bi-Monthly Short Interest History",
+        yaxis=dict(title="Short % Float", ticksuffix="%", gridcolor=COLORS["grid"]),
+        yaxis2=dict(
+            title="Days-to-Cover", overlaying="y", side="right",
+            gridcolor="rgba(0,0,0,0)", ticksuffix="d",
+        ),
+        legend=dict(orientation="h", y=1.08),
+        hovermode="x unified",
+    )
+    st.plotly_chart(_fig, use_container_width=True)
+    st.caption(f"Source: Nasdaq · Bi-monthly settlement dates · {len(df)} periods shown")
+
+
 def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
     """Full detail panel — radar + squeeze checklist + AI thesis."""
     _ticker = r["ticker"]
@@ -270,6 +388,9 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+    # Short interest history chart
+    _render_short_history(_ticker, _short_pct, _dtc)
 
     # Radar chart — red theme for squeeze
     _categories = ["Technicals", "Fundamentals", "Insider", "Options", "Congress", "Short Int"]
@@ -337,17 +458,11 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
         unsafe_allow_html=True,
     )
 
-    _tier_sel = st.radio(
-        "Engine", list(_TIER_MAP.keys()), horizontal=True, key="sq_thesis_engine"
+    _use_cl, _model = render_ai_tier_selector(
+        key="sq_thesis_engine",
+        label="Engine",
+        recommendation="🧠 Regard recommended for squeeze thesis — Grok 4.1 handles multi-signal synthesis well",
     )
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:6px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-    _use_cl, _model = _TIER_MAP[_tier_sel]
 
     if st.button("GENERATE SQUEEZE THESIS", type="primary", key="sq_gen_thesis"):
         from services.claude_client import generate_squeeze_thesis

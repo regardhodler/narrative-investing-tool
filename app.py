@@ -9,7 +9,7 @@ from utils.session import get_narrative, get_ticker
 from utils.theme import COLORS
 
 st.set_page_config(
-    page_title="Highly Regarded Terminals",
+    page_title="Regarded Terminals",
     page_icon="📡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -36,6 +36,15 @@ if not st.session_state.get("_signals_cache_loaded"):
     except Exception:
         pass
     st.session_state["_signals_cache_loaded"] = True
+
+# Warm FRED cache once per session so Fed Forecaster + Risk Regime load fast
+if not st.session_state.get("_fred_cache_warmed"):
+    try:
+        from services.market_data import warm_fred_cache
+        warm_fred_cache()
+    except Exception:
+        pass
+    st.session_state["_fred_cache_warmed"] = True
 
 # --- Sidebar ---
 with st.sidebar:

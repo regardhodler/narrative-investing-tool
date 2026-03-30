@@ -13,23 +13,26 @@ def render_header() -> None:
         background:{COLORS["header_bg"]};
         border-left:4px solid {COLORS["bloomberg_orange"]};
         border-bottom:1px solid {COLORS["bloomberg_orange"]}33;
-        padding:10px 20px;
-        margin:-1rem -2rem 1rem -2rem;
+        padding:10px 20px 10px 20px;
+        margin:2.5rem 0 1rem 0;
         display:flex;
         align-items:center;
-        justify-content:space-between;
+        justify-content:flex-start;
+        gap:16px;
     ">
         <span style="
             font-family:'JetBrains Mono',Consolas,monospace;
-            font-size:16px;
-            font-weight:700;
-            color:{COLORS["bloomberg_orange"]};
-            letter-spacing:0.1em;
-        ">HIGHLY REGARDED TERMINALS</span>
+            font-size:11px;
+            color:#2d2d2d;
+            letter-spacing:0.08em;
+        ">Jude · Wincyl · Elijah · Eloise · Pakaps</span>
         <span style="
             font-family:'JetBrains Mono',Consolas,monospace;
-            font-size:12px;
+            font-size:11px;
             color:{COLORS["text_dim"]};
+            margin-left:auto;
+            padding-right:160px;
+            white-space:nowrap;
         ">{_now}</span>
     </div>""", unsafe_allow_html=True)
 
@@ -38,8 +41,12 @@ def render_sidebar_header(narrative: str, ticker: str) -> None:
     """App title + active narrative/ticker status lines."""
     st.markdown(
         f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
-        f'font-size:15px;font-weight:700;color:{COLORS["bloomberg_orange"]};'
-        f'letter-spacing:0.08em;margin-bottom:8px;">HIGHLY REGARDED TERMINALS</div>',
+        f'font-size:22px;font-weight:700;color:{COLORS["bloomberg_orange"]};'
+        f'letter-spacing:0.08em;margin-bottom:2px;">REGARD TERMINALS</div>'
+        f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+        f'color:#475569;font-style:italic;line-height:1.5;margin-bottom:8px;">'
+        f'providing excellent analytics,<br>one losing trade at a time<br>'
+        f'<span style="color:#374151;">— by Regardhodler</span></div>',
         unsafe_allow_html=True,
     )
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:4px 0 12px 0;"></div>', unsafe_allow_html=True)
@@ -166,3 +173,63 @@ def render_watchlist_widget() -> None:
             remove_from_watchlist(selected_wl.split(" — ")[0])
             st.rerun()
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:8px 0;"></div>', unsafe_allow_html=True)
+
+
+def render_signal_coverage() -> None:
+    """Prompt Context panel — shows which Quick Intel signals are loaded + freshness badges.
+    Reusable across Quick Intel Run, Valuation, Discovery, and Portfolio Intelligence."""
+    from datetime import datetime as _dt2
+    _coverage_signals = [
+        ("Regime",          "_regime_context",          "_regime_context_ts"),
+        ("Tactical Regime", "_tactical_context",        "_tactical_context_ts"),
+        ("Fed Rate Path",   "_dominant_rate_path",      "_rate_path_probs_ts"),
+        ("Fed Funds Rate",  "_fed_funds_rate",           None),
+        ("Rate-Path Plays", "_fed_plays_result",         "_fed_plays_result_ts"),
+        ("Regime Plays",    "_rp_plays_result",          None),
+        ("Doom Briefing",   "_doom_briefing",            "_doom_briefing_ts"),
+        ("Policy Trans.",   "_chain_narration",          "_chain_narration_ts"),
+        ("Black Swans",     "_custom_swans",             "_custom_swans_ts"),
+        ("Whale Activity",  "_whale_summary",            "_whale_summary_ts"),
+        ("Current Events",  "_current_events_digest",   "_current_events_digest_ts"),
+        ("Risk Snapshot",   "_portfolio_risk_snapshot", "_portfolio_risk_snapshot_ts"),
+        ("Social Sentiment","_stocktwits_digest",        "_stocktwits_digest_ts"),
+    ]
+    _now2 = _dt2.now()
+    _n_loaded = sum(1 for _, k, _ in _coverage_signals if st.session_state.get(k))
+    _bar_pct = int(_n_loaded / len(_coverage_signals) * 100)
+    _bar_color = "#22c55e" if _n_loaded == len(_coverage_signals) else ("#f59e0b" if _n_loaded >= 7 else "#ef4444")
+
+    _left = _coverage_signals[:6]
+    _right = _coverage_signals[6:]
+    _rows_html = ""
+    _pad = (None, None, None)
+    for (lbl_l, k_l, ts_l), (lbl_r, k_r, ts_r) in zip(_left, _right + [_pad] * (len(_left) - len(_right))):
+        def _sig_cell(lbl, k, ts_k):
+            if lbl is None:
+                return '<td></td>'
+            ok = bool(st.session_state.get(k))
+            icon = f'<span style="color:#22c55e;">✓</span>' if ok else '<span style="color:#ef4444;">✗</span>'
+            age = ""
+            if ok and ts_k:
+                _ts = st.session_state.get(ts_k)
+                if _ts:
+                    _m = int((_now2 - _ts).total_seconds() / 60)
+                    age = f' <span style="color:#555;font-size:10px;">· {"just now" if _m < 1 else (f"{_m}m ago" if _m < 60 else f"{_m//60}h ago")}</span>'
+            color = "#e2e8f0" if ok else "#475569"
+            return f'<td style="padding:2px 12px 2px 0;white-space:nowrap;">{icon} <span style="color:{color};">{lbl}</span>{age}</td>'
+        _rows_html += f"<tr>{_sig_cell(lbl_l, k_l, ts_l)}{_sig_cell(lbl_r, k_r, ts_r)}</tr>"
+
+    st.markdown(
+        f'<div style="border:1px solid #334155;border-radius:6px;padding:10px 14px;margin-bottom:12px;">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;">Prompt Context</span>'
+        f'<span style="font-size:10px;color:{_bar_color};font-weight:600;">{_n_loaded}/{len(_coverage_signals)} signals loaded</span>'
+        f'</div>'
+        f'<div style="height:2px;background:#1e293b;border-radius:1px;margin-bottom:8px;">'
+        f'<div style="height:2px;width:{_bar_pct}%;background:{_bar_color};border-radius:1px;"></div>'
+        f'</div>'
+        f'<table style="width:100%;font-size:11px;font-family:monospace;border-collapse:collapse;">'
+        f'{_rows_html}</table>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )

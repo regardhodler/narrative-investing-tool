@@ -11,14 +11,23 @@ _DEFAULTS = {
         "insider_cluster": True,
         "options_pc_ratio": False,
         "stress_threshold": False,
+        "tactical_threshold": False,
+        "data_quality_alert": False,
     },
     "thresholds": {
         "pc_ratio": 1.5,
         "stress_score": 70,
+        "tactical_risk_off": 38,
+        "tactical_entry": 65,
     },
     "last_check": None,
     "last_regime": None,
     "alert_history": [],
+    "price_targets": [],  # list of {ticker, target, direction ("above"/"below"), active}
+    "current_tactical_score": None,
+    "last_tactical_score": None,
+    "current_data_quality_score": None,
+    "data_quality_alerted": False,
 }
 
 

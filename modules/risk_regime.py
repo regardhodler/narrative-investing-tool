@@ -1,7 +1,7 @@
 ﻿"""
 Module 0: Macro Dashboard
 
-Daily macro regime indicator using 21 cross-asset signals:
+Daily macro regime indicator using 26 cross-asset signals:
 - FRED macro series (yield curve, credit spreads, ISM, FCI, jobless claims, LEI, etc.)
 - ETF proxies (equities, commodities, FX, volatility, credit ratios)
 - SPY options chain (dealer gamma positioning)
@@ -15,7 +15,7 @@ Output:
 - SPY gamma sentiment (zone, flip, call wall, put wall)
 
 Architecture:
-- 21-indicator scoring engine (_build_macro_dashboard)
+- 27-indicator scoring engine (_build_macro_dashboard)
 - Daily regime history persistence (JSON snapshots)
 - Shared data layer via services/market_data.py
 """
@@ -147,8 +147,12 @@ CORE_TICKERS = {
     "CPER": "Copper",
     "UUP": "USD Bull ETF",
     "^VIX": "VIX",
+    "^VIX3M": "VIX 3-Month",  # Used for VIX term structure (contango/backwardation)
     "HYG": "High Yield Corp",
     "LQD": "Inv Grade Corp",
+    "RSP": "S&P 500 Equal Weight",  # Used for market breadth signal (RSP/SPY ratio)
+    "EWG": "Germany ETF (Eurozone mfg proxy)",  # Global manufacturing signal
+    "FXI": "China Large-Cap ETF",               # Global manufacturing signal
     # Display-only (ticker bar)
     "IWM": "Russell 2000",
     "GLD": "Gold",
@@ -608,7 +612,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     _FRED_IDS = [
         "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "PNFI", "THREEFYTP10", "INDPRO", "NFCI", "DGS10",
-        "ICSA", "USSLIND", "UMCSENT", "PERMIT", "FEDFUNDS",
+        "ICSA", "USSLIND", "UMCSENT", "PERMIT", "FEDFUNDS", "DFII10", "MANEMP", "TOTBKCR", "DGS2",
     ]
     fred_key_map = {
         "yield_curve": "T10Y2Y", "credit_spread": "BAMLH0A0HYM2",
@@ -617,6 +621,8 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "lei": "USSLIND", "term_premium": "THREEFYTP10", "ism": "INDPRO",
         "fci": "NFCI", "dgs10": "DGS10", "umcsent": "UMCSENT",
         "permit": "PERMIT", "fedfunds": "FEDFUNDS",
+        "real_yield": "DFII10", "napm": "MANEMP",
+        "totbkcr": "TOTBKCR", "dgs2": "DGS2",
     }
 
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -628,10 +634,38 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         gamma = gamma_fut.result()
 
     fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_key_map.items()}
+    from services.market_data import compute_data_quality_score
+    _dq = compute_data_quality_score(core_snaps, fred_data)
     macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
     macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], core_snaps)
     macro["tactical_opps"] = _tactical_opportunities(macro, core_snaps)
     macro["snaps"] = core_snaps
+
+    # Tactical regime — computed here, returned to caller so main thread writes session_state
+    # (st.session_state writes from background threads are silently lost — must write from main thread)
+    _tac_result = None
+    _tac_text_result = None
+    try:
+        _tac_fn = _build_tactical_dashboard.__wrapped__ if hasattr(_build_tactical_dashboard, "__wrapped__") else _build_tactical_dashboard
+        _tac = _tac_fn(core_snaps)
+        _tac_result = {
+            "tactical_score": _tac["tactical_score"],
+            "label":          _tac["label"],
+            "action_bias":    _tac["action_bias"],
+            "signals":        _tac["signals"],
+        }
+        # Auto-run tactical AI narrative
+        try:
+            from services.claude_client import generate_tactical_analysis
+            _macro_label = f"{macro.get('macro_regime', '')} / {macro.get('quadrant', '')}"
+            _tac_text_result = generate_tactical_analysis(
+                _tac["signals"], _tac["tactical_score"], _tac["label"],
+                macro_label=_macro_label, use_claude=use_claude, model=model,
+            )
+        except Exception:
+            pass
+    except Exception:
+        pass
 
     top_sigs = macro.get("top_signals", [])[:8]
     sig_lines = [f"- {s['name']}: z={s['score']:+.2f} ({s.get('label', '')})" for s in top_sigs]
@@ -640,15 +674,15 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
 
     _prev_regime = (st.session_state.get("_regime_context") or {}).get("regime", "")
     _new_regime = macro["macro_regime"]
-    st.session_state["_regime_context"] = {
+
+    _regime_ctx = {
         "regime": _new_regime,
         "score": norm_score,
         "signal_summary": signal_summary,
         "quadrant": macro["quadrant"],
     }
-    st.session_state["_regime_context_ts"] = _dt.datetime.now()
 
-    # Telegram alert on regime flip
+    # Telegram alert on regime flip (side-effect only, no session state)
     if _prev_regime and _prev_regime != _new_regime:
         try:
             from services.telegram_client import send_alert as _tg_alert
@@ -666,9 +700,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         use_claude=use_claude, model=model,
     )
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
-    st.session_state["_rp_plays_result"] = _plays
-    st.session_state["_rp_plays_last_tier"] = _tier
-    return macro, fred_data
+    return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq
 
 
 # ─────────────────────────────────────────────
@@ -782,6 +814,10 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "dgs10": "DGS10",  # 10-Year Treasury yield (for yield curve regime classification)
         "umcsent": "UMCSENT",  # Consumer Sentiment (University of Michigan)
         "permit": "PERMIT",  # Building Permits (housing leading indicator)
+        "real_yield": "DFII10",  # 10-Year Real Treasury Rate (TIPS) — key risk-on/off divider
+        "napm": "MANEMP",  # Manufacturing Employment (monthly, YoY = expansion/contraction proxy)
+        "totbkcr": "TOTBKCR",  # Total Bank Credit (weekly) — for credit impulse calculation
+        "dgs2": "DGS2",  # 2-Year Treasury yield (daily) — rate expectations vs Fed Funds
     }
     if fred_data is not None:
         # Use pre-fetched FRED data from warm cache — avoid duplicate requests
@@ -934,19 +970,9 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     icsa_score = _zscore_score(fred["icsa"], invert=True)  # higher claims = risk-off
     indicators.append(("Initial Jobless Claims", icsa, "K", icsa_score, _confidence_from_age(fred["icsa"], expected_days=14)))
 
-    # --- HYG/LQD Ratio (high-yield vs investment-grade credit) ---
-    hyg_snap = snaps.get("HYG")
-    lqd_snap = snaps.get("LQD")
-    hyg_lqd_val = None
-    hyg_lqd_score = 0.0
-    hyg_lqd_series = None
-    if hyg_snap and lqd_snap and hyg_snap.series is not None and lqd_snap.series is not None:
-        aligned = pd.DataFrame({"hyg": hyg_snap.series, "lqd": lqd_snap.series}).dropna()
-        if len(aligned) > 20:
-            hyg_lqd_series = aligned["hyg"] / aligned["lqd"]
-            hyg_lqd_val = float(hyg_lqd_series.iloc[-1])
-            hyg_lqd_score = _zscore_score(hyg_lqd_series)  # higher ratio = risk-on
-    indicators.append(("HYG/LQD Ratio (Credit Risk Appetite)", hyg_lqd_val, "ratio", hyg_lqd_score, _confidence_from_snap("HYG", "LQD", snaps=snaps)))
+    # HYG/LQD Ratio removed — redundant with Credit Spreads (BAMLH0A0HYM2) which measures
+    # the same high-yield credit risk appetite more directly. Keeping HYG/LQD in CORE_TICKERS
+    # for the ticker display bar.
 
     # --- Copper/Gold Ratio (CPER/GLD) ---
     cper_snap = snaps.get("CPER")
@@ -976,6 +1002,83 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     permit_score = _zscore_score(fred["permit"])  # higher permits = risk-on
     indicators.append(("Building Permits", permit, "K", permit_score, _confidence_from_age(fred["permit"], expected_days=30)))
 
+    # --- Real Yields (10-Year TIPS, DFII10) ---
+    real_yield = _safe_latest(fred.get("real_yield"))
+    real_yield_score = _zscore_score(fred.get("real_yield"), invert=True)  # higher real yields = tighter conditions = risk-off
+    indicators.append(("Real Yields (10Y TIPS)", real_yield, "%", real_yield_score, _confidence_from_age(fred.get("real_yield"), expected_days=7)))
+
+    # --- Manufacturing Employment YoY (MANEMP — proxy for sector expansion/contraction) ---
+    napm_yoy = _yoy_latest(fred.get("napm"), periods=12)
+    napm_yoy_full = _yoy_series(fred.get("napm"), periods=12)
+    napm_score = _zscore_score(napm_yoy_full) if napm_yoy_full is not None else _clamp_score((napm_yoy or 0.0), 3.0)
+    indicators.append(("Manufacturing Employment", napm_yoy, "% YoY", napm_score, _confidence_from_age(fred.get("napm"), expected_days=45)))
+
+    # --- Market Breadth (RSP/SPY equal-weight vs cap-weight ratio) ---
+    rsp_snap = snaps.get("RSP")
+    spy_snap_brd = snaps.get("SPY")
+    breadth_val = None
+    breadth_score = 0.0
+    if rsp_snap and spy_snap_brd and rsp_snap.series is not None and spy_snap_brd.series is not None:
+        _brd_df = pd.DataFrame({"rsp": rsp_snap.series, "spy": spy_snap_brd.series}).dropna()
+        if len(_brd_df) > 20:
+            _brd_ratio = _brd_df["rsp"] / _brd_df["spy"]
+            breadth_val = float(_brd_ratio.iloc[-1])
+            breadth_score = _zscore_score(_brd_ratio)  # RSP outperforming SPY = broad participation = risk-on
+    indicators.append(("Market Breadth (RSP/SPY)", breadth_val, "ratio", breadth_score, _confidence_from_snap("RSP", "SPY", snaps=snaps)))
+
+    # --- Credit Impulse (acceleration of total bank credit growth, TOTBKCR) ---
+    # Credit impulse = change in the YoY credit growth rate (quarterly)
+    # Positive impulse = credit accelerating = leads GDP growth by ~9 months = risk-on
+    _cr_series = fred.get("totbkcr")
+    cr_impulse_val = None
+    cr_impulse_score = 0.0
+    if _cr_series is not None and len(_cr_series.dropna()) >= 65:
+        _cr = _cr_series.dropna()
+        # Weekly data: 52-week YoY growth
+        _cr_yoy = (_cr / _cr.shift(52) - 1) * 100
+        _cr_yoy = _cr_yoy.dropna()
+        if len(_cr_yoy) >= 14:
+            # Impulse = quarterly change in YoY rate (13-week delta)
+            _cr_impulse_series = _cr_yoy - _cr_yoy.shift(13)
+            _cr_impulse_series = _cr_impulse_series.dropna()
+            if len(_cr_impulse_series) >= 10:
+                cr_impulse_val = round(float(_cr_impulse_series.iloc[-1]), 2)
+                cr_impulse_score = _zscore_score(_cr_impulse_series)  # positive = accelerating = risk-on
+    indicators.append(("Credit Impulse (Bank Credit Accel)", cr_impulse_val, "pp chg", cr_impulse_score, _confidence_from_age(_cr_series, expected_days=14)))
+
+    # --- Rate Expectations Gap (2Y Treasury vs Fed Funds) ---
+    # When 2Y < FEDFUNDS: market pricing cuts ahead = accommodative
+    # When 2Y > FEDFUNDS: market pricing hikes = tightening
+    # Score inverted: negative spread (cuts priced) = easier conditions = risk-on lean
+    _dgs2_series = fred.get("dgs2")
+    _ff_series = fred.get("fedfunds")
+    rate_exp_val = None
+    rate_exp_score = 0.0
+    if _dgs2_series is not None and _ff_series is not None:
+        _aligned = pd.DataFrame({"dgs2": _dgs2_series, "ff": _ff_series}).dropna()
+        if len(_aligned) >= 20:
+            _spread_series = _aligned["dgs2"] - _aligned["ff"]
+            rate_exp_val = round(float(_spread_series.iloc[-1]), 2)
+            rate_exp_score = _zscore_score(_spread_series, invert=True)  # lower spread = easier money = risk-on
+    indicators.append(("Rate Expectations (2Y vs Fed Funds)", rate_exp_val, "pp spread", rate_exp_score, _confidence_from_age(_dgs2_series, expected_days=7)))
+
+    # --- Global Manufacturing Proxy (EWG + FXI ETF blend) ---
+    # EWG = Germany equities (Eurozone manufacturing bellwether)
+    # FXI = China large-caps (China factory cycle)
+    # Blended 1-month return as global growth breadth indicator
+    _ewg_snap = snaps.get("EWG")
+    _fxi_snap = snaps.get("FXI")
+    global_mfg_val = None
+    global_mfg_score = 0.0
+    _gmfg_components = []
+    for _gs in (_ewg_snap, _fxi_snap):
+        if _gs and _gs.pct_change_30d is not None:
+            _gmfg_components.append(_gs.pct_change_30d)
+    if _gmfg_components:
+        global_mfg_val = round(float(np.mean(_gmfg_components)), 2)
+        global_mfg_score = _clamp_score(global_mfg_val, 8.0)
+    indicators.append(("Global Manufacturing (EWG+FXI)", global_mfg_val, "% 1m blend", global_mfg_score, _confidence_from_snap("EWG", "FXI", snaps=snaps)))
+
     SIGNAL_CATEGORIES = {
         "Yield Curve (10Y-2Y)": "Rates",
         "Credit Spreads (HY vs Treasuries)": "Credit",
@@ -989,7 +1092,6 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "S&P 500 P/E (CAPE proxy)": "Valuation",
         "Corporate CAPEX vs Liquidity": "Growth",
         "Initial Jobless Claims": "Labor",
-        "HYG/LQD Ratio (Credit Risk Appetite)": "Credit",
         "Copper/Gold Ratio (Growth vs Safety)": "Commodities",
         "Leading Economic Index": "Growth",
         "Gamma Exposure (Dealer Positioning)": "Positioning",
@@ -998,6 +1100,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Financial Conditions Index": "Credit",
         "Consumer Sentiment (Michigan)": "Sentiment",
         "Building Permits": "Housing",
+        "Real Yields (10Y TIPS)": "Rates",
+        "Manufacturing Employment": "Growth",
+        "Market Breadth (RSP/SPY)": "Equities",
+        "Credit Impulse (Bank Credit Accel)": "Credit",
+        "Rate Expectations (2Y vs Fed Funds)": "Rates",
+        "Global Manufacturing (EWG+FXI)": "Growth",
     }
 
     SIGNAL_WEIGHTS = {
@@ -1011,7 +1119,6 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Unemployment Trend (Sahm context)": 1.5,
         "Global Liquidity (M2 proxy)": 1.5,
         "Initial Jobless Claims": 1.5,
-        "HYG/LQD Ratio (Credit Risk Appetite)": 1.5,
         # Tier 3 — Standard
         "Commodity Trend (Oil + Copper)": 1.0,
         "US Dollar Index (DXY proxy)": 1.0,
@@ -1021,12 +1128,19 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Gamma Exposure (Dealer Positioning)": 1.0,
         "Copper/Gold Ratio (Growth vs Safety)": 1.0,
         "Consumer Sentiment (Michigan)": 1.0,
-        "Building Permits": 1.0,
+        "Building Permits": 0.5,  # Down-weighted — already inside LEI composite
         # Tier 1 — Leading
         "Leading Economic Index": 2.0,
         # Tier 4 — Slow-moving / noisy
         "S&P 500 P/E (CAPE proxy)": 0.5,
         "Corporate CAPEX vs Liquidity": 0.5,
+        # New signals
+        "Real Yields (10Y TIPS)": 2.0,              # Tier 1 — most important rates signal
+        "Manufacturing Employment": 1.5,             # Tier 2 — manufacturing sector proxy
+        "Market Breadth (RSP/SPY)": 1.5,            # Tier 2 — breadth confirms or diverges
+        "Credit Impulse (Bank Credit Accel)": 2.0,  # Tier 1 — leads GDP by ~9 months, highest-lead macro signal
+        "Rate Expectations (2Y vs Fed Funds)": 1.5, # Tier 2 — market vs Fed pricing gap
+        "Global Manufacturing (EWG+FXI)": 1.0,     # Tier 3 — global growth breadth
     }
 
     signal_rows = []
@@ -1094,6 +1208,49 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
 
     valuation_text = _interpret_valuation(cape)
 
+    # ── Rate-adjusted P/E ──────────────────────────────────────────────
+    _dgs10_latest = _safe_latest(fred["dgs10"])
+    fair_pe = round(100.0 / _dgs10_latest, 1) if (_dgs10_latest and _dgs10_latest > 0) else None
+    pe_premium_pct = round((cape / fair_pe - 1) * 100) if (cape and fair_pe) else None
+
+    # ── Regime velocity ────────────────────────────────────────────────
+    _history_for_vel = _load_history()
+    _prev_score = None
+    # Find the most recent saved snapshot that isn't today
+    _today_str = datetime.now().strftime("%Y-%m-%d")
+    for _h in reversed(_history_for_vel):
+        if _h.get("date") != _today_str:
+            _prev_score = _h.get("macro_score")
+            _prev_score_date = _h.get("date", "?")
+            break
+    else:
+        _prev_score_date = "?"
+    velocity = int(macro_score - _prev_score) if _prev_score is not None else None
+    if velocity is None:
+        velocity_label = "→ No prior data"
+    elif velocity > 3:
+        velocity_label = f"↑ Strengthening ({velocity:+d} pts vs {_prev_score_date})"
+    elif velocity < -3:
+        velocity_label = f"↓ Weakening ({velocity:+d} pts vs {_prev_score_date})"
+    else:
+        velocity_label = f"→ Stable ({velocity:+d} pts vs {_prev_score_date})"
+
+    # ── Contradiction detection ────────────────────────────────────────
+    _strong_bulls = sorted(
+        [r for r in signal_rows if r.get("Score", 0) > 0.4],
+        key=lambda x: x["Score"], reverse=True
+    )[:3]
+    _strong_bears = sorted(
+        [r for r in signal_rows if r.get("Score", 0) < -0.4],
+        key=lambda x: x["Score"]
+    )[:3]
+    contradictions = None
+    if _strong_bulls and _strong_bears:
+        contradictions = {
+            "bull": [r["Indicator"] for r in _strong_bulls],
+            "bear": [r["Indicator"] for r in _strong_bears],
+        }
+
     ranked = sorted(signal_rows, key=lambda x: abs(x["Score"]), reverse=True)
     summary = [
         f"Macro score is {macro_score}/100 ({macro_regime}).",
@@ -1131,6 +1288,12 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "inflation_signal": round(float(inflation_direction_value), 3),
         "valuation": valuation_text,
         "cape": cape,
+        "dgs10": _dgs10_latest,
+        "fair_pe": fair_pe,
+        "pe_premium_pct": pe_premium_pct,
+        "velocity": velocity,
+        "velocity_label": velocity_label,
+        "contradictions": contradictions,
         "cycle_stage": cycle_stage,
         "capex_vs_liquidity": capex_vs_liquidity,
         "capex_level": capex_level,
@@ -1145,7 +1308,8 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     result["risk_alerts"] = _risk_management_alerts(result, snaps)
     result["key_levels"] = _key_levels(result, snaps)
     result["yield_curve_regime"] = _classify_yield_curve(fred["yield_curve"], fred["dgs10"])
-    result["snaps"] = snaps
+    # NOTE: snaps NOT included here — AssetSnapshot contains pd.Series which breaks st.cache_data pickle.
+    # Callers add snaps to the result dict after this call if needed.
 
     # Persist daily snapshot
     try:
@@ -1490,6 +1654,198 @@ from services.sector_rotation import (
 )
 
 
+@st.cache_data(ttl=3600)
+def _fetch_spy_returns_hist(start: str, end: str) -> pd.DataFrame:
+    """Fetch SPY daily closes for a date range (used by regime signal history)."""
+    try:
+        raw = yf.download("SPY", start=start, end=end, interval="1d",
+                          progress=False, auto_adjust=True)
+        if raw.empty:
+            return pd.DataFrame()
+        close = raw["Close"]["SPY"] if isinstance(raw.columns, pd.MultiIndex) else raw["Close"]
+        return close.pct_change().dropna().rename("spy_return")
+    except Exception:
+        return pd.DataFrame()
+
+
+def _load_regime_history_df() -> pd.DataFrame:
+    """Load regime_history.json and return as a tidy DataFrame."""
+    try:
+        with open(_HISTORY_FILE) as f:
+            records = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return pd.DataFrame()
+    rows = []
+    for r in records:
+        row = {
+            "date": pd.to_datetime(r["date"]),
+            "score": r.get("score", 0.0),
+            "macro_score": r.get("macro_score", 50),
+            "regime": r.get("regime", "Neutral"),
+            "quadrant": r.get("quadrant", ""),
+        }
+        for sig, val in (r.get("signals_summary") or {}).items():
+            row[sig] = val
+        rows.append(row)
+    return pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+
+
+def _render_regime_signal_history():
+    """Regime Signal History — score timeline, SPY overlay, signal heatmap, quadrant transitions."""
+    df = _load_regime_history_df()
+
+    if df.empty:
+        st.info("No regime history yet. Run the Macro Dashboard to start building history.")
+        return
+
+    n_days = len(df)
+    date_range = f"{df['date'].min().strftime('%b %d')} → {df['date'].max().strftime('%b %d, %Y')}"
+
+    st.markdown(
+        f'<div style="font-size:11px;color:#64748b;margin-bottom:12px;">'
+        f'{n_days} sessions recorded · {date_range}'
+        + (" · History building — more sessions = higher accuracy" if n_days < 30 else "")
+        + f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Regime score timeline ────────────────────────────────────────────────
+    fig_score = go.Figure()
+    fig_score.add_hrect(y0=0.2, y1=1.0, fillcolor="rgba(34,197,94,0.07)", line_width=0,
+                        annotation_text="Risk-On", annotation_position="right")
+    fig_score.add_hrect(y0=-1.0, y1=-0.2, fillcolor="rgba(239,68,68,0.07)", line_width=0,
+                        annotation_text="Risk-Off", annotation_position="right")
+    fig_score.add_hline(y=0, line_dash="dot", line_color="#334155", line_width=1)
+
+    colors_score = [
+        "#22c55e" if s >= 0.2 else ("#ef4444" if s <= -0.2 else "#f59e0b")
+        for s in df["score"]
+    ]
+    fig_score.add_trace(go.Scatter(
+        x=df["date"], y=df["score"],
+        mode="lines+markers",
+        line=dict(color="#60a5fa", width=2),
+        marker=dict(size=6, color=colors_score, line=dict(color="#1e293b", width=1)),
+        name="Regime Score",
+        hovertemplate="<b>%{x|%b %d}</b><br>Score: %{y:.3f}<extra></extra>",
+    ))
+    apply_dark_layout(fig_score, title="Regime Score History", height=280)
+    fig_score.update_layout(
+        yaxis=dict(title="Score (−1 to +1)", range=[-1.1, 1.1], tickformat=".2f"),
+        margin=dict(t=40, b=30, l=60, r=80),
+    )
+    st.plotly_chart(fig_score, use_container_width=True)
+
+    # ── Regime vs SPY overlay ────────────────────────────────────────────────
+    _start = (df["date"].min() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    _end   = (df["date"].max() + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    spy_ret = _fetch_spy_returns_hist(_start, _end)
+
+    if not spy_ret.empty:
+        df_spy = df.set_index("date")[["score", "regime"]].copy()
+        spy_aligned = spy_ret.copy()
+        spy_aligned.index = pd.to_datetime(spy_aligned.index).normalize()
+        merged = df_spy.join(spy_aligned, how="inner")
+        if not merged.empty:
+            fig_spy = go.Figure()
+            fig_spy.add_trace(go.Bar(
+                x=merged.index,
+                y=merged["spy_return"] * 100,
+                marker_color=["#22c55e" if v >= 0 else "#ef4444" for v in merged["spy_return"]],
+                name="SPY Daily %",
+                yaxis="y2",
+                opacity=0.5,
+                hovertemplate="<b>%{x|%b %d}</b><br>SPY: %{y:+.2f}%<extra></extra>",
+            ))
+            fig_spy.add_trace(go.Scatter(
+                x=merged.index,
+                y=merged["score"],
+                mode="lines+markers",
+                line=dict(color="#60a5fa", width=2),
+                marker=dict(size=5),
+                name="Regime Score",
+                hovertemplate="<b>%{x|%b %d}</b><br>Score: %{y:.3f}<extra></extra>",
+            ))
+            apply_dark_layout(fig_spy, title="Regime Score vs SPY Daily Returns", height=280)
+            fig_spy.update_layout(
+                yaxis=dict(title="Regime Score", range=[-1.1, 1.1], tickformat=".2f"),
+                yaxis2=dict(title="SPY Return (%)", overlaying="y", side="right",
+                            tickformat=".1f", showgrid=False),
+                margin=dict(t=40, b=30, l=60, r=80),
+                legend=dict(orientation="h", y=1.08, x=0),
+            )
+            st.plotly_chart(fig_spy, use_container_width=True)
+
+            if len(merged) >= 3:
+                correct = ((merged["score"] > 0) & (merged["spy_return"] > 0)) | \
+                          ((merged["score"] < 0) & (merged["spy_return"] < 0))
+                accuracy = correct.mean() * 100
+                acc_color = "#22c55e" if accuracy >= 55 else ("#f59e0b" if accuracy >= 45 else "#ef4444")
+                st.markdown(
+                    f'<div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">'
+                    f'Regime → SPY direction accuracy: '
+                    f'<b style="color:{acc_color};">{accuracy:.0f}%</b>'
+                    f' ({correct.sum()}/{len(merged)} sessions) '
+                    f'<span style="color:#475569;font-size:11px;">— needs 30+ sessions for statistical significance</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # ── Signal heatmap ───────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.08em;margin:16px 0 6px 0;">SIGNAL SCORE HEATMAP</div>',
+        unsafe_allow_html=True,
+    )
+    signal_cols = [c for c in df.columns if c not in ("date", "score", "macro_score", "regime", "quadrant")]
+    if signal_cols:
+        heat_df = df[["date"] + signal_cols].set_index("date")[signal_cols].T.fillna(0)
+        date_labels = [d.strftime("%b %d") for d in heat_df.columns]
+        fig_heat = go.Figure(go.Heatmap(
+            z=heat_df.values.tolist(),
+            x=date_labels,
+            y=heat_df.index.tolist(),
+            colorscale=[[0.0, "#b91c1c"], [0.5, "#1e293b"], [1.0, "#15803d"]],
+            zmid=0, zmin=-1, zmax=1,
+            showscale=True,
+            colorbar=dict(
+                title=dict(text="Score", font=dict(color="#aaa", size=10)),
+                thickness=12, len=0.8,
+                tickfont=dict(color="#aaa", size=10),
+                tickvals=[-1, -0.5, 0, 0.5, 1],
+            ),
+            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.3f}<extra></extra>",
+        ))
+        apply_dark_layout(fig_heat, title="", height=max(360, 22 * len(signal_cols)))
+        fig_heat.update_layout(
+            margin=dict(t=10, b=40, l=220, r=60),
+            xaxis=dict(tickfont=dict(color="#94a3b8", size=10)),
+            yaxis=dict(tickfont=dict(color="#94a3b8", size=10), autorange="reversed"),
+        )
+        st.plotly_chart(fig_heat, use_container_width=True)
+
+    # ── Quadrant transition log ───────────────────────────────────────────────
+    if "quadrant" in df.columns and len(df) >= 2:
+        transitions = []
+        for i in range(1, len(df)):
+            prev_q = df.iloc[i - 1]["quadrant"]
+            curr_q = df.iloc[i]["quadrant"]
+            if prev_q != curr_q:
+                transitions.append({
+                    "Date": df.iloc[i]["date"].strftime("%b %d, %Y"),
+                    "From": prev_q,
+                    "To": curr_q,
+                    "Score": f"{df.iloc[i]['score']:+.3f}",
+                })
+        if transitions:
+            st.markdown(
+                f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin:16px 0 6px 0;">QUADRANT TRANSITIONS</div>',
+                unsafe_allow_html=True,
+            )
+            st.dataframe(pd.DataFrame(transitions), use_container_width=True, hide_index=True)
+
+
 def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
     """Live sector rotation panel: 4W + 12W momentum ranks + regime alignment."""
     st.markdown(
@@ -1674,6 +2030,249 @@ def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
 """)
 
 
+# ─────────────────────────────────────────────
+# TACTICAL REGIME — days-to-weeks scoring engine
+# ─────────────────────────────────────────────
+
+@st.cache_data(ttl=14400, show_spinner=False)
+def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
+    """5-signal tactical regime score operating on a days-to-weeks timeframe.
+
+    Signals: VIX level+trend, VIX term structure, SPY vs MAs,
+             short-term momentum, market breadth trend (RSP/SPY).
+    Returns: tactical_score (0-100), label, action_bias, signals list.
+    """
+    # ── Signal 1: VIX Level + 5d Trend ───────────────────────────────────────
+    vix_snap   = snaps.get("^VIX")
+    vix_series = vix_snap.series.dropna() if (vix_snap and vix_snap.series is not None) else None
+    vix_level  = float(vix_series.iloc[-1]) if vix_series is not None and len(vix_series) else None
+
+    if vix_series is not None and len(vix_series) >= 20:
+        vix_level_score = _zscore_score(vix_series, invert=True)
+    elif vix_level is not None:
+        vix_level_score = _clamp_score(20.0 - vix_level, 10.0)
+    else:
+        vix_level_score = 0.0
+
+    vix_5d_chg = None
+    vix_trend_score = 0.0
+    if vix_series is not None and len(vix_series) >= 6:
+        vix_5d_chg = round(float(vix_series.iloc[-1] - vix_series.iloc[-6]), 2)
+        vix_trend_score = _clamp(-vix_5d_chg / 3.0)  # 3pt VIX rise → full risk-off
+
+    sig1_score = _clamp(vix_level_score * 0.6 + vix_trend_score * 0.4)
+    vix_display = (f"{vix_level:.1f} ({vix_5d_chg:+.1f} 5d)" if vix_level and vix_5d_chg is not None
+                   else (f"{vix_level:.1f}" if vix_level else "N/A"))
+
+    # ── Signal 2: VIX Term Structure (VIX/VIX3M) ─────────────────────────────
+    vix3m_snap  = snaps.get("^VIX3M")
+    vix3m_level = float(vix3m_snap.series.dropna().iloc[-1]) if (
+        vix3m_snap and vix3m_snap.series is not None and len(vix3m_snap.series.dropna())
+    ) else None
+
+    ts_ratio    = None
+    sig2_score  = 0.0
+    if vix_level and vix3m_level and vix3m_level > 0:
+        ts_ratio = round(vix_level / vix3m_level, 3)
+        # <0.85 = deep contango (calm) → +1; >1.15 = backwardation (fear) → -1
+        sig2_score = _clamp((1.0 - ts_ratio) / 0.15)
+    ts_display = f"{ts_ratio:.3f}" if ts_ratio else "N/A"
+
+    # ── Signal 3: SPY vs 20d/50d MA + slope ──────────────────────────────────
+    spy_snap   = snaps.get("SPY")
+    spy_series = spy_snap.series.dropna() if (spy_snap and spy_snap.series is not None) else None
+    sig3_score = 0.0
+    spy_ma_display = "N/A"
+
+    if spy_series is not None and len(spy_series) >= 50:
+        spy_price   = float(spy_series.iloc[-1])
+        ma20        = float(spy_series.tail(20).mean())
+        ma50        = float(spy_series.tail(50).mean())
+        pct20       = (spy_price / ma20 - 1.0) * 100
+        pct50       = (spy_price / ma50 - 1.0) * 100
+        ma20_5d_ago = float(spy_series.iloc[-6:-1].mean()) if len(spy_series) >= 6 else ma20
+        slope_pct   = (ma20 - ma20_5d_ago) / ma20_5d_ago * 100 if ma20_5d_ago else 0.0
+        ma_score    = _clamp_score(pct20 * 0.5 + pct50 * 0.5, 4.0)
+        slope_score = _clamp(slope_pct / 0.5)
+        sig3_score  = _clamp(ma_score * 0.7 + slope_score * 0.3)
+        spy_ma_display = f"{pct20:+.1f}%/20d  {pct50:+.1f}%/50d"
+
+    # ── Signal 4: Short-term Momentum (5d vs 20d ROC acceleration) ───────────
+    sig4_score    = 0.0
+    roc_display   = "N/A"
+    if spy_series is not None and len(spy_series) >= 21:
+        roc5  = float((spy_series.iloc[-1] / spy_series.iloc[-6]  - 1) * 100)
+        roc20 = float((spy_series.iloc[-1] / spy_series.iloc[-21] - 1) * 100)
+        # Is short-term pace faster than medium-term pace?
+        accel       = roc5 - (roc20 / 4)        # compare weekly pace to annualized quarterly
+        mom_score   = _clamp_score(roc5, 3.0)   # 3% 5d move = full
+        accel_score = _clamp(accel / 2.0)        # 2pp acceleration = full
+        sig4_score  = _clamp(mom_score * 0.6 + accel_score * 0.4)
+        roc_display = f"5d {roc5:+.1f}%  20d {roc20:+.1f}%"
+
+    # ── Signal 5: Market Breadth Trend (RSP/SPY 5d ratio change) ─────────────
+    rsp_snap        = snaps.get("RSP")
+    sig5_score      = 0.0
+    breadth_display = "N/A"
+    if (rsp_snap and spy_snap
+            and rsp_snap.series is not None and spy_snap.series is not None):
+        brd = pd.DataFrame({"rsp": rsp_snap.series, "spy": spy_snap.series}).dropna()
+        if len(brd) >= 6:
+            ratio        = brd["rsp"] / brd["spy"]
+            ratio_5d_chg = float((ratio.iloc[-1] / ratio.iloc[-6] - 1) * 100)
+            sig5_score   = _clamp(ratio_5d_chg / 1.0)  # 1% ratio move = full score
+            breadth_display = f"{ratio_5d_chg:+.2f}% 5d"
+
+    # ── Weighted aggregate ────────────────────────────────────────────────────
+    _scores  = [sig1_score, sig2_score, sig3_score, sig4_score, sig5_score]
+    _weights = [2.0,        2.0,        1.5,        1.5,        1.0]
+    agg      = float(np.average(_scores, weights=_weights))
+    tactical_score = int(round((agg + 1.0) * 50))
+
+    if tactical_score >= 65:
+        label       = "Favorable Entry"
+        action_bias = "Conditions support initiating or adding to risk positions on pullbacks."
+        _color_key  = "green"
+    elif tactical_score >= 52:
+        label       = "Neutral / Hold"
+        action_bias = "Mixed short-term signals. Hold existing positions; await a clearer setup."
+        _color_key  = "yellow"
+    elif tactical_score >= 38:
+        label       = "Caution / Reduce"
+        action_bias = "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
+        _color_key  = "yellow"
+    else:
+        label       = "Risk-Off Signal"
+        action_bias = "Elevated vol + weak momentum. Defensive posture warranted — hedge or step aside."
+        _color_key  = "red"
+
+    signal_rows = [
+        {"Signal": "VIX Level + 5d Trend",        "Value": vix_display,     "Score": round(sig1_score, 3), "Direction": _score_to_bucket(sig1_score)[1]},
+        {"Signal": "VIX Term Structure (VIX/VIX3M)","Value": ts_display,    "Score": round(sig2_score, 3), "Direction": _score_to_bucket(sig2_score)[1]},
+        {"Signal": "SPY vs 20d/50d MA",            "Value": spy_ma_display,  "Score": round(sig3_score, 3), "Direction": _score_to_bucket(sig3_score)[1]},
+        {"Signal": "SPY Momentum (5d vs 20d ROC)", "Value": roc_display,     "Score": round(sig4_score, 3), "Direction": _score_to_bucket(sig4_score)[1]},
+        {"Signal": "Breadth Trend (RSP/SPY 5d)",   "Value": breadth_display, "Score": round(sig5_score, 3), "Direction": _score_to_bucket(sig5_score)[1]},
+    ]
+
+    return {
+        "tactical_score": tactical_score,
+        "label":          label,
+        "action_bias":    action_bias,
+        "color_key":      _color_key,
+        "signals":        signal_rows,
+        "raw_score":      round(agg, 3),
+    }
+
+
+def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
+    """Render the ⚡ Tactical Regime tab."""
+    _oc  = COLORS["bloomberg_orange"]
+    _col = COLORS.get(tactical["color_key"], COLORS["yellow"])
+    ts   = tactical["tactical_score"]
+
+    # ── Score header ─────────────────────────────────────────────────────────
+    c1, c2, c3 = st.columns([1, 1, 2])
+    with c1:
+        st.markdown(bloomberg_metric("TACTICAL SCORE", f"{ts}/100", _col), unsafe_allow_html=True)
+    with c2:
+        st.markdown(bloomberg_metric("SIGNAL", tactical["label"], _col), unsafe_allow_html=True)
+    with c3:
+        st.markdown(
+            f'<div style="border-left:3px solid {_col};padding:8px 14px;margin-top:6px;'
+            f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12px;color:{COLORS["text"]};">'
+            f'<b style="color:{_oc};">ACTION BIAS</b><br>{tactical["action_bias"]}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Gauge ────────────────────────────────────────────────────────────────
+    fig = _make_gauge(ts, tactical["label"], _col)
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.caption(
+        "Tactical Regime: days-to-weeks entry/exit timing. "
+        "Use alongside the Macro Dashboard (weeks-to-months) — macro sets the posture, tactical sets the trigger."
+    )
+
+    # ── AI Narrative ──────────────────────────────────────────────────────────
+    from utils.ai_tier import TIER_OPTS, TIER_MAP
+    _tac_engine = st.radio("Engine", TIER_OPTS, horizontal=True, key="tac_ai_engine")
+    _tac_use_claude, _tac_model = TIER_MAP[_tac_engine]
+    if st.button("⚡ Generate Tactical Analysis", key="btn_tactical_ai", use_container_width=True):
+        with st.spinner("Analyzing tactical signals..."):
+            try:
+                from services.claude_client import generate_tactical_analysis
+                _macro_label = (st.session_state.get("_regime_context") or {}).get("regime", "")
+                _analysis = generate_tactical_analysis(
+                    signals=tactical["signals"],
+                    tactical_score=tactical["tactical_score"],
+                    label=tactical["label"],
+                    macro_label=_macro_label,
+                    use_claude=_tac_use_claude,
+                    model=_tac_model,
+                )
+                st.session_state["_tactical_analysis"] = _analysis
+                st.session_state["_tactical_analysis_ts"] = datetime.now()
+            except Exception as _e:
+                st.error(f"AI analysis failed: {_e}")
+
+    _cached_tac = st.session_state.get("_tactical_analysis")
+    if _cached_tac:
+        _ts = st.session_state.get("_tactical_analysis_ts")
+        _age = f" · {int((datetime.now() - _ts).total_seconds() / 60)}m ago" if _ts else ""
+        st.markdown(
+            f'<div style="border:1px solid {_col};border-radius:6px;padding:12px 16px;'
+            f'background:#1A1F2E;margin:8px 0;white-space:pre-line;line-height:1.8;">'
+            f'{_cached_tac}</div>'
+            f'<div style="font-size:10px;color:#666;margin-top:2px;">AI Tactical Narrative{_age}</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Signal table ─────────────────────────────────────────────────────────
+    _section_header("Tactical Signals (5)")
+
+    # Warn if VIX3M unavailable
+    if tactical["signals"][1]["Value"] == "N/A":
+        st.warning("⚠ VIX3M unavailable — term structure signal defaulted to neutral. May occur outside US market hours.")
+
+    _df = pd.DataFrame(tactical["signals"])
+
+    def _cs(val):
+        try:
+            v = float(val)
+        except (ValueError, TypeError):
+            return ""
+        return f"color: {COLORS['green']}" if v > 0 else (f"color: {COLORS['red']}" if v < 0 else f"color: {COLORS['text_dim']}")
+
+    def _cd(val):
+        if val == "Risk-On":  return f"color: {COLORS['green']}"
+        if val == "Risk-Off": return f"color: {COLORS['red']}"
+        return f"color: {COLORS['yellow']}"
+
+    styled = (
+        _df.style
+        .map(_cs, subset=["Score"])
+        .map(_cd, subset=["Direction"])
+        .set_properties(**{"font-family": "'JetBrains Mono', Consolas, monospace", "font-size": "12px"})
+    )
+    st.dataframe(styled, use_container_width=True, hide_index=True)
+
+    # ── Timeframe context ─────────────────────────────────────────────────────
+    st.markdown("---")
+    _section_header("How to Use This Layer")
+    st.markdown("""
+| Tactical Score | Label | Action |
+|---|---|---|
+| 65–100 | Favorable Entry | Add risk on dips, extend duration, reduce hedges |
+| 52–64 | Neutral / Hold | Maintain current exposure, no new initiations |
+| 38–51 | Caution / Reduce | Trim laggards, tighten stops, raise cash buffer |
+| 0–37 | Risk-Off Signal | Step aside or hedge — wait for score to recover above 45 |
+
+**Key principle:** The Macro Regime tells you *what* to own. The Tactical Regime tells you *when* to act.
+A Macro Risk-On + Tactical Caution = hold positions but don't add.
+A Macro Risk-Off + Tactical Favorable = a bear market bounce — trade carefully if at all.
+""")
+
+
 def render():
     st.title("Macro Dashboard")
     st.caption("Global macro monitor — Risk-On / Risk-Off workflow")
@@ -1732,6 +2331,10 @@ def render():
             "umcsent": "UMCSENT",
             "permit": "PERMIT",
             "fedfunds": "FEDFUNDS",
+            "real_yield": "DFII10",
+            "napm": "MANEMP",
+            "totbkcr": "TOTBKCR",
+            "dgs2": "DGS2",
         }
         fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
         macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
@@ -1740,7 +2343,7 @@ def render():
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
         macro["snaps"] = snaps
         t_macro = (datetime.now() - t1).total_seconds()
-        st.write("✓ Risk regime signals — 21 signals")
+        st.write("✓ Risk regime signals — 26 signals")
 
         status.update(label="MACRO DASHBOARD · READY", state="complete", expanded=False)
 
@@ -1754,7 +2357,9 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab1, tab_sector = st.tabs(["📊 Macro Dashboard", "🔄 Sector Rotation"])
+    tab1, tab_sector, tab_sig_history, tab_tactical = st.tabs([
+        "📊 Macro Dashboard", "🔄 Sector Rotation", "📈 Regime Signal History", "⚡ Tactical Regime",
+    ])
 
     with tab1:
         # ── Ticker Bar ──
@@ -1895,17 +2500,13 @@ def render():
                     st.rerun()
 
         # AI News Digest
-        _ce_has_claude = bool(os.getenv("XAI_API_KEY"))
-        _ce_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _ce_has_claude else [])
+        from utils.ai_tier import render_ai_tier_selector as _rr_ai_tier
         _ced1, _ced2 = st.columns([2, 2])
         with _ced1:
-            _ce_tier = st.radio("Engine", _ce_tier_opts, horizontal=True, key="ce_engine_radio")
-            st.markdown(
-                '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-                'margin-top:-10px;margin-bottom:2px;">'
-                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-                '</div>',
-                unsafe_allow_html=True,
+            _use_ce_news, _ce_news_model = _rr_ai_tier(
+                key="ce_engine_radio",
+                label="Engine",
+                recommendation="⚡ Freeloader for quick regime reads · 🧠 Regard for live X/news synthesis",
             )
         with _ced2:
             _ce_run = st.button("🗞 Generate News Digest", key="ce_digest_btn", type="primary")
@@ -1920,14 +2521,18 @@ def render():
             )
             _groq_key = os.getenv("GROQ_API_KEY", "")
             _digest = None
-            if _ce_tier != "⚡ Freeloader Mode" and _ce_has_claude:
+            if _use_ce_news:
                 try:
-                    import anthropic as _ac
-                    _ac_client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-                    _digest = _ac_client.messages.create(
-                        model="grok-4-1-fast-reasoning", max_tokens=400, temperature=0.3,
-                        messages=[{"role": "user", "content": _ce_prompt}],
-                    ).content[0].text.strip()
+                    _ce_m = _ce_news_model or "grok-4-1-fast-reasoning"
+                    if _ce_m.startswith("grok-") and os.getenv("XAI_API_KEY"):
+                        from services.claude_client import _call_xai
+                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], _ce_m, 400, 0.3)
+                    else:
+                        import anthropic as _ac
+                        _digest = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")).messages.create(
+                            model=_ce_m, max_tokens=400, temperature=0.3,
+                            messages=[{"role": "user", "content": _ce_prompt}],
+                        ).content[0].text.strip()
                 except Exception as _ace:
                     st.error(f"Claude error: {_ace}")
             elif _groq_key:
@@ -1943,18 +2548,15 @@ def render():
                     if _gr.ok:
                         _digest = _gr.json()["choices"][0]["message"]["content"].strip()
                     elif _gr.status_code == 400 and _ce_has_claude:
-                        import anthropic as _ac2
-                        _digest = _ac2.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")).messages.create(
-                            model="grok-4-1-fast-reasoning", max_tokens=400, temperature=0.3,
-                            messages=[{"role": "user", "content": _ce_prompt}],
-                        ).content[0].text.strip()
+                        from services.claude_client import _call_xai
+                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], "grok-4-1-fast-reasoning", 400, 0.3)
                 except Exception as _ge:
                     st.error(f"News digest error: {_ge}")
 
             if _digest:
                 st.session_state["_current_events_digest"] = _digest
                 st.session_state["_current_events_digest_ts"] = datetime.now()
-                st.session_state["_current_events_engine"] = _ce_tier
+                st.session_state["_current_events_engine"] = st.session_state.get("ce_engine_radio", "⚡ Freeloader Mode")
 
         _digest_val = st.session_state.get("_current_events_digest")
         if _digest_val:
@@ -2004,7 +2606,7 @@ def render():
                 "Financial Conditions Index": 7, "VIX (Equity Volatility)": 1,
                 "Equity Trend (S&P, Nasdaq, Dow)": 1, "Commodity Trend (Oil + Copper)": 1,
                 "US Dollar Index (DXY proxy)": 1, "Initial Jobless Claims": 7,
-                "HYG/LQD Ratio (Credit Risk Appetite)": 1, "Copper/Gold Ratio (Growth vs Safety)": 1,
+                "Copper/Gold Ratio (Growth vs Safety)": 1,
                 "Global Liquidity (M2 proxy)": 30, "Unemployment Trend (Sahm context)": 30,
                 "Core Inflation (PCE)": 30, "Industrial Production": 30,
                 "Term Premium": 7, "S&P 500 P/E (CAPE proxy)": 1,
@@ -2077,8 +2679,20 @@ def render():
         # ── Valuation ──
         _section_header("Valuation")
         cape_txt = "N/A" if macro["cape"] is None else f"{macro['cape']:.2f}x"
-        st.markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
-        st.caption(macro["valuation"])
+        _fair_pe = macro.get("fair_pe")
+        _pe_prem = macro.get("pe_premium_pct")
+        _dgs10_d = macro.get("dgs10")
+        _v_cols = st.columns(3)
+        _v_cols[0].markdown(bloomberg_metric("S&P 500 P/E", cape_txt), unsafe_allow_html=True)
+        if _fair_pe is not None:
+            _v_cols[1].markdown(bloomberg_metric("Yield-Parity P/E", f"{_fair_pe:.1f}x"), unsafe_allow_html=True)
+        if _pe_prem is not None:
+            _prem_color = COLORS["red"] if _pe_prem > 20 else COLORS["yellow"] if _pe_prem > 0 else COLORS["green"]
+            _v_cols[2].markdown(bloomberg_metric("Premium vs Yield", f"{_pe_prem:+d}%", _prem_color), unsafe_allow_html=True)
+        _val_caption = macro["valuation"]
+        if _dgs10_d is not None and _fair_pe is not None:
+            _val_caption = f"10Y yield {_dgs10_d:.2f}% → earnings-yield parity P/E = {_fair_pe:.1f}x. {_val_caption}"
+        st.caption(_val_caption)
 
         # ── Cycle Stage ──
         _section_header("Cycle Stage")
@@ -2104,8 +2718,29 @@ def render():
 
         # ── Summary ──
         _section_header("Summary")
+        _vel_label = macro.get("velocity_label", "")
+        if _vel_label:
+            _vel_color = COLORS["green"] if "↑" in _vel_label else COLORS["red"] if "↓" in _vel_label else COLORS["text_dim"]
+            st.markdown(
+                f'<span style="background:{_vel_color}22;border:1px solid {_vel_color}55;border-radius:3px;'
+                f'padding:3px 10px;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12px;'
+                f'color:{_vel_color};display:inline-block;margin-bottom:8px;">{_vel_label}</span>',
+                unsafe_allow_html=True,
+            )
         for line in macro["summary"]:
             st.markdown(f"- {line}")
+        _contradictions = macro.get("contradictions")
+        if _contradictions:
+            _bull_str = ", ".join(_contradictions["bull"][:2])
+            _bear_str = ", ".join(_contradictions["bear"][:2])
+            st.markdown(
+                f'<div style="background:{COLORS["yellow"]}15;border-left:3px solid {COLORS["yellow"]};'
+                f'padding:8px 12px;margin-top:8px;font-size:12px;color:{COLORS["text_dim"]};">'
+                f'⚡ <strong style="color:{COLORS["yellow"]}">Signal Conflict</strong> — '
+                f'Bull: {_bull_str} vs Bear: {_bear_str}. '
+                f'Regime conviction lower than score implies.</div>',
+                unsafe_allow_html=True,
+            )
 
         # ── Portfolio Bias ──
         _section_header("Portfolio Bias")
@@ -2128,7 +2763,9 @@ def render():
                 for rec in sector_recs:
                     if rec["action"] == "Favor":
                         mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
-                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+                        diverging = rec["momentum_30d"] is not None and rec["momentum_30d"] < 0
+                        warn_str = f' <span style="color:{COLORS["yellow"]};font-size:11px;">⚠ diverging</span>' if diverging else ""
+                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str}{warn_str} — {rec['reason']}", unsafe_allow_html=True)
             with col_avoid:
                 st.markdown(
                     f'<div style="color:{COLORS["red"]};font-family:\'JetBrains Mono\',Consolas,monospace;'
@@ -2138,33 +2775,21 @@ def render():
                 for rec in sector_recs:
                     if rec["action"] == "Avoid":
                         mom_str = f" ({rec['momentum_30d']:+.1f}% 30d)" if rec["momentum_30d"] is not None else ""
-                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str} — {rec['reason']}")
+                        diverging = rec["momentum_30d"] is not None and rec["momentum_30d"] > 0
+                        warn_str = f' <span style="color:{COLORS["yellow"]};font-size:11px;">⚠ diverging</span>' if diverging else ""
+                        st.markdown(f"- **{rec['ticker']}** {rec['label']}{mom_str}{warn_str} — {rec['reason']}", unsafe_allow_html=True)
         else:
             st.markdown("Sector rotation data unavailable.")
 
         # ── AI Regime Plays ──────────────────────────────────────────────────
-        _rp_has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
-        _rp_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"] if _rp_has_anthropic else ["⚡ Freeloader Mode"]
-        _rp_tier_map  = {
-            "⚡ Freeloader Mode":                (False, None),
-            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
-        }
+        from utils.ai_tier import render_ai_tier_selector as _rp_ai_tier
         _prev_rp_tier = st.session_state.get("_rp_tier_prev")
-        _sel_rp_tier = st.radio(
-            "Engine", _rp_tier_opts, horizontal=True, key="regime_plays_engine_radio",
-            help="Sonnet gives the most nuanced regime play synthesis"
+        _use_cl_rp, _cl_rp_model = _rp_ai_tier(
+            key="regime_plays_engine_radio",
+            label="Engine",
+            recommendation="🧠 Regard recommended — Grok 4.1 reasoning aligns well with regime classification tasks",
         )
-        st.markdown(
-            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-            'margin-top:-10px;margin-bottom:2px;">'
-            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("💡 🧠 Grok 4.1 sufficient here — structured JSON output, Groq also works well")
-        _use_cl_rp, _cl_rp_model = _rp_tier_map[_sel_rp_tier]
-        st.session_state["_rp_tier_prev"] = _sel_rp_tier
+        st.session_state["_rp_tier_prev"] = st.session_state.get("regime_plays_engine_radio", "⚡ Freeloader Mode")
 
         _gen_rp = st.button("Generate Regime Plays", type="primary", key="gen_regime_plays_btn")
         if _gen_rp or st.session_state.get("_rp_plays_result"):
@@ -2183,14 +2808,15 @@ def render():
                         model=_cl_rp_model,
                     )
                 st.session_state["_rp_plays_result"] = _plays
-                st.session_state["_rp_plays_last_tier"] = _sel_rp_tier
+                st.session_state["_rp_plays_last_tier"] = st.session_state.get("regime_plays_engine_radio", "⚡ Freeloader Mode")
                 from services.play_log import append_play as _append_play
-                _append_play("AI Regime Plays", _sel_rp_tier, _plays,
+                _rp_tier_label = st.session_state.get("regime_plays_engine_radio", "⚡ Freeloader Mode")
+                _append_play("AI Regime Plays", _rp_tier_label, _plays,
                              meta={"regime": macro.get("macro_regime"), "score": round(_score_norm, 3)})
             else:
                 _plays = st.session_state["_rp_plays_result"]
 
-            _section_header("AI Regime Plays", badge=st.session_state.get("_rp_plays_last_tier", _sel_rp_tier))
+            _section_header("AI Regime Plays", badge=st.session_state.get("_rp_plays_last_tier", st.session_state.get("regime_plays_engine_radio", "⚡ Freeloader Mode")))
             if _plays.get("rationale"):
                 st.markdown(
                     f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
@@ -2312,3 +2938,10 @@ def render():
 
     with tab_sector:
         _render_sector_rotation_tab(macro["quadrant"], macro["macro_regime"])
+
+    with tab_sig_history:
+        _render_regime_signal_history()
+
+    with tab_tactical:
+        _tactical = _build_tactical_dashboard(snaps)
+        _render_tactical_tab(_tactical, snaps)

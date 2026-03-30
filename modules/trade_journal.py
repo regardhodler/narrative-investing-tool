@@ -9,6 +9,7 @@ import yfinance as yf
 from datetime import date
 from utils.journal import load_journal, add_trade, close_trade, delete_trade, update_trade
 from utils.theme import COLORS, apply_dark_layout
+from utils.ai_tier import render_ai_tier_selector
 from services.sec_client import search_ticker_by_name
 
 _REGIME_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json")
@@ -92,6 +93,164 @@ def _fetch_sector(ticker: str) -> str:
         return info.get("sector") or info.get("industryDisp") or "Unknown"
     except Exception:
         return "Unknown"
+
+
+def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) -> bool:
+    """
+    Headless risk matrix computation for Quick Intel Run.
+    Computes portfolio risk metrics and stores _portfolio_risk_snapshot to session state.
+    Optionally runs AI interpretation and stores _risk_matrix_interpretation.
+    Returns True on success.
+    """
+    import numpy as np
+
+    open_trades = [t for t in load_journal() if t.get("status") == "open"]
+    if not open_trades:
+        return False  # caller shows "no open positions" info message
+
+    port_tickers = list({t["ticker"].upper() for t in open_trades})
+    bench = "SPY"
+    all_tickers = tuple(sorted(set(port_tickers + [bench])))
+
+    prices = _fetch_risk_prices(all_tickers)
+    if prices.empty:
+        raise RuntimeError(f"Price history unavailable for {', '.join(port_tickers)}")
+
+    prices_latest = _get_live_prices(port_tickers)
+    returns = prices.pct_change().dropna(how="all")
+
+    # Position values & weights
+    position_values = {}
+    for trade in open_trades:
+        tk = trade["ticker"].upper()
+        if tk in port_tickers:
+            px = prices_latest.get(tk, trade.get("entry_price", 0))
+            position_values[tk] = position_values.get(tk, 0) + px * trade.get("position_size", 0)
+    total_val = sum(position_values.values())
+    weights = (
+        {tk: v / total_val for tk, v in position_values.items()}
+        if total_val > 0 else {tk: 1 / len(port_tickers) for tk in port_tickers}
+    )
+
+    # Portfolio daily return series
+    port_ret = sum(
+        returns[tk] * weights.get(tk, 0)
+        for tk in port_tickers if tk in returns.columns
+    )
+    port_ret_clean = port_ret.dropna()
+
+    # VaR / CVaR
+    var_95 = float(np.percentile(port_ret_clean, 5)) * 100 if len(port_ret_clean) > 20 else None
+    var_99 = float(np.percentile(port_ret_clean, 1)) * 100 if len(port_ret_clean) > 20 else None
+    var_95_dollar = var_95 / 100 * total_val if var_95 and total_val else None
+    cvar_95 = float(port_ret_clean[port_ret_clean <= np.percentile(port_ret_clean, 5)].mean()) * 100 if len(port_ret_clean) > 20 else None
+
+    # Beta
+    spy_ret = returns[bench].dropna() if bench in returns.columns else None
+    betas = {}
+    if spy_ret is not None:
+        for tk in port_tickers:
+            if tk in returns.columns:
+                aligned = pd.concat([returns[tk], spy_ret], axis=1).dropna()
+                if len(aligned) > 20:
+                    cov = np.cov(aligned.iloc[:, 0], aligned.iloc[:, 1])
+                    betas[tk] = round(cov[0, 1] / cov[1, 1], 2) if cov[1, 1] != 0 else 1.0
+    port_beta = sum(betas.get(tk, 1.0) * weights.get(tk, 0) for tk in port_tickers)
+
+    # Sector weights
+    sectors = {tk: _fetch_sector(tk) for tk in port_tickers}
+    sector_weights: dict = {}
+    for tk, w in weights.items():
+        s = sectors.get(tk, "Unknown")
+        sector_weights[s] = sector_weights.get(s, 0) + w
+
+    # Correlation matrix
+    ret_df = returns[[t for t in port_tickers if t in returns.columns]].dropna()
+    corr = ret_df.corr() if len(ret_df.columns) > 1 else None
+
+    # Max position weight
+    max_wt = max(weights.values()) * 100 if weights else 0
+
+    # Stress test scenarios
+    stress_results = []
+    if total_val and betas:
+        for _s_label, _spy_shock, _ in [
+            ("2008 GFC", -0.57, ""),
+            ("COVID Crash", -0.34, ""),
+            ("2022 Rate Shock", -0.25, ""),
+            ("Flash Crash", -0.10, ""),
+            ("VIX Spike +200%", -0.15, ""),
+        ]:
+            _port_impact = 0.0
+            for trade in open_trades:
+                tk = trade["ticker"].upper()
+                if tk not in port_tickers:
+                    continue
+                _w = weights.get(tk, 0)
+                _b = betas.get(tk, 1.0)
+                _sign = 1 if trade.get("direction", "long").lower() == "long" else -1
+                _port_impact += _w * _b * _spy_shock * _sign
+            stress_results.append({
+                "scenario": _s_label,
+                "spy_shock_pct": round(_spy_shock * 100),
+                "port_impact_pct": round(_port_impact * 100, 1),
+                "port_impact_dollar": round(_port_impact * total_val),
+            })
+
+    # Risk flags
+    flags = []
+    if port_beta > 1.4:
+        flags.append(f"⚠ High portfolio beta ({port_beta:.2f}) — amplified SPY moves in both directions")
+    if max_wt > 40:
+        top_tk = max(weights, key=weights.get)
+        flags.append(f"⚠ Concentration risk: {top_tk} is {max_wt:.0f}% of portfolio")
+    if corr is not None and len(corr) > 1:
+        upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+        high_corr_pairs = [
+            (c, r) for c in corr.columns for r in corr.index
+            if r != c and pd.notna(upper.loc[r, c]) and upper.loc[r, c] > 0.75
+        ]
+        if high_corr_pairs:
+            pair = high_corr_pairs[0]
+            v = corr.loc[pair[1], pair[0]]
+            flags.append(f"⚠ High correlation: {pair[0]} / {pair[1]} ({v:.2f}) — limited diversification benefit")
+    if len(sector_weights) == 1:
+        flags.append(f"⚠ All positions in one sector ({list(sector_weights.keys())[0]}) — zero sector diversification")
+
+    worst_stress = min((s["port_impact_pct"] for s in stress_results), default=0) if stress_results else None
+    snapshot = {
+        "beta": round(port_beta, 2),
+        "var_95_pct": round(var_95, 2) if var_95 else None,
+        "var_99_pct": round(var_99, 2) if var_99 else None,
+        "cvar_95_pct": round(cvar_95, 2) if cvar_95 else None,
+        "var_95_dollar": round(var_95_dollar) if var_95_dollar else None,
+        "total_value": round(total_val) if total_val else None,
+        "position_count": len(port_tickers),
+        "sector_weights": {k: round(v * 100, 1) for k, v in sector_weights.items()},
+        "max_position_weight": round(max_wt, 1),
+        "top_position": max(weights, key=weights.get) if weights else None,
+        "risk_flags": flags,
+        "stress_scenarios": stress_results,
+        "worst_stress_pct": worst_stress,
+    }
+    st.session_state["_portfolio_risk_snapshot"] = snapshot
+
+    # Run AI interpretation if regime context available
+    regime_ctx = st.session_state.get("_regime_context") or {}
+    if regime_ctx:
+        try:
+            from services.claude_client import interpret_risk_matrix as _irm
+            _tac_snap = st.session_state.get("_tactical_context") or {}
+            interp = _irm(snapshot, regime_ctx, use_claude=use_claude, model=model,
+                          tactical_context=_tac_snap or None)
+            st.session_state["_risk_matrix_interpretation"] = interp
+            tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+                else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+            st.session_state["_risk_matrix_interpretation_engine"] = tier
+        except Exception:
+            pass
+
+    return True
 
 
 def _render_risk_matrix(open_trades: list):
@@ -345,6 +504,7 @@ def _render_risk_matrix(open_trades: list):
             ("Flash Crash",      -0.10, "Intraday -10% shock (1-day stress)"),
             ("VIX Spike +200%",  -0.15, "Hypothetical vol regime shift"),
         ]
+        _stress_results = []  # collect for session state snapshot
         _s_rows = ""
         for _s_label, _spy_shock, _s_desc in _stress_scenarios:
             # Beta-adjusted loss per position, weighted by portfolio weight
@@ -361,6 +521,12 @@ def _render_risk_matrix(open_trades: list):
                 _port_impact += _w * _b * _spy_shock * _sign
             _loss_pct = _port_impact * 100
             _loss_dollar = _port_impact * total_val
+            _stress_results.append({
+                "scenario": _s_label,
+                "spy_shock_pct": round(_spy_shock * 100),
+                "port_impact_pct": round(_loss_pct, 1),
+                "port_impact_dollar": round(_loss_dollar),
+            })
             _s_color = "#ef4444" if _loss_pct < -15 else ("#f59e0b" if _loss_pct < -5 else "#22c55e")
             _s_rows += (
                 f'<tr>'
@@ -417,6 +583,85 @@ def _render_risk_matrix(open_trades: list):
                 unsafe_allow_html=True,
             )
 
+    # ── Save risk snapshot to session state (feeds Portfolio Intelligence) ────
+    _max_stress_loss = min((s["port_impact_pct"] for s in _stress_results), default=0) if total_val and betas else None
+    st.session_state["_portfolio_risk_snapshot"] = {
+        "beta": round(port_beta, 2),
+        "var_95_pct": round(var_95, 2) if var_95 else None,
+        "var_99_pct": round(var_99, 2) if var_99 else None,
+        "cvar_95_pct": round(cvar_95, 2) if cvar_95 else None,
+        "var_95_dollar": round(var_95_dollar) if var_95_dollar else None,
+        "total_value": round(total_val) if total_val else None,
+        "position_count": len(port_tickers),
+        "sector_weights": {k: round(v * 100, 1) for k, v in sector_weights.items()},
+        "max_position_weight": round(max_wt, 1),
+        "top_position": max(weights, key=weights.get) if weights else None,
+        "risk_flags": flags,
+        "stress_scenarios": _stress_results if total_val and betas else [],
+        "worst_stress_pct": _max_stress_loss,
+    }
+
+    # ── AI Risk Interpretation ────────────────────────────────────────────────
+    st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">🧠 AI RISK INTERPRETATION</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("AI reads your risk profile — beta, VaR, stress scenarios, flags — against the current macro regime.")
+    _use_rm_cl, _rm_model = render_ai_tier_selector(
+        key="risk_matrix_engine",
+        label="Interpretation Engine",
+        recommendation="⚡ Freeloader sufficient · 🧠 Regard for nuanced regime-risk interaction analysis",
+    )
+    if st.button("Interpret Risk Profile", key="run_risk_interp_btn", type="primary"):
+        from services.claude_client import interpret_risk_matrix as _irm
+        _regime_ctx = st.session_state.get("_regime_context") or {}
+        _snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+        with st.spinner("Interpreting risk profile..."):
+            _interp = _irm(_snap, _regime_ctx, use_claude=_use_rm_cl, model=_rm_model)
+        st.session_state["_risk_matrix_interpretation"] = _interp
+        st.session_state["_risk_matrix_interpretation_engine"] = st.session_state.get("risk_matrix_engine", "⚡ Freeloader Mode")
+
+    _interp_result = st.session_state.get("_risk_matrix_interpretation")
+    if _interp_result:
+        _interp_engine = st.session_state.get("_risk_matrix_interpretation_engine", "")
+        _interp_color = "#FF8811" if "Highly" in _interp_engine else ("#a78bfa" if "Regard" in _interp_engine else "#38bdf8")
+        _alert_level = _interp_result.get("alert_level", "")
+        _al_color = {"HIGH": "#ef4444", "MODERATE": "#f59e0b", "LOW": "#22c55e"}.get(_alert_level, "#64748b")
+        _al_bg = {"HIGH": "#1f0a0a", "MODERATE": "#1a1200", "LOW": "#0a2218"}.get(_alert_level, "#0f172a")
+        if _alert_level:
+            st.markdown(
+                f'<div style="border:1px solid {_al_color}44;border-radius:6px;'
+                f'padding:8px 14px;background:{_al_bg};margin:8px 0 4px 0;">'
+                f'<span style="font-size:10px;color:{_al_color};font-weight:700;letter-spacing:0.08em;">'
+                f'RISK ALERT: {_alert_level}</span></div>',
+                unsafe_allow_html=True,
+            )
+        _summary = _interp_result.get("summary", "")
+        if _summary:
+            st.markdown(
+                f'<div style="background:{COLORS["surface"]};border:1px solid {_interp_color}33;'
+                f'border-radius:6px;padding:12px 16px;margin:6px 0;">'
+                f'<span style="font-size:12px;color:#e2e8f0;line-height:1.6;">{_summary}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        _actions = _interp_result.get("action_items", [])
+        if _actions:
+            st.markdown(
+                f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.06em;margin:8px 0 4px 0;">SUGGESTED ACTIONS</div>',
+                unsafe_allow_html=True,
+            )
+            for _act in _actions:
+                st.markdown(
+                    f'<div style="background:#0f172a;border-left:3px solid {_interp_color};'
+                    f'border-radius:0 4px 4px 0;padding:6px 12px;margin-bottom:4px;'
+                    f'font-size:12px;color:#cbd5e1;">→ {_act}</div>',
+                    unsafe_allow_html=True,
+                )
+
 
 def _regime_badge(direction: str, regime: str) -> tuple:
     """Return (badge_text, color) for a position direction × current regime."""
@@ -453,7 +698,8 @@ def render():
                 else:
                     # Fallback to yfinance for non-US tickers (TSX, etc.)
                     try:
-                        info = yf.Ticker(ticker).info
+                        from services.market_data import get_yf_info_safe
+                        info = get_yf_info_safe(ticker)
                         name = info.get("shortName") or info.get("longName")
                         if name:
                             st.caption(f":green[✓ {name}]")
@@ -527,6 +773,14 @@ def render():
                 total_portfolio_val += cur * trade["position_size"]
 
             _cur_regime = st.session_state.get("_regime_context", {}).get("regime", "")
+            _tac_pos = st.session_state.get("_tactical_context") or {}
+            _of_pos = st.session_state.get("_options_flow_context") or {}
+            _narr_all = st.session_state.get("_trending_narratives") or []
+            # Build ticker → narratives lookup once for O(1) per-position access
+            _narr_by_ticker: dict = {}
+            for _nn in _narr_all:
+                for _nt in _nn.get("tickers", []):
+                    _narr_by_ticker.setdefault(_nt.upper(), []).append(_nn)
 
             # ── Portfolio Allocation Chart ─────────────────────────────────
             if total_portfolio_val > 0:
@@ -652,12 +906,67 @@ def render():
                         _drift_badge = f' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">✗ {_action or "misaligned"}</span>'
                     elif _alignment == "neutral":
                         _drift_badge = f' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">~ {_action or "neutral"}</span>'
+                    _tac_badge = ""
+                    if _tac_pos:
+                        _ts = _tac_pos.get("tactical_score", 50)
+                        if direction == "Long":
+                            if _ts >= 65:
+                                _tac_badge = ' <span style="background:#052e16;border:1px solid #22c55e55;border-radius:3px;padding:1px 6px;font-size:10px;color:#22c55e;">⚡ Good timing</span>'
+                            elif _ts >= 52:
+                                _tac_badge = ' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">⏸ Hold</span>'
+                            elif _ts >= 38:
+                                _tac_badge = ' <span style="background:#1f1000;border:1px solid #f97316aa;border-radius:3px;padding:1px 6px;font-size:10px;color:#f97316;">⚠ Trim timing</span>'
+                            else:
+                                _tac_badge = ' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">🔴 Exit timing</span>'
+                        else:  # Short
+                            if _ts < 38:
+                                _tac_badge = ' <span style="background:#052e16;border:1px solid #22c55e55;border-radius:3px;padding:1px 6px;font-size:10px;color:#22c55e;">⚡ Good timing</span>'
+                            elif _ts < 52:
+                                _tac_badge = ' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">⏸ Neutral</span>'
+                            elif _ts < 65:
+                                _tac_badge = ' <span style="background:#1f1000;border:1px solid #f97316aa;border-radius:3px;padding:1px 6px;font-size:10px;color:#f97316;">⚠ Cover timing</span>'
+                            else:
+                                _tac_badge = ' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">🔴 Cover timing</span>'
+                    _of_badge = ""
+                    if _of_pos:
+                        _of_ts = _of_pos.get("options_score", 50)
+                        if direction == "Long":
+                            if _of_ts >= 65:
+                                _of_badge = ' <span style="background:#052e16;border:1px solid #22c55e55;border-radius:3px;padding:1px 6px;font-size:10px;color:#22c55e;">📈 Options confirm</span>'
+                            elif _of_ts >= 52:
+                                _of_badge = ' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">➡ Flow neutral</span>'
+                            elif _of_ts >= 38:
+                                _of_badge = ' <span style="background:#1f1000;border:1px solid #f97316aa;border-radius:3px;padding:1px 6px;font-size:10px;color:#f97316;">📉 Flow warns</span>'
+                            else:
+                                _of_badge = ' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">🔴 Options bearish</span>'
+                        else:  # Short
+                            if _of_ts < 38:
+                                _of_badge = ' <span style="background:#052e16;border:1px solid #22c55e55;border-radius:3px;padding:1px 6px;font-size:10px;color:#22c55e;">📈 Options confirm</span>'
+                            elif _of_ts < 52:
+                                _of_badge = ' <span style="background:#1a1200;border:1px solid #f59e0b55;border-radius:3px;padding:1px 6px;font-size:10px;color:#f59e0b;">➡ Flow neutral</span>'
+                            elif _of_ts < 65:
+                                _of_badge = ' <span style="background:#1f1000;border:1px solid #f97316aa;border-radius:3px;padding:1px 6px;font-size:10px;color:#f97316;">📉 Flow warns</span>'
+                            else:
+                                _of_badge = ' <span style="background:#2d0a0a;border:1px solid #ef444455;border-radius:3px;padding:1px 6px;font-size:10px;color:#ef4444;">🔴 Options bullish</span>'
+                    _narr_badge = ""
+                    _narr_matches = _narr_by_ticker.get(trade["ticker"].upper(), [])
+                    if _narr_matches:
+                        _conv_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+                        _best_n = min(_narr_matches, key=lambda n: _conv_order.get(n.get("conviction", "LOW"), 2))
+                        _bc = _best_n.get("conviction", "MEDIUM")
+                        _bn = _best_n.get("narrative", "")[:35]
+                        _bcolor = "#22c55e" if _bc == "HIGH" else ("#f59e0b" if _bc == "MEDIUM" else "#64748b")
+                        _narr_badge = (
+                            f' <span style="background:{_bcolor}18;border:1px solid {_bcolor}44;'
+                            f'border-radius:3px;padding:1px 6px;font-size:10px;color:{_bcolor};">'
+                            f'◈ {_bn}</span>'
+                        )
                     st.markdown(
                         f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{trade["ticker"]}</span>'
                         f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{direction} · {trade["signal_source"]}'
                         f' · {trade["entry_date"]}</span>'
                         f' <span style="color:{_badge_color};font-size:11px;font-weight:600;margin-left:6px;">{_badge_text}</span>'
-                        f'{_drift_badge}{_earn_badge}',
+                        f'{_drift_badge}{_tac_badge}{_of_badge}{_narr_badge}{_earn_badge}',
                         unsafe_allow_html=True,
                     )
                     if trade.get("regime_at_entry") and _cur_regime and trade["regime_at_entry"] != _cur_regime:
@@ -797,57 +1106,18 @@ def render():
             st.info("Run Risk Regime → Regime Overview to load macro context, then return here for sizing guidance.")
 
         # Section A — Context freshness panel
-        st.markdown(
-            f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-            f'letter-spacing:0.08em;margin-bottom:8px;">CONTEXT FRESHNESS</div>',
-            unsafe_allow_html=True,
-        )
-        _ctx_items = [
-            ("Regime", "_regime_context_ts"),
-            ("Rate Path", "_rate_path_probs_ts"),
-            ("Doom Briefing", "_doom_briefing_ts"),
-            ("Black Swans", "_custom_swans_ts"),
-            ("Whale Summary", "_whale_summary_ts"),
-            ("Fed Plays", "_fed_plays_result_ts"),
-            ("Current Events", "_current_events_digest_ts"),
-        ]
-        _ctx_cols = st.columns(len(_ctx_items))
+        from utils.components import render_signal_coverage as _render_sig_cov
+        _render_sig_cov()
+
+        # Critical signal check
         _now = _dt.now()
         _missing_critical = []
-        for _ci, (_label, _ts_key) in enumerate(_ctx_items):
-            _ts = st.session_state.get(_ts_key)
-            if _ts is None:
-                _icon = "✗"
-                _color = "#ef4444"
-                _age_str = "missing"
-                if _label in ("Regime", "Rate Path"):
-                    _missing_critical.append(_label)
-            else:
-                _age_min = (_now - _ts).total_seconds() / 60
-                if _age_min < 120:
-                    _icon = "✅"
-                    _color = "#22c55e"
-                    _age_str = f"{int(_age_min)}m ago"
-                elif _age_min < 360:
-                    _icon = "⚠"
-                    _color = "#f59e0b"
-                    _age_str = f"{int(_age_min // 60)}h ago"
-                else:
-                    _icon = "✗"
-                    _color = "#ef4444"
-                    _age_str = f"{int(_age_min // 60)}h ago"
-                    if _label in ("Regime", "Rate Path"):
-                        _missing_critical.append(_label)
-            _ctx_cols[_ci].markdown(
-                f'<div style="text-align:center;font-size:11px;">'
-                f'<div style="color:{_color};font-size:16px;">{_icon}</div>'
-                f'<div style="color:#ccc;font-weight:600;">{_label}</div>'
-                f'<div style="color:#888;">{_age_str}</div></div>',
-                unsafe_allow_html=True,
-            )
-        # Also flag missing presence (not just stale timestamps)
         for _k, _lbl in [("_regime_context", "Regime"), ("_rate_path_probs", "Rate Path")]:
-            if not st.session_state.get(_k) and _lbl not in _missing_critical:
+            if not st.session_state.get(_k):
+                _missing_critical.append(_lbl)
+        for _ts_key, _lbl in [("_regime_context_ts", "Regime"), ("_rate_path_probs_ts", "Rate Path")]:
+            _ts = st.session_state.get(_ts_key)
+            if _ts and (_now - _ts).total_seconds() > 21600 and _lbl not in _missing_critical:
                 _missing_critical.append(_lbl)
         if _missing_critical:
             st.markdown(
@@ -870,20 +1140,14 @@ def render():
         )
         import os as _os
         _pi_has_xai = bool(_os.getenv("XAI_API_KEY"))
-
         _pi_has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-        _pi_tier_opts = ["⚡ Freeloader Mode"]
-        if _pi_has_claude:
-            _pi_tier_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
-        _sel_pi_tier = st.radio("Analysis Engine", _pi_tier_opts, horizontal=True, key="portfolio_intel_engine")
-        st.markdown(
-            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-            'margin-top:-10px;margin-bottom:2px;">'
-            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-            '</div>',
-            unsafe_allow_html=True,
+        from utils.ai_tier import render_ai_tier_selector as _tj_ai_tier, TIER_MAP as _TJ_TIER_MAP
+        _use_claude_pi, _pi_model_pi = _tj_ai_tier(
+            key="portfolio_intel_engine",
+            label="Analysis Engine",
+            recommendation="👑 Highly Regarded strongly recommended — portfolio synthesis is the highest-stakes task",
+            default=2,
         )
-        st.caption("💡 👑 Highly Regarded Mode strongly recommended — this is the highest-stakes synthesis task (actual position decisions)")
         if not _pi_has_claude:
             st.markdown(
                 '<div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;'
@@ -895,6 +1159,25 @@ def render():
         if not open_trades:
             st.info("No open positions to analyze.")
         else:
+            # Staleness warning — if Quick Intel Run ran after last portfolio analysis
+            _pa_ts_check = st.session_state.get("_portfolio_analysis_ts")
+            _qir_ts_check = st.session_state.get("_macro_synopsis_ts") or st.session_state.get("_regime_context_ts")
+            if _pa_ts_check and _qir_ts_check and _qir_ts_check > _pa_ts_check:
+                st.markdown(
+                    '<div style="background:#1a1200;border:1px solid #f59e0b66;border-radius:6px;'
+                    'padding:8px 14px;margin-bottom:8px;font-size:12px;color:#f59e0b;">'
+                    '⚠ <b>Quick Intel Run has updated since your last portfolio analysis.</b> '
+                    'Re-run portfolio analysis to incorporate the latest signals.</div>',
+                    unsafe_allow_html=True,
+                )
+            elif not _pa_ts_check and _qir_ts_check:
+                st.markdown(
+                    '<div style="background:#0a1f0a;border:1px solid #22c55e44;border-radius:6px;'
+                    'padding:8px 14px;margin-bottom:8px;font-size:12px;color:#22c55e;">'
+                    '✅ Quick Intel signals ready — run portfolio analysis to use them.</div>',
+                    unsafe_allow_html=True,
+                )
+
             if st.button("🧠 Run Portfolio Analysis", type="primary", key="run_portfolio_intel"):
                 # Assemble upstream context from session_state
                 _rc = st.session_state.get("_regime_context") or {}
@@ -966,25 +1249,50 @@ def render():
                     "insider_net_flow": st.session_state.get("_insider_net_flow") or {},
                     "congress_bias": st.session_state.get("_congress_bias") or {},
                     "macro_synopsis": st.session_state.get("_macro_synopsis") or {},
+                    "portfolio_risk": st.session_state.get("_portfolio_risk_snapshot") or {},
+                    "tactical_regime": (
+                        f"{_tac_pos['tactical_score']}/100 ({_tac_pos['label']}) — {_tac_pos['action_bias']}"
+                        if _tac_pos else ""
+                    ),
+                    "options_flow": (
+                        f"{_of_pos['options_score']}/100 ({_of_pos['label']}) — {_of_pos['action_bias']}"
+                        if _of_pos else ""
+                    ),
+                    "narrative_alignment": "; ".join(
+                        f"{_pt['ticker']}: {min(_narr_by_ticker[_pt['ticker'].upper()], key=lambda n: {'HIGH':0,'MEDIUM':1,'LOW':2}.get(n.get('conviction','LOW'),2))['narrative']} ({min(_narr_by_ticker[_pt['ticker'].upper()], key=lambda n: {'HIGH':0,'MEDIUM':1,'LOW':2}.get(n.get('conviction','LOW'),2)).get('conviction','')})"
+                        for _pt in open_trades
+                        if _pt["ticker"].upper() in _narr_by_ticker
+                    )[:600],
+                    "social_sentiment": "; ".join(
+                        f"{_pt['ticker']}: {_stt['bull_pct']}% bull / {_stt['bear_pct']}% bear ({_stt['total']} msgs)"
+                        for _pt in open_trades
+                        for _stt in [next(
+                            (t for t in (st.session_state.get("_stocktwits_digest") or {}).get("trending_tickers", [])
+                             if t.get("symbol", "").upper() == _pt["ticker"].upper()),
+                            None
+                        )]
+                        if _stt and _stt.get("total", 0) > 0
+                    )[:400] or (
+                        f"Market-wide: {(st.session_state.get('_stocktwits_digest') or {}).get('overall_bull_pct', '?')}% bullish "
+                        f"({(st.session_state.get('_stocktwits_digest') or {}).get('market_mood', 'unknown')})"
+                        if st.session_state.get("_stocktwits_digest") else ""
+                    ),
                 }
                 try:
                     from services.sector_rotation import get_sector_context_str as _sr_ctx_fn
                     _upstream["sector_rotation"] = _sr_ctx_fn("", _rc.get("quadrant", ""))
                 except Exception:
                     _upstream["sector_rotation"] = ""
-                _use_claude = _sel_pi_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
-                _pi_model = None
-                if _sel_pi_tier == "🧠 Regard Mode":
-                    _pi_model = "grok-4-1-fast-reasoning"
-                elif _sel_pi_tier == "👑 Highly Regarded Mode":
-                    _pi_model = "claude-sonnet-4-6"
+                _use_claude = _use_claude_pi
+                _pi_model = _pi_model_pi
                 with st.spinner("Analyzing portfolio against macro conditions..."):
                     _pi_result = analyze_portfolio(open_trades, _upstream, use_claude=_use_claude, model=_pi_model)
                 if _pi_result and "_error" not in _pi_result:
                     st.session_state["_portfolio_analysis"] = _pi_result
                     st.session_state["_portfolio_analysis_ts"] = _dt.now()
-                    st.session_state["_portfolio_analysis_engine"] = _sel_pi_tier
-                    append_play("Portfolio Analysis", _sel_pi_tier, _pi_result,
+                    st.session_state["_portfolio_analysis_engine"] = st.session_state.get("portfolio_intel_engine", "⚡ Freeloader Mode")
+                    _pi_tier_label = st.session_state.get("portfolio_intel_engine", "⚡ Freeloader Mode")
+                    append_play("Portfolio Analysis", _pi_tier_label, _pi_result,
                                 meta={"n_positions": len(open_trades), "verdict": _pi_result.get("verdict")})
                     # Telegram alert for high-risk verdicts
                     _verdict_val = _pi_result.get("verdict", "")
@@ -1042,11 +1350,7 @@ def render():
                 _age_m = int((_dt.now() - _pa_ts).total_seconds() / 60)
                 _age_str = f"{_age_m}m ago"
             _is_claude_engine = _pa_engine in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
-            _claude_badge_html = (
-                f'<span style="background:linear-gradient(135deg,#7c3aed,#a855f7);'
-                f'color:#fff;font-size:10px;font-weight:700;letter-spacing:0.06em;'
-                f'padding:2px 8px;border-radius:3px;margin-left:8px;">✦ POWERED BY CLAUDE</span>'
-            ) if _is_claude_engine else ""
+            _claude_badge_html = ""
             st.markdown(
                 f'<div style="background:#1a1a1a;border:1px solid {COLORS["border"]};border-radius:6px;padding:14px 18px;margin-bottom:10px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
@@ -1509,30 +1813,17 @@ def render():
                     unsafe_allow_html=True,
                 )
 
-            _fa_has_claude = bool(os.getenv("XAI_API_KEY"))
-
-
-            _has_anthropic_fa_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-            _fa_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _fa_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_fa_has_claude else [])
             _fa_col1, _fa_col2 = st.columns([4, 2])
             with _fa_col1:
-                _fa_tier = st.radio(
-                    "Factor Engine", _fa_tier_opts, horizontal=True,
+                _fa_use_claude, _fa_model = render_ai_tier_selector(
                     key="factor_analysis_engine",
-                    help="Regard = Grok 4.1 (fast, reasoning) · Highly Regarded = Sonnet (richer, specific)",
+                    label="Factor Engine",
+                    recommendation="🧠 Regard for daily checks · 👑 Highly Regarded for rebalancing decisions",
                 )
-            # Change A — engine recommendation caption
-            st.caption("💡 **Regard** for daily checks · **👑 Highly Regarded** for rebalancing decisions (position-specific suggestions)")
             with _fa_col2:
                 _fa_run = st.button("🧠 Analyze Factors", key="run_factor_analysis", type="primary")
 
             if _fa_run:
-                _fa_use_claude = _fa_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
-                _fa_model = None
-                if _fa_tier == "🧠 Regard Mode":
-                    _fa_model = "grok-4-1-fast-reasoning"
-                elif _fa_tier == "👑 Highly Regarded Mode":
-                    _fa_model = "claude-sonnet-4-6"
                 try:
                     from services.portfolio_sizing import aggregate_factor_exposure as _agg_fa
                     _fe_for_ai = _agg_fa(_sz_result.values())
@@ -1550,7 +1841,7 @@ def render():
                 if _fa_result and "_error" not in _fa_result:
                     st.session_state["_factor_analysis"] = _fa_result
                     st.session_state["_factor_analysis_ts"] = _dt.now()
-                    st.session_state["_factor_analysis_engine"] = _fa_tier
+                    st.session_state["_factor_analysis_engine"] = st.session_state.get("factor_analysis_engine", "⚡ Freeloader Mode")
                 else:
                     st.error(f"Factor analysis failed: {(_fa_result or {}).get('_error', 'Unknown error')}")
 
@@ -1649,7 +1940,8 @@ def render():
                     _sim_ticker = st.text_input("Ticker", placeholder="e.g. GLD", key="sim_ticker").strip().upper()
                     if _sim_ticker:
                         try:
-                            _sim_info = yf.Ticker(_sim_ticker).info
+                            from services.market_data import get_yf_info_safe
+                            _sim_info = get_yf_info_safe(_sim_ticker)
                             _sim_name = _sim_info.get("shortName") or _sim_info.get("longName") or ""
                             _sim_sector = _sim_info.get("sector") or _sim_info.get("industryDisp") or ""
                             _sim_summary = (_sim_info.get("longBusinessSummary") or "")[:200]
@@ -1744,28 +2036,17 @@ def render():
 
                     # ── AI Verdict Engine ──────────────────────────────────────
                     st.markdown(f'<div style="margin-top:12px;border-top:1px solid #1E3A4A;padding-top:10px;"></div>', unsafe_allow_html=True)
-                    _sv_has_claude = bool(os.getenv("XAI_API_KEY"))
-
-                    _has_anthropic_sv_has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-                    _sv_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _sv_has_claude else []) + (["👑 Highly Regarded Mode"] if _has_anthropic_sv_has_claude else [])
                     _sv_col1, _sv_col2 = st.columns([4, 2])
                     with _sv_col1:
-                        _sv_tier = st.radio(
-                            "Verdict Engine", _sv_tier_opts, horizontal=True,
+                        _sv_use_claude, _sv_model = render_ai_tier_selector(
                             key="sim_verdict_engine",
-                            help="Regard = Grok 4.1 (fast) · Highly Regarded = Sonnet (deeper regime reasoning)",
+                            label="Verdict Engine",
+                            recommendation="🧠 Regard sufficient · 👑 Highly Regarded for high-conviction sizing decisions",
                         )
-                    st.caption("💡 **Regard** sufficient · **👑 Highly Regarded** for high-conviction sizing decisions")
                     with _sv_col2:
                         _sv_run = st.button("🧠 Get AI Verdict", key="sim_verdict_run", type="primary")
 
                     if _sv_run:
-                        _sv_use_claude = _sv_tier in ("🧠 Regard Mode", "👑 Highly Regarded Mode")
-                        _sv_model = None
-                        if _sv_tier == "🧠 Regard Mode":
-                            _sv_model = "grok-4-1-fast-reasoning"
-                        elif _sv_tier == "👑 Highly Regarded Mode":
-                            _sv_model = "claude-sonnet-4-6"
                         from services.claude_client import analyze_sim_verdict as _asv
                         with st.spinner("Getting AI verdict…"):
                             _sv_result = _asv(
@@ -1779,7 +2060,7 @@ def render():
                             )
                         if _sv_result and "_error" not in _sv_result:
                             st.session_state["_sim_verdict"] = _sv_result
-                            st.session_state["_sim_verdict_engine"] = _sv_tier
+                            st.session_state["_sim_verdict_engine"] = st.session_state.get("sim_verdict_engine", "⚡ Freeloader Mode")
                         else:
                             st.error(f"Verdict error: {(_sv_result or {}).get('_error', 'Unknown')}")
 

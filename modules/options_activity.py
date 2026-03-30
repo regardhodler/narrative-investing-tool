@@ -544,3 +544,271 @@ def _get_options_data(ticker: str) -> tuple:
         return df, expirations
     except Exception:
         return None, []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OPTIONS FLOW SENTIMENT — QIR background scoring engine
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _clamp_of(x: float) -> float:
+    return max(-1.0, min(1.0, x))
+
+
+def _score_to_dir(s: float) -> str:
+    if s > 0.15:  return "Bullish"
+    if s < -0.15: return "Bearish"
+    return "Neutral"
+
+
+def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> dict:
+    """4-signal Options Flow Sentiment score (0-100) for SPY — hours-to-days timeframe.
+
+    Signals: P/C Ratio, Gamma Zone, IV Skew, Unusual Activity Bias.
+    Returns same structure as _tactical_context for consistent downstream consumption.
+    """
+    strikes    = spy_chain.get("strikes", [])
+    call_oi    = spy_chain.get("call_oi", [])
+    put_oi     = spy_chain.get("put_oi", [])
+    spot_price = spy_chain.get("price", 0)
+
+    import pandas as _pd
+
+    # Pre-fetched arrays from spy_chain (populated by run_quick_options_flow)
+    _s_call_vol = spy_chain.get("call_vol", [])
+    _s_put_vol  = spy_chain.get("put_vol",  [])
+    _s_call_iv  = spy_chain.get("call_iv",  [])
+    _s_put_iv   = spy_chain.get("put_iv",   [])
+    _s_call_oi  = spy_chain.get("call_oi",  [])
+    _s_put_oi   = spy_chain.get("put_oi",   [])
+    _has_vol    = bool(_s_call_vol) and (sum(_s_call_vol) + sum(_s_put_vol)) > 0
+
+    # ── Signal 1: P/C Ratio (weight 3.0) ─────────────────────────────────────
+    total_call_vol = total_put_vol = 0
+    if _has_vol:
+        total_call_vol = sum(_s_call_vol)
+        total_put_vol  = sum(_s_put_vol)
+    else:
+        # Fallback: use OI as volume proxy, then try fresh yfinance fetch
+        if _s_call_oi and _s_put_oi:
+            total_call_vol = sum(_s_call_oi)
+            total_put_vol  = sum(_s_put_oi)
+        else:
+            try:
+                import yfinance as _yf
+                _spy = _yf.Ticker("SPY")
+                _expiries = list(_spy.options or [])[:2]
+                for _exp in _expiries:
+                    _ch = _spy.option_chain(_exp)
+                    total_call_vol += int(_ch.calls["volume"].fillna(0).sum())
+                    total_put_vol  += int(_ch.puts["volume"].fillna(0).sum())
+            except Exception:
+                pass
+
+    pc_ratio   = (total_put_vol / total_call_vol) if total_call_vol > 0 else 1.0
+    sig1_score = _clamp_of((0.9 - pc_ratio) / 0.3)
+    pc_display = f"{pc_ratio:.2f} ({'bullish' if pc_ratio < 0.8 else ('bearish' if pc_ratio > 1.1 else 'neutral')})"
+
+    # ── Signal 2: Gamma Zone (weight 1.5) ─────────────────────────────────────
+    sig2_score    = 0.0
+    gamma_display = "N/A (neutral)"
+    if gamma_data:
+        zone = gamma_data.get("zone", "")
+        if "Positive" in zone:
+            sig2_score    = 0.4
+            gamma_display = "Positive (stabilizing)"
+        elif "Negative" in zone:
+            sig2_score    = -0.6
+            gamma_display = "Negative (amplifying)"
+        gflip = gamma_data.get("gamma_flip")
+        if gflip and spot_price:
+            gamma_display += f" · flip ${gflip:.0f}"
+
+    # ── Signal 3: IV Skew (weight 2.0) ────────────────────────────────────────
+    sig3_score   = 0.0
+    skew_display = "N/A"
+    if _s_call_iv and _s_put_iv and spot_price:
+        try:
+            import numpy as _np3
+            _strikes_arr = _np3.array(strikes)
+            _call_iv_arr = _np3.array(_s_call_iv)
+            _put_iv_arr  = _np3.array(_s_put_iv)
+            _otm_put_idx  = int(_np3.argmin(_np3.abs(_strikes_arr - spot_price * 0.95)))
+            _otm_call_idx = int(_np3.argmin(_np3.abs(_strikes_arr - spot_price * 1.05)))
+            _put_iv_val  = _put_iv_arr[_otm_put_idx]
+            _call_iv_val = _call_iv_arr[_otm_call_idx]
+            if _call_iv_val > 0 and _put_iv_val > 0:
+                _skew        = _put_iv_val / _call_iv_val
+                sig3_score   = _clamp_of((1.1 - _skew) / 0.2)
+                skew_display = f"{_skew:.2f} ({'flat' if _skew < 1.05 else ('steep' if _skew > 1.3 else 'moderate')})"
+        except Exception:
+            pass
+    if skew_display == "N/A":
+        try:
+            import yfinance as _yf2
+            _spy2 = _yf2.Ticker("SPY")
+            _exp0 = list(_spy2.options or [])[0] if _spy2.options else None
+            if _exp0 and spot_price:
+                _chain2 = _spy2.option_chain(_exp0)
+                _cdf = _chain2.calls[["strike", "impliedVolatility"]].dropna()
+                _pdf = _chain2.puts[["strike",  "impliedVolatility"]].dropna()
+                _pr  = _pdf.iloc[(_pdf["strike"] - spot_price * 0.95).abs().argsort()[:1]]
+                _cr  = _cdf.iloc[(_cdf["strike"] - spot_price * 1.05).abs().argsort()[:1]]
+                if len(_pr) and len(_cr):
+                    _piv = float(_pr["impliedVolatility"].iloc[0])
+                    _civ = float(_cr["impliedVolatility"].iloc[0])
+                    if _civ > 0:
+                        _skew = _piv / _civ
+                        sig3_score   = _clamp_of((1.1 - _skew) / 0.2)
+                        skew_display = f"{_skew:.2f} ({'flat' if _skew < 1.05 else ('steep' if _skew > 1.3 else 'moderate')})"
+        except Exception:
+            pass
+
+    # ── Signal 4: Unusual Activity Bias (weight 1.5) ──────────────────────────
+    sig4_score      = 0.0
+    unusual_display = "N/A"
+    if _s_call_vol and _s_call_oi and _s_put_vol and _s_put_oi:
+        try:
+            _c_unusual = sum(
+                v for v, oi in zip(_s_call_vol, _s_call_oi) if oi > 0 and v / oi > 2.0
+            )
+            _p_unusual = sum(
+                v for v, oi in zip(_s_put_vol, _s_put_oi) if oi > 0 and v / oi > 2.0
+            )
+            _total_un = _c_unusual + _p_unusual
+            if _total_un > 0:
+                sig4_score      = _clamp_of((_c_unusual - _p_unusual) / _total_un)
+                unusual_display = (
+                    f"calls {_c_unusual:,.0f} vs puts {_p_unusual:,.0f} "
+                    f"({'call-heavy' if sig4_score > 0.2 else ('put-heavy' if sig4_score < -0.2 else 'mixed')})"
+                )
+        except Exception:
+            pass
+    if unusual_display == "N/A":
+        try:
+            import yfinance as _yf3
+            _spy3 = _yf3.Ticker("SPY")
+            _exp1 = list(_spy3.options or [])[0] if _spy3.options else None
+            if _exp1:
+                _chain3 = _spy3.option_chain(_exp1)
+                _cdf3 = _chain3.calls[["volume", "openInterest"]].fillna(0)
+                _pdf3 = _chain3.puts[["volume",  "openInterest"]].fillna(0)
+                _cu = float(_cdf3.loc[_cdf3["openInterest"] > 0].apply(
+                    lambda r: r["volume"] if r["volume"] / r["openInterest"] > 2.0 else 0, axis=1).sum())
+                _pu = float(_pdf3.loc[_pdf3["openInterest"] > 0].apply(
+                    lambda r: r["volume"] if r["volume"] / r["openInterest"] > 2.0 else 0, axis=1).sum())
+                _tu = _cu + _pu
+                if _tu > 0:
+                    sig4_score      = _clamp_of((_cu - _pu) / _tu)
+                    unusual_display = (
+                        f"calls {_cu:,.0f} vs puts {_pu:,.0f} "
+                        f"({'call-heavy' if sig4_score > 0.2 else ('put-heavy' if sig4_score < -0.2 else 'mixed')})"
+                    )
+        except Exception:
+            pass
+
+    # ── Aggregate ─────────────────────────────────────────────────────────────
+    scores  = [sig1_score, sig2_score, sig3_score, sig4_score]
+    weights = [3.0, 1.5, 2.0, 1.5]
+    agg     = float(np.average(scores, weights=weights))
+    options_score = int(round((agg + 1.0) * 50))
+    options_score = max(0, min(100, options_score))
+
+    if options_score >= 65:
+        label       = "Call-Skewed Flow"
+        action_bias = "Options market favoring risk-on. Call flow dominant — supportive of long entries."
+    elif options_score >= 52:
+        label       = "Neutral Flow"
+        action_bias = "Options positioning mixed. No strong directional bias in the market."
+    elif options_score >= 38:
+        label       = "Put-Skewed Flow"
+        action_bias = "Elevated put demand. Market hedging above normal — be selective with new longs."
+    else:
+        label       = "Bearish Hedging"
+        action_bias = "Significant defensive positioning in options. Consider reducing risk exposure."
+
+    signal_rows = [
+        {"Signal": "P/C Ratio",           "Value": pc_display,      "Score": round(sig1_score, 3), "Direction": _score_to_dir(sig1_score)},
+        {"Signal": "Gamma Zone",           "Value": gamma_display,   "Score": round(sig2_score, 3), "Direction": _score_to_dir(sig2_score)},
+        {"Signal": "IV Skew (put/call)",   "Value": skew_display,    "Score": round(sig3_score, 3), "Direction": _score_to_dir(sig3_score)},
+        {"Signal": "Unusual Activity",     "Value": unusual_display, "Score": round(sig4_score, 3), "Direction": _score_to_dir(sig4_score)},
+    ]
+
+    return {
+        "options_score": options_score,
+        "label":         label,
+        "action_bias":   action_bias,
+        "signals":       signal_rows,
+        "pc_ratio":      round(pc_ratio, 3),
+        "raw_score":     round(agg, 3),
+    }
+
+
+def run_quick_options_flow(use_claude: bool = False, model: str | None = None) -> dict | None:
+    """Background-safe QIR helper — fetches SPY options data and returns Options Flow context dict.
+
+    No st.* calls. Caller (main thread) writes result to session_state.
+    Bypasses @st.cache_data via __wrapped__ — background threads cannot use Streamlit's cache
+    after cache_data.clear() is called at the start of QIR.
+    Gamma is skipped (scores neutral) to avoid the double-cached _compute_spy_gamma_mode chain.
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    tk = yf.Ticker("SPY")
+    hist = tk.history(period="5d", interval="1d", auto_adjust=True)
+    if hist is None or hist.empty:
+        raise RuntimeError("SPY price history unavailable (market closed or yfinance issue)")
+    price = float(hist["Close"].iloc[-1])
+    expiries = list(tk.options or [])
+    if not expiries:
+        raise RuntimeError("SPY has no options expiries listed (market closed or yfinance issue)")
+
+    selected = expiries[:min(2, len(expiries))]
+    strike_map: dict = {}
+    chain_errors = []
+    for exp in selected:
+        try:
+            chain = tk.option_chain(exp)
+        except Exception as _ce:
+            chain_errors.append(f"{exp}: {_ce}")
+            continue
+        for side, sign in ((chain.calls, 1.0), (chain.puts, -1.0)):
+            if side is None or side.empty:
+                continue
+            subset = side[["strike", "openInterest", "impliedVolatility", "volume"]].copy()
+            subset["openInterest"]     = pd.to_numeric(subset["openInterest"],     errors="coerce").fillna(0)
+            subset["impliedVolatility"] = pd.to_numeric(subset["impliedVolatility"], errors="coerce").fillna(0.2)
+            subset["volume"]           = pd.to_numeric(subset["volume"],           errors="coerce").fillna(0)
+            for _, row in subset.iterrows():
+                s = float(row["strike"])
+                if s not in strike_map:
+                    strike_map[s] = {"call_oi": 0.0, "put_oi": 0.0, "call_vol": 0.0, "put_vol": 0.0,
+                                     "call_iv": 0.0, "put_iv": 0.0}
+                if sign > 0:
+                    strike_map[s]["call_oi"]  += float(row["openInterest"])
+                    strike_map[s]["call_vol"] += float(row["volume"])
+                    strike_map[s]["call_iv"]   = float(row["impliedVolatility"])
+                else:
+                    strike_map[s]["put_oi"]  += float(row["openInterest"])
+                    strike_map[s]["put_vol"] += float(row["volume"])
+                    strike_map[s]["put_iv"]   = float(row["impliedVolatility"])
+
+    if not strike_map:
+        detail = f" ({'; '.join(chain_errors)})" if chain_errors else " (empty chain data)"
+        raise RuntimeError(f"SPY option chain returned no strike data{detail}")
+
+    strikes = sorted(strike_map.keys())
+    spy_chain = {
+        "ticker": "SPY",
+        "price": price,
+        "strikes": strikes,
+        "call_oi":  [strike_map[s]["call_oi"]  for s in strikes],
+        "put_oi":   [strike_map[s]["put_oi"]   for s in strikes],
+        "call_vol": [strike_map[s]["call_vol"] for s in strikes],
+        "put_vol":  [strike_map[s]["put_vol"]  for s in strikes],
+        "call_iv":  [strike_map[s]["call_iv"]  for s in strikes],
+        "put_iv":   [strike_map[s]["put_iv"]   for s in strikes],
+        "expiries": selected,
+    }
+    # Gamma skipped in background thread (doubly cached, unreliable) — scores as neutral
+    return _build_options_flow_dashboard(spy_chain, gamma_data=None)

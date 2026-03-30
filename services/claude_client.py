@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import requests
 import streamlit as st
@@ -11,6 +11,16 @@ XAI_MODEL_REGARD = "grok-4-1-fast-reasoning"
 def _is_xai_model(model: str | None) -> bool:
     """True when the model should be routed to xAI (api.x.ai)."""
     return bool(model and model.startswith("grok-"))
+
+
+def _fmt_tactical_ctx(ctx: dict | None) -> str:
+    """Format a _tactical_context dict as a one-line prompt injection string."""
+    if not ctx:
+        return ""
+    score = ctx.get("tactical_score", "?")
+    label = ctx.get("label", "?")
+    bias  = ctx.get("action_bias", "")
+    return f"Tactical Score: {score}/100 ({label}) — {bias}"
 
 
 def _call_xai(
@@ -246,19 +256,22 @@ def analyze_mda_sentiment(
 
     prompt = f"""You are a financial NLP analyst. Analyze the management tone in this MD&A section from {company}'s 10-K filing.
 
+CRITICAL: bullish_phrases and bearish_phrases must be EXACT verbatim quotes copied from the text below. Do not paraphrase or invent. If you cannot find a suitable quote, use an empty list.
+
 Score the tone and return ONLY valid JSON (no markdown, no explanation):
 
 {{
   "tone": "<confident|cautious|defensive|neutral>",
   "tone_score": <integer 0-100, 100=very confident, 0=very defensive/alarming>,
   "forward_outlook": "<positive|mixed|negative>",
-  "bullish_phrases": ["<direct quote 1>", "<direct quote 2>"],
-  "bearish_phrases": ["<direct quote 1>", "<direct quote 2>"],
+  "bullish_phrases": ["<exact verbatim quote from text>", "<exact verbatim quote from text>"],
+  "bearish_phrases": ["<exact verbatim quote from text>", "<exact verbatim quote from text>"],
   "summary": "<2 sentences summarizing the overall management tone and key tone signals>"
 }}
 
 MD&A text:
-{mda_text[:8000]}"""
+{mda_text[:8000]}
+[Note: text may be truncated]"""
 
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
     _cl_model = model or "grok-4-1-fast-reasoning"
@@ -433,7 +446,72 @@ Rules:
         return []
 
 
-def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None, current_events: str = "") -> dict | None:
+def generate_tactical_analysis(
+    signals: list[dict],
+    tactical_score: int,
+    label: str,
+    macro_label: str = "",
+    use_claude: bool = False,
+    model: str | None = None,
+) -> str:
+    """Generate an AI narrative interpretation of the Tactical Regime signals.
+
+    Returns a plain-text 2-3 paragraph analysis. Falls back to a template
+    string on API failure so the UI always has something to display.
+    """
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
+    sig_lines = "\n".join(
+        f"- {s['Signal']}: {s['Value']}  (score {s['Score']:+.3f} — {s['Direction']})"
+        for s in signals
+    )
+    prompt = f"""You are a short-term market tactician. Today is {_today}.
+
+TACTICAL REGIME: {label} (score {tactical_score}/100)
+MACRO BACKDROP: {macro_label if macro_label else "Not specified"}
+
+TACTICAL SIGNALS:
+{sig_lines}
+
+Write a concise 2-3 paragraph tactical analysis. Cover:
+1. What the combined signal picture says about short-term risk appetite and entry conditions
+2. Which specific signals are most dominant right now and why they matter
+3. A concrete action implication: what a trader should do with this setup (add, hold, reduce, or hedge)
+
+Be specific, clinical, and use the actual signal values. No vague generalities."""
+
+    _cl_model = model or "grok-4-1-fast-reasoning"
+
+    try:
+        if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 600, 0.4)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            msg = client.messages.create(
+                model=_cl_model, max_tokens=600, temperature=0.4,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return msg.content[0].text.strip()
+        else:
+            api_key = os.getenv("GROQ_API_KEY", "")
+            if not api_key:
+                return f"Tactical Regime: {label} ({tactical_score}/100). Add a GROQ_API_KEY to enable AI narrative."
+            resp = requests.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}],
+                      "max_tokens": 600, "temperature": 0.4},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Tactical Regime: {label} ({tactical_score}/100). AI analysis unavailable: {e}"
+
+
+def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None, current_events: str = "", tactical_context: str = "") -> dict | None:
     """Generate an AI valuation and recommendation for a ticker via Groq or Claude.
 
     Returns dict with keys: rating, confidence, summary, bullish_factors,
@@ -441,11 +519,20 @@ def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False,
     """
     import re
 
-    _ce_block = f"\nCURRENT EVENTS & MARKET INTEL:\n{current_events[:800]}\n" if current_events else ""
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+    _ce_block = (
+        f"\nCURRENT EVENTS & MARKET INTEL:\n{current_events[:800]}\n"
+        if current_events and len(current_events.strip()) > 20
+        else "\nCURRENT EVENTS: None provided — base analysis on signals only.\n"
+    )
 
-    prompt = f"""You are an expert equity research analyst. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
+    _tac_block = (f"\nTACTICAL REGIME (days-to-weeks entry timing): {tactical_context}\n"
+                  if tactical_context else "")
 
-{signals_text}{_ce_block}
+    prompt = f"""You are an expert equity research analyst. Analysis date: {_today}. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
+
+{signals_text}{_ce_block}{_tac_block}
 
 Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys:
 {{
@@ -556,7 +643,10 @@ def suggest_regime_plays(regime: str, score: float, signal_summary: str, use_cla
         "Goldilocks": "GOLDILOCKS regime (rising growth + stable inflation): prioritize equities broadly (QQQ, SPY, IWM), growth sectors, EM. Avoid defensive gold and long bonds.",
     }.get(_quadrant, "")
 
-    prompt = f"""You are a macro strategist. The market risk regime is currently **{regime}** with an aggregate score of {score:+.2f} (scale: -1 risk-off to +1 risk-on).
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
+    prompt = f"""You are a macro strategist. As of {_today}, the market risk regime is currently **{regime}** with an aggregate score of {score:+.2f} (scale: -1 risk-off to +1 risk-on).
 
 Key signal summary:
 {signal_summary}
@@ -749,7 +839,10 @@ def summarize_whale_activity(activity_text: str, use_claude: bool = False, model
 
     Returns a markdown-formatted narrative string about big money themes this quarter.
     """
-    prompt = f"""You are a top-tier institutional equity analyst. Analyze these quarterly 13F whale position changes and recent activism filings, then write a narrative summary.
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
+    prompt = f"""You are a top-tier institutional equity analyst. As of {_today}, analyze these quarterly 13F whale position changes and recent activism filings, then write a narrative summary.
 
 Focus on:
 - What themes or sectors are the biggest hedge funds and institutions converging on?
@@ -824,11 +917,15 @@ def generate_doom_briefing(stress_data: str, use_claude: bool = False, model: st
     Returns a markdown-formatted doom briefing string.
     """
     # Truncate stress_data to avoid Groq context limits (~6k chars is safe)
+    from datetime import date as _date
+    _today = _date.today().isoformat()
     _stress_truncated = stress_data[:6000] + "\n[...truncated]" if len(stress_data) > 6000 else stress_data
-    if current_events:
+    if current_events and len(current_events.strip()) > 20:
         _stress_truncated += f"\n\nCURRENT EVENTS CONTEXT:\n{current_events[:1500]}"
+    else:
+        _stress_truncated += "\n\nCURRENT EVENTS CONTEXT: None provided — base analysis on signal data only."
 
-    prompt = f"""You are a senior sell-side risk strategist writing for institutional allocators.
+    prompt = f"""You are a senior sell-side risk strategist writing for institutional allocators. Analysis date: {_today}.
 
 Analyze the stress signal data below and produce a concise risk assessment briefing.
 
@@ -919,8 +1016,10 @@ def narrate_policy_transmission(chains_json: str, adj_probs_json: str, use_claud
     chains_json and adj_probs_json are JSON strings (hashable for @st.cache_data).
     Returns 3-4 sentence narrative string.
     """
+    from datetime import date as _date
+    _today = _date.today().isoformat()
     prompt = (
-        "You are a macro policy analyst. Based on these Fed policy probability scenarios and "
+        f"You are a macro policy analyst. As of {_today}, based on these Fed policy probability scenarios and "
         "causal transmission chains, write exactly 3-4 sentences explaining: "
         "(1) the most likely rate path and its probability, "
         "(2) how that path transmits through credit markets, housing, and employment, "
@@ -1056,16 +1155,18 @@ def assess_macro_fit(
     regime_context: str,
     rate_path_context: str,
     black_swan_context: str,
+    tactical_context: str = "",
     use_claude: bool = False,
     model: str | None = None,
 ) -> dict | None:
     """Evaluate how well a ticker fits the current macro regime environment."""
+    _tac_line = f"\n- Tactical Regime (entry timing): {tactical_context}" if tactical_context else ""
     prompt = f"""You are a macro-regime portfolio analyst. Evaluate how well {ticker} ({company_name}, {sector}) fits the CURRENT macro environment.
 
 CURRENT MACRO ENVIRONMENT:
 - Regime Context: {regime_context}
 - Fed Rate Path: {rate_path_context}
-- Black Swan Tail Risks: {black_swan_context if black_swan_context else "None analyzed"}
+- Black Swan Tail Risks: {black_swan_context if black_swan_context else "None analyzed"}{_tac_line}
 - Stock Technical: {price_summary}
 
 Rate the macro fit from 1-5 and explain. Consider:
@@ -1174,6 +1275,26 @@ def analyze_portfolio(
         if factor_exposure else "  Not computed"
     )
 
+    # Portfolio risk snapshot block
+    _pr = upstream.get("portfolio_risk") or {}
+    _pr_block = ""
+    if _pr:
+        _pr_lines = []
+        if _pr.get("beta") is not None:
+            _pr_lines.append(f"Beta: {_pr['beta']} | VaR95: {_pr.get('var_95_pct', '?')}% | CVaR95: {_pr.get('cvar_95_pct', '?')}% | Total Value: ${_pr.get('total_value', 0):,}")
+        if _pr.get("max_position_weight"):
+            _pr_lines.append(f"Largest position: {_pr.get('top_position')} at {_pr['max_position_weight']}% of portfolio")
+        _sw = _pr.get("sector_weights") or {}
+        if _sw:
+            _pr_lines.append("Sector weights: " + ", ".join(f"{s} {w}%" for s, w in sorted(_sw.items(), key=lambda x: -x[1])))
+        _stress = _pr.get("stress_scenarios") or []
+        if _stress:
+            _pr_lines.append("Stress tests: " + " | ".join(f"{s['scenario']} {s['port_impact_pct']:+.1f}% (${s['port_impact_dollar']:,})" for s in _stress))
+        _rf = _pr.get("risk_flags") or []
+        if _rf:
+            _pr_lines.append("Risk flags: " + "; ".join(f.replace("⚠ ", "") for f in _rf))
+        _pr_block = "\n\nPORTFOLIO RISK METRICS (computed):\n" + "\n".join(f"  {l}" for l in _pr_lines)
+
     # Sizing scores block
     sizing_scores = upstream.get("sizing_scores") or {}
 
@@ -1273,7 +1394,7 @@ MACRO ENVIRONMENT:
 - Cross-Signal Discovery Plays: {discovery_plays_str}{_ms_block}{ce_block}{_tn_block}{_atg_block}{_pm_block}{_fd_block}{_sm_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
-{fe_block}
+{fe_block}{_pr_block}
 
 BLACK SWAN RISKS:
 {swan_block}
@@ -1669,16 +1790,18 @@ def discover_trending_narratives(
     regime = macro_context.get("regime", "Unknown")
     score = macro_context.get("score", 0.0)
     quadrant = macro_context.get("quadrant", "Unknown")
+    tactical_ctx = macro_context.get("tactical_context", "")
     tf_label = "past 7 days" if timeframe == "1W" else "past 30 days"
 
     headlines_text = "\n".join(f"- {h}" for h in headlines[:40])
     trends_text = "\n".join(f"- {t}" for t in trends[:30]) if trends else "- (unavailable)"
+    _tac_line = f"\n- Tactical Regime (entry timing): {tactical_ctx}" if tactical_ctx else ""
 
     prompt = f"""You are a macro narrative analyst. Based on the data below, identify the TOP 5 EMERGING INVESTMENT NARRATIVES of the {tf_label}.
 
 MACRO CONTEXT:
 - Regime: {regime} (score {score:+.2f})
-- Quadrant: {quadrant}
+- Quadrant: {quadrant}{_tac_line}
 
 RISING GOOGLE TRENDS (finance-related searches gaining momentum):
 {trends_text}
@@ -1778,7 +1901,15 @@ def generate_squeeze_thesis(
     _fund_det = _details.get("fundamentals", {})
     _si_det = _details.get("short_interest", {})
 
-    prompt = f"""You are a quant equity analyst specializing in short squeeze setups. Analyze the following data for {ticker} and write a concise squeeze thesis.
+    def _fmt_det(d: dict) -> str:
+        if not d:
+            return "N/A"
+        return " | ".join(f"{k}: {v}" for k, v in d.items() if v is not None)
+
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
+    prompt = f"""You are a quant equity analyst specializing in short squeeze setups. Analysis date: {_today}. Analyze the following data for {ticker} and write a concise squeeze thesis.
 
 SHORT INTEREST DATA:
 - Short % of Float: {_short_pct:.1f}%
@@ -1791,9 +1922,9 @@ SIGNAL SCORECARD (0-100 each):
 - Composite: {_composite} | Technicals: {_tech} | Fundamentals: {_fund}
 - Insider: {_ins} | Options: {_opt} | Congress: {_cong} | Short Interest: {_si}
 
-TECHNICAL DETAILS: {_tech_det}
-FUNDAMENTAL DETAILS: {_fund_det}
-SHORT INTEREST DETAILS: {_si_det}
+TECHNICAL DETAILS: {_fmt_det(_tech_det)}
+FUNDAMENTAL DETAILS: {_fmt_det(_fund_det)}
+SHORT INTEREST DETAILS: {_fmt_det(_si_det)}
 
 Write a squeeze thesis covering:
 1. The squeeze setup quality — is the short float + DTC combination dangerous for bears?
@@ -1856,3 +1987,103 @@ Use clear paragraphs with a blank line between each. Be specific and direct. No 
         text = text.strip()
 
     return text
+
+
+def interpret_risk_matrix(
+    risk_snapshot: dict,
+    regime_context: dict,
+    use_claude: bool = False,
+    model: str | None = None,
+    tactical_context: dict | None = None,
+) -> dict:
+    """
+    AI interpretation of the portfolio risk matrix.
+    Returns {summary, alert_level, action_items}.
+    """
+    if not risk_snapshot:
+        return {"summary": "No risk data available — run the Risk Matrix first.", "alert_level": "", "action_items": []}
+
+    regime = regime_context.get("regime", "Unknown")
+    score = regime_context.get("score", 0)
+    quadrant = regime_context.get("quadrant", "Unknown")
+
+    beta = risk_snapshot.get("beta")
+    var_95 = risk_snapshot.get("var_95_pct")
+    cvar_95 = risk_snapshot.get("cvar_95_pct")
+    total_val = risk_snapshot.get("total_value") or 0
+    top_pos = risk_snapshot.get("top_position")
+    max_wt = risk_snapshot.get("max_position_weight")
+    sector_weights = risk_snapshot.get("sector_weights") or {}
+    stress = risk_snapshot.get("stress_scenarios") or []
+    flags = risk_snapshot.get("risk_flags") or []
+
+    sw_str = ", ".join(f"{s} {w}%" for s, w in sorted(sector_weights.items(), key=lambda x: -x[1]))
+    stress_str = " | ".join(f"{s['scenario']} {s['port_impact_pct']:+.1f}%" for s in stress)
+    flags_str = "; ".join(f.replace("⚠ ", "") for f in flags) if flags else "None"
+
+    _tac_line = ""
+    if tactical_context:
+        _tac_line = f"\n- Tactical Timing: {tactical_context.get('tactical_score', '?')}/100 ({tactical_context.get('label', '')}) — {tactical_context.get('action_bias', '')}"
+
+    prompt = f"""You are a portfolio risk analyst. Interpret this portfolio's risk profile against the current macro regime.
+
+MACRO REGIME:
+- Regime: {regime} (score {score:+.2f})
+- Quadrant: {quadrant}{_tac_line}
+
+PORTFOLIO RISK PROFILE:
+- Beta vs SPY: {beta}
+- VaR 95%: {var_95}% | CVaR 95%: {cvar_95}%
+- Total portfolio value: ${total_val:,}
+- Largest position: {top_pos} at {max_wt}%
+- Sector weights: {sw_str}
+- Stress test impacts: {stress_str}
+- Risk flags: {flags_str}
+
+Provide a concise, actionable risk interpretation. Focus on:
+1. How the current regime (Risk-On/Off, quadrant) interacts with this specific risk profile
+2. Whether beta/VaR is appropriate for this regime
+3. The most dangerous stress scenario given current conditions
+4. Concrete actions to improve the risk/reward profile
+
+Return ONLY valid JSON:
+{{
+  "alert_level": "HIGH"|"MODERATE"|"LOW",
+  "summary": "2-3 sentences: regime-specific risk assessment",
+  "action_items": ["specific action 1", "specific action 2", "specific action 3"]
+}}"""
+
+    _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no preamble. Be concise and specific — no generic advice."
+    _model = model or "llama-3.3-70b-versatile"
+    try:
+        if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai([{"role": "user", "content": prompt}], _model, 1000, 0.3, system=_system)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            resp = client.messages.create(
+                model=_model or "claude-sonnet-4-6", max_tokens=1000, temperature=0.3,
+                system=_system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = resp.content[0].text.strip()
+        else:
+            r = requests.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {os.getenv('GROQ_API_KEY')}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": _system}, {"role": "user", "content": prompt}],
+                    "max_tokens": 800, "temperature": 0.3,
+                },
+                timeout=30,
+            )
+            raw = r.json()["choices"][0]["message"]["content"].strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[1]
+            if raw.endswith("```"):
+                raw = raw[:-3]
+            raw = raw.strip()
+        return json.loads(raw)
+    except Exception as e:
+        return {"summary": f"Interpretation error: {e}", "alert_level": "", "action_items": []}

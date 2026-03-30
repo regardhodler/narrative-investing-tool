@@ -19,15 +19,22 @@ def auth_gate() -> None:
         margin:8vh auto 0 auto;max-width:420px;
     ">
         <div style="
-            font-family:'JetBrains Mono',Consolas,monospace;font-size:32px;font-weight:700;
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:700;
             color:{COLORS['bloomberg_orange']};letter-spacing:0.12em;margin-bottom:4px;
-        ">HIGHLY REGARDED</div>
+        ">REGARD</div>
         <div style="
-            font-family:'JetBrains Mono',Consolas,monospace;font-size:32px;font-weight:300;
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:300;
+            color:{COLORS['text']};letter-spacing:0.18em;margin-bottom:8px;
+        ">TERMINALS</div>
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:300;
             color:{COLORS['text']};letter-spacing:0.18em;margin-bottom:8px;
         ">TERMINALS</div>
         <div style="
-            font-family:'JetBrains Mono',Consolas,monospace;font-size:14px;font-weight:400;
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:400;
+            color:#475569;letter-spacing:0.06em;margin-bottom:2px;
+        ">providing excellent analytics, one losing trade at a time</div>
+        <div style="
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:400;
             color:{COLORS['text_dim']};letter-spacing:0.10em;margin-bottom:8px;
         ">by Regardhodler</div>
         <div style="

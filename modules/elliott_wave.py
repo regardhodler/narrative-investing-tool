@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Module: Elliott Wave Analysis (SPY) — Multi-Degree
 
@@ -859,7 +859,7 @@ def render():
     st.markdown(
         '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
         'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
         '</div>',
         unsafe_allow_html=True,
     )

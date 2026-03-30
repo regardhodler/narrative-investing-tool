@@ -13,6 +13,7 @@ from services.sec_client import get_company_info, search_ticker_by_name
 from utils.session import get_ticker, set_narrative, set_ticker
 from utils.watchlist import add_to_watchlist, is_in_watchlist
 from utils.theme import COLORS, apply_dark_layout
+from utils.ai_tier import render_ai_tier_selector, TIER_OPTS, TIER_MAP, MODEL_HINT_HTML
 
 ASSET_CLASSES = {
     "Equities": None,  # sentinel — use Yahoo trending
@@ -163,33 +164,17 @@ def _render_trending_narratives():
     )
 
     _has_xai = bool(os.getenv("XAI_API_KEY"))
-
-
     _has_claude = bool(os.getenv("ANTHROPIC_API_KEY"))
-    _eng_opts = ["⚡ Freeloader Mode"]
-    if _has_claude:
-        _eng_opts += ["🧠 Regard Mode", "👑 Highly Regarded Mode"]
-    _eng_map = {
-        "⚡ Freeloader Mode":        (False, None),
-        "🧠 Regard Mode":         (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
 
     col_e, col_t = st.columns([2, 1])
     with col_e:
-        _eng = st.radio("Engine", _eng_opts, horizontal=True, key="disc_trend_engine")
+        _use_claude, _model = render_ai_tier_selector(
+            key="disc_trend_engine",
+            label="Engine",
+            recommendation="⚡ Freeloader for daily trend scanning · 🧠 Regard for deeper narrative grouping",
+        )
     with col_t:
         _tf = st.radio("Timeframe", ["1W", "1M", "3M"], horizontal=True, key="disc_trend_tf")
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    _use_claude, _model = _eng_map.get(_eng, (False, None))
-
     # Show cached result if available
     _cached = st.session_state.get("_trending_narratives")
     _cached_ts = st.session_state.get("_trending_narratives_ts")
@@ -229,7 +214,12 @@ def _render_trending_narratives():
             except Exception:
                 _trends = []
 
-        _macro = st.session_state.get("_regime_context") or {}
+        _macro = dict(st.session_state.get("_regime_context") or {})
+        # Inject tactical context so AI can prioritize narratives suited to current entry conditions
+        from services.claude_client import _fmt_tactical_ctx as _fmt_tac_nd
+        _tac_nd = _fmt_tac_nd(st.session_state.get("_tactical_context"))
+        if _tac_nd:
+            _macro["tactical_context"] = _tac_nd
 
         with st.spinner("AI synthesizing top narratives..."):
             _result = discover_trending_narratives(
@@ -256,6 +246,36 @@ def _render_trending_narratives():
             "macro": "#3b82f6", "sector": _oc, "commodity": "#f59e0b",
             "geopolitical": "#ef4444", "tech": "#8b5cf6",
         }
+        # Read tactical + options flow context once for all cards
+        _tac_nd = st.session_state.get("_tactical_context") or {}
+        _tac_badge_html = ""
+        if _tac_nd:
+            _tac_score = _tac_nd.get("tactical_score", 50)
+            _tac_lbl = _tac_nd.get("label", "")
+            _tac_icon = "⚡" if _tac_score >= 65 else ("⏸" if _tac_score >= 52 else ("⚠" if _tac_score >= 38 else "🔴"))
+            _tac_color = "#22c55e" if _tac_score >= 65 else ("#f59e0b" if _tac_score >= 38 else "#ef4444")
+            _tac_badge_html = (
+                f'<span style="background:{_tac_color}18;border:1px solid {_tac_color}44;border-radius:3px;'
+                f'padding:1px 7px;font-size:10px;color:{_tac_color};">{_tac_icon} {_tac_lbl}</span>'
+            )
+        _of_nd = st.session_state.get("_options_flow_context") or {}
+        _of_badge_html = ""
+        if _of_nd:
+            _of_score = _of_nd.get("options_score", 50)
+            _of_lbl = _of_nd.get("label", "")
+            _of_icon = "📈" if _of_score >= 65 else ("➡" if _of_score >= 52 else ("📉" if _of_score >= 38 else "🔴"))
+            _of_color = "#22c55e" if _of_score >= 65 else ("#f59e0b" if _of_score >= 38 else "#ef4444")
+            _of_badge_html = (
+                f'<span style="background:{_of_color}18;border:1px solid {_of_color}44;border-radius:3px;'
+                f'padding:1px 7px;font-size:10px;color:{_of_color};">{_of_icon} {_of_lbl}</span>'
+            )
+        # Load open position tickers once for "You hold" badge on each card
+        try:
+            from utils.journal import load_journal as _load_j_nd
+            _open_tickers_nd = {t["ticker"].upper() for t in _load_j_nd() if t.get("status") == "open"}
+        except Exception:
+            _open_tickers_nd = set()
+
         for _n in _cached:
             _name = _n.get("narrative", "")
             _ev = _n.get("evidence", "")
@@ -265,17 +285,29 @@ def _render_trending_narratives():
             _cat = _n.get("category", "macro")
             _cc = _conv_colors.get(_conv, "#888")
             _catc = _cat_colors.get(_cat, "#888")
+            # "You hold" badge — blue if any open position tickers match this narrative
+            _held_tickers = [t for t in _tks if t.upper() in _open_tickers_nd]
+            _held_badge_html = ""
+            if _held_tickers:
+                _held_str = ", ".join(_held_tickers[:3]) + ("…" if len(_held_tickers) > 3 else "")
+                _held_badge_html = (
+                    f'<span style="background:#1e3a5f;border:1px solid #3b82f644;border-radius:3px;'
+                    f'padding:1px 7px;font-size:10px;color:#60a5fa;">📂 {_held_str}</span>'
+                )
 
             st.markdown(
                 f'<div style="background:#0d1117;border:1px solid #1e293b;border-left:3px solid {_catc};'
                 f'border-radius:4px;padding:10px 14px;margin-bottom:8px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
                 f'<span style="color:{_oc};font-weight:700;font-size:13px;">{_name}</span>'
-                f'<div style="display:flex;gap:6px;">'
+                f'<div style="display:flex;gap:6px;flex-wrap:wrap;">'
                 f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:{_catc};">{_cat}</span>'
                 f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:{_cc};">{_conv}</span>'
                 f'<span style="background:#1e293b;border-radius:3px;padding:1px 7px;font-size:10px;color:#475569;">{_tf_label}</span>'
-                f'</div></div>'
+                + (_tac_badge_html if _tac_badge_html else "")
+                + (_of_badge_html if _of_badge_html else "")
+                + (_held_badge_html if _held_badge_html else "")
+                + f'</div></div>'
                 f'<div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">{_ev}</div>'
                 f'<div style="display:flex;flex-wrap:wrap;gap:4px;">'
                 + "".join(
@@ -304,6 +336,10 @@ def _render_trending_narratives():
 
 def render():
     st.header("NARRATIVE DISCOVERY")
+
+    # ── Signal Coverage ────────────────────────────────────────────────────────
+    from utils.components import render_signal_coverage as _render_sig_cov_disc
+    _render_sig_cov_disc()
 
     # ── Sector Rotation Strip ──────────────────────────────────────────────
     try:
@@ -411,10 +447,11 @@ def render():
         )
 
         # Engine selector
-        _selected_play_model = st.radio(
-            "Engine", _PLAY_MODEL_OPTIONS, horizontal=True, key="play_engine_radio"
+        _use_cl_play, _cl_model_play = render_ai_tier_selector(
+            key="play_engine_radio",
+            label="Engine",
+            recommendation="🧠 Regard recommended for trade play generation — Grok 4.1 reasoning improves entry/exit logic",
         )
-        st.caption("💡 🧠 Grok 4.1 sufficient here — same structured schema as Regime Plays")
 
         # ── Stress-Test Overlay (optional scenario input) ─────────────────
         st.markdown(
@@ -578,7 +615,7 @@ def render():
 
         if _gen_plays or st.session_state.get("_plays_result"):
             if _gen_plays:
-                _use_cl, _cl_model = _PLAY_MODEL_MAP[_selected_play_model]
+                _use_cl, _cl_model = _use_cl_play, _cl_model_play
                 _signal_summary = (
                     f"VIX: {_vix}, HY Spread: {_hy}bps, Yield Curve: {_yc:+.2f}%, "
                     f"System Stress: {_stress}, SPY 1-day: {_macro_ctx['spy_1d']:+.2f}%, "
@@ -713,6 +750,22 @@ def render():
                         for g in _atg_disc[:3]
                     ]
                     _enrichment_parts.append("[Trending Price Movers: " + " | ".join(_atg_lines) + "]")
+
+                # Portfolio Risk Snapshot (from Quick Intel Run or Trade Journal)
+                _pr_disc = st.session_state.get("_portfolio_risk_snapshot") or {}
+                if _pr_disc:
+                    _pr_disc_parts = []
+                    if _pr_disc.get("beta") is not None:
+                        _pr_disc_parts.append(f"Beta {_pr_disc['beta']} | VaR95 {_pr_disc.get('var_95_pct')}%")
+                    _sw_disc = _pr_disc.get("sector_weights") or {}
+                    if _sw_disc:
+                        _top_sectors = sorted(_sw_disc.items(), key=lambda x: -x[1])[:3]
+                        _pr_disc_parts.append("Heavy in: " + ", ".join(f"{s} {w}%" for s, w in _top_sectors))
+                    _rf_disc = _pr_disc.get("risk_flags") or []
+                    if _rf_disc:
+                        _pr_disc_parts.append("Flags: " + "; ".join(f.replace("⚠ ", "") for f in _rf_disc[:2]))
+                    if _pr_disc_parts:
+                        _enrichment_parts.append("[Portfolio Risk: " + " | ".join(_pr_disc_parts) + "]")
 
                 if _enrichment_parts:
                     _signal_summary += " || UPSTREAM AI CONTEXT: " + " | ".join(_enrichment_parts)
@@ -860,12 +913,14 @@ def render():
 
             from services.claude_client import assess_macro_fit as _assess_macro_fit
             with st.spinner(f"Assessing macro fit for {_fit_t_input}..."):
+                from services.claude_client import _fmt_tactical_ctx as _fmt_tac
                 _fit_result = _assess_macro_fit(
                     ticker=_fit_t_input, company_name=_fit_name, sector=_fit_sector,
                     price_summary=_fit_price_str,
                     regime_context=_fit_regime_ctx,
                     rate_path_context=_fit_rp_str,
                     black_swan_context=_fit_swan_str,
+                    tactical_context=_fmt_tac(st.session_state.get("_tactical_context")),
                     use_claude=_fit_use_cl, model=_fit_model,
                 )
             if _fit_result and "_error" in _fit_result:
@@ -899,6 +954,21 @@ def render():
                 "Strong Fit": "#22c55e", "Moderate Fit": "#86efac",
                 "Neutral": "#f59e0b", "Caution": "#f97316", "Avoid": "#ef4444",
             }.get(_fit_verdict, "#94a3b8")
+            _fit_tac = st.session_state.get("_tactical_context") or {}
+            _fit_tac_html = ""
+            if _fit_tac:
+                _fts = _fit_tac.get("tactical_score", 50)
+                _ftl = _fit_tac.get("label", "")
+                _fta = _fit_tac.get("action_bias", "")
+                _ftc = "#22c55e" if _fts >= 65 else ("#f59e0b" if _fts >= 38 else "#ef4444")
+                _fit_tac_html = (
+                    f'<div style="margin-top:8px;padding:6px 10px;background:{_ftc}12;'
+                    f'border-left:2px solid {_ftc};border-radius:0 4px 4px 0;">'
+                    f'<span style="font-size:10px;color:{_ftc};font-weight:700;letter-spacing:0.05em;">TIMING</span>'
+                    f'&nbsp;&nbsp;<span style="font-size:11px;color:{_ftc};">{_ftl} ({_fts}/100)</span>'
+                    f'<span style="font-size:11px;color:#64748b;"> — {_fta}</span>'
+                    f'</div>'
+                )
             st.markdown(
                 f'<div style="border:1px solid #1e293b;border-radius:8px;padding:12px 16px;margin-top:8px;">'
                 f'<span style="font-size:13px;font-weight:700;color:#e2e8f0;">{_cached_fit_t}</span>'
@@ -907,6 +977,7 @@ def render():
                 f'<p style="font-size:12px;color:#94a3b8;margin:8px 0 6px 0;">{_cached_fit.get("rationale", "")}</p>'
                 + "".join(f'<span style="font-size:11px;color:#22c55e;">↑ {t}&nbsp;&nbsp;</span>' for t in _cached_fit.get("tailwinds", []))
                 + "".join(f'<span style="font-size:11px;color:#ef4444;">↓ {h}&nbsp;&nbsp;</span>' for h in _cached_fit.get("headwinds", []))
+                + _fit_tac_html
                 + '</div>',
                 unsafe_allow_html=True,
             )
@@ -942,20 +1013,13 @@ def _fetch_curated_assets(ticker_dict: dict[str, str], asset_class: str) -> list
 
 
 def _render_auto():
-    import os as _os
-    _has_xai = bool(_os.getenv("XAI_API_KEY"))
-
-    _has_claude = bool(_os.getenv("ANTHROPIC_API_KEY"))
-    _AUTO_ENGINE_OPTIONS = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai else []) + (["👑 Highly Regarded Mode"] if _has_claude else [])
-    _AUTO_ENGINE_MAP = {
-        "⚡ Freeloader Mode": (False, None),
-        "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-    }
-    _auto_engine_sel = st.radio(
-        "Engine", _AUTO_ENGINE_OPTIONS, horizontal=True, key="auto_trend_engine"
+    from utils.ai_tier import render_ai_tier_selector
+    _auto_use_claude, _auto_model = render_ai_tier_selector(
+        key="auto_trend_engine",
+        label="Engine",
+        recommendation="⚡ Freeloader sufficient for trend discovery · 🧠 Regard for richer narrative grouping",
     )
-    _auto_use_claude, _auto_model = _AUTO_ENGINE_MAP[_auto_engine_sel]
+    _auto_engine_sel = st.session_state.get("auto_trend_engine", "⚡ Freeloader Mode")
 
     # --- Asset class filter ---
     selected_classes = st.multiselect(
@@ -971,12 +1035,35 @@ def _render_auto():
 
     # --- Equities: Yahoo Finance trending tickers ---
     if "Equities" in selected_classes:
-        with st.spinner("Fetching trending tickers from Yahoo Finance..."):
+        with st.spinner("Fetching trending tickers from Yahoo Finance + StockTwits..."):
             yf_trending = get_yahoo_trending_tickers()
         if yf_trending:
             for item in yf_trending:
                 item["asset_class"] = "Equities"
             all_trending.extend(yf_trending)
+
+        # Merge StockTwits trending (from cached QIR digest or fresh fetch)
+        _st_digest = st.session_state.get("_stocktwits_digest") or {}
+        _st_tickers = _st_digest.get("all_trending_symbols", [])
+        if not _st_tickers:
+            # QIR hasn't run yet — try a quick live fetch (cached for 1h)
+            try:
+                from services.stocktwits_client import get_trending_symbols as _st_trending
+                _st_raw = _st_trending(limit=15)
+                _st_tickers = [t["symbol"] for t in _st_raw]
+            except Exception:
+                _st_tickers = []
+        # Add StockTwits symbols not already in the pool
+        _existing_symbols = {item["symbol"].upper() for item in all_trending}
+        for _stk in _st_tickers:
+            if _stk.upper() not in _existing_symbols:
+                all_trending.append({
+                    "symbol": _stk,
+                    "name": _stk,
+                    "asset_class": "Equities",
+                    "source": "StockTwits",
+                })
+                _existing_symbols.add(_stk.upper())
 
     # --- Non-equity asset classes ---
     for cls in selected_classes:

@@ -1,6 +1,5 @@
 """Backtesting — test historical signal strategies and view results."""
 
-import json
 import os
 
 import numpy as np
@@ -18,232 +17,6 @@ from services.backtest_engine import (
     walk_forward_vix,
     BacktestResult,
 )
-
-_REGIME_HISTORY_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json"
-)
-
-
-def _load_regime_history() -> pd.DataFrame:
-    """Load regime_history.json and return as a tidy DataFrame."""
-    try:
-        with open(_REGIME_HISTORY_PATH) as f:
-            records = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return pd.DataFrame()
-
-    rows = []
-    for r in records:
-        row = {
-            "date": pd.to_datetime(r["date"]),
-            "score": r.get("score", 0.0),
-            "macro_score": r.get("macro_score", 50),
-            "regime": r.get("regime", "Neutral"),
-            "quadrant": r.get("quadrant", ""),
-        }
-        for sig, val in (r.get("signals_summary") or {}).items():
-            row[sig] = val
-        rows.append(row)
-
-    df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
-    return df
-
-
-@st.cache_data(ttl=3600)
-def _fetch_spy_returns(start: str, end: str) -> pd.DataFrame:
-    """Fetch SPY daily closes for a date range."""
-    try:
-        raw = yf.download("SPY", start=start, end=end, interval="1d",
-                          progress=False, auto_adjust=True)
-        if raw.empty:
-            return pd.DataFrame()
-        if isinstance(raw.columns, pd.MultiIndex):
-            close = raw["Close"]["SPY"]
-        else:
-            close = raw["Close"]
-        return close.pct_change().dropna().rename("spy_return")
-    except Exception:
-        return pd.DataFrame()
-
-
-def _render_regime_history():
-    """Regime Signal History — score timeline, signal heatmap, SPY overlay."""
-    df = _load_regime_history()
-
-    if df.empty:
-        st.info("No regime history yet. Run the Risk Regime module to start building history.")
-        return
-
-    n_days = len(df)
-    date_range = f"{df['date'].min().strftime('%b %d')} → {df['date'].max().strftime('%b %d, %Y')}"
-
-    st.markdown(
-        f'<div style="font-size:11px;color:#64748b;margin-bottom:12px;">'
-        f'{n_days} sessions recorded · {date_range}'
-        + (" · History building — more sessions = higher accuracy" if n_days < 30 else "")
-        + f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── Regime score timeline ────────────────────────────────────────────────
-    fig_score = go.Figure()
-
-    # Background bands
-    fig_score.add_hrect(y0=0.2, y1=1.0, fillcolor="rgba(34,197,94,0.07)", line_width=0, annotation_text="Risk-On", annotation_position="right")
-    fig_score.add_hrect(y0=-1.0, y1=-0.2, fillcolor="rgba(239,68,68,0.07)", line_width=0, annotation_text="Risk-Off", annotation_position="right")
-    fig_score.add_hline(y=0, line_dash="dot", line_color="#334155", line_width=1)
-
-    # Regime score line
-    colors_score = [
-        "#22c55e" if s >= 0.2 else ("#ef4444" if s <= -0.2 else "#f59e0b")
-        for s in df["score"]
-    ]
-    fig_score.add_trace(go.Scatter(
-        x=df["date"], y=df["score"],
-        mode="lines+markers",
-        line=dict(color="#60a5fa", width=2),
-        marker=dict(size=6, color=colors_score, line=dict(color="#1e293b", width=1)),
-        name="Regime Score",
-        hovertemplate="<b>%{x|%b %d}</b><br>Score: %{y:.3f}<extra></extra>",
-    ))
-
-    apply_dark_layout(fig_score, title="Regime Score History", height=280)
-    fig_score.update_layout(
-        yaxis=dict(title="Score (−1 to +1)", range=[-1.1, 1.1], tickformat=".2f"),
-        margin=dict(t=40, b=30, l=60, r=80),
-    )
-    st.plotly_chart(fig_score, use_container_width=True)
-
-    # ── Regime vs SPY overlay ────────────────────────────────────────────────
-    _start = (df["date"].min() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    _end   = (df["date"].max() + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
-    spy_ret = _fetch_spy_returns(_start, _end)
-
-    if not spy_ret.empty:
-        # Align on date
-        df_spy = df.set_index("date")[["score", "regime"]].copy()
-        spy_aligned = spy_ret.copy()
-        spy_aligned.index = pd.to_datetime(spy_aligned.index).normalize()
-
-        merged = df_spy.join(spy_aligned, how="inner")
-        if not merged.empty:
-            # Cumulative SPY return
-            cum_spy = (1 + merged["spy_return"]).cumprod() - 1
-
-            fig_spy = go.Figure()
-            fig_spy.add_trace(go.Bar(
-                x=merged.index,
-                y=merged["spy_return"] * 100,
-                marker_color=[
-                    "#22c55e" if v >= 0 else "#ef4444"
-                    for v in merged["spy_return"]
-                ],
-                name="SPY Daily %",
-                yaxis="y2",
-                opacity=0.5,
-                hovertemplate="<b>%{x|%b %d}</b><br>SPY: %{y:+.2f}%<extra></extra>",
-            ))
-            fig_spy.add_trace(go.Scatter(
-                x=merged.index,
-                y=merged["score"],
-                mode="lines+markers",
-                line=dict(color="#60a5fa", width=2),
-                marker=dict(size=5),
-                name="Regime Score",
-                hovertemplate="<b>%{x|%b %d}</b><br>Score: %{y:.3f}<extra></extra>",
-            ))
-
-            apply_dark_layout(fig_spy, title="Regime Score vs SPY Daily Returns", height=280)
-            fig_spy.update_layout(
-                yaxis=dict(title="Regime Score", range=[-1.1, 1.1], tickformat=".2f"),
-                yaxis2=dict(
-                    title="SPY Return (%)",
-                    overlaying="y", side="right",
-                    tickformat=".1f", showgrid=False,
-                ),
-                margin=dict(t=40, b=30, l=60, r=80),
-                legend=dict(orientation="h", y=1.08, x=0),
-            )
-            st.plotly_chart(fig_spy, use_container_width=True)
-
-            # Direction accuracy
-            if len(merged) >= 3:
-                correct = ((merged["score"] > 0) & (merged["spy_return"] > 0)) | \
-                          ((merged["score"] < 0) & (merged["spy_return"] < 0))
-                accuracy = correct.mean() * 100
-                acc_color = "#22c55e" if accuracy >= 55 else ("#f59e0b" if accuracy >= 45 else "#ef4444")
-                st.markdown(
-                    f'<div style="font-size:12px;color:#94a3b8;margin-bottom:12px;">'
-                    f'Regime → SPY direction accuracy: '
-                    f'<b style="color:{acc_color};">{accuracy:.0f}%</b>'
-                    f' ({correct.sum()}/{len(merged)} sessions) '
-                    f'<span style="color:#475569;font-size:11px;">— needs 30+ sessions for statistical significance</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-    # ── Signal heatmap ───────────────────────────────────────────────────────
-    st.markdown(
-        f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'letter-spacing:0.08em;margin:16px 0 6px 0;">SIGNAL SCORE HEATMAP</div>',
-        unsafe_allow_html=True,
-    )
-
-    signal_cols = [c for c in df.columns if c not in ("date", "score", "macro_score", "regime", "quadrant")]
-    if signal_cols:
-        heat_df = df[["date"] + signal_cols].set_index("date")[signal_cols].T
-        # Fill NaN with 0
-        heat_df = heat_df.fillna(0)
-
-        date_labels = [d.strftime("%b %d") for d in heat_df.columns]
-
-        fig_heat = go.Figure(go.Heatmap(
-            z=heat_df.values.tolist(),
-            x=date_labels,
-            y=heat_df.index.tolist(),
-            colorscale=[
-                [0.0, "#b91c1c"],   # -1 = deep red (risk-off)
-                [0.5, "#1e293b"],   # 0  = dark neutral
-                [1.0, "#15803d"],   # +1 = deep green (risk-on)
-            ],
-            zmid=0, zmin=-1, zmax=1,
-            showscale=True,
-            colorbar=dict(
-                title=dict(text="Score", font=dict(color="#aaa", size=10)),
-                thickness=12, len=0.8,
-                tickfont=dict(color="#aaa", size=10),
-                tickvals=[-1, -0.5, 0, 0.5, 1],
-            ),
-            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.3f}<extra></extra>",
-        ))
-        apply_dark_layout(fig_heat, title="", height=max(360, 22 * len(signal_cols)))
-        fig_heat.update_layout(
-            margin=dict(t=10, b=40, l=220, r=60),
-            xaxis=dict(tickfont=dict(color="#94a3b8", size=10)),
-            yaxis=dict(tickfont=dict(color="#94a3b8", size=10), autorange="reversed"),
-        )
-        st.plotly_chart(fig_heat, use_container_width=True)
-
-    # ── Quadrant transition log ───────────────────────────────────────────────
-    if "quadrant" in df.columns and len(df) >= 2:
-        transitions = []
-        for i in range(1, len(df)):
-            prev_q = df.iloc[i - 1]["quadrant"]
-            curr_q = df.iloc[i]["quadrant"]
-            if prev_q != curr_q:
-                transitions.append({
-                    "Date": df.iloc[i]["date"].strftime("%b %d, %Y"),
-                    "From": prev_q,
-                    "To": curr_q,
-                    "Score": f"{df.iloc[i]['score']:+.3f}",
-                })
-        if transitions:
-            st.markdown(
-                f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-                f'letter-spacing:0.08em;margin:16px 0 6px 0;">QUADRANT TRANSITIONS</div>',
-                unsafe_allow_html=True,
-            )
-            st.dataframe(pd.DataFrame(transitions), use_container_width=True, hide_index=True)
 
 
 def _render_results(result: BacktestResult):
@@ -490,6 +263,235 @@ A single backtest uses ALL the data to measure performance — but the parameter
 """)
 
 
+def _load_regime_history() -> list[dict]:
+    """Load regime history from local JSON — no circular imports, mirrors backtest_engine pattern."""
+    import json as _json
+    _hf = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json")
+    if not os.path.exists(_hf):
+        return []
+    try:
+        with open(_hf) as f:
+            return _json.load(f)
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _run_regime_conditional_backtest(ticker: str, target_quadrant: str, _history_key: str) -> dict:
+    """Compute per-period returns for ticker during target_quadrant regime periods.
+
+    _history_key is a cache-busting string (e.g. last date in history) to avoid stale results.
+    """
+    from services.backtest_engine import _compute_metrics
+    history = _load_regime_history()
+    if not history:
+        return {"error": "No regime history found. Run QIR at least once to build history."}
+
+    history = sorted(history, key=lambda x: x.get("date", ""))
+
+    # Find contiguous windows matching target_quadrant
+    windows, regime_periods, non_regime_periods = [], [], []
+    in_regime = False
+    start = None
+    for entry in history:
+        q = entry.get("quadrant", "")
+        d = entry.get("date", "")
+        if q == target_quadrant:
+            if not in_regime:
+                in_regime = True
+                start = d
+        else:
+            if in_regime:
+                windows.append((start, d))
+                in_regime = False
+    if in_regime and start:
+        windows.append((start, history[-1]["date"]))
+
+    if not windows:
+        return {"error": f"No '{target_quadrant}' regime periods found in history ({len(history)} days)."}
+
+    # Download price data for full span
+    overall_start = windows[0][0]
+    try:
+        raw = yf.download(ticker, start=overall_start, progress=False, auto_adjust=True)
+        if raw.empty:
+            return {"error": f"No price data returned for {ticker}."}
+        prices = raw["Close"].squeeze().dropna()
+        # Normalize index to timezone-naive for consistent date comparisons
+        if hasattr(prices.index, "tz") and prices.index.tz is not None:
+            prices.index = prices.index.tz_localize(None)
+    except Exception as e:
+        return {"error": f"Price download failed: {e}"}
+
+    def _get_price(date_str: str, after: bool = True) -> float | None:
+        idx = pd.to_datetime(date_str)
+        candidates = prices.loc[prices.index >= idx] if after else prices.loc[prices.index <= idx]
+        return float(candidates.iloc[0]) if len(candidates) else None
+
+    periods = []
+    for ws, we in windows:
+        ep = _get_price(ws, after=True)
+        xp = _get_price(we, after=True)
+        if ep and xp and ep > 0:
+            ret = (xp / ep - 1) * 100
+            days = (pd.to_datetime(we) - pd.to_datetime(ws)).days
+            periods.append({"start": ws, "end": we, "return_pct": round(ret, 2), "num_days": days})
+            regime_periods.append(ret)
+
+    # Non-regime periods: everything else in the history span
+    all_dates = [e["date"] for e in history]
+    regime_dates = set()
+    for ws, we in windows:
+        regime_dates.update(d for d in all_dates if ws <= d <= we)
+    non_regime_dates = [d for d in all_dates if d not in regime_dates]
+    if non_regime_dates:
+        for i in range(0, len(non_regime_dates) - 30, 30):
+            ep = _get_price(non_regime_dates[i], after=True)
+            xp = _get_price(non_regime_dates[min(i + 30, len(non_regime_dates) - 1)], after=True)
+            if ep and xp and ep > 0:
+                non_regime_periods.append((xp / ep - 1) * 100)
+
+    # Compute metrics directly from return list (avoid _compute_metrics which expects list[dict])
+    if regime_periods:
+        wins = sum(1 for r in regime_periods if r > 0)
+        win_rate = wins / len(regime_periods) * 100
+        avg_return = float(np.mean(regime_periods))
+        # Max drawdown on cumulative equity curve
+        equity = np.cumprod([1 + r / 100 for r in regime_periods])
+        peak = np.maximum.accumulate(equity)
+        drawdowns = (equity - peak) / peak * 100
+        max_dd = float(np.min(drawdowns))
+    else:
+        win_rate = avg_return = max_dd = 0.0
+    metrics = {"win_rate": win_rate, "avg_return": avg_return, "max_drawdown": max_dd}
+
+    return {
+        "periods": periods,
+        "regime_win_rate":       round(metrics["win_rate"], 1),
+        "regime_avg_return":     round(metrics["avg_return"], 2),
+        "regime_max_drawdown":   round(metrics["max_drawdown"], 2),
+        "non_regime_avg_return": round(float(np.mean(non_regime_periods)), 2) if non_regime_periods else 0.0,
+        "total_regime_periods":  len(periods),
+        "ticker": ticker,
+        "quadrant": target_quadrant,
+    }
+
+
+def _render_regime_conditional() -> None:
+    """UI for Regime-Conditional Backtest tab."""
+    st.caption("How does a ticker perform historically during specific macro quadrant regimes?")
+
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col1:
+        rc_ticker = st.text_input("Ticker", value="SPY", key="rc_ticker").upper().strip()
+    with col2:
+        _current_q = (st.session_state.get("_regime_context") or {}).get("quadrant", "")
+        _q_options = ["Current (auto)", "Goldilocks", "Reflation", "Stagflation", "Deflation"]
+        rc_quadrant_sel = st.selectbox("Quadrant", _q_options, key="rc_quadrant")
+        target_q = _current_q if rc_quadrant_sel == "Current (auto)" else rc_quadrant_sel
+        if rc_quadrant_sel == "Current (auto)" and _current_q:
+            st.caption(f"Auto: {_current_q}")
+    with col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        run_rc = st.button("RUN", type="primary", key="rc_run", use_container_width=True)
+
+    if not target_q and rc_quadrant_sel == "Current (auto)":
+        st.info("Run QIR first to auto-populate the current quadrant, or select one manually.")
+        return
+
+    if run_rc or st.session_state.get("_rc_result"):
+        if run_rc:
+            history = _load_regime_history()
+            _hkey = history[-1]["date"] if history else "none"
+            result = _run_regime_conditional_backtest(rc_ticker, target_q, _hkey)
+            st.session_state["_rc_result"] = result
+            st.session_state["_rc_ticker"] = rc_ticker
+            st.session_state["_rc_quadrant"] = target_q
+
+        result = st.session_state.get("_rc_result", {})
+        if "error" in result:
+            st.warning(result["error"])
+            return
+
+        # Metric row
+        m1, m2, m3, m4 = st.columns(4)
+        _oc = COLORS["bloomberg_orange"]
+        m1.metric("Regime Periods", result["total_regime_periods"])
+        m2.metric("Win Rate", f"{result['regime_win_rate']}%")
+        m3.metric("Avg Return", f"{result['regime_avg_return']:+.2f}%")
+        _delta = result["regime_avg_return"] - result["non_regime_avg_return"]
+        m4.metric("vs Non-Regime", f"{result['non_regime_avg_return']:+.2f}%",
+                  delta=f"{_delta:+.2f}pp")
+
+        # Bar chart
+        periods = result.get("periods", [])
+        if periods:
+            _labels = [f"{p['start'][:7]}→{p['end'][:7]}" for p in periods]
+            _rets   = [p["return_pct"] for p in periods]
+            _colors = [COLORS["positive"] if r >= 0 else COLORS["negative"] for r in _rets]
+            fig = go.Figure(go.Bar(
+                x=_labels, y=_rets,
+                marker_color=_colors,
+                text=[f"{r:+.1f}%" for r in _rets],
+                textposition="outside",
+                textfont=dict(size=10),
+            ))
+            apply_dark_layout(fig)
+            fig.update_layout(
+                height=280, margin=dict(l=0, r=0, t=30, b=0),
+                title=dict(text=f"{result['ticker']} returns in {result['quadrant']} periods",
+                           font=dict(size=11, color=_oc), x=0, xanchor="left"),
+                yaxis=dict(title="Return %", ticksuffix="%"),
+                showlegend=False,
+            )
+            fig.add_hline(y=0, line_color="#334155", line_width=1)
+            st.plotly_chart(fig, use_container_width=True)
+
+            with st.expander("📋 Period Detail"):
+                st.dataframe(
+                    pd.DataFrame(periods).rename(columns={
+                        "start": "Start", "end": "End",
+                        "return_pct": "Return %", "num_days": "Days"
+                    }),
+                    use_container_width=True, hide_index=True,
+                )
+
+        # Auto-query open positions
+        with st.expander(f"🗂 How do my open positions perform in {target_q}?"):
+            try:
+                import json as _json2
+                _jf = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "trade_journal.json")
+                _trades = _json2.load(open(_jf)) if os.path.exists(_jf) else []
+                _open_tickers = list({t["ticker"].upper() for t in _trades if t.get("status") == "open"})
+                if not _open_tickers:
+                    st.info("No open positions in trade journal.")
+                else:
+                    history2 = _load_regime_history()
+                    _hkey2 = history2[-1]["date"] if history2 else "none"
+                    _rows = []
+                    with st.spinner(f"Querying {len(_open_tickers)} positions..."):
+                        for _tk in _open_tickers:
+                            try:
+                                _r = _run_regime_conditional_backtest(_tk, target_q, _hkey2)
+                                if "error" not in _r:
+                                    _rows.append({
+                                        "Ticker": _tk,
+                                        "Regime Win Rate": f"{_r['regime_win_rate']}%",
+                                        "Regime Avg Return": f"{_r['regime_avg_return']:+.2f}%",
+                                        "vs Non-Regime": f"{_r['regime_avg_return'] - _r['non_regime_avg_return']:+.2f}pp",
+                                        "Periods": _r["total_regime_periods"],
+                                    })
+                            except Exception:
+                                pass
+                    if _rows:
+                        _df = pd.DataFrame(_rows).sort_values("Regime Avg Return", ascending=False)
+                        st.dataframe(_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No results — try different quadrant or check ticker symbols.")
+            except Exception as _ex:
+                st.warning(f"Could not load trade journal: {_ex}")
+
+
 def render():
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
@@ -497,10 +499,7 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab_bt, tab_wf, tab_history = st.tabs(["⚙ Strategy Backtest", "📊 Walk-Forward Validation", "📈 Regime Signal History"])
-
-    with tab_history:
-        _render_regime_history()
+    tab_bt, tab_wf, tab_rc = st.tabs(["⚙ Strategy Backtest", "📊 Walk-Forward Validation", "🗂 Regime-Conditional"])
 
     with tab_wf:
         _render_walk_forward()
@@ -600,3 +599,6 @@ def render():
         result = st.session_state.get("bt_result")
         if result:
             _render_results(result)
+
+    with tab_rc:
+        _render_regime_conditional()

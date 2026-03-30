@@ -92,6 +92,24 @@ _SIGNAL_KEYS = [
     "_macro_synopsis",
     "_macro_synopsis_ts",
     "_macro_synopsis_engine",
+    # Tactical Regime (days/weeks layer — computed inside run_quick_regime)
+    "_tactical_context",
+    "_tactical_context_ts",
+    "_tactical_analysis",
+    "_tactical_analysis_ts",
+    # Options Flow Sentiment (hours/days layer — computed in QIR Round 1)
+    "_options_flow_context",
+    "_options_flow_context_ts",
+    # Data Quality score
+    "_data_quality",
+    "_data_quality_ts",
+    # Portfolio Risk Snapshot (computed in QIR Round 5)
+    "_portfolio_risk_snapshot",
+    "_portfolio_risk_snapshot_ts",
+    "_risk_matrix_interpretation",
+    # StockTwits social sentiment (computed in QIR Round 1)
+    "_stocktwits_digest",
+    "_stocktwits_digest_ts",
 ]
 
 

@@ -66,6 +66,28 @@ def _prev_current_events(v):
     return s[:120] + ("…" if len(s) > 120 else "")
 
 
+def _prev_macro_synopsis(v):
+    if isinstance(v, dict):
+        s = v.get("summary", "") or v.get("text", "") or str(v)
+    else:
+        s = str(v)
+    return s[:120] + ("…" if len(s) > 120 else "")
+
+def _prev_risk_snapshot(v):
+    beta = v.get("portfolio_beta", "?")
+    var = v.get("var_95_pct", "?")
+    flags = len(v.get("risk_flags", []))
+    return f"Beta: {beta} | VaR 95%: {var} | Risk flags: {flags}"
+
+def _prev_tactical(v):
+    if not isinstance(v, dict):
+        return str(v)[:120]
+    score = v.get("tactical_score", "?")
+    label = v.get("label", "")
+    bias  = v.get("action_bias", "")
+    return f"Score: {score}/100 ({label}) — {bias}"
+
+
 _SIGNAL_REGISTRY = [
     {
         "label": "Regime label / score / quadrant",
@@ -92,6 +114,14 @@ _SIGNAL_REGISTRY = [
         "valuation": True, "discovery": True, "portfolio": True,
         "preview_fn": _prev_regime_plays,
         "run_hint": "Risk Regime → Generate Regime Plays",
+    },
+    {
+        "label": "Tactical Regime",
+        "key": "_tactical_context",
+        "ts_key": "_tactical_context_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_tactical,
+        "run_hint": "Risk Regime → Tactical Regime (Quick Intel Run)",
     },
     {
         "label": "Fed Funds Rate %",
@@ -128,7 +158,7 @@ _SIGNAL_REGISTRY = [
     {
         "label": "Policy Transmission narration",
         "key": "_chain_narration",
-        "ts_key": None,
+        "ts_key": "_chain_narration_ts",
         "valuation": True, "discovery": True, "portfolio": True,
         "preview_fn": _prev_text,
         "run_hint": "Risk Regime → Transmission Path",
@@ -180,6 +210,22 @@ _SIGNAL_REGISTRY = [
         "valuation": True, "discovery": True, "portfolio": True,
         "preview_fn": _prev_current_events,
         "run_hint": "Current Events → Generate News Digest",
+    },
+    {
+        "label": "Macro Synopsis (Quick Intel Round 4)",
+        "key": "_macro_synopsis",
+        "ts_key": "_macro_synopsis_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_macro_synopsis,
+        "run_hint": "Quick Intel Run → Round 4: Macro Conviction Synopsis",
+    },
+    {
+        "label": "Portfolio Risk Snapshot",
+        "key": "_portfolio_risk_snapshot",
+        "ts_key": "_portfolio_risk_snapshot_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_risk_snapshot,
+        "run_hint": "My Regarded Portfolio → Risk Matrix tab (or Quick Intel Run Round 5)",
     },
 ]
 

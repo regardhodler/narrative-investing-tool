@@ -1,4 +1,4 @@
-"""
+﻿"""
 Fed Policy Forecasting Machine — data layer.
 
 Functions:
@@ -1050,7 +1050,7 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: st
     """Use Claude for higher-quality causal chains and asset impact reasoning.
 
     Same schema as _call_groq_core_forecast. Requires ANTHROPIC_API_KEY in env.
-    model: grok-4-1-fast-reasoning (fast/cheap) or claude-sonnet-4-6 (most accurate).
+    model: grok-4-1-fast (fast/cheap) or claude-sonnet-4-6 (most accurate).
     """
     _is_grok = model and model.startswith("grok-")
     if _is_grok:
@@ -1212,7 +1212,7 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
     """Use Claude for commodities and international equities forecast.
 
     Same schema as _call_groq_commodities_intl_forecast.
-    model: grok-4-1-fast-reasoning or claude-sonnet-4-6.
+    model: grok-4-1-fast or claude-sonnet-4-6.
     """
     import anthropic
 

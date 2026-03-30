@@ -11,6 +11,7 @@ from services.whale_screener import (
 )
 from services.claude_client import summarize_whale_activity
 from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
+from utils.ai_tier import render_ai_tier_selector
 
 
 def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
@@ -43,10 +44,11 @@ def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
     summary = summarize_whale_activity("\n".join(lines), use_claude=use_claude, model=model)
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
         else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
-    st.session_state["_whale_summary"] = summary
-    st.session_state["_whale_summary_ts"] = _dt.datetime.now()
-    st.session_state["_whale_summary_engine"] = _tier
-    return True
+    return {
+        "_whale_summary": summary,
+        "_whale_summary_ts": _dt.datetime.now(),
+        "_whale_summary_engine": _tier,
+    }
 
 
 def render():
@@ -401,26 +403,11 @@ def _render_ai_summary(df: pd.DataFrame):
         )
 
         # Engine selector
-        _has_xai_whale = bool(_os.getenv("XAI_API_KEY"))
-        _has_anthropic = bool(_os.getenv("ANTHROPIC_API_KEY"))
-        _whale_tier_opts = ["⚡ Freeloader Mode"] + (["🧠 Regard Mode"] if _has_xai_whale else []) + (["👑 Highly Regarded Mode"] if _has_anthropic else [])
-        _whale_tier_map = {
-            "⚡ Freeloader Mode":                (False, None),
-            "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
-        }
-        _sel_whale_tier = st.radio(
-            "Engine", _whale_tier_opts, horizontal=True, key="whale_summary_engine"
+        _use_cl_whale, _whale_model = render_ai_tier_selector(
+            key="whale_summary_engine",
+            label="Engine",
+            recommendation="🧠 Regard (Grok 4.1) sufficient — summarisation task · ⚡ Freeloader for quick scans",
         )
-        st.markdown(
-            '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
-            'margin-top:-10px;margin-bottom:2px;">'
-            '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast-reasoning &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("💡 🧠 Regard (Grok 4.1) sufficient — summarisation task")
-        _use_cl_whale, _whale_model = _whale_tier_map[_sel_whale_tier]
 
         # Build text summary of top 20 changes for the AI
         df_sorted = df.copy()
@@ -462,9 +449,9 @@ def _render_ai_summary(df: pd.DataFrame):
                     summary = summarize_whale_activity(activity_text, use_claude=_use_cl_whale, model=_whale_model)
                     st.session_state["_whale_summary"] = summary
                     st.session_state["_whale_summary_ts"] = __import__("datetime").datetime.now()
-                    st.session_state["_whale_summary_engine"] = _sel_whale_tier
+                    st.session_state["_whale_summary_engine"] = st.session_state.get("whale_summary_engine", "⚡ Freeloader Mode")
                     from services.play_log import append_play as _append_play
-                    _append_play("Whale Summary", _sel_whale_tier, {"summary": summary})
+                    _append_play("Whale Summary", st.session_state.get("whale_summary_engine", "⚡ Freeloader Mode"), {"summary": summary})
                 except Exception as e:
                     st.warning(f"AI summary unavailable: {e}")
 
