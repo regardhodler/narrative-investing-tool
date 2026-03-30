@@ -180,13 +180,19 @@ def _render_trending_narratives():
     _cached_ts = st.session_state.get("_trending_narratives_ts")
     _cached_tf = st.session_state.get("_trending_narratives_tf")
 
+    _auto_refresh_fired = False
     if _cached_ts:
         from datetime import datetime as _dt2
         _age_m = int((_dt2.now() - _cached_ts).total_seconds() / 60)
         _age_str = f"{_age_m}m ago" if _age_m < 60 else f"{_age_m // 60}h ago"
         st.caption(f"Last scan {_age_str} · {_cached_tf or _tf}")
+        # Auto-refresh if cache is ≥4h old
+        if _age_m >= 240 and not st.session_state.get("_narr_auto_refresh_running"):
+            st.session_state["_narr_auto_refresh_running"] = True
+            _auto_refresh_fired = True
+            st.info("♻️ Narratives are 4h+ old — auto-refreshing...")
 
-    if st.button("🔥 Scan Trending Narratives", key="disc_trend_scan", type="primary"):
+    if st.button("🔥 Scan Trending Narratives", key="disc_trend_scan", type="primary") or _auto_refresh_fired:
         with st.spinner("Fetching headlines + Google Trends..."):
             _headlines_raw = fetch_financial_headlines()
             _headline_strs = [f"[{h['source']}] {h['title']}" for h in _headlines_raw[:40]]
@@ -236,8 +242,10 @@ def _render_trending_narratives():
             st.session_state["_trending_narratives"] = _result
             st.session_state["_trending_narratives_ts"] = _dt2.now()
             st.session_state["_trending_narratives_tf"] = _tf
+            st.session_state.pop("_narr_auto_refresh_running", None)
             _cached = _result
         else:
+            st.session_state.pop("_narr_auto_refresh_running", None)
             st.error("Narrative scan failed — check API keys or try Groq.")
 
     if _cached:

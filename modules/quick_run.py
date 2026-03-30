@@ -412,12 +412,45 @@ def _render_qir_dashboard() -> None:
             f'Run QIR to activate the intelligence dashboard</div>'
         )
 
+    # ── Signal freshness row ──────────────────────────────────────────────
+    _sig_checks = [
+        ("Regime",    "_regime_context"),
+        ("Tactical",  "_tactical_context"),
+        ("Opt Flow",  "_options_flow_context"),
+        ("Rate Path", "_dominant_rate_path"),
+        ("Events",    "_current_events_digest"),
+        ("Doom",      "_doom_briefing"),
+        ("Whales",    "_whale_summary"),
+        ("Risk Snap", "_portfolio_risk_snapshot"),
+        ("Earnings",  "_qir_earnings_risk"),
+    ]
+    _fresh_count = sum(1 for _, k in _sig_checks if st.session_state.get(k))
+    _total_sigs = len(_sig_checks)
+    _frac = _fresh_count / _total_sigs
+    _fc = "#22c55e" if _frac == 1.0 else ("#f59e0b" if _frac >= 0.5 else "#ef4444")
+    _dots = "".join(
+        f'<span style="color:{"#22c55e" if st.session_state.get(k) else "#1e293b"};font-size:9px;">●</span>'
+        for _, k in _sig_checks
+    )
+    _freshness_html = (
+        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+        f'<span style="color:{_fc};font-size:10px;font-weight:700;font-family:monospace;">'
+        f'{_fresh_count}/{_total_sigs}</span>'
+        f'<span style="letter-spacing:2px;">{_dots}</span>'
+        f'<span style="color:#334155;font-size:10px;">'
+        f'{"all signals loaded" if _fresh_count == _total_sigs else f"{_total_sigs - _fresh_count} signal(s) missing — run QIR"}'
+        f'</span></div>'
+    )
+
     # ── Render the full dashboard ─────────────────────────────────────────
     st.markdown(
         f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
         f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
         f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
-        f'text-transform:uppercase;margin-bottom:10px;">QIR Intelligence Dashboard</div>'
+        f'text-transform:uppercase;">QIR Intelligence Dashboard</div>'
+        f'</div>'
+        f'{_freshness_html}'
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
@@ -1014,9 +1047,35 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _rc_f  = st.session_state.get("_regime_context") or {}
                 _tac_f = st.session_state.get("_tactical_context") or {}
                 _dq_f  = st.session_state.get("_data_quality") or {}
-                _of_f = st.session_state.get("_options_flow_context") or {}
+                _of_f  = st.session_state.get("_options_flow_context") or {}
+
+                # ── Pattern change alert ──────────────────────────────────
+                _new_pat = _classify_signals(_rc_f, _tac_f, _of_f)
+                _new_pat_name = _new_pat["pattern"]
+                _prev_pat_name = st.session_state.get("_qir_last_pattern", "")
+                if _prev_pat_name and _prev_pat_name != _new_pat_name:
+                    _pat_emojis = {
+                        "BULLISH_CONFIRMATION":   "🟢",
+                        "BEARISH_CONFIRMATION":   "🔴",
+                        "PULLBACK_IN_UPTREND":    "🟡",
+                        "OPTIONS_FLOW_DIVERGENCE":"🟡",
+                        "BEAR_MARKET_BOUNCE":     "🟠",
+                        "LATE_CYCLE_SQUEEZE":     "🔴",
+                        "GENUINE_UNCERTAINTY":    "⚪",
+                    }
+                    _e_old = _pat_emojis.get(_prev_pat_name, "◆")
+                    _e_new = _pat_emojis.get(_new_pat_name, "◆")
+                    _tg_qir(
+                        f"🔄 <b>QIR Pattern Changed</b>\n"
+                        f"{_e_old} {_prev_pat_name.replace('_',' ')} → {_e_new} {_new_pat_name.replace('_',' ')}\n"
+                        f"Buy: {_new_pat['buy_tier']} | Short: {_new_pat['short_tier']}\n"
+                        f"Regime: {_rc_f.get('regime','?')} | Tactical: {_tac_f.get('tactical_score','?')}/100 | Flow: {_of_f.get('options_score','?')}/100"
+                    )
+                st.session_state["_qir_last_pattern"] = _new_pat_name
+
                 _tg_qir(
                     f"⚡ <b>Quick Intel Run Complete</b>\n"
+                    f"Pattern: {_new_pat['label']}\n"
                     f"Regime: {_rc_f.get('regime','?')} | {_rc_f.get('quadrant','?')}\n"
                     f"Tactical: {_tac_f.get('tactical_score','?')}/100 — {_tac_f.get('label','?')}\n"
                     f"Options Flow: {_of_f.get('options_score','?')}/100 — {_of_f.get('label','')}\n"
