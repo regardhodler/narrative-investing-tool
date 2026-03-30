@@ -440,6 +440,53 @@ def render():
         "Navigate to Portfolio Intelligence when done."
     )
 
+    # ── VIX live ticker ────────────────────────────────────────────────────────
+    try:
+        import yfinance as _yf
+        @st.cache_data(ttl=120)
+        def _fetch_vix_change():
+            _v = _yf.Ticker("^VIX")
+            _h = _v.history(period="2d", interval="1d")
+            if _h is None or len(_h) < 2:
+                return None, None, None
+            _prev = float(_h["Close"].iloc[-2])
+            _cur  = float(_h["Close"].iloc[-1])
+            _chg  = _cur - _prev
+            _pct  = (_chg / _prev) * 100
+            return round(_cur, 2), round(_chg, 2), round(_pct, 2)
+
+        _vix_cur, _vix_chg, _vix_pct = _fetch_vix_change()
+        if _vix_cur is not None:
+            if _vix_pct >= 10:
+                _vc = "#ef4444"; _vglow = "0 0 10px #ef444488"; _vbg = "#2d0a0a"; _varrow = "▲"
+            elif _vix_pct >= 3:
+                _vc = "#f97316"; _vglow = "0 0 8px #f9731666"; _vbg = "#1f1000"; _varrow = "▲"
+            elif _vix_pct > 0:
+                _vc = "#f59e0b"; _vglow = "none"; _vbg = "#1a1200"; _varrow = "▲"
+            elif _vix_pct <= -10:
+                _vc = "#22c55e"; _vglow = "0 0 10px #22c55e88"; _vbg = "#052e16"; _varrow = "▼"
+            elif _vix_pct <= -3:
+                _vc = "#22c55e"; _vglow = "0 0 8px #22c55e55"; _vbg = "#0c1a0c"; _varrow = "▼"
+            elif _vix_pct < 0:
+                _vc = "#4ade80"; _vglow = "none"; _vbg = "#0c1a0c"; _varrow = "▼"
+            else:
+                _vc = "#475569"; _vglow = "none"; _vbg = "#0d1117"; _varrow = "◆"
+            _vsign = "+" if _vix_chg >= 0 else ""
+            st.markdown(
+                f'<div style="background:{_vbg};border:1px solid {_vc}55;border-radius:6px;'
+                f'box-shadow:{_vglow};padding:7px 14px;margin-bottom:8px;'
+                f'display:inline-flex;align-items:center;gap:10px;">'
+                f'<span style="color:#475569;font-size:10px;font-weight:700;letter-spacing:0.1em;">VIX</span>'
+                f'<span style="color:{_vc};font-size:18px;font-weight:800;font-family:monospace;'
+                f'text-shadow:{_vglow};">{_vix_cur}</span>'
+                f'<span style="color:{_vc};font-size:12px;font-weight:700;">'
+                f'{_varrow} {_vsign}{_vix_chg} ({_vsign}{_vix_pct}%)</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+    except Exception:
+        pass
+
     # ── Highly Regarded gate: check if conditions warrant Sonnet ──────────────
     def _hr_gate_check() -> tuple[bool, str]:
         """Returns (unlocked, reason). Unlocked when macro stress or event warrants Sonnet."""
