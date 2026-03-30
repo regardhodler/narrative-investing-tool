@@ -1,4 +1,70 @@
 {
+  "_regime_context": {
+    "regime": "Neutral \u2014 Leaning Risk-Off",
+    "score": -0.08,
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-1.00 ()\n- Market Breadth (RSP/SPY): z=+0.92 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.62 ()",
+    "quadrant": "Stagflation"
+  },
+  "_regime_context_ts": {
+    "__datetime__": "2026-03-30T23:41:16.610821"
+  },
+  "_rp_plays_result": {
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 2
+      },
+      {
+        "name": "Utilities",
+        "conviction": 1
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "XOM is a strong energy play with a stable dividend yield, making it a good fit for a neutral to risk-off regime.",
+        "conviction": 2
+      },
+      {
+        "ticker": "DUK",
+        "reason": "DUK is a utility stock with a high dividend yield, providing a safe haven in a risk-off environment.",
+        "conviction": 1
+      },
+      {
+        "ticker": "PG",
+        "reason": "PG is a consumer staples stock with a stable dividend yield and a history of performing well in uncertain markets.",
+        "conviction": 1
+      },
+      {
+        "ticker": "COP",
+        "reason": "COP is an energy stock with a strong balance sheet and a history of outperforming in a neutral to risk-off regime.",
+        "conviction": 2
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NEE is a utility stock with a strong track record of dividend growth and a stable business model.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "TLT is a long-term Treasury bond ETF that provides a safe haven in a risk-off environment.",
+        "conviction": 2
+      },
+      {
+        "ticker": "IEF",
+        "reason": "IEF is a 7-10 year Treasury bond ETF that offers a relatively stable return with low credit risk.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "The current neutral to risk-off regime suggests a cautious approach to investing, with a focus on stable and defensive sectors such as energy, utilities, and consumer staples. The strong commodity trend and term premium signals support a moderate buy rating for energy stocks, while the weak equity trend and high VIX suggest a more defensive approach. The recommended stocks and bonds are designed to provide a balance of stability and potential for growth in this uncertain market environment."
+  },
+  "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
     {
       "scenario": "hold",
@@ -24,5 +90,70 @@
       "implied_rate": 3.6449966430664062,
       "source": "yfinance"
     }
-  ]
+  ],
+  "_current_events_digest": "In the current neutral-leaning risk-off macro regime, characterized by stagflationary pressures, recent events confirm the dominant narrative of supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, as reported by zerohedge, highlights the vulnerability of critical industries such as semiconductor manufacturing, which relies heavily on helium for cooling and lithography. Meanwhile, the sharp rise in Japan's bond yields, noted by Ricky Ho, suggests a bearish outlook for the long end of the curve, potentially signaling a shift in investor sentiment towards risk-off assets. These developments, combined with the Oracle CDS nearing its record global financial crisis print, flag actionable risks in the technology and energy sectors, while also presenting opportunities for investors to position themselves for potential safe-haven asset rallies.",
+  "_current_events_digest_ts": {
+    "__datetime__": "2026-03-30T23:41:19.449503"
+  },
+  "_current_events_engine": "\u26a1 Freeloader Mode",
+  "_tactical_context": {
+    "tactical_score": 27,
+    "label": "Risk-Off Signal",
+    "action_bias": "Elevated vol + weak momentum. Defensive posture warranted \u2014 hedge or step aside.",
+    "signals": [
+      {
+        "Signal": "VIX Level + 5d Trend",
+        "Value": "30.6 (+4.5 5d)",
+        "Score": -1.0,
+        "Direction": "Risk-Off"
+      },
+      {
+        "Signal": "VIX Term Structure (VIX/VIX3M)",
+        "Value": "1.051",
+        "Score": -0.34,
+        "Direction": "Risk-Off"
+      },
+      {
+        "Signal": "SPY vs 20d/50d MA",
+        "Value": "-4.5%/20d  -6.6%/50d",
+        "Score": -0.4,
+        "Direction": "Risk-Off"
+      },
+      {
+        "Signal": "SPY Momentum (5d vs 20d ROC)",
+        "Value": "5d -3.6%  20d -7.7%",
+        "Score": -0.931,
+        "Direction": "Risk-Off"
+      },
+      {
+        "Signal": "Breadth Trend (RSP/SPY 5d)",
+        "Value": "+1.75% 5d",
+        "Score": 1.0,
+        "Direction": "Risk-On"
+      }
+    ]
+  },
+  "_tactical_context_ts": {
+    "__datetime__": "2026-03-30T23:41:16.610825"
+  },
+  "_tactical_analysis": "The combined signal picture indicates a Risk-Off environment, with a tactical regime score of 27/100. This suggests that short-term risk appetite is subdued, and entry conditions are not favorable for aggressive long positions. The majority of the signals are pointing towards a risk-off tone, with the VIX Level and Trend, VIX Term Structure, SPY vs 20d/50d MA, and SPY Momentum all contributing to this narrative. The VIX Level of 30.6, with a 5-day trend of +4.5, is particularly noteworthy, as it indicates a significant increase in implied volatility and a strong risk-off signal (score -1.000).\n\nThe most dominant signals right now are the VIX Level and Trend, and the SPY Momentum. The VIX Level and Trend are indicating a high level of fear and uncertainty in the market, which is typically associated with a risk-off environment. The SPY Momentum, with a 5-day rate of change (ROC) of -3.6% and a 20-day ROC of -7.7%, suggests that the market is experiencing a significant decline in momentum, which is further reinforcing the risk-off tone. The only signal that is bucking this trend is the Breadth Trend, which is indicating a risk-on tone (score +1.000), but this is not enough to overcome the overwhelming risk-off signals.\n\nGiven this setup, a trader should consider reducing their long exposure or hedging their positions. The strong risk-off signals suggest that the market is likely to continue experiencing volatility and downward pressure, at least in the short term. With the VIX Level and Trend indicating a high level of fear and uncertainty, it may be prudent to wait for a more favorable risk-reward environment before adding to long positions. A concrete action implication would be to reduce long exposure by 20-30% and consider hedging remaining positions with options or other risk-reducing strategies to mitigate potential losses.",
+  "_tactical_analysis_ts": {
+    "__datetime__": "2026-03-30T23:41:16.610826"
+  },
+  "_data_quality": {
+    "score": 70,
+    "label": "Moderate \u2014 some signals stale",
+    "stale_market": [
+      "DXY"
+    ],
+    "stale_fred": [
+      "sahm",
+      "core_pce"
+    ],
+    "total_signals": 10,
+    "fresh_signals": 7
+  },
+  "_data_quality_ts": {
+    "__datetime__": "2026-03-30T23:41:16.610826"
+  }
 }
