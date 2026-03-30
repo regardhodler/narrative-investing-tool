@@ -64,10 +64,6 @@ def render():
     from utils.components import render_signal_coverage as _render_sig_cov_val
     _render_sig_cov_val()
 
-    # ── DCF Valuation — shown first ────────────────────────────────────────────
-    _dcf_scenarios = _render_dcf(ticker)
-    st.markdown("---")
-
     # ── Undervaluation Spotlight toggle ───────────────────────────────────────
     st.toggle(
         "🎯 Undervaluation Spotlight",
@@ -585,6 +581,10 @@ def render():
     _render_rating_banner(result)
     _render_signal_scorecard(signals)
     _render_analysis(result)
+
+    # ── DCF Valuation — shown below AI rating ─────────────────────────────────
+    st.markdown("---")
+    _dcf_scenarios = _render_dcf(ticker)
 
     # Kelly Position Sizing
     if _dcf_scenarios and result:
