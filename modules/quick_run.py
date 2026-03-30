@@ -182,6 +182,251 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     return {"pattern": pattern, **_PATTERNS[pattern]}
 
 
+def _render_qir_dashboard() -> None:
+    """Render the QIR Intelligence Dashboard.
+
+    Always visible — greyed shell before QIR, activated with glow border after.
+    Reads from session state only — no API calls.
+    """
+    _rc  = st.session_state.get("_regime_context")       or {}
+    _tac = st.session_state.get("_tactical_context")     or {}
+    _of  = st.session_state.get("_options_flow_context") or {}
+    _er  = st.session_state.get("_qir_earnings_risk")    or []
+    _populated = bool(_rc or _tac or _of)
+
+    # ── Signal classification ─────────────────────────────────────────────
+    _cls = _classify_signals(_rc, _tac, _of)
+    _border_color = _cls["color"] if _populated else "#1e293b"
+    _border_glow  = f"0 0 8px {_cls['color']}44" if _populated else "none"
+
+    # ── Timing Stack column ───────────────────────────────────────────────
+    _regime_score = _rc.get("score", 0)
+    _regime_label = _rc.get("regime", "")
+    _tac_score    = _tac.get("tactical_score", 50) if _tac else 50
+    _of_score     = _of.get("options_score", 50)   if _of  else 50
+
+    _t1 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">TIMING STACK</div>'
+    if _rc:
+        _r_bull = "Risk-On"  in _regime_label or _regime_score >  0.3
+        _r_bear = "Risk-Off" in _regime_label or _regime_score < -0.3
+        _rc_color = "#22c55e" if _r_bull else ("#ef4444" if _r_bear else "#f59e0b")
+        _rc_arrow = "▲" if _r_bull else ("▼" if _r_bear else "◆")
+        _t1 += (f'<div style="color:{_rc_color};font-size:11px;padding:1px 0;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'{_rc_arrow} 📡 Regime: <span style="color:#e2e8f0;">{_regime_label[:28]}</span>'
+                f'<span style="color:{_rc_color};font-size:10px;"> ({_regime_score:+.2f})</span></div>')
+    else:
+        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ 📡 Regime — run QIR</div>'
+
+    if _tac:
+        _t_bull = _tac_score >= 65; _t_bear = _tac_score < 38
+        _tc = "#22c55e" if _t_bull else ("#ef4444" if _t_bear else "#f59e0b")
+        _ta = "▲" if _t_bull else ("▼" if _t_bear else "◆")
+        _t1 += (f'<div style="color:{_tc};font-size:11px;padding:1px 0;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'{_ta} ⚡ Tactical: <span style="color:#e2e8f0;">{_tac.get("label","")}</span>'
+                f'<span style="color:{_tc};font-size:10px;"> ({_tac_score}/100)</span></div>')
+    else:
+        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ ⚡ Tactical — run QIR</div>'
+
+    if _of:
+        _o_bull = _of_score >= 65; _o_bear = _of_score < 38
+        _oc = "#22c55e" if _o_bull else ("#ef4444" if _o_bear else "#f59e0b")
+        _oa = "▲" if _o_bull else ("▼" if _o_bear else "◆")
+        _t1 += (f'<div style="color:{_oc};font-size:11px;padding:1px 0;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'{_oa} 📊 Opt Flow: <span style="color:#e2e8f0;">{_of.get("label","")}</span>'
+                f'<span style="color:{_oc};font-size:10px;"> ({_of_score}/100)</span></div>')
+    else:
+        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ 📊 Opt Flow — run QIR</div>'
+
+    # ── Macro Events column ───────────────────────────────────────────────
+    _t2 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">MACRO EVENTS</div>'
+    try:
+        from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
+        for _ev_label, _ev_fn in (("FOMC", get_next_fomc), ("CPI", get_next_cpi), ("NFP", get_next_nfp)):
+            try:
+                _ev = _ev_fn()
+                _d  = _ev.get("days_away", 99)
+                _dt = _ev.get("date", "")[:6]
+                if   _d == 0:  _ec = "#ef4444"; _ds = "TODAY"
+                elif _d == 1:  _ec = "#f97316"; _ds = "TMRW"
+                elif _d <= 5:  _ec = "#f59e0b"; _ds = f"{_d}d"
+                else:          _ec = "#475569"; _ds = f"{_d}d"
+                _t2 += (f'<div style="font-size:11px;padding:1px 0;'
+                        f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                        f'<span style="color:#64748b;">{_ev_label}</span>'
+                        f'<span style="color:{_ec};"> {_ds}</span>'
+                        f'<span style="color:#475569;font-size:10px;"> {_dt}</span></div>')
+            except Exception:
+                _t2 += f'<div style="color:#374151;font-size:11px;padding:1px 0;">{_ev_label} —</div>'
+    except Exception:
+        _t2 += '<div style="color:#374151;font-size:11px;">Macro events unavailable</div>'
+
+    # ── Earnings Risk column ──────────────────────────────────────────────
+    _t3 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">EARNINGS RISK</div>'
+    if _er:
+        for _e in _er[:4]:
+            _ed = _e["days_away"]
+            _em = _e.get("expected_move_pct")
+            _em_str = f" ±{_em:.1f}%" if _em else ""
+            if   _ed <= 3: _ec2 = "#ef4444"; _eicon = "⚠"
+            elif _ed <= 7: _ec2 = "#f59e0b"; _eicon = "⚠"
+            else:          _ec2 = "#475569"; _eicon = "📅"
+            _t3 += (f'<div style="font-size:11px;padding:1px 0;'
+                    f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                    f'<span style="color:{_ec2};">{_eicon} {_e["ticker"]}</span>'
+                    f'<span style="color:#64748b;"> {_ed}d</span>'
+                    f'<span style="color:{_ec2};font-size:10px;">{_em_str}</span></div>')
+    else:
+        _t3 += '<div style="color:#374151;font-size:11px;">No earnings ≤21d</div>'
+
+    # ── Verdict section ───────────────────────────────────────────────────
+    if _populated:
+        _verdict_color = _cls["color"]
+        _verdict_label = _cls["label"]
+        _verdict_interp = _cls["interpretation"]
+        _buy_tier   = _cls["buy_tier"]
+        _short_tier = _cls["short_tier"]
+        _instr_buy  = list(_cls["instruments_buy"])
+        _instr_shrt = list(_cls["instruments_short"])
+        _entry_buy  = _cls["entry_buy"]
+        _entry_shrt = _cls["entry_short"]
+
+        # Quadrant-specific instrument override
+        _quadrant = _rc.get("quadrant", "")
+        if _cls["pattern"] in ("BULLISH_CONFIRMATION", "PULLBACK_IN_UPTREND"):
+            if _quadrant == "Goldilocks":
+                _instr_buy = [("XLK / QQQ", "Tech leads in Goldilocks — low rates, strong growth"),
+                              ("XLY", "Consumer discretionary benefits from spending confidence")] + _instr_buy
+            elif _quadrant == "Overheating":
+                _instr_buy = [("XLE", "Energy outperforms in overheating / commodity-driven growth"),
+                              ("XLB", "Materials benefit from rising input prices")] + _instr_buy
+            elif _quadrant == "Reflation":
+                _instr_buy = [("XLE / XLB", "Commodity producers lead in reflation"),
+                              ("XLF", "Financials benefit from steepening yield curve")] + _instr_buy
+        elif _cls["pattern"] in ("BEARISH_CONFIRMATION", "LATE_CYCLE_SQUEEZE"):
+            if _quadrant == "Stagflation":
+                _instr_shrt = _instr_shrt + [("XLY Puts", "Consumer discretionary crushed by stagflation"),
+                                              ("QQQ Puts", "Growth multiples compress fastest under stagflation")]
+            elif _quadrant in ("Deflation", "Recession"):
+                _instr_shrt = _instr_shrt + [("XLF Puts", "Credit losses mount in deflation/recession"),
+                                              ("XLE Puts", "Demand collapses before supply adjusts")]
+
+        # VIX note
+        _vix_note = ""
+        try:
+            import re as _vre
+            _vix_raw = (_tac.get("signals") or [{}])[0].get("Value", "") if _tac else ""
+            _vm = _vre.search(r"(\d+\.?\d*)", str(_vix_raw))
+            if _vm:
+                _vix = float(_vm.group(1))
+                if _vix > 28:
+                    _vix_note = f"⚠ VIX {_vix:.0f} — premiums elevated. Prefer ETFs over options."
+                elif _vix < 15:
+                    _vix_note = f"ℹ VIX {_vix:.0f} — low vol. Options cheap: calls over ETFs for leverage efficiency."
+        except Exception:
+            pass
+
+        # Earnings footer caveat (≤14 days)
+        _earn_caveats = [
+            f"⚠ {e['ticker']} earnings in {e['days_away']}d — size to survive "
+            f"±{e['expected_move_pct']:.1f}% gap before the print"
+            for e in _er
+            if e["days_away"] <= 14 and e.get("expected_move_pct")
+        ]
+
+        # Build verdict HTML helpers
+        def _tier_badge(tier):
+            _tc = {"STRONG": "#22c55e", "MODERATE": "#f59e0b",
+                   "SELECTIVE": "#f97316", "NOT A BUYING ENV": "#ef4444",
+                   "NOT A SHORTING ENV": "#22c55e"}.get(tier, "#64748b")
+            return (f'<span style="background:{_tc};color:black;font-weight:800;'
+                    f'font-size:9px;padding:1px 7px;border-radius:3px;">{tier}</span>')
+
+        def _instruments_html(instruments):
+            if not instruments:
+                return ""
+            rows = "".join(
+                f'<div style="padding:2px 0;border-bottom:1px solid #1e293b;">'
+                f'<span style="color:#f1f5f9;font-weight:700;font-size:10px;">{t}</span>'
+                f'<span style="color:#94a3b8;font-size:10px;"> — {d}</span></div>'
+                for t, d in instruments[:4]
+            )
+            return (f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+                    f'letter-spacing:0.06em;margin:6px 0 2px;">INSTRUMENTS</div>'
+                    f'<div style="margin-bottom:6px;">{rows}</div>')
+
+        def _entry_html(entry_text, label="ENTRY / RISK RULES"):
+            rows = "".join(
+                f'<div style="color:#94a3b8;font-size:10px;padding:1px 0;">· {r.strip()}</div>'
+                for r in entry_text.strip().split("\n") if r.strip()
+            )
+            return (f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+                    f'letter-spacing:0.06em;margin:6px 0 2px;">{label}</div>{rows}')
+
+        _verdict_html = (
+            f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
+            f'<div style="font-size:13px;font-weight:800;color:{_verdict_color};'
+            f'letter-spacing:0.04em;margin-bottom:4px;">{_verdict_label}</div>'
+            f'<div style="color:#94a3b8;font-size:11px;margin-bottom:10px;">{_verdict_interp}</div>'
+        )
+        if _vix_note:
+            _verdict_html += (
+                f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
+                f'padding:5px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">{_vix_note}</div>'
+            )
+
+        _buy_html = (
+            f'<div style="padding:8px;background:#0a1628;border:1px solid {_cls["color"]}22;border-radius:5px;">'
+            f'<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>'
+            f'{_tier_badge(_buy_tier)}'
+            f'{_instruments_html(_instr_buy)}'
+            f'{_entry_html(_entry_buy)}'
+            f'</div>'
+        )
+        _short_html = (
+            f'<div style="padding:8px;background:#160a0a;border:1px solid {_cls["color"]}22;border-radius:5px;">'
+            f'<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">SHORT SETUP</div>'
+            f'{_tier_badge(_short_tier)}'
+            f'{_instruments_html(_instr_shrt)}'
+            f'{_entry_html(_entry_shrt)}'
+            f'</div>'
+        )
+
+        _verdict_html += (
+            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+            f'{_buy_html}{_short_html}</div>'
+        )
+
+        if _earn_caveats:
+            _verdict_html += "".join(
+                f'<div style="background:#1a0a00;border-left:3px solid #ef4444;'
+                f'padding:5px 10px;font-size:10px;color:#ef4444;margin-top:4px;">{c}</div>'
+                for c in _earn_caveats
+            )
+    else:
+        _verdict_html = (
+            f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
+            f'<div style="color:#374151;font-size:12px;text-align:center;padding:12px 0;">'
+            f'Run QIR to activate the intelligence dashboard</div>'
+        )
+
+    # ── Render the full dashboard ─────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
+        f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
+        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
+        f'text-transform:uppercase;margin-bottom:10px;">QIR Intelligence Dashboard</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
+        f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
+        f'</div>'
+        f'{_verdict_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render():
     _oc = COLORS["bloomberg_orange"]
 
