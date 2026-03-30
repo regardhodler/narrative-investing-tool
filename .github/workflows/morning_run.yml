@@ -19,6 +19,8 @@ jobs:
     name: Fetch & Cache QIR Signals
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write   # needed to push signals_cache.json back to repo
 
     steps:
       - name: Checkout repo

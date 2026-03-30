@@ -108,9 +108,12 @@ def _run_regime():
         regime = rc.get("regime", "unknown")
         score  = rc.get("score", 0.0)
         print(f"[morning_run]   Regime: {regime} (score={score:+.2f})")
+        if regime == "unknown":
+            print("[morning_run]   WARNING: regime is unknown — check FRED_API_KEY secret")
         return ok
     except Exception as e:
         print(f"[morning_run]   ERROR in regime: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 
@@ -123,9 +126,12 @@ def _run_digest():
         digest = _mock_st.session_state.get("_current_events_digest") or ""
         preview = digest[:120].replace("\n", " ") if digest else "(empty)"
         print(f"[morning_run]   Digest: {preview}...")
+        if not digest:
+            print("[morning_run]   WARNING: digest empty — check GROQ_API_KEY / NEWSAPI_KEY secrets")
         return ok
     except Exception as e:
         print(f"[morning_run]   ERROR in digest: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 
@@ -143,6 +149,7 @@ def _run_fed():
         return bool(probs)
     except Exception as e:
         print(f"[morning_run]   ERROR in fed: {e}")
+        import traceback; traceback.print_exc()
         return False
 
 
