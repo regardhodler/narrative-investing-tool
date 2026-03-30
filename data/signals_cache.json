@@ -2,26 +2,26 @@
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.6617948671571402,
-      "implied_rate": 3.625,
+      "prob": 0.6653657334171021,
+      "implied_rate": 3.6449966430664062,
       "source": "yfinance"
     },
     {
       "scenario": "cut_25",
-      "prob": 0.19494810936932513,
-      "implied_rate": 3.625,
+      "prob": 0.15695038234134703,
+      "implied_rate": 3.6449966430664062,
       "source": "yfinance"
     },
     {
       "scenario": "cut_50",
-      "prob": 0.0035705991732500214,
-      "implied_rate": 3.625,
+      "prob": 0.002301922852286354,
+      "implied_rate": 3.6449966430664062,
       "source": "yfinance"
     },
     {
       "scenario": "hike_25",
-      "prob": 0.13968642430028458,
-      "implied_rate": 3.625,
+      "prob": 0.17538196138926443,
+      "implied_rate": 3.6449966430664062,
       "source": "yfinance"
     }
   ]
