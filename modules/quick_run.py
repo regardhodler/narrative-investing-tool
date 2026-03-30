@@ -889,6 +889,42 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _results["risk_snapshot"] = False
                 st.error(f"❌ Risk Snapshot failed: {e}")
 
+            # ── Earnings Risk: fetch per held position ────────────────────
+            try:
+                from utils.journal import load_journal as _lj_r5
+                from services.market_data import fetch_earnings_intelligence as _fei
+                import datetime as _er_dt
+                _open_tks = list({t["ticker"].upper() for t in _lj_r5() if t.get("status") == "open"})
+                _earn_risk = []
+                for _etk in _open_tks:
+                    try:
+                        _ei = _fei(_etk)
+                        _ne = _ei.get("next_earnings") or {}
+                        _em = _ei.get("expected_move") or {}
+                        _days = _ne.get("days_away")
+                        if _days is not None and _days <= 21:
+                            _earn_risk.append({
+                                "ticker": _etk,
+                                "days_away": _days,
+                                "date": _ne.get("date", ""),
+                                "expected_move_pct": _em.get("pct"),
+                                "expected_move_dollar": _em.get("dollar"),
+                            })
+                    except Exception:
+                        continue
+                _earn_risk.sort(key=lambda x: x["days_away"])
+                if _earn_risk:
+                    st.session_state["_qir_earnings_risk"] = _earn_risk
+                    st.session_state["_qir_earnings_risk_ts"] = _er_dt.datetime.now()
+                    _er_names = ", ".join(
+                        f"{e['ticker']} ({e['days_away']}d)" for e in _earn_risk[:3]
+                    )
+                    st.success(f"✅ Earnings Risk — {len(_earn_risk)} position(s) flagged: {_er_names}")
+                else:
+                    st.info("ℹ️ No held positions with earnings in the next 21 days")
+            except Exception as _er_e:
+                st.warning(f"⚠ Earnings Risk scan failed: {_er_e}")
+
         # ── Completion summary ─────────────────────────────────────────────────
         _n_ok = sum(1 for v in _results.values() if v)
         if _n_ok == 9:

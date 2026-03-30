@@ -110,6 +110,9 @@ _SIGNAL_KEYS = [
     # StockTwits social sentiment (computed in QIR Round 1)
     "_stocktwits_digest",
     "_stocktwits_digest_ts",
+    # QIR Earnings Risk (held positions with earnings ≤21 days, computed in Round 5)
+    "_qir_earnings_risk",
+    "_qir_earnings_risk_ts",
 ]
 
 
