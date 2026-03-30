@@ -53,6 +53,28 @@ def _fetch_x_feed_via_grok(queries: list, regime_context: str = "") -> str:
 
 
 
+def _detect_source_conflict(x_content: str, rss_text: str) -> str:
+    """Score X feed vs RSS headlines for directional bias. Returns conflict string or ''."""
+    if not x_content or not rss_text:
+        return ""
+    _bull = ["rally", "surge", "rise", "gain", "bull", "higher", "strong", "recover",
+             "rebound", "upside", "beat", "growth", "green", "positive"]
+    _bear = ["fall", "drop", "crash", "plunge", "bear", "lower", "weak", "sell",
+             "decline", "loss", "miss", "recession", "red", "negative", "risk-off"]
+
+    def _score(text: str) -> int:
+        t = text.lower()
+        return sum(t.count(w) for w in _bull) - sum(t.count(w) for w in _bear)
+
+    _xs = _score(x_content)
+    _rs = _score(rss_text)
+    if _xs >= 3 and _rs <= -3:
+        return f"⚠ Source conflict: X posts lean bullish ({_xs:+d}) but RSS headlines lean bearish ({_rs:+d}) — digest may be blending contradictory signals."
+    if _xs <= -3 and _rs >= 3:
+        return f"⚠ Source conflict: X posts lean bearish ({_xs:+d}) but RSS headlines lean bullish ({_rs:+d}) — digest may be blending contradictory signals."
+    return ""
+
+
 def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool:
     """
     Background helper for Quick Intel Run.
@@ -87,6 +109,9 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
         return False
 
     context = "\n\n".join(parts)
+    # Store raw headline text for source breakdown (populated before X feed)
+    _raw_hl_text = hl_text or ""
+    _raw_inbox_text = inbox_text or ""
 
     _rc = st.session_state.get("_regime_context") or {}
     _regime_line = ""
@@ -171,12 +196,19 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
 
     if digest:
         _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
+        _conflict = _detect_source_conflict(_x_content_out, _raw_hl_text)
         return {
             "_current_events_digest": digest,
             "_current_events_digest_ts": datetime.now(),
             "_current_events_engine": _tier,
             "_x_feed_injected": _x_injected,
             "_x_feed_content": _x_content_out,
+            "_current_events_conflict": _conflict,
+            "_current_events_sources": {
+                "x_feed": _x_content_out,
+                "headlines": _raw_hl_text,
+                "inbox": _raw_inbox_text,
+            },
         }
     return None
 
@@ -465,15 +497,55 @@ def render():
             f'</div>',
             unsafe_allow_html=True,
         )
-        # Show raw X feed content so user can verify what was fetched
-        _x_content = st.session_state.get("_x_feed_content", "")
-        if _x_content:
-            with st.expander("𝕏 View raw X feed injected into digest", expanded=False):
-                st.markdown(
-                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
-                    f'color:{COLORS["text_dim"]};line-height:1.8;white-space:pre-wrap;">{_x_content}</div>',
-                    unsafe_allow_html=True,
-                )
+        # Contradiction warning banner
+        _conflict = st.session_state.get("_current_events_conflict", "")
+        if _conflict:
+            st.markdown(
+                f'<div style="background:#2d1a00;border-left:4px solid #f97316;'
+                f'border-radius:4px;padding:8px 14px;margin-bottom:8px;">'
+                f'<span style="color:#f97316;font-size:11px;font-weight:700;">{_conflict}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        # Verify Sources expander — X feed vs RSS side by side
+        _sources = st.session_state.get("_current_events_sources") or {}
+        _src_x  = _sources.get("x_feed", "")
+        _src_hl = _sources.get("headlines", "")
+        _src_in = _sources.get("inbox", "")
+        if _src_x or _src_hl or _src_in:
+            with st.expander("🔍 Verify Sources — check digest claims against raw inputs", expanded=False):
+                _sc1, _sc2 = st.columns(2)
+                with _sc1:
+                    if _src_x:
+                        st.markdown(
+                            f'<div style="font-size:10px;font-weight:700;color:#1d9bf0;'
+                            f'letter-spacing:0.08em;margin-bottom:6px;">𝕏 LIVE X FEED</div>'
+                            f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;color:{COLORS["text_dim"]};line-height:1.7;'
+                            f'white-space:pre-wrap;">{_src_x}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    else:
+                        st.caption("No X feed — ran in Freeloader or Highly Regarded Mode")
+                with _sc2:
+                    if _src_hl:
+                        st.markdown(
+                            f'<div style="font-size:10px;font-weight:700;color:#94a3b8;'
+                            f'letter-spacing:0.08em;margin-bottom:6px;">📰 RSS HEADLINES</div>'
+                            f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;color:{COLORS["text_dim"]};line-height:1.7;'
+                            f'white-space:pre-wrap;">{_src_hl[:1500]}</div>',
+                            unsafe_allow_html=True,
+                        )
+                if _src_in:
+                    st.markdown(
+                        f'<div style="font-size:10px;font-weight:700;color:{COLORS["bloomberg_orange"]};'
+                        f'letter-spacing:0.08em;margin:8px 0 4px;">📂 YOUR FIELD NOTES (highest priority)</div>'
+                        f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                        f'font-size:11px;color:{COLORS["text_dim"]};line-height:1.7;">{_src_in}</div>',
+                        unsafe_allow_html=True,
+                    )
 
     if st.button("🗞 Generate News Digest", key="ce_gen_digest", type="primary"):
         with st.spinner("Generating digest..."):
@@ -508,6 +580,8 @@ def _run_digest(headlines, inbox, gist, engine: str):
         return
 
     context = "\n\n".join(parts)
+    _raw_hl_text = hl_text or ""
+    _raw_inbox_text = inbox_to_text(inbox) or ""
 
     _rc = st.session_state.get("_regime_context") or {}
     _regime_line = ""
@@ -603,7 +677,14 @@ def _run_digest(headlines, inbox, gist, engine: str):
             return
 
     if digest:
+        _x_out = st.session_state.get("_x_feed_content", "")
         st.session_state["_current_events_digest"] = digest
         st.session_state["_current_events_digest_ts"] = datetime.now()
         st.session_state["_current_events_engine"] = engine
+        st.session_state["_current_events_conflict"] = _detect_source_conflict(_x_out, _raw_hl_text)
+        st.session_state["_current_events_sources"] = {
+            "x_feed": _x_out,
+            "headlines": _raw_hl_text,
+            "inbox": _raw_inbox_text,
+        }
         st.rerun()

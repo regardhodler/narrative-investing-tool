@@ -800,6 +800,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             _ev_engine = st.session_state.get("_current_events_engine", "")
             _ev_engine_str = f" [{_ev_engine}]" if _ev_engine else ""
             st.success(f"✅ Current Events Digest{_ev_engine_str}{_x_badge}")
+            _ev_conflict = st.session_state.get("_current_events_conflict", "")
+            if _ev_conflict:
+                st.warning(_ev_conflict)
         else:
             st.warning(f"⚠ Digest skipped — {_r1_errors.get('digest', 'no content available')}")
         if _results.get("whale"):
