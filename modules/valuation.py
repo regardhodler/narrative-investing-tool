@@ -542,6 +542,17 @@ def render():
             f"({_cong_b.get('buy_pct', 50):.0f}% cumulative buy bias)"
         )
 
+    # Inject QIR Earnings Risk for current ticker
+    _qir_er = st.session_state.get("_qir_earnings_risk") or []
+    _ticker_er = next((e for e in _qir_er if e.get("ticker", "").upper() == ticker.upper()), None)
+    if _ticker_er:
+        _em_str = (
+            f", options pricing ±{_ticker_er['expected_move_pct']:.1f}% move"
+            f" (${_ticker_er.get('expected_move_dollar','?')})"
+            if _ticker_er.get('expected_move_pct') else ""
+        )
+        signals_text += f"\nEarnings Risk: {ticker} reports in {_ticker_er['days_away']}d{_em_str}"
+
     # Inject StockTwits crowd sentiment
     _st_val = st.session_state.get("_stocktwits_digest") or {}
     if _st_val:

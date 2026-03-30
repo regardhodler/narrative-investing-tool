@@ -1277,6 +1277,11 @@ def render():
                         f"({(st.session_state.get('_stocktwits_digest') or {}).get('market_mood', 'unknown')})"
                         if st.session_state.get("_stocktwits_digest") else ""
                     ),
+                    "earnings_risk": "; ".join(
+                        f"{e['ticker']} in {e['days_away']}d"
+                        + (f" ±{e['expected_move_pct']:.1f}%" if e.get('expected_move_pct') else "")
+                        for e in (st.session_state.get("_qir_earnings_risk") or [])
+                    ) or "",
                 }
                 try:
                     from services.sector_rotation import get_sector_context_str as _sr_ctx_fn

@@ -859,6 +859,28 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     )
                     _sig_parts.append(f"BLACK SWANS: {_bs_summary}")
 
+                # ── Macro calendar context ────────────────────────────────
+                try:
+                    from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
+                    _fomc = get_next_fomc(); _cpi = get_next_cpi(); _nfp = get_next_nfp()
+                    _sig_parts.append(
+                        f"MACRO CALENDAR: FOMC in {_fomc.get('days_away','?')}d ({_fomc.get('date','')})"
+                        f" | CPI in {_cpi.get('days_away','?')}d ({_cpi.get('date','')})"
+                        f" | NFP in {_nfp.get('days_away','?')}d ({_nfp.get('date','')})"
+                    )
+                except Exception:
+                    pass
+
+                # ── Earnings risk context ─────────────────────────────────
+                _er_sig = st.session_state.get("_qir_earnings_risk") or []
+                if _er_sig:
+                    _er_parts = [
+                        f"{e['ticker']} in {e['days_away']}d"
+                        + (f" (±{e['expected_move_pct']:.1f}%)" if e.get('expected_move_pct') else "")
+                        for e in _er_sig[:5]
+                    ]
+                    _sig_parts.append(f"EARNINGS RISK: {', '.join(_er_parts)}")
+
                 _synopsis = _gen_synopsis("\n\n".join(_sig_parts), use_claude=_use_claude, model=_cl_model)
                 _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
                     else ("🧠 Regard Mode" if _use_claude else "⚡ Freeloader Mode")
