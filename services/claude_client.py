@@ -911,6 +911,85 @@ Whale activity data:
     return text
 
 
+def summarize_activism_filings(filings_text: str, use_claude: bool = False, model: str = None) -> str:
+    """Analyze SC 13D/13G activism filings and generate an investment intelligence summary.
+
+    Returns a markdown-formatted analysis string covering activist intent,
+    historical campaign patterns, and likely outcomes.
+    """
+    from datetime import date as _date
+    _today = _date.today().isoformat()
+
+    prompt = f"""You are a top-tier activist investing analyst. As of {_today}, analyze these SC 13D/13G filings and write an actionable intelligence summary.
+
+For each significant 13D filing, identify:
+- The activist's likely campaign objective (board seats, asset sale, spinoff, CEO change, buyback, merger opposition)
+- The target's vulnerability (undervalued assets, weak governance, depressed valuation, insider entrenchment)
+- Historical outcome pattern for this type of campaign
+- Estimated probability of activist success and timeline
+
+Then provide a cross-filing synthesis:
+- Which sectors are attracting the most activism right now?
+- Are there common themes (e.g., energy restructuring, biotech governance, tech buybacks)?
+- What does this activism wave signal about broader market conditions?
+
+Be specific, direct, and investment-actionable. Write in clear paragraphs.
+
+SC 13D/13G filings data:
+{filings_text}"""
+
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+        try:
+            return _call_xai([{"role": "user", "content": prompt}], _cl_model, 1500, 0.3)
+        except Exception as _e:
+            st.error(f"xAI API error (Activism Analysis): {_e}")
+            return f"Error generating activism analysis: {_e}"
+    elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
+        try:
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            message = client.messages.create(
+                model=_cl_model,
+                max_tokens=1500,
+                temperature=0.3,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return message.content[0].text.strip()
+        except Exception as _e:
+            st.error(f"Claude API error (Activism Analysis): {_e}")
+            return f"Error generating activism analysis: {_e}"
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return "GROQ_API_KEY not set — cannot generate activism analysis."
+
+    try:
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 1500,
+                "temperature": 0.3,
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Error generating activism analysis: {e}"
+
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1]
+        if text.endswith("```"):
+            text = text[:-3]
+        text = text.strip()
+
+    return text
+
+
 def generate_doom_briefing(stress_data: str, use_claude: bool = False, model: str = None, current_events: str = "") -> str:
     """Generate an ominous risk intelligence briefing from stress signal data via Groq or Claude.
 

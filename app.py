@@ -60,7 +60,7 @@ with st.sidebar:
             "⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events",
             "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
             "Short Squeeze Radar", "Backtesting", "My Regarded Portfolio",
-            "Signal Audit", "Export Hub", "Alerts",
+            "Signal Audit", "Forecast Tracker", "Export Hub", "Alerts",
         ],
         key="top_module",
     )
@@ -203,6 +203,8 @@ elif top_level == "My Regarded Portfolio":
     from modules.trade_journal import render; render()
 elif top_level == "Signal Audit":
     from modules.signal_audit import render; render()
+elif top_level == "Forecast Tracker":
+    from modules.forecast_accuracy import render; render()
 elif top_level == "Export Hub":
     from modules.export_hub import render; render()
 elif top_level == "Alerts":

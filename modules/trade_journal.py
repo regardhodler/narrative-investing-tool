@@ -1230,6 +1230,7 @@ def render():
                     "custom_swans": st.session_state.get("_custom_swans") or {},
                     "doom_briefing": st.session_state.get("_doom_briefing", ""),
                     "whale_summary": st.session_state.get("_whale_summary", ""),
+                    "activism_digest": st.session_state.get("_activism_digest", ""),
                     "regime_plays": _rp_plays,
                     "fed_plays": _fed_plays,
                     "discovery_plays": st.session_state.get("_plays_result") or {},

@@ -1,0 +1,65 @@
+name: Morning QIR Run
+
+on:
+  # 8:00 AM MDT = 14:00 UTC (summer/Mar-Nov)
+  # Note: shifts to 9:00 AM MST in winter (Nov-Mar) — GitHub cron doesn't auto-adjust for DST
+  schedule:
+    - cron: "0 14 * * 1-5"   # weekdays only
+
+  # Allow manual trigger from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual run"
+        required: false
+        default: "manual trigger"
+
+jobs:
+  qir-morning-run:
+    name: Fetch & Cache QIR Signals
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          # Install all deps except ib-insync (requires TWS, not needed headlessly)
+          grep -v "ib.insync" requirements.txt | pip install -r /dev/stdin
+
+      - name: Run morning QIR pipeline
+        env:
+          ANTHROPIC_API_KEY:     ${{ secrets.ANTHROPIC_API_KEY }}
+          GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
+          XAI_API_KEY:           ${{ secrets.XAI_API_KEY }}
+          FRED_API_KEY:          ${{ secrets.FRED_API_KEY }}
+          NEWSAPI_KEY:           ${{ secrets.NEWSAPI_KEY }}
+          GIST_TOKEN:            ${{ secrets.GIST_TOKEN }}
+          SIGNALS_GIST_ID:       ${{ secrets.SIGNALS_GIST_ID }}
+          SIGNALS_GIST_RAW_URL:  ${{ secrets.SIGNALS_GIST_RAW_URL }}
+          INBOX_GIST_ID:         ${{ secrets.INBOX_GIST_ID }}
+          INBOX_GIST_RAW_URL:    ${{ secrets.INBOX_GIST_RAW_URL }}
+          NEWS_GIST_RAW_URL:     ${{ secrets.NEWS_GIST_RAW_URL }}
+          REGIME_GIST_ID:        ${{ secrets.REGIME_GIST_ID }}
+          REGIME_GIST_RAW_URL:   ${{ secrets.REGIME_GIST_RAW_URL }}
+          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python tools/morning_run.py
+
+      - name: Commit updated signals cache
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/signals_cache.json
+          # Only commit if the file actually changed
+          git diff --cached --quiet || git commit -m "chore: morning QIR cache $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push

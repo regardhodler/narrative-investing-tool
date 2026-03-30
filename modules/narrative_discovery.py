@@ -565,6 +565,12 @@ def render():
                 "_whale_summary_ts",
             ),
             (
+                bool(st.session_state.get("_activism_digest")),
+                "Activism (13D)",
+                st.session_state.get("_activism_digest_engine", ""),
+                "_activism_digest_ts",
+            ),
+            (
                 bool(st.session_state.get("_current_events_digest")),
                 "Current Events",
                 st.session_state.get("_current_events_engine", ""),
@@ -713,6 +719,11 @@ def render():
                 _whale_cached = st.session_state.get("_whale_summary")
                 if _whale_cached:
                     _enrichment_parts.append(f"[Whale Activity: {_whale_cached[:400]}]")
+
+                # Activism Campaigns (13D digest)
+                _activism_cached = st.session_state.get("_activism_digest")
+                if _activism_cached:
+                    _enrichment_parts.append(f"[Activism Campaigns (13D): {_activism_cached[:300]}]")
 
                 # AI Regime Plays (sector/stock picks for current regime)
                 _rp_plays_cached = st.session_state.get("_rp_plays_result")

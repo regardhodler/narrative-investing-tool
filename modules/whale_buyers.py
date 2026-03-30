@@ -9,7 +9,7 @@ from services.whale_screener import (
     get_available_quarters,
     screen_whale_buyers,
 )
-from services.claude_client import summarize_whale_activity
+from services.claude_client import summarize_whale_activity, summarize_activism_filings
 from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
 from utils.ai_tier import render_ai_tier_selector
 
@@ -51,7 +51,41 @@ def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
     }
 
 
-def render():
+def run_quick_activism(use_claude: bool = False, model: str | None = None) -> dict | None:
+    """
+    Background helper for Quick Intel Run.
+    Fetches last 30 days of SC 13D filings, generates AI activism analysis.
+    Stores _activism_digest, _activism_digest_ts, _activism_digest_engine to session_state.
+    """
+    import datetime as _dt
+    from services.activism_screener import get_activism_filings
+
+    filings = get_activism_filings(days_back=30, include_13g=False)
+    if not filings:
+        return None
+
+    lines = []
+    for f in filings[:20]:  # cap at 20 most recent
+        filer = f.get("filer", "Unknown")[:40]
+        subject = f.get("subject", "Unknown")[:40]
+        form = f.get("form_type", "SC 13D")
+        date = f.get("file_date", "")
+        lines.append(f"{date} | {form} | Activist: {filer} → Target: {subject}")
+
+    filings_text = "\n".join(lines)
+    summary = summarize_activism_filings(filings_text, use_claude=use_claude, model=model)
+    if not summary or summary.startswith("Error"):
+        return None
+
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+        else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+    return {
+        "_activism_digest": summary,
+        "_activism_digest_ts": _dt.datetime.now(),
+        "_activism_digest_engine": _tier,
+    }
+
+
     tab_whales, tab_activism = st.tabs(["🐋 13F Whale Movement", "🎯 Activism (13D/13G)"])
     with tab_whales:
         _render_whale_tab()
@@ -618,3 +652,63 @@ def _render_activism_tab():
         f'Click accession numbers to view full filings on SEC EDGAR.</div>',
         unsafe_allow_html=True,
     )
+
+    # ── AI Activism Analysis ───────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">🎯 AI ACTIVISM ANALYSIS</div>',
+        unsafe_allow_html=True,
+    )
+
+    _use_cl_act, _act_model = render_ai_tier_selector(
+        key="act_ai_tier",
+        label="Analysis Engine",
+        recommendation="🧠 Regard Mode for activism campaign analysis",
+        default=1,
+    )
+
+    if st.button("Generate Activism Analysis", type="primary", key="act_ai_btn", use_container_width=True):
+        lines = []
+        for f in filings[:20]:
+            filer = f.get("filer", "Unknown")[:40]
+            subject = f.get("subject", "Unknown")[:40]
+            form = f.get("form_type", "SC 13D")
+            date = f.get("file_date", "")
+            lines.append(f"{date} | {form} | Activist: {filer} → Target: {subject}")
+        filings_text = "\n".join(lines)
+
+        with st.spinner("Analyzing activism campaigns..."):
+            _act_summary = summarize_activism_filings(filings_text, use_claude=_use_cl_act, model=_act_model)
+
+        if _act_summary and not _act_summary.startswith("Error"):
+            import datetime as _dt_act
+            st.session_state["_activism_digest"] = _act_summary
+            st.session_state["_activism_digest_ts"] = _dt_act.datetime.now()
+            _tier_label = "👑 Highly Regarded Mode" if (_use_cl_act and _act_model == "claude-sonnet-4-6") \
+                else ("🧠 Regard Mode" if _use_cl_act else "⚡ Freeloader Mode")
+            st.session_state["_activism_digest_engine"] = _tier_label
+            st.rerun()
+        else:
+            st.error(_act_summary or "No analysis generated.")
+
+    _existing_digest = st.session_state.get("_activism_digest")
+    if _existing_digest:
+        _ts = st.session_state.get("_activism_digest_ts")
+        _eng = st.session_state.get("_activism_digest_engine", "")
+        _ts_str = _ts.strftime("%Y-%m-%d %H:%M") if _ts else ""
+        st.markdown(
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};margin-bottom:6px;">'
+            f'Generated {_ts_str} via {_eng}</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+            f'border-left:3px solid {COLORS["bloomberg_orange"]};padding:12px 16px;'
+            f'border-radius:4px;font-size:12px;line-height:1.6;color:{COLORS["text"]};">'
+            f'{_existing_digest.replace(chr(10), "<br>")}</div>',
+            unsafe_allow_html=True,
+        )

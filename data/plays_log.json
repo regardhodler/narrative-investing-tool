@@ -11015,5 +11015,270 @@
       "n_positions": 14,
       "verdict": "REDUCE_RISK"
     }
+  },
+  {
+    "id": "20260329_192523_29",
+    "timestamp": "2026-03-29T19:25:23.292506",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 6\n\n* The Composite Stress Score of 31.6/100 indicates a moderate level of financial system stress, with the HY OAS at 3.21 and IG OAS at 0.88 suggesting a widening credit spread.\n* The 10Y-2Y Spread of 0.56 is relatively flat, indicating a potential inversion risk, which may signal a recession.\n* The Canary Watchlist Summary shows significant drawdowns in Regional Banks (-21.3%) and Commercial Real Estate (-16.4%), indicating potential stress in these sectors.\n* The Distress filings (275 in the last 30 days) and Whale exits ($-129,883,591M) suggest a moderate level of market stress, with investors reducing their exposure to risky assets.\n* The Volatility / Fear index has a 1M return of +25.5%, indicating increased market uncertainty and risk aversion.\n\nLooking forward, the current stagflation regime, exacerbated by Middle East tensions and supply shocks, may lead to further market stress and potential contagion risks. The risk of semis supply chain breaks and gold drawdowns in historical oil crises patterns should be closely monitored. The potential for yen strength on intervention or volatility trades also presents opportunities for investors to hedge against market uncertainty."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260329_204921_69",
+    "timestamp": "2026-03-29T20:49:21.698119",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 6\n\n* The Composite Stress Score of 31.6/100 indicates a moderate level of financial system stress, with the HY OAS at 3.21 and IG OAS at 0.88 suggesting some widening in credit spreads.\n* The 10Y-2Y Spread of 0.56 is relatively flat, indicating a moderate level of concern about the economic outlook.\n* The Canary Watchlist Summary shows significant drawdowns in Regional Banks (-21.3%) and Subprime / Consumer Credit (-33.8%), which may be indicative of emerging credit concerns.\n* The number of distress filings (275) and whale exits (20 positions, total $-129,883,591M closed/reduced) over the last 30 days suggests some level of market stress and potential for further liquidation.\n* The Volatility / Fear index has seen a significant increase in returns (+25.5%) over the past month, indicating a rise in market anxiety.\n\nLooking forward, the current stagflation regime and Middle East tensions may continue to exacerbate supply shocks and drive market volatility. The risk of semis supply chain breaks and gold drawdowns in historical oil crises patterns may lead to further market stress, while the potential for yen strength on intervention or volatility trades presents opportunities for investors. Overall, the current stress level suggests a moderate level of concern, but investors should remain vigilant and closely monitor market developments."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260329_205012_74",
+    "timestamp": "2026-03-29T20:50:12.749825",
+    "feature": "Doom Briefing",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "briefing": "**STRESS LEVEL: 5/10**\n\n- HY OAS at 3.21 reflects moderate widening in high-yield credit spreads, while IG OAS at 0.88 remains contained.\n- Regional banks show average 1M return of -10.1% and average drawdown of -21.3%, with CRE at average 1M return -5.6% and drawdown -16.4%, indicating interconnected drawdowns across bank exposures.\n- Private equity exposure records average drawdown of -39.1%; subprime/consumer credit shows average drawdown of -33.8%, signaling deep illiquidity pockets.\n- Distress filings reached 275 over the last 30 days; whale exits total 20 positions with $-129,883,591M closed/reduced, pointing to accelerated de-risking.\n- Volatility/fear index average 1M return of +25.5% with drawdown -23.0% confirms heightened market fear alongside the composite stress score of 31.6/100 (MODERATE).\n- 10Y-2Y spread at 0.56 shows limited curve stress.\n\nElevated drawdowns in regional banks (-21.3%) and CRE (-16.4%) alongside 275 distress filings raise potential for cascading defaults if credit conditions tighten further. Whale exits of $-129,883,591M across 20 positions amplify liquidity drain risks. Monitoring HY OAS (3.21) and volatility return (+25.5%) will indicate if stress escalates toward 40/100 composite levels."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260329_210449_87",
+    "timestamp": "2026-03-29T21:04:49.873109",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6803164140997132,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12899126057052873,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013800630280835205,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18931226230167453,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260329_210515_95",
+    "timestamp": "2026-03-29T21:05:15.956757",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6803164140997132,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12899126057052873,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013800630280835205,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18931226230167453,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260329_210517_72",
+    "timestamp": "2026-03-29T21:05:17.724509",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6803164140997132,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12899126057052873,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013800630280835205,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18931226230167453,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260329_210519_51",
+    "timestamp": "2026-03-29T21:05:19.512284",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6803164140997132,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12899126057052873,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013800630280835205,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18931226230167453,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260329_210521_27",
+    "timestamp": "2026-03-29T21:05:21.274611",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6803164140997132,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12899126057052873,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013800630280835205,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18931226230167453,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260329_210901_84",
+    "timestamp": "2026-03-29T21:09:01.843641",
+    "feature": "Whale Summary",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "summary": "**Institutional Convergence on AI-Driven Tech and Semiconductors**\n\nMajor institutions like BlackRock, Vanguard, and State Street are heavily converging on AI and semiconductor leaders, alongside select megacap tech and healthcare names. BlackRock aggressively boosted NVIDIA by $62.2 billion (+37.6%), the largest single position change, signaling strong conviction in AI chip dominance. Alphabet saw massive inflows across all three giants: Vanguard added $40.0 billion (+31.9%) and $31.6 billion (+31.4%) across share classes, State Street +$16.6 billion (+29.8%), and BlackRock +$13.9 billion (+22.2%) plus $11.0 billion (+20.2%). Apple drew broad buying with BlackRock +$43.7 billion (+24.5%) and Vanguard +$31.4 billion (+8.8%). Semiconductor plays like Micron (Vanguard +$12.9 billion, +73.8%) and Broadcom (Vanguard +$9.1 billion, +5.8%) also attracted flows, while Eli Lilly gained from Vanguard +$26.3 billion (+42.6%) and State Street +$9.2 billion (+49.9%), likely tied to GLP-1 drug momentum.\n\n**Names with Highest Conviction from Multiple Whales**\n\nAlphabet exhibits the strongest multi-whale conviction, with every major player (Vanguard, BlackRock, State Street) piling in for over $113 billion combined increases. Apple follows closely, with BlackRock and Vanguard adding $75.1 billion total. Eli Lilly shows dual commitment from Vanguard and State Street (+$35.5 billion combined). NVIDIA's BlackRock surge stands alone but at an unmatched scale, while Microsoft has mixed signals (BlackRock +$17.8 billion vs. Vanguard/State Street cuts). Amazon's BlackRock +$9.7 billion adds to emerging semis/tech breadth.\n\n**Notable Exits and Position Reductions Signaling Shifts**\n\nSeveral high-profile trims suggest rotation away from certain tech subsectors. Meta Platforms faced significant selling: State Street - $14.7 billion (-15.4%) and Vanguard - $9.5 billion (-6.7%). Microsoft saw net outflows with Vanguard - $16.4 billion (-4.5%) and State Street - $11.8 billion (-10.9%), despite BlackRock's buy. Vanguard sharply cut Oracle by $13.4 billion (-28.3%) and Netflix by $9.6 billion (-20.8%), indicating reduced faith in enterprise software and streaming amid AI reallocations.\n\n**Overall Institutional Flow Patterns and Sentiment**\n\nNet flows tilt decisively bullish on AI infrastructure (NVIDIA, Alphabet, semis) and resilient growth names (Apple, Lilly), with over $250 billion in disclosed buys dwarfing $75 billion in cuts. This pattern reflects optimistic sentiment toward AI monetization and capex cycles, with passive giants reweighting portfolios toward high-conviction leaders. Trims in Meta, Microsoft, Oracle, and Netflix hint at profit-taking or derisking in mature tech/streaming, suggesting a \"quality AI barbell\" strategy amid 2026 market dynamics.\n\n**Recent SC 13D Activism Filings**\n\nActivism remains concentrated in microcaps and niche targets, with no major blue-chip campaigns in the last 90 days. AGL Private Credit Income Fund (CIK 0002011498) filed on Abu Dhabi Investment Authority (CIK 0001362558), likely seeking influence over credit allocations. FIRST NATIONAL CORP /VA/ (FXNC, CIK 0000719402) targeted Wilkins III James R (CIK 0001252758), possibly for banking control or asset sales. Arcus Biosciences (RCUS, CIK 0001724521) went after Rosen Terry J (CIK 0001182473), aiming at biotech governance or IP strategy. Newegg Commerce (NEGG, CIK 0001474627) filed on Tekhill USA LLC (CIK 0001971269), indicating e-commerce operational push. NACCO Industries (NC, CIK 0000789933) twice targeted Rankin Alfred M et al (CIK 0000904532), signaling board overhaul in industrials. BrilliA (BRIA, CIK 0002000230) pursued Hartanto Kendrew (CIK 0002048799) for management changes. Karbon-X (KARX, CIK 0001729637) hit Hummingbird STAR Trust (CIK 0002035272), likely for carbon tech direction. MSP Recovery (LIFW etc., CIK 0001802450) targeted Ruiz John Hasan (CIK 0001926798) amid recovery claims disputes. Logan Ridge Finance (LRFC, CIK 0001571329) filed on Frischer Charles L (CIK 0001402258), probably for"
+    },
+    "meta": {}
   }
 ]

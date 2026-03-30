@@ -486,6 +486,9 @@ def render():
     _whale_sum = st.session_state.get("_whale_summary")
     if _whale_sum:
         signals_text += f"\nInstitutional Whale Activity: {_whale_sum[:500]}"
+    _activism_dig = st.session_state.get("_activism_digest")
+    if _activism_dig:
+        signals_text += f"\nActivism Campaigns (13D): {_activism_dig[:400]}"
 
     # Inject Trending Narratives (market attention signals from Google Trends + news)
     _tn_val = st.session_state.get("_trending_narratives")

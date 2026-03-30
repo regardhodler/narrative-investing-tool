@@ -421,6 +421,7 @@ def _render_qir_dashboard() -> None:
         ("Events",    "_current_events_digest"),
         ("Doom",      "_doom_briefing"),
         ("Whales",    "_whale_summary"),
+        ("Activism",  "_activism_digest"),
         ("Risk Snap", "_portfolio_risk_snapshot"),
         ("Earnings",  "_qir_earnings_risk"),
     ]
@@ -609,8 +610,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
-    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
+    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
+    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -722,26 +723,28 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         # These five are fully independent — run concurrently to save time.
         from modules.risk_regime import run_quick_regime
         from modules.current_events import run_quick_digest
-        from modules.whale_buyers import run_quick_whale
+        from modules.whale_buyers import run_quick_whale, run_quick_activism
         from modules.options_activity import run_quick_options_flow
         from services.stocktwits_client import run_quick_stocktwits
 
-        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Options Flow · Social (parallel)..."):
+        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Social (parallel)..."):
             _r1_errors = {}
             _macro_ctx, _fred_data = None, None
             import datetime as _dt_qir
-            with ThreadPoolExecutor(max_workers=5) as _pool:
-                _fut_regime = _pool.submit(run_quick_regime, _use_claude, _cl_model)
-                _fut_digest = _pool.submit(run_quick_digest, _use_claude, _cl_model)
-                _fut_whale  = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
-                _fut_opts   = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
-                _fut_stwit  = _pool.submit(run_quick_stocktwits)
+            with ThreadPoolExecutor(max_workers=6) as _pool:
+                _fut_regime   = _pool.submit(run_quick_regime, _use_claude, _cl_model)
+                _fut_digest   = _pool.submit(run_quick_digest, _use_claude, _cl_model)
+                _fut_whale    = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
+                _fut_activism = _pool.submit(run_quick_activism, _use_claude, _cl_model)
+                _fut_opts     = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
+                _fut_stwit    = _pool.submit(run_quick_stocktwits)
                 for _fut, _key in (
-                    (_fut_regime, "regime"),
-                    (_fut_digest, "digest"),
-                    (_fut_whale,  "whale"),
-                    (_fut_opts,   "opts"),
-                    (_fut_stwit,  "social"),
+                    (_fut_regime,   "regime"),
+                    (_fut_digest,   "digest"),
+                    (_fut_whale,    "whale"),
+                    (_fut_activism, "activism"),
+                    (_fut_opts,     "opts"),
+                    (_fut_stwit,    "social"),
                 ):
                     try:
                         _val = _fut.result()
@@ -776,6 +779,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                             for _k, _v in _val.items():
                                 st.session_state[_k] = _v
                         elif _key == "whale" and _val:
+                            for _k, _v in _val.items():
+                                st.session_state[_k] = _v
+                        elif _key == "activism" and _val:
                             for _k, _v in _val.items():
                                 st.session_state[_k] = _v
                         elif _key == "opts" and _val:
@@ -938,6 +944,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _whale = st.session_state.get("_whale_summary", "")
                 if _whale:
                     _sig_parts.append(f"WHALE ACTIVITY: {_whale[:300]}")
+                _activism = st.session_state.get("_activism_digest", "")
+                if _activism:
+                    _sig_parts.append(f"ACTIVISM CAMPAIGNS: {_activism[:300]}")
                 _bs = st.session_state.get("_custom_swans", {})
                 if _bs:
                     _bs_summary = "; ".join(
@@ -1290,6 +1299,15 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 st.markdown(
                     f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
                     f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_whale}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _activism = st.session_state.get("_activism_digest", "")
+        if _activism:
+            with st.expander("🎯 Activism Campaigns (13D)", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_activism}</div>',
                     unsafe_allow_html=True,
                 )
 

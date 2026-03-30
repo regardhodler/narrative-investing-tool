@@ -330,8 +330,19 @@ def fetch_zq_probabilities() -> list[dict]:
     except Exception:
         pass
 
-    # Tier 2 — named contracts
-    for ticker in ("ZQH26", "ZQK26", "ZQM26"):
+    # Tier 2 — named contracts (dynamically built so they don't expire)
+    _ZQ_MONTH_CODES = "FGHJKMNQUVXZ"  # CME month codes Jan–Dec
+    _today = date.today()
+    _zq_tickers = []
+    _yr, _mo = _today.year, _today.month
+    for _ in range(4):
+        _mo += 1
+        if _mo > 12:
+            _mo = 1
+            _yr += 1
+        _zq_tickers.append(f"ZQ{_ZQ_MONTH_CODES[_mo - 1]}{str(_yr)[-2:]}")
+
+    for ticker in _zq_tickers:
         try:
             df = yf.download(ticker, period="5d", interval="1d", progress=False, auto_adjust=True)
             if isinstance(df.columns, pd.MultiIndex):

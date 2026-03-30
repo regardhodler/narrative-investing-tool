@@ -88,6 +88,16 @@ def _prev_tactical(v):
     return f"Score: {score}/100 ({label}) — {bias}"
 
 
+def _prev_forecast_log(v):
+    if not isinstance(v, list):
+        return ""
+    total = len(v)
+    resolved = [e for e in v if e.get("outcome") in ("correct", "incorrect")]
+    correct = sum(1 for e in resolved if e.get("outcome") == "correct")
+    acc = round(correct / len(resolved) * 100, 1) if resolved else 0.0
+    return f"{total} logged · {len(resolved)} resolved · {acc}% accuracy"
+
+
 _SIGNAL_REGISTRY = [
     {
         "label": "Regime label / score / quadrant",
@@ -226,6 +236,22 @@ _SIGNAL_REGISTRY = [
         "valuation": True, "discovery": True, "portfolio": True,
         "preview_fn": _prev_risk_snapshot,
         "run_hint": "My Regarded Portfolio → Risk Matrix tab (or Quick Intel Run Round 5)",
+    },
+    {
+        "label": "Forecast Accuracy Log",
+        "key": "_forecast_log",
+        "ts_key": "_forecast_log_ts",
+        "valuation": False, "discovery": False, "portfolio": True,
+        "preview_fn": _prev_forecast_log,
+        "run_hint": "Forecast Tracker → Log Forecast tab",
+    },
+    {
+        "label": "Activism Analysis (13D digest)",
+        "key": "_activism_digest",
+        "ts_key": "_activism_digest_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_text,
+        "run_hint": "Whale Movement → Activism tab → Generate Activism Analysis",
     },
 ]
 

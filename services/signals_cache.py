@@ -113,6 +113,13 @@ _SIGNAL_KEYS = [
     # QIR Earnings Risk (held positions with earnings ≤21 days, computed in Round 5)
     "_qir_earnings_risk",
     "_qir_earnings_risk_ts",
+    # Forecast Accuracy Tracker
+    "_forecast_log",
+    "_forecast_log_ts",
+    # Activism Analysis
+    "_activism_digest",
+    "_activism_digest_ts",
+    "_activism_digest_engine",
 ]
 
 
