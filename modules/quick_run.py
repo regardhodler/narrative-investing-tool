@@ -795,7 +795,11 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         else:
             st.error(f"❌ Regime failed: {_r1_errors.get('regime', '?')}")
         if _results.get("digest"):
-            st.success("✅ Current Events Digest — done")
+            _x_live = st.session_state.get("_x_feed_injected", False)
+            _x_badge = " · 𝕏 Live Feed ✓" if _x_live else ""
+            _ev_engine = st.session_state.get("_current_events_engine", "")
+            _ev_engine_str = f" [{_ev_engine}]" if _ev_engine else ""
+            st.success(f"✅ Current Events Digest{_ev_engine_str}{_x_badge}")
         else:
             st.warning(f"⚠ Digest skipped — {_r1_errors.get('digest', 'no content available')}")
         if _results.get("whale"):

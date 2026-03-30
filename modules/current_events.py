@@ -112,6 +112,8 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     digest = None
     _use_cl = use_claude
     _model = model
+    _x_injected = False
+    _x_content_out = ""
 
     # Inject X live feed when using Grok (xAI)
     if _use_cl and _model and _model.startswith("grok-") and os.getenv("XAI_API_KEY"):
@@ -132,11 +134,8 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
                 + _regime_line
                 + f"{context[:5000]}"
             )
-            st.session_state["_x_feed_injected"] = True
-            st.session_state["_x_feed_content"] = x_content
-        else:
-            st.session_state.pop("_x_feed_injected", None)
-            st.session_state.pop("_x_feed_content", None)
+            _x_injected = True
+            _x_content_out = x_content
 
     if not _use_cl:
         try:
@@ -176,6 +175,8 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
             "_current_events_digest": digest,
             "_current_events_digest_ts": datetime.now(),
             "_current_events_engine": _tier,
+            "_x_feed_injected": _x_injected,
+            "_x_feed_content": _x_content_out,
         }
     return None
 
