@@ -68,162 +68,6 @@ def render():
     _dcf_scenarios = _render_dcf(ticker)
     st.markdown("---")
 
-    # ── Context Readiness ──────────────────────────────────────────────────────
-    _regime_tier = st.session_state.get("_regime_plays_tier")
-    _disc_tier   = st.session_state.get("_discovery_tier")
-
-    def _tier_badge_html(tier):
-        if tier is None:
-            return '<span style="font-size:11px;background:#3B1F1F;color:#ef4444;padding:2px 8px;border-radius:4px;">⚠️ Not loaded</span>'
-        icon = tier.split()[0]
-        bg    = {"⚡": "#334155", "🧠": "#4C1D95", "👑": "#1a1000"}.get(icon, "#334155")
-        color = {"⚡": "#94a3b8", "🧠": "white",   "👑": "#FF8811"}.get(icon, "white")
-        return f'<span style="font-size:11px;background:{bg};color:{color};padding:2px 8px;border-radius:4px;font-weight:600;">{tier}</span>'
-
-    _both_loaded = _regime_tier is not None and _disc_tier is not None
-    _both_sonnet = (
-        _regime_tier == "👑 Highly Regarded Mode" and _disc_tier == "👑 Highly Regarded Mode"
-    )
-    _cr_suffix = " ✅" if _both_sonnet else " ⚠️" if not _both_loaded else " 🟡"
-    with st.expander(f"📡 Context Readiness{_cr_suffix}", expanded=not _both_loaded):
-        from utils.ai_tier import render_ai_tier_selector as _val_ai_tier, TIER_OPTS as _VAL_TIER_OPTS, TIER_MAP as _VAL_TIER_MAP
-        # ── Engine selectors ──────────────────────────────────────────────────
-        _cr_model_map = _VAL_TIER_MAP
-        _sel_r_idx = next((i for i, o in enumerate(_VAL_TIER_OPTS) if o == _regime_tier), 0)
-        _sel_d_idx = next((i for i, o in enumerate(_VAL_TIER_OPTS) if o == _disc_tier), 0)
-
-        _cre1, _cre2 = st.columns(2)
-        with _cre1:
-            _r_use_cl_cr, _r_model_cr = _val_ai_tier(
-                key="cr_regime_engine",
-                label="Risk Regime Engine",
-                recommendation="🧠 Grok 4.1 sufficient for regime context",
-                default=_sel_r_idx,
-            )
-            _regime_tier_sel = st.session_state.get("cr_regime_engine", "⚡ Freeloader Mode")
-        with _cre2:
-            _d_use_cl_cr, _d_model_cr = _val_ai_tier(
-                key="cr_disc_engine",
-                label="Discovery Engine",
-                recommendation="🧠 Grok 4.1 sufficient for narrative discovery context",
-                default=_sel_d_idx,
-            )
-            _disc_tier_sel = st.session_state.get("cr_disc_engine", "⚡ Freeloader Mode")
-
-        # ── Status cards with orange glow ─────────────────────────────────────
-        def _glow_card(title, tier_sel, status_badge, caption_text):
-            is_gold  = tier_sel == "👑 Highly Regarded Mode"
-            border   = "2px solid #FF8811" if is_gold else "1px solid #334155"
-            shadow   = "0 0 14px #FF881155" if is_gold else "none"
-            return (
-                f'<div style="border:{border};border-radius:8px;padding:12px 16px;'
-                f'box-shadow:{shadow};margin:6px 0;">'
-                f'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;'
-                f'color:#94a3b8;text-transform:uppercase;margin-bottom:6px;">{title}</div>'
-                f'{status_badge}'
-                f'<div style="font-size:11px;color:#64748b;margin-top:6px;">{caption_text}</div>'
-                f'</div>'
-            )
-
-        _gc1, _gc2 = st.columns(2)
-        with _gc1:
-            st.markdown(_glow_card("Risk Regime AI", _regime_tier_sel,
-                _tier_badge_html(_regime_tier), "Risk Regime → Fed Forecaster → Rate-Path Plays"),
-                unsafe_allow_html=True)
-        with _gc2:
-            st.markdown(_glow_card("Discovery AI", _disc_tier_sel,
-                _tier_badge_html(_disc_tier), "Discovery → Cross-Signal Macro Plays"),
-                unsafe_allow_html=True)
-
-        # ── Workflow step guide ───────────────────────────────────────────────
-        st.markdown("---")
-        _regime_ctx       = st.session_state.get("_regime_context")
-        _has_rate_path_v  = bool(st.session_state.get("_dominant_rate_path"))
-        _has_black_swans_v = bool(st.session_state.get("_custom_swans"))
-        _bs_count_v       = len(st.session_state.get("_custom_swans", {}))
-        _step1_done  = bool(_regime_ctx) and _has_rate_path_v
-        _step3_done  = _both_loaded   # Step 3 = run plays
-        _step4_ready = _step1_done and _step3_done
-
-        def _step_badge(done, active):
-            if done:   return '<span style="color:#22c55e;font-weight:700;">✅</span>'
-            if active: return '<span style="color:#FF8811;font-weight:700;">▶</span>'
-            return '<span style="color:#475569;font-weight:700;">○</span>'
-
-        def _val_age(ts_key: str) -> str:
-            from datetime import datetime as _dt
-            _ts = st.session_state.get(ts_key)
-            if not _ts:
-                return ""
-            _mins = int((_dt.now() - _ts).total_seconds() / 60)
-            if _mins < 1:
-                return ' <span style="color:#22c55e;font-size:10px;">— just now</span>'
-            if _mins < 60:
-                return f' <span style="color:#64748b;font-size:10px;">— {_mins}m ago</span>'
-            return f' <span style="color:#64748b;font-size:10px;">— {_mins // 60}h ago</span>'
-
-        _s1 = _step_badge(_step1_done, not _step1_done)
-        # Step 2 (optional) — just shows ✅ or ○, never blocks
-        _s2_opt = '✅' if _has_black_swans_v else '○'
-        _s2_color = '#22c55e' if _has_black_swans_v else '#475569'
-        _bs_step_hint = f"{_bs_count_v} events analyzed ✓" if _has_black_swans_v else "go to Risk Regime → Fed Forecaster → Black Swan"
-        _s3 = _step_badge(_step3_done, _step1_done and not _step3_done)
-        _s4 = _step_badge(_step4_ready, _step3_done and not _step4_ready)
-
-        st.markdown(
-            f'<div style="font-size:11px;color:#94a3b8;line-height:2.1;">'
-            f'{_s1} <b>Step 1</b> — <b>Risk Regime</b> → <b>Fed Forecaster</b> (regime + rate path)'
-            f'{"" if _step1_done else " ← do this first"}'
-            f'{_val_age("_regime_context_ts") if _step1_done else ""}<br>'
-            f'<span style="color:{_s2_color};font-weight:700;">{_s2_opt}</span>'
-            f' <b>Step 2</b> <span style="color:#64748b;">(optional)</span>'
-            f' — <b>Black Swan</b> events — <span style="color:#64748b;">{_bs_step_hint}</span>'
-            f'{_val_age("_custom_swans_ts") if _has_black_swans_v else ""}<br>'
-            f'{_s3} <b>Step 3</b> — Click <b>Run Regime Plays</b> &amp; <b>Run Discovery Plays</b> below'
-            f'{"" if _step3_done else (" ← do this now" if _step1_done else " (needs Step 1)")}'
-            f'{_val_age("_fed_plays_result_ts") if _step3_done else ""}<br>'
-            f'{_s4} <b>Step 4</b> — Select engine + toggle Undervaluation Spotlight → <b>Analyze Ticker</b>'
-            f'{"&nbsp;&nbsp;<span style=\'color:#22c55e;\'>← ready!</span>" if _step4_ready else ""}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown("")
-
-        # ── Action buttons ────────────────────────────────────────────────────
-        _ab1, _ab2 = st.columns(2)
-        with _ab1:
-            _r_use_cl, _r_model = _r_use_cl_cr, _r_model_cr
-            _r_icon = _regime_tier_sel.split()[0]
-            _r_btn_label = f"{'▶ ' if _step1_done and not _regime_tier else ''}Run {_r_icon} Regime Plays"
-            if st.button(_r_btn_label, key="cr_run_regime",
-                         disabled=not bool(_regime_ctx),
-                         help="Re-runs Regime Plays with the selected engine" if _regime_ctx else "Load Risk Regime → Fed Forecaster first"):
-                from services.claude_client import suggest_regime_plays
-                with st.spinner(f"Running {_regime_tier_sel}..."):
-                    suggest_regime_plays(
-                        _regime_ctx["regime"], _regime_ctx["score"], _regime_ctx["signal_summary"],
-                        use_claude=_r_use_cl, model=_r_model,
-                    )
-                st.session_state["_regime_plays_tier"] = _regime_tier_sel
-                st.rerun()
-            if not _regime_ctx:
-                st.caption("⚠ Load Risk Regime → Fed Forecaster first")
-        with _ab2:
-            _d_use_cl, _d_model = _d_use_cl_cr, _d_model_cr
-            _d_icon = _disc_tier_sel.split()[0]
-            if st.button(f"Run {_d_icon} Discovery Plays", key="cr_run_disc"):
-                from services.claude_client import suggest_regime_plays as _srp_disc
-                from modules.narrative_discovery import _get_macro_context_for_plays
-                with st.spinner(f"Running {_disc_tier_sel}..."):
-                    _mctx = _get_macro_context_for_plays()
-                    if _mctx:
-                        _srp_disc(
-                            _mctx["regime"], _mctx["score"], str(_mctx),
-                            use_claude=_d_use_cl, model=_d_model,
-                        )
-                st.session_state["_discovery_tier"] = _disc_tier_sel
-                st.rerun()
-
     # ── Undervaluation Spotlight toggle ───────────────────────────────────────
     st.toggle(
         "🎯 Undervaluation Spotlight",
@@ -522,6 +366,15 @@ def render():
             f"\nUnusual Options Activity: {_ua_s.get('sentiment', '')} "
             f"({_ua_s.get('call_pct', 0):.0f}% calls / {_ua_s.get('put_pct', 0):.0f}% puts, "
             f"{_ua_s.get('flagged_contracts', 0)} flagged contracts)"
+        )
+
+    # Inject macro options flow (SPY-level market-wide P/C, gamma, put wall)
+    _of_ctx_v = st.session_state.get("_options_flow_context") or {}
+    if _of_ctx_v:
+        signals_text += (
+            f"\nMacro Options Flow (SPY): {_of_ctx_v.get('label', '')} "
+            f"(score {_of_ctx_v.get('options_score', 50)}/100) | "
+            f"{_of_ctx_v.get('action_bias', '')[:150]}"
         )
 
     _inst_b = st.session_state.get("_institutional_bias") or {}

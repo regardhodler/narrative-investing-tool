@@ -507,6 +507,8 @@ def render():
         _bs_count = len(st.session_state.get("_custom_swans", {}))
         _ff_rate = st.session_state.get("_fed_funds_rate")
 
+        _of_ctx_nd = st.session_state.get("_options_flow_context") or {}
+        _tac_ctx_nd = st.session_state.get("_tactical_context") or {}
         _ctx_signals = [
             (
                 bool(st.session_state.get("_regime_context")),
@@ -515,6 +517,12 @@ def render():
                 f"score {st.session_state.get('_regime_context', {}).get('score', 0):+.2f} · "
                 f"{st.session_state.get('_regime_context', {}).get('quadrant', '')}",
                 "_regime_context_ts",
+            ),
+            (
+                bool(_tac_ctx_nd),
+                "Tactical Regime",
+                f"{_tac_ctx_nd.get('tactical_score', '')}/100 · {_tac_ctx_nd.get('label', '')}" if _tac_ctx_nd else "",
+                "_tactical_context_ts",
             ),
             (
                 bool(st.session_state.get("_dominant_rate_path")),
@@ -548,7 +556,7 @@ def render():
             ),
             (
                 bool(st.session_state.get("_chain_narration")),
-                "Policy Transmission",
+                "Policy Trans.",
                 "",
                 None,
             ),
@@ -576,6 +584,18 @@ def render():
                 st.session_state.get("_current_events_engine", ""),
                 "_current_events_digest_ts",
             ),
+            (
+                bool(_of_ctx_nd),
+                "Opt Flow",
+                f"score {_of_ctx_nd.get('options_score', 0)}/100 · {_of_ctx_nd.get('label', '')}" if _of_ctx_nd else "",
+                "_options_flow_context_ts",
+            ),
+            (
+                bool(st.session_state.get("_portfolio_risk_snapshot")),
+                "Risk Snapshot",
+                "",
+                "_portfolio_risk_snapshot_ts",
+            ),
         ]
 
         _n_loaded = sum(1 for ok, *_ in _ctx_signals if ok)
@@ -583,10 +603,11 @@ def render():
         _bar_pct = int(_n_loaded / _total * 100)
         _bar_color = "#22c55e" if _n_loaded >= 7 else ("#f59e0b" if _n_loaded >= 4 else "#ef4444")
 
-        # Build 2-column checklist rows
+        # Build 2-column checklist rows (dynamic mid-split)
         _rows_html = ""
-        _left = _ctx_signals[:5]
-        _right = _ctx_signals[5:]
+        _mid = len(_ctx_signals) // 2
+        _left = _ctx_signals[:_mid]
+        _right = _ctx_signals[_mid:]
         for (ok_l, label_l, detail_l, ts_l), (ok_r, label_r, detail_r, ts_r) in zip(_left, _right):
             _icon_l = f'<span style="color:#22c55e;">✓</span>' if ok_l else '<span style="color:#ef4444;">✗</span>'
             _icon_r = f'<span style="color:#22c55e;">✓</span>' if ok_r else '<span style="color:#ef4444;">✗</span>'
@@ -769,6 +790,14 @@ def render():
                         for g in _atg_disc[:3]
                     ]
                     _enrichment_parts.append("[Trending Price Movers: " + " | ".join(_atg_lines) + "]")
+
+                # Macro Options Flow (SPY-level P/C, gamma, put wall)
+                _of_nd = st.session_state.get("_options_flow_context") or {}
+                if _of_nd:
+                    _enrichment_parts.append(
+                        f"[Macro Options Flow (SPY): {_of_nd.get('label', '')} "
+                        f"(score {_of_nd.get('options_score', 50)}/100) — {_of_nd.get('action_bias', '')[:150]}]"
+                    )
 
                 # Portfolio Risk Snapshot (from Quick Intel Run or Trade Journal)
                 _pr_disc = st.session_state.get("_portfolio_risk_snapshot") or {}

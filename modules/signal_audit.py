@@ -88,6 +88,16 @@ def _prev_tactical(v):
     return f"Score: {score}/100 ({label}) — {bias}"
 
 
+def _prev_options_flow(v):
+    if not isinstance(v, dict):
+        return str(v)[:120]
+    score = v.get("options_score", "?")
+    label = v.get("label", "")
+    bias  = v.get("action_bias", "")
+    pc    = v.get("put_call_ratio", "?")
+    return f"Score: {score}/100 ({label}) | P/C: {pc} — {bias}"
+
+
 def _prev_forecast_log(v):
     if not isinstance(v, list):
         return ""
@@ -252,6 +262,14 @@ _SIGNAL_REGISTRY = [
         "valuation": True, "discovery": True, "portfolio": True,
         "preview_fn": _prev_text,
         "run_hint": "Whale Movement → Activism tab → Generate Activism Analysis",
+    },
+    {
+        "label": "Macro Options Flow (SPY)",
+        "key": "_options_flow_context",
+        "ts_key": "_options_flow_context_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_options_flow,
+        "run_hint": "Quick Intel Run → Round 1 (options flow auto-runs)",
     },
 ]
 
