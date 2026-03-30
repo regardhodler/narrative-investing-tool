@@ -102,15 +102,30 @@ def _run_regime():
     """Fetch regime + tactical context and store in mock session_state."""
     print("[morning_run] [1/3] Fetching regime context...")
     try:
+        from datetime import datetime as _dt
         from modules.risk_regime import run_quick_regime
-        ok = run_quick_regime(use_claude=False)
-        rc = _mock_st.session_state.get("_regime_context") or {}
-        regime = rc.get("regime", "unknown")
-        score  = rc.get("score", 0.0)
-        print(f"[morning_run]   Regime: {regime} (score={score:+.2f})")
-        if regime == "unknown":
-            print("[morning_run]   WARNING: regime is unknown — check FRED_API_KEY secret")
-        return ok
+        _val = run_quick_regime(use_claude=False)
+        if _val:
+            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq = _val
+            _mock_st.session_state["_regime_context"]    = _regime_ctx
+            _mock_st.session_state["_regime_context_ts"] = _dt.now()
+            _mock_st.session_state["_rp_plays_result"]   = _plays
+            _mock_st.session_state["_rp_plays_last_tier"] = _tier
+            if _tac_data:
+                _mock_st.session_state["_tactical_context"]    = _tac_data
+                _mock_st.session_state["_tactical_context_ts"] = _dt.now()
+            if _tac_text:
+                _mock_st.session_state["_tactical_analysis"]    = _tac_text
+                _mock_st.session_state["_tactical_analysis_ts"] = _dt.now()
+            if _dq:
+                _mock_st.session_state["_data_quality"]    = _dq
+                _mock_st.session_state["_data_quality_ts"] = _dt.now()
+            regime = _regime_ctx.get("regime", "unknown")
+            score  = _regime_ctx.get("score", 0.0)
+            print(f"[morning_run]   Regime: {regime} (score={score:+.2f})")
+            return True
+        print("[morning_run]   WARNING: run_quick_regime returned nothing — check FRED_API_KEY secret")
+        return False
     except Exception as e:
         print(f"[morning_run]   ERROR in regime: {e}")
         import traceback; traceback.print_exc()
@@ -122,13 +137,16 @@ def _run_digest():
     print("[morning_run] [2/3] Fetching current events digest...")
     try:
         from modules.current_events import run_quick_digest
-        ok = run_quick_digest(use_claude=False)
-        digest = _mock_st.session_state.get("_current_events_digest") or ""
-        preview = digest[:120].replace("\n", " ") if digest else "(empty)"
-        print(f"[morning_run]   Digest: {preview}...")
-        if not digest:
-            print("[morning_run]   WARNING: digest empty — check GROQ_API_KEY / NEWSAPI_KEY secrets")
-        return ok
+        _val = run_quick_digest(use_claude=False)
+        if _val:
+            for _k, _v in _val.items():
+                _mock_st.session_state[_k] = _v
+            digest = _val.get("_current_events_digest", "")
+            preview = digest[:120].replace("\n", " ") if digest else "(empty)"
+            print(f"[morning_run]   Digest: {preview}...")
+            return True
+        print("[morning_run]   WARNING: digest empty — check GROQ_API_KEY / NEWSAPI_KEY secrets")
+        return False
     except Exception as e:
         print(f"[morning_run]   ERROR in digest: {e}")
         import traceback; traceback.print_exc()
