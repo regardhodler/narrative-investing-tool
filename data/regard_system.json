@@ -1,0 +1,98 @@
+{
+  "system": "Regard Terminals",
+  "description": "Multi-module investment intelligence dashboard. Regime-aware, AI-powered, built for independent investors.",
+  "generated_at": "2026-03-30T21:09:34",
+  "current_regime": "Neutral — Leaning Risk-Off",
+  "current_qir_pattern": "GENUINE_UNCERTAINTY",
+  "modules": [
+    {
+      "id": 0,
+      "name": "Risk Regime",
+      "description": "Cross-asset risk-on/off indicator. 17+ z-score signals, daily history."
+    },
+    {
+      "id": 1,
+      "name": "Narrative Discovery",
+      "description": "AI-grouped ticker discovery by narrative themes. Auto-refreshes every 4h."
+    },
+    {
+      "id": 2,
+      "name": "Narrative Pulse",
+      "description": "Sentiment tracking across narratives."
+    },
+    {
+      "id": 3,
+      "name": "EDGAR Scanner",
+      "description": "SEC filing search and digest."
+    },
+    {
+      "id": 4,
+      "name": "Institutional",
+      "description": "13F institutional holdings analysis."
+    },
+    {
+      "id": 5,
+      "name": "Insider & Congress",
+      "description": "Form 4 insider trades and Congress trading activity."
+    },
+    {
+      "id": 6,
+      "name": "Options Activity",
+      "description": "Options flow analysis with unusual activity sentiment."
+    },
+    {
+      "id": 7,
+      "name": "Valuation",
+      "description": "AI rating + 2-stage levered DCF with CAPM discount rate, sector profiles, Kelly sizing."
+    }
+  ],
+  "qir_patterns": [
+    {
+      "name": "BULLISH_CONFIRMATION",
+      "description": "All three timing layers aligned bullish — highest-conviction long entry."
+    },
+    {
+      "name": "BEARISH_CONFIRMATION",
+      "description": "All three layers aligned bearish — highest-conviction short or cash environment."
+    },
+    {
+      "name": "PULLBACK_IN_UPTREND",
+      "description": "Regime + Options Flow confirm bull trend — Tactical dip is a buy-the-dip setup."
+    },
+    {
+      "name": "OPTIONS_FLOW_DIVERGENCE",
+      "description": "Regime + Tactical bullish but options crowd hedging — smart money buying protection."
+    },
+    {
+      "name": "BEAR_MARKET_BOUNCE",
+      "description": "Regime bearish but Tactical + Options show short-term bounce — trade the bounce, not the trend."
+    },
+    {
+      "name": "LATE_CYCLE_SQUEEZE",
+      "description": "Regime bearish, Tactical neutral, Options bullish — gamma squeeze risk, stay defensive."
+    },
+    {
+      "name": "GENUINE_UNCERTAINTY",
+      "description": "No clear alignment across layers — reduce size, wait for confluence."
+    }
+  ],
+  "signal_layers": {
+    "regime": "Structural macro (weeks–months): FRED data, z-scores, yield curve, credit spreads, VIX, M2, Sahm rule.",
+    "tactical": "Medium-term (days–weeks): price momentum, breadth, RSI, moving average crossovers.",
+    "options_flow": "Short-term (hours–days): put/call ratio, unusual activity, gamma exposure."
+  },
+  "dcf_methodology": "2-stage levered DCF. CAPM discount rate using live market beta + Damodaran sector unlevered beta re-levered with D/E ratio. Regime-adjusted ERP: 5.0% risk-on, 5.5% neutral, 6.0% risk-off. Bear/Base/Bull scenarios ±35% growth adjustment. Sensitivity grid: WACC ±100bps × terminal growth ±50bps.",
+  "ai_engines": [
+    "Groq LLaMA 3.3 70B (free)",
+    "Grok 4.1 via xAI",
+    "Claude Sonnet 4.6 via Anthropic"
+  ],
+  "data_sources": [
+    "yfinance",
+    "FRED",
+    "SEC EDGAR",
+    "CME FedWatch",
+    "NewsAPI RSS",
+    "Google Trends"
+  ]
+}
