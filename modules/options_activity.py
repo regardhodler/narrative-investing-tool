@@ -754,14 +754,24 @@ def run_quick_options_flow(use_claude: bool = False, model: str | None = None) -
     import yfinance as yf
     import pandas as pd
 
+    _neutral_flow = {
+        "options_score": 50,
+        "label":         "Neutral",
+        "action_bias":   "Data unavailable — options market closed or feed down",
+        "signals":       [],
+        "pc_ratio":      1.0,
+        "raw_score":     0.0,
+        "data_unavailable": True,
+    }
+
     tk = yf.Ticker("SPY")
     hist = tk.history(period="5d", interval="1d", auto_adjust=True)
     if hist is None or hist.empty:
-        raise RuntimeError("SPY price history unavailable (market closed or yfinance issue)")
+        return _neutral_flow
     price = float(hist["Close"].iloc[-1])
     expiries = list(tk.options or [])
     if not expiries:
-        raise RuntimeError("SPY has no options expiries listed (market closed or yfinance issue)")
+        return _neutral_flow
 
     selected = expiries[:min(2, len(expiries))]
     strike_map: dict = {}
@@ -794,8 +804,7 @@ def run_quick_options_flow(use_claude: bool = False, model: str | None = None) -
                     strike_map[s]["put_iv"]   = float(row["impliedVolatility"])
 
     if not strike_map:
-        detail = f" ({'; '.join(chain_errors)})" if chain_errors else " (empty chain data)"
-        raise RuntimeError(f"SPY option chain returned no strike data{detail}")
+        return _neutral_flow
 
     strikes = sorted(strike_map.keys())
     spy_chain = {

@@ -237,6 +237,8 @@ def _render_qir_dashboard() -> None:
                 f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
                 f'{_oa} 📊 Opt Flow: <span style="color:#e2e8f0;">{_of.get("label","")}</span>'
                 f'<span style="color:{_oc};font-size:10px;"> ({_of_score}/100)</span></div>')
+    elif _of.get("data_unavailable"):
+        _t1 += '<div style="color:#475569;font-size:11px;padding:1px 0;">◆ 📊 Opt Flow — market closed</div>'
     else:
         _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ 📊 Opt Flow — run QIR</div>'
 
