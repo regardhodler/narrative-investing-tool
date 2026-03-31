@@ -609,14 +609,17 @@ def render():
         _bar_pct = int(_n_loaded / _total * 100)
         _bar_color = "#22c55e" if _n_loaded >= 7 else ("#f59e0b" if _n_loaded >= 4 else "#ef4444")
 
-        # Build 2-column checklist rows (dynamic mid-split)
+        # Build 2-column checklist rows (dynamic mid-split, handles odd counts)
         _rows_html = ""
-        _mid = len(_ctx_signals) // 2
+        _mid = (len(_ctx_signals) + 1) // 2  # ceil so left >= right
         _left = _ctx_signals[:_mid]
         _right = _ctx_signals[_mid:]
+        # Pad right with a dummy entry if odd total so zip doesn't drop last left item
+        if len(_right) < len(_left):
+            _right = list(_right) + [(None, "", "", None)]
         for (ok_l, label_l, detail_l, ts_l), (ok_r, label_r, detail_r, ts_r) in zip(_left, _right):
-            _icon_l = f'<span style="color:#22c55e;">✓</span>' if ok_l else '<span style="color:#ef4444;">✗</span>'
-            _icon_r = f'<span style="color:#22c55e;">✓</span>' if ok_r else '<span style="color:#ef4444;">✗</span>'
+            _icon_l = f'<span style="color:#22c55e;">✓</span>' if ok_l else ('<span style="color:#ef4444;">✗</span>' if ok_l is not None else '')
+            _icon_r = f'<span style="color:#22c55e;">✓</span>' if ok_r else ('<span style="color:#ef4444;">✗</span>' if ok_r is not None else '')
             _detail_l = f'<span style="color:#555;font-size:10px;"> {detail_l}{_age_label(ts_l) if ts_l else ""}</span>' if (ok_l and detail_l) else (f'<span style="color:#555;font-size:10px;">{_age_label(ts_l)}</span>' if (ok_l and ts_l) else "")
             _detail_r = f'<span style="color:#555;font-size:10px;"> {detail_r}{_age_label(ts_r) if ts_r else ""}</span>' if (ok_r and detail_r) else (f'<span style="color:#555;font-size:10px;">{_age_label(ts_r)}</span>' if (ok_r and ts_r) else "")
             _col_l = f'<td style="padding:2px 12px 2px 0;white-space:nowrap;">{_icon_l} <span style="color:{"#e2e8f0" if ok_l else "#475569"};">{label_l}</span>{_detail_l}</td>'

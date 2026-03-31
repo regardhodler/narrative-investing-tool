@@ -1359,36 +1359,61 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
 <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">DATA SOURCES</div>
 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
-  {''.join(f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px 8px;color:#94a3b8;">{s}</span>' for s in ['yfinance','FRED API','RSS feeds','Polymarket Gist','📱 Telegram inbox','SEC EDGAR'])}
+  {''.join(f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px 8px;color:#94a3b8;">{s}</span>' for s in ['yfinance (prices, options, fundamentals)','FRED API (macro series)','RSS / news feeds','SEC EDGAR (13F, 13D, Form 4)','StockTwits social sentiment','📱 Telegram inbox','Polymarket Gist (Black Swans)'])}
 </div>
 
 <div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
 
-<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL LAYER <span style="font-weight:400;color:#475569;">(Quick Intel Run generates these)</span></div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:14px;">
-  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Tactical Regime (days-to-weeks)','Rate Path Plays','Fed Funds Rate','Current Events Digest','Doom Briefing','Whale Activity','Black Swans','Policy Transmission','Trending Narratives','Auto-Trending Groups','Portfolio Risk Snapshot'])}
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">QIR ROUND 1 — parallel <span style="font-weight:400;color:#475569;">(runs simultaneously)</span></div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Tactical Regime','Current Events Digest','Options Flow (SPY macro)','Whale Activity (13F)','Activism Digest (13D)','Social Sentiment (StockTwits)'])}
+</div>
+<div style="color:#64748b;font-size:10px;margin-bottom:2px;">↳ then sequentially:</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:14px;">
+  {''.join(f'<div style="background:#0d1a0d;border:1px solid #22c55e44;border-radius:3px;padding:3px 8px;color:#22c55e88;">{s}</div>' for s in ['Sector×Regime Digest (needs regime quadrant)'])}
+</div>
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">QIR ROUND 2 — parallel</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:14px;">
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Fed Rate Path + Plays','Doom Briefing','Black Swans'])}
+</div>
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">QIR ROUND 3</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:14px;">
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Policy Transmission','Trending Narratives','Auto-Trending Groups'])}
+</div>
+
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">QIR ROUND 4 + 5</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:14px;">
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Macro Conviction Synopsis (all signals → coherence verdict)','Portfolio Risk Snapshot (beta · VaR · stress · flags)'])}
 </div>
 
 <div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
 
-<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">CONSUMERS</div>
+<div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL CONSUMERS</div>
 <div style="display:flex;flex-direction:column;gap:4px;">
   <div style="background:#0c1a0c;border:1px solid #22c55e44;border-radius:4px;padding:6px 10px;">
     <span style="color:#22c55e;font-weight:700;">Portfolio Intelligence</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">uses ALL signals — regime · rate path · news digest · doom · whales · swans · current events · trending narratives · auto-trending groups · <b style="color:#22c55e88;">portfolio risk snapshot</b></span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot · social sentiment</span>
   </div>
   <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
-    <span style="color:#f59e0b;font-weight:700;">Discovery</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups (feeds Cross-Signal Plays)</span>
+    <span style="color:#f59e0b;font-weight:700;">Discovery (Cross-Signal Plays)</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · regime plays · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot</span>
   </div>
   <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
-    <span style="color:#3b82f6;font-weight:700;">Valuation</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · rate path · fed plays · regime plays · doom · whales · swans · current events · trending narratives · auto-trending groups · DCF + Elliott Wave + Wyckoff · <b style="color:#3b82f688;">portfolio risk snapshot</b></span>
+    <span style="color:#3b82f6;font-weight:700;">Valuation (AI Rating)</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · doom · whales · activism · sector×regime · macro options flow · news · swans · trending · auto-trending · per-ticker options/insider/congress/institutional · portfolio risk</span>
+  </div>
+  <div style="background:#120d1a;border:1px solid #a855f744;border-radius:4px;padding:6px 10px;">
+    <span style="color:#a855f7;font-weight:700;">Signal Audit</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">tracks all signals — age · engine · preview — with staleness warnings</span>
   </div>
 </div>
 
-<div style="margin-top:12px;padding-top:8px;border-top:1px solid #1e293b;color:#334155;font-size:10px;">
-  📱 Telegram inbox → Current Events Digest → Portfolio Intelligence + Doom Briefing
+<div style="margin-top:12px;padding-top:8px;border-top:1px solid #1e293b;color:#475569;font-size:10px;line-height:1.8;">
+  📱 Telegram inbox → Current Events Digest → all consumers<br>
+  🔄 Sector×Regime = 11 SPDR ETFs momentum × Dalio quadrant → confirms or flags divergence<br>
+  📡 Options Flow (SPY) = macro P/C ratio + gamma exposure + put wall → market positioning layer
 </div>
 
 </div>""",
