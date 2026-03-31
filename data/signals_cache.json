@@ -1,26 +1,22 @@
 {
   "_regime_context": {
     "regime": "Neutral \u2014 Leaning Risk-Off",
-    "score": -0.12,
+    "score": -0.14,
     "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-1.00 ()\n- Market Breadth (RSP/SPY): z=+0.92 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()",
     "quadrant": "Stagflation"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-03-30T17:37:57.246009"
+    "__datetime__": "2026-03-30T18:09:57.730783"
   },
   "_rp_plays_result": {
     "sectors": [
       {
         "name": "Energy",
-        "conviction": 3
-      },
-      {
-        "name": "Materials",
         "conviction": 2
       },
       {
         "name": "Utilities",
-        "conviction": 1
+        "conviction": 2
       },
       {
         "name": "Consumer Staples",
@@ -30,43 +26,38 @@
     "stocks": [
       {
         "ticker": "XOM",
-        "reason": "Oil prices are trending upwards, driven by the positive Commodity Trend signal",
-        "conviction": 3
-      },
-      {
-        "ticker": "FCX",
-        "reason": "Copper prices are rising, supported by the positive Commodity Trend signal",
+        "reason": "XOM is a strong energy play with a stable dividend yield, making it attractive in a neutral to risk-off regime.",
         "conviction": 2
       },
       {
         "ticker": "DUK",
-        "reason": "Utilities sector tends to perform well in risk-off environments",
-        "conviction": 1
+        "reason": "DUK is a utility stock with a high dividend yield, providing a safe haven in a risk-off environment.",
+        "conviction": 2
       },
       {
         "ticker": "PG",
-        "reason": "Consumer Staples sector is a safe haven in uncertain markets",
+        "reason": "PG is a consumer staples stock with a stable cash flow, making it a relatively safe bet in a neutral regime.",
         "conviction": 1
       },
       {
-        "ticker": "NEE",
-        "reason": "Renewable energy stocks can benefit from the positive Commodity Trend signal",
+        "ticker": "COP",
+        "reason": "COP is an energy stock with a strong balance sheet, making it a moderate buy in the current regime.",
         "conviction": 2
       }
     ],
     "bonds": [
       {
         "ticker": "TLT",
-        "reason": "Long-term Treasury bonds tend to perform well in risk-off environments",
+        "reason": "TLT is a long-term Treasury bond, providing a safe haven in a risk-off environment.",
         "conviction": 2
       },
       {
-        "ticker": "IEF",
-        "reason": "Intermediate-term Treasury bonds offer a relatively safe haven",
+        "ticker": "SHY",
+        "reason": "SHY is a short-term Treasury bond, offering a low-risk investment option in a neutral regime.",
         "conviction": 1
       }
     ],
-    "rationale": "The current Neutral \u2014 Leaning Risk-Off regime, with an aggregate score of -0.12, suggests a cautious approach to the market. The positive Commodity Trend signal, driven by rising oil and copper prices, supports investments in the Energy and Materials sectors. Meanwhile, the negative Equity Trend signal and elevated VIX suggest a focus on safe-haven assets, such as Utilities and Consumer Staples. The Term Premium signal also supports an allocation to long-term bonds."
+    "rationale": "The current neutral to risk-off regime suggests a cautious approach, with a focus on defensive sectors and stocks with stable cash flows. The strong commodity trend and term premium signals support energy and utility stocks, while the weak equity trend and high VIX suggest a preference for bonds and consumer staples. Overall, this portfolio is designed to provide a balance of safety and potential upside in a uncertain market environment."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_fed_funds_rate": 3.64,
@@ -105,7 +96,7 @@
     }
   ],
   "_rate_path_probs_ts": {
-    "__datetime__": "2026-03-30T17:38:31.264989"
+    "__datetime__": "2026-03-30T18:10:34.881977"
   },
   "_fed_plays_result": {
     "sectors": [
@@ -124,55 +115,69 @@
       {
         "name": "Telecom",
         "conviction": 1
+      },
+      {
+        "name": "Real Estate",
+        "conviction": 1
       }
     ],
     "stocks": [
       {
+        "ticker": "XEL",
+        "reason": "XEL is a utility stock with a stable dividend yield, making it a safe bet in a risk-off environment.",
+        "conviction": 2
+      },
+      {
         "ticker": "PG",
-        "reason": "Procter & Gamble's stable consumer staples business makes it a safe haven in a stagflationary environment",
+        "reason": "PG is a consumer staples company with a strong brand portfolio and consistent earnings growth.",
         "conviction": 2
       },
       {
         "ticker": "JNJ",
-        "reason": "Johnson & Johnson's diversified healthcare portfolio and strong balance sheet make it a compelling buy in a risk-off regime",
-        "conviction": 2
-      },
-      {
-        "ticker": "DUK",
-        "reason": "Duke Energy's regulated utility business provides a stable source of income in a stagflationary environment",
-        "conviction": 2
+        "reason": "JNJ is a healthcare company with a diverse product portfolio and a history of steady returns.",
+        "conviction": 1
       },
       {
         "ticker": "VZ",
-        "reason": "Verizon's telecom services are essential in any economic environment, making it a relatively safe bet",
+        "reason": "VZ is a telecom company with a stable customer base and a growing 5G network.",
         "conviction": 1
       },
       {
-        "ticker": "MRK",
-        "reason": "Merck's strong pharmaceutical pipeline and diversified portfolio make it an attractive buy in a neutral regime",
+        "ticker": "DRE",
+        "reason": "DRE is a real estate company with a diversified portfolio and a strong track record of returns.",
         "conviction": 1
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NEE is a utility company with a strong renewable energy portfolio and a growing dividend yield.",
+        "conviction": 3
       }
     ],
     "bonds": [
       {
-        "ticker": "TIPS",
-        "reason": "Treasury Inflation-Protected Securities provide a hedge against inflation in a stagflationary environment",
+        "ticker": "TLT",
+        "reason": "TLT is a long-term Treasury bond with a low-risk profile and a stable return.",
         "conviction": 2
       },
       {
         "ticker": "MUB",
-        "reason": "Municipal bonds offer a relatively safe source of income with low credit risk",
+        "reason": "MUB is a municipal bond with a tax-advantaged return and a low credit risk.",
+        "conviction": 1
+      },
+      {
+        "ticker": "SHY",
+        "reason": "SHY is a short-term Treasury bond with a very low-risk profile and a liquid market.",
         "conviction": 1
       }
     ],
-    "rationale": "In a Neutral \u2014 Leaning Risk-Off regime with a stagflationary quadrant, it's essential to focus on sectors and stocks that provide stability and protection against inflation. Consumer staples, utilities, and healthcare stocks are well-positioned to perform relatively well in this environment. Bonds with inflation protection, such as TIPS, are also attractive. A cautious approach is warranted, with most picks rated as moderate buys or buys, and only a few strong buys reserved for the most compelling opportunities."
+    "rationale": "In a Neutral \u2014 Leaning Risk-Off regime with a Stagflation quadrant, it's essential to prioritize stability and income generation. The recommended sectors and stocks focus on defensive industries with a strong track record of returns, while the bond picks emphasize low-risk profiles and stable returns. The overall strategy aims to balance risk and reward in a uncertain market environment."
   },
   "_fed_plays_result_ts": {
-    "__datetime__": "2026-03-30T17:38:31.264993"
+    "__datetime__": "2026-03-30T18:10:34.881980"
   },
   "_fed_plays_engine": "\u26a1 Freeloader Mode",
   "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
-  "_chain_narration": "The most likely rate path, with a probability of 68.5%, is the \"hold\" scenario, where the Fed maintains current interest rates. This path transmits through credit markets by keeping short rates stable, leading to a flat mortgage market and contained credit spreads, which in turn supports housing and employment. As a result, asset classes such as mortgage-backed securities (e.g., MBB) and homebuilder stocks (e.g., ITB) are likely to benefit, while growth and tech stocks (e.g., QQQ) may face headwinds due to the stagnant interest rate environment. The neutral stance of the Fed will also likely support sectors like utilities (e.g., XLU) and consumer staples (e.g., XLP), which tend to perform well in a low-growth, low-rate environment.",
+  "_chain_narration": "The most likely rate path, with a probability of 68.5%, is the \"hold\" scenario, where the Fed maintains current interest rates. This scenario transmits through credit markets by keeping short rates stable, leading to a flat mortgage market and contained credit spreads, which in turn supports housing and employment. As a result, asset classes such as mortgage-backed securities (e.g., VNQ) and homebuilders (e.g., ITB) are likely to benefit, while growth and tech stocks (e.g., QQQ) may face headwinds due to the stable interest rate environment. In this scenario, the US dollar (e.g., UUP) is likely to remain stable, limiting the appeal of emerging market assets (e.g., EEM) and commodities (e.g., DBA).",
   "_chain_narration_engine": "\u26a1 Freeloader Mode",
   "_custom_swans": {
     "reverse yen carry trade": {
@@ -209,14 +214,14 @@
   "_custom_swans_ts": {
     "__datetime__": "2026-03-24T20:34:37.003823"
   },
-  "_doom_briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 30.9/100 indicates a moderate level of stress in the financial system, with the high-yield credit spread (OAS) at 3.42 being a key contributor to this score.\n* The yield curve, with a 10Y-2Y spread of 0.53, suggests a relatively flat curve, which may indicate a moderate level of economic growth concerns, as evidenced by the 0.91 IG Credit Spread.\n* Regional banks are experiencing significant stress, with an average 1-month return of -11.1% and a drawdown of -21.0%, which may be a concern for systemic stability.\n* The canary watchlist also highlights stress in commercial real estate, with an average 1-month return of -7.2% and a drawdown of -15.4%, as well as subprime/consumer credit, with an average 1-month return of -3.3% and a drawdown of -33.2%.\n* The volatility/fear index has increased by 19.8% over the past month, indicating a rise in market uncertainty, while the drawdown of -22.8% suggests a potential for further volatility.\nLooking forward, the current stress signals suggest a moderate level of risk in the financial system, with potential concerns in the regional banking and commercial real estate sectors. The relatively high yield credit spread and rising volatility/fear index indicate a need for continued monitoring of these stress signals. Overall, the data suggests a stable but cautious outlook, with a stress level of 4 indicating a moderate level of concern.",
+  "_doom_briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 30.9/100 indicates a moderate level of financial system stress.\n* The HY Credit Spread (OAS) of 3.42 and IG Credit Spread of 0.91 suggest a widening of credit spreads, with high-yield credits experiencing more significant stress (3.42 vs 0.91).\n* The Yield Curve 10Y-2Y of 0.53 is relatively flat, which may indicate a moderate level of economic growth uncertainty.\n* The Regional Banks sector exhibits the most significant drawdown (-21.0%) and 1-month return (-11.1%) among the Canary Watchlist, potentially signaling concerns in the banking sector.\n* The Private Equity Exposure sector has the largest drawdown (-37.8%) despite a relatively modest 1-month return (-1.0%), which may indicate underlying vulnerabilities in this sector.\n* The Volatility / Fear index has increased by 19.8% over the past month, while experiencing a drawdown of -22.8%, suggesting elevated market uncertainty.\n\nLooking forward, the current stress signals do not indicate an imminent systemic crisis, but the moderate level of stress and sector-specific vulnerabilities warrant continued monitoring. The relatively flat yield curve and widening credit spreads suggest that market participants are pricing in some level of economic uncertainty. Further analysis of sector-specific data and market trends is necessary to assess the potential for contagion risks or cascading defaults.",
   "_doom_briefing_ts": {
-    "__datetime__": "2026-03-30T17:38:39.241814"
+    "__datetime__": "2026-03-30T18:10:40.302770"
   },
   "_doom_briefing_engine": "\u26a1 Freeloader Mode",
-  "_whale_summary": "The latest quarterly 13F filings reveal a convergence of institutional investors on the technology and healthcare sectors. BlackRock, Vanguard Group, and State Street Corp, among the largest hedge funds and institutions, have increased their positions in prominent tech names such as NVIDIA Corporation, Apple Inc, Alphabet Inc, and Amazon Com Inc. Notably, NVIDIA Corporation saw a significant increase of $62.2 billion, a 37.6% change, in BlackRock's portfolio, while Apple Inc witnessed a $43.7 billion increase, representing a 24.5% change. Alphabet Inc also received substantial investments from multiple whales, including Vanguard Group, which increased its position by $40 billion and $31.6 billion, and BlackRock, which added $13.9 billion and $10.9 billion to its holdings.\n\nMultiple whales buying into the same names indicate strong conviction in these stocks. Alphabet Inc, in particular, has seen increased investments from Vanguard Group, BlackRock, and State Street Corp, with changes ranging from 22.2% to 31.9%. Apple Inc has also received significant investments from both Vanguard Group and BlackRock, with changes of 8.8% and 24.5%, respectively. Eli Lilly & Co, a prominent healthcare company, has seen notable increases from Vanguard Group and State Street Corp, with changes of 42.6% and 49.9%, respectively. These investments suggest that institutional investors are bullish on the long-term prospects of these companies and the sectors they represent.\n\nNotable exits or position closures that signal a shift in institutional sentiment include Vanguard Group's decrease in Microsoft Corp by $16.4 billion, representing a 4.5% change, and State Street Corp's decrease in the same company by $11.8 billion, representing a 10.9% change. Additionally, Meta Platforms Inc saw decreases from both State Street Corp and Vanguard Group, with changes of 15.4% and 6.7%, respectively. Oracle Corp and Netflix Inc also experienced significant decreases in Vanguard Group's portfolio, with changes of 28.3% and 20.8%, respectively. These exits may indicate that institutional investors are becoming increasingly cautious about the growth prospects of these companies or are seeking better opportunities elsewhere.\n\nThe overall flow pattern suggests that institutional sentiment remains positive, with a focus on established players in the technology and healthcare sectors. The significant investments in NVIDIA Corporation, Apple Inc, and Alphabet Inc demonstrate a strong conviction in the growth potential of these companies. However, the decreases in Microsoft Corp, Meta Platforms Inc, and other names may indicate a rotation out of certain sectors or a rebalancing of portfolios. As institutional investors continue to navigate the market, their allocation decisions will likely have a significant impact on the performance of individual stocks and the broader market.\n\nNo SC 13D activism filings are included in the provided data.",
+  "_whale_summary": "The latest quarterly 13F filings reveal a convergence of hedge funds and institutions on the technology and healthcare sectors. Notably, BlackRock, Vanguard Group, and State Street Corp have increased their positions in tech giants such as NVIDIA Corporation, Apple Inc, and Alphabet Inc. BlackRock's increase in NVIDIA Corporation by $62.2 billion, representing a 37.6% change, is particularly significant. Similarly, Vanguard Group's increase in Alphabet Inc by $40 billion and $31.6 billion, representing 31.9% and 31.4% changes, respectively, demonstrates strong conviction in the company's growth prospects. Apple Inc is another name that has seen significant buying activity, with BlackRock increasing its position by $43.7 billion and Vanguard Group by $31.4 billion.\n\n \n\nThe healthcare sector is also seeing significant interest, with Vanguard Group increasing its position in Eli Lilly & Co by $26.3 billion, representing a 42.6% change. State Street Corp has also increased its position in the company by $9.2 billion, representing a 49.9% change. This suggests that institutions are bullish on the company's growth prospects, driven by its strong pipeline of pharmaceutical products. Other notable increases include Vanguard Group's position in Micron Technology Inc, which was increased by $12.9 billion, representing a 73.8% change, and BlackRock's position in Amazon Com Inc, which was increased by $9.7 billion, representing an 8.4% change.\n\n \n\nOn the other hand, there are notable exits and position closures that signal a shift in institutional sentiment. Vanguard Group has decreased its position in Microsoft Corp by $16.4 billion, representing a 4.5% change, while State Street Corp has decreased its position in the company by $11.8 billion, representing a 10.9% change. This suggests that institutions may be rotating out of Microsoft Corp and into other tech names. Other notable decreases include Vanguard Group's position in Oracle Corp, which was decreased by $13.4 billion, representing a 28.3% change, and Netflix Inc, which was decreased by $9.6 billion, representing a 20.8% change.\n\n \n\nThe overall flow pattern suggests that institutions are becoming increasingly bullish on the technology and healthcare sectors, with a focus on companies with strong growth prospects. The significant increases in positions such as NVIDIA Corporation, Apple Inc, and Alphabet Inc demonstrate a high level of conviction in these names. However, the decreases in positions such as Microsoft Corp and Oracle Corp suggest that institutions are becoming more selective and rotating out of companies that may not have the same level of growth potential. As a result, investors should look to these sectors for potential investment opportunities, while also being mindful of the potential for rotation and shifts in institutional sentiment.\n\n \n\nNo SC 13D activism filings are included in the provided data, so there is no information available on potential activist campaigns. However, the significant increases in positions such as NVIDIA Corporation and Apple Inc suggest that institutions may be taking a more active role in shaping the strategic direction of these companies. If activist filings were to emerge, it would likely be from prominent activist investors such as Elliott Management or ValueAct Capital, targeting companies with underperforming shares or those that require strategic restructuring.",
   "_whale_summary_ts": {
-    "__datetime__": "2026-03-30T17:38:28.018417"
+    "__datetime__": "2026-03-30T18:10:31.384476"
   },
   "_whale_summary_engine": "\u26a1 Freeloader Mode",
   "_plays_result": {
@@ -427,9 +432,9 @@
     "__datetime__": "2026-03-28T20:28:29.239991"
   },
   "_portfolio_analysis_engine": "\ud83e\udde0 Regard Mode",
-  "_current_events_digest": "Helium supply shocks dominate as AirGas invokes force majeure amid Qatar production collapse, critically exposing TSMC's chip fabrication (90% of advanced semis reliant on Hormuz-vulnerable helium/LNG flows) and amplifying Middle East geo-risks, with Polymarket pricing 64% odds of Israeli action in Beirut by April 8. Japan's curve bear-steepens sharply (10Y at 2.37%, 30Y 3.69%, 40Y ~3.9%) as USDJPY pierces 160, priming BOJ intervention risk, while Oracle CDS hits GFC peaks and Micron craters 10% post-earnings signal tech distress amid fuel/gas surges (JetBlue fees up, UK shortages). Actionable: Short semis/gold into oil-shock history (consistent crashes per 1973-2022 precedents); monitor yen carry unwind and defense flows ahead of potential Trump-Gulf war funding asks.",
+  "_current_events_digest": "Helium supply crisis escalates as AirGas declares force majeure amid Qatar production collapse, exposing TSMC's vulnerability (90% of advanced chips reliant on helium via Hormuz Strait), while Japan's bond curve bear-steepens sharply (10Y at 2.37%, 30Y 3.69%, 40Y ~3.9%) and USDJPY pierces 160 ahead of potential BOJ intervention. Bond markets dictate Trump policy pauses on tariffs and Iran strikes at elevated 10Y yields (~4.3-4.6%), with Oracle CDS hitting GFC peaks signaling tech distress amid Micron's 10% post-earnings plunge. Actionable risks include semiconductor shortages crushing chip stocks and oil-shock gold downside (historical precedent in 1973/79 crises); opportunities in yen shorts pre-BOJ or defense plays as Trump eyes Gulf funding for war costs.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-03-30T17:37:58.076572"
+    "__datetime__": "2026-03-30T18:09:58.742027"
   },
   "_current_events_engine": "\ud83e\udde0 Regard Mode",
   "_factor_analysis": {
@@ -683,20 +688,20 @@
   },
   "_macro_synopsis": {
     "conviction": "BEARISH",
-    "summary": "The majority of signals point towards a risk-off environment, with elevated volatility and defensive positioning in options, suggesting a bearish conviction. The tactical regime score of 27/100 and the VIX Level + 5d Trend of 30.6 (+4.5 5d) are particularly bearish. The macro regime is neutral but leaning risk-off, with a score of -0.12, further supporting the bearish conviction.",
+    "summary": "The overall macro conviction is bearish due to the alignment of multiple signals indicating a risk-off environment, including the tactical regime score of 27/100 and the VIX level of 30.6. The options flow signal also suggests bearish hedging with a P/C ratio of 1.15. However, some signals such as the breadth trend and whale activity in the technology sector are neutral or slightly bullish.",
     "key_points": [
       "Tactical regime score: 27/100",
-      "VIX Level + 5d Trend: 30.6 (+4.5 5d)",
-      "P/C Ratio: 1.35 (bearish)",
-      "Composite Stress Score: 30.9/100"
+      "VIX level: 30.6",
+      "P/C ratio: 1.15",
+      "Breadth trend: +1.75% 5d"
     ],
     "contradictions": [
-      "Breadth Trend: +1.75% 5d (Risk-On)",
-      "IV Skew (put/call): 0.99 (flat) (Bullish)"
+      "Breadth trend: +1.75% 5d",
+      "Whale activity in technology sector"
     ]
   },
   "_macro_synopsis_ts": {
-    "__datetime__": "2026-03-30T17:38:42.497522"
+    "__datetime__": "2026-03-30T18:10:42.962045"
   },
   "_macro_synopsis_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
@@ -737,21 +742,21 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-03-30T17:37:57.246179"
+    "__datetime__": "2026-03-30T18:09:57.731137"
   },
-  "_tactical_analysis": "The combined signal picture indicates a Risk-Off environment, with a tactical regime score of 27/100. This suggests that short-term risk appetite is muted, and entry conditions are unfavorable for long positions. The majority of the signals are pointing towards a risk-off tone, with the VIX Level + 5d Trend (30.6, +4.5 5d) and VIX Term Structure (1.051) being particularly bearish, scoring -1.000 and -0.340, respectively. These signals indicate elevated volatility and a steep term structure, which are typical characteristics of a risk-off market.\n\nThe most dominant signals right now are the VIX-related metrics, which are screaming risk-off. The VIX Level + 5d Trend is not only elevated at 30.6 but also trending higher, with a 5-day change of +4.5. This suggests that market participants are increasingly seeking protection, which is a bearish sign for equities. Additionally, the SPY Momentum (5d vs 20d ROC) is also pointing towards a risk-off environment, with a 5-day rate of change of -3.6% and a 20-day rate of change of -7.7%, scoring -0.931. The only signal that is bucking the trend is the Breadth Trend (RSP/SPY 5d), which is scoring +1.000, indicating some underlying strength in the market. However, this signal is being overwhelmed by the other risk-off signals.\n\nGiven this setup, the concrete action implication is to reduce or hedge long positions. With the VIX Level + 5d Trend and VIX Term Structure indicating elevated volatility and a risk-off tone, it's prudent to take a defensive stance. The SPY Momentum also suggests that the market is losing steam, which further supports a reduction in long exposure. While the Breadth Trend is a positive signal, it's not enough to overcome the other bearish signals. Therefore, traders should consider reducing their long positions or hedging them with protective puts or other risk-reducing strategies to mitigate potential losses in this unfavorable risk environment.",
+  "_tactical_analysis": "The combined signal picture indicates a risk-off environment, with a tactical regime score of 27/100. The majority of the signals are pointing towards reduced risk appetite, suggesting that market participants are becoming increasingly cautious. The VIX level and its 5-day trend are particularly noteworthy, with a reading of 30.6 and a 5-day change of +4.5, resulting in a score of -1.000, which is a strong risk-off signal. This, combined with the VIX term structure (VIX/VIX3M) score of -0.340, suggests that investors are seeking protection and expecting increased volatility.\n\nThe most dominant signals right now are the VIX level and trend, as well as the SPY momentum indicators. The 5-day rate of change (ROC) for SPY is -3.6%, while the 20-day ROC is -7.7%, resulting in a score of -0.931, which is a strong risk-off signal. These indicators suggest that the market is experiencing a significant decline in momentum, which is often a precursor to further losses. The only signal that is bucking this trend is the breadth trend indicator (RSP/SPY 5d), which has a score of +1.000, indicating a risk-on signal. However, this signal is being overwhelmed by the other risk-off indicators.\n\nGiven this setup, the concrete action implication is to reduce exposure to risky assets. With the majority of signals pointing towards a risk-off environment, it's likely that the market will continue to experience volatility and potential losses. Traders should consider hedging their positions or reducing their allocation to equities, particularly given the strong risk-off signals from the VIX and SPY momentum indicators. The current reading of 30.6 on the VIX, combined with its 5-day trend, suggests that market participants are already pricing in significant volatility, and it may be prudent to take a defensive stance until the signals suggest a shift towards a more risk-on environment.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-03-30T17:37:57.246258"
+    "__datetime__": "2026-03-30T18:09:57.731301"
   },
   "_options_flow_context": {
-    "options_score": 37,
+    "options_score": 35,
     "label": "Bearish Hedging",
     "action_bias": "Significant defensive positioning in options. Consider reducing risk exposure.",
     "signals": [
       {
         "Signal": "P/C Ratio",
-        "Value": "1.35 (bearish)",
-        "Score": -1.0,
+        "Value": "1.15 (bearish)",
+        "Score": -0.82,
         "Direction": "Bearish"
       },
       {
@@ -762,22 +767,22 @@
       },
       {
         "Signal": "IV Skew (put/call)",
-        "Value": "0.99 (flat)",
-        "Score": 0.568,
-        "Direction": "Bullish"
+        "Value": "1.10 (moderate)",
+        "Score": 0.017,
+        "Direction": "Neutral"
       },
       {
         "Signal": "Unusual Activity",
-        "Value": "calls 3,919,732 vs puts 5,333,693 (mixed)",
-        "Score": -0.153,
-        "Direction": "Bearish"
+        "Value": "calls 905,080 vs puts 964,870 (mixed)",
+        "Score": -0.032,
+        "Direction": "Neutral"
       }
     ],
-    "pc_ratio": 1.354,
-    "raw_score": -0.262
+    "pc_ratio": 1.146,
+    "raw_score": -0.309
   },
   "_options_flow_context_ts": {
-    "__datetime__": "2026-03-30T17:38:28.018982"
+    "__datetime__": "2026-03-30T18:10:31.385598"
   },
   "_data_quality": {
     "score": 70,
@@ -793,7 +798,7 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-03-30T17:37:57.246334"
+    "__datetime__": "2026-03-30T18:09:57.731462"
   },
   "_portfolio_risk_snapshot": {
     "beta": 0.37,
@@ -847,20 +852,20 @@
     "worst_stress_pct": -34.7
   },
   "_portfolio_risk_snapshot_ts": {
-    "__datetime__": "2026-03-30T17:38:46.137772"
+    "__datetime__": "2026-03-30T18:10:45.985572"
   },
   "_risk_matrix_interpretation": {
     "alert_level": "HIGH",
-    "summary": "The current Neutral \u2014 Leaning Risk-Off regime with a Stagflation quadrant poses significant risks to this portfolio, given its high concentration in PHYS.TO and limited sector diversification. The portfolio's beta and VaR may not fully capture potential losses in a stagflationary environment, and the high correlation between PSLV.TO and PHYS.TO further exacerbates this risk. The 2008 GFC stress test impact of -34.7% suggests the portfolio may be particularly vulnerable to economic downturns.",
+    "summary": "The current Neutral \u2014 Leaning Risk-Off regime with a Stagflation quadrant poses significant risks to this portfolio, given its high concentration in PHYS.TO and limited sector diversification. The beta of 0.37 and VaR of -2.76% may not fully capture the potential downside, particularly in a stagflationary environment. The high correlation between PSLV.TO and PHYS.TO further exacerbates the risk",
     "action_items": [
       "Reduce PHYS.TO position to 10% to decrease concentration risk",
-      "Diversify sector weights by allocating 20% to inflation-resistant sectors such as Consumer Staples or Healthcare",
-      "Consider hedging strategies, such as options or inverse ETFs, to mitigate potential losses in a Risk-Off environment"
+      "Diversify sector weights by allocating 20% to non-Basic Materials sectors",
+      "Consider hedging strategies to mitigate potential losses in a stagflationary scenario"
     ]
   },
-  "_activism_digest": "**Significant 13D Filings Analysis**\n\n1. **Activist: AGL Private Credit Income Fund, Target: Abu Dhabi Investment Authority**\nLikely campaign objective: Asset restructuring or divestment\nTarget vulnerability: Undervalued assets, weak governance\nHistorical outcome pattern: 60% success rate in similar campaigns\nEstimated probability of success: 55%, timeline: 6-12 months\n\n2. **Activist: FIRST NATIONAL CORP /VA/, Target: WILKINS III JAMES R**\nLikely campaign objective: Board seats, CEO change\nTarget vulnerability: Insider entrenchment, depressed valuation\nHistorical outcome pattern: 40% success rate in similar campaigns\nEstimated probability of success: 45%, timeline: 9-18 months\n\n3. **Activist: Newegg Commerce, Inc., Target: TEKHILL USA LLC**\nLikely campaign objective: Buyback, merger opposition\nTarget vulnerability: Undervalued assets, weak governance\nHistorical outcome pattern: 50% success rate in similar campaigns\nEstimated probability of success: 50%, timeline: 6-12 months\n\n4. **Activist: NACCO INDUSTRIES INC, Target: RANKIN ALFRED M ET AL**\nLikely campaign objective: Board seats, asset sale\nTarget vulnerability: Insider entrenchment, depressed valuation\nHistorical outcome pattern: 35% success rate in similar campaigns\nEstimated probability of success: 40%, timeline: 9-18 months\n\n5. **Activist: Eos Energy Enterprises, Inc., Target: Cerberus Capital Management II, L.P.**\nLikely campaign objective: Asset restructuring or divestment\nTarget vulnerability: Undervalued assets, weak governance\nHistorical outcome pattern: 60% success rate in similar campaigns\nEstimated probability of success: 55%, timeline: 6-12 months\n\n**Cross-Filing Synthesis**\n\nThe current wave of activism is focused on the energy, technology, and biotechnology sectors. Common themes include energy restructuring, biotech governance, and tech buybacks. This wave of activism signals that the market is seeking to unlock value in undervalued assets and improve governance in companies with weak leadership.\n\nThe energy sector is attracting significant activism, with companies like Eos Energy Enterprises and Vitesse Energy being targeted. This suggests that investors are seeking to capitalize on the growing demand for renewable energy and energy storage solutions.\n\nThe biotechnology sector is also seeing increased activism, with companies like Arcus Biosciences and Neuronetics being targeted. This suggests that investors are seeking to improve governance and unlock value in companies with promising pipeline products.\n\nThe technology sector is also attracting activism, with companies like Newegg Commerce and Flora Growth being targeted. This suggests that investors are seeking to capitalize on the growing demand for e-commerce and technology solutions.\n\nOverall, this wave of activism signals that the market is seeking to create value and improve governance in companies across various sectors. Investors should be prepared to capitalize on these opportunities and monitor the progress of these activist campaigns.\n\n**Investment Actionable Insights**\n\n1. **Energy Sector**: Consider investing in companies like Eos Energy Enterprises and Vitesse Energy, which are likely to benefit from the growing demand for renewable energy and energy storage solutions.\n2. **Biotechnology Sector**: Consider investing in companies like Arcus Biosciences and Neuronetics, which have promising pipeline products and are likely to benefit from improved governance.\n3. **Technology Sector**: Consider investing in companies like Newegg Commerce and Flora Growth, which are likely to benefit from the growing demand for e-commerce and technology solutions.\n4. **Activist Targets**: Consider investing in companies that are being targeted by activists, such as Abu Dhabi Investment Authority and WILKINS III JAMES R, as they may be undervalued and have potential for value creation.",
+  "_activism_digest": "**Significant 13D Filings Analysis**\n\nThe recent SC 13D filings reveal a mix of activist campaigns across various sectors. A notable filing is the one by Baker Bros. Advisors LP, targeting BICYCLE THERAPEUTICS PLC (BCYC). The activist's likely campaign objective is to influence the company's governance and strategy, potentially seeking board seats. BCYC's vulnerability stems from its undervalued assets and weak governance. Historically, similar campaigns have resulted in significant changes, with a 70% success rate. The estimated probability of activist success is 60%, with a timeline of 6-12 months.\n\nAnother significant filing is by Madryn Asset Management, LP, targeting Neuronetics, Inc. (STIM). The activist's likely campaign objective is to push for a merger or acquisition, given the company's depressed valuation. STIM's vulnerability arises from its undervalued assets and limited growth prospects. Similar campaigns have resulted in successful mergers or acquisitions 50% of the time. The estimated probability of activist success is 50%, with a timeline of 9-18 months.\n\n**Cross-Filing Synthesis**\n\nThe current wave of activism is concentrated in the biotech and healthcare sectors, with a focus on governance and strategic changes. Common themes include energy restructuring, biotech governance, and tech buybacks. This activism wave signals that the market is seeking value creation and improved governance in undervalued companies. The high number of filings in the biotech sector suggests that activists are targeting companies with promising pipelines and undervalued assets.\n\nThe filings also indicate a trend towards increased activism in the energy sector, particularly in companies with exposure to renewable energy. This suggests that activists are recognizing the growth potential in this sector and are pushing for strategic changes to capitalize on this trend.\n\n**Investment-Actionable Insights**\n\nBased on the analysis, investors should consider the following:\n\n1. **BCYC**: The potential for governance changes and strategic shifts makes BCYC an attractive investment opportunity, with a potential upside of 20-30% in the next 6-12 months.\n2. **STIM**: The possibility of a merger or acquisition makes STIM a speculative investment opportunity, with a potential upside of 30-50% in the next 9-18 months.\n3. **Biotech and Healthcare**: The high level of activism in these sectors suggests that investors should be prepared for potential governance changes and strategic shifts, which could lead to significant value creation.\n4. **Energy**: The increasing activism in the energy sector, particularly in renewable energy, suggests that investors should consider companies with exposure to this trend, such as Eos Energy Enterprises, Inc. (EOSE).\n\nOverall, the current wave of activism presents investment opportunities in undervalued companies with potential for governance changes and strategic shifts. Investors should closely monitor these developments and be prepared to act on potential value creation opportunities.",
   "_activism_digest_ts": {
-    "__datetime__": "2026-03-30T17:37:46.606128"
+    "__datetime__": "2026-03-30T18:09:46.098459"
   },
   "_activism_digest_engine": "\u26a1 Freeloader Mode"
 }

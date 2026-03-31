@@ -731,14 +731,13 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             _r1_errors = {}
             _macro_ctx, _fred_data = None, None
             import datetime as _dt_qir
-            with ThreadPoolExecutor(max_workers=7) as _pool:
+            with ThreadPoolExecutor(max_workers=6) as _pool:
                 _fut_regime   = _pool.submit(run_quick_regime, _use_claude, _cl_model)
                 _fut_digest   = _pool.submit(run_quick_digest, _use_claude, _cl_model)
                 _fut_whale    = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
                 _fut_activism = _pool.submit(run_quick_activism, _use_claude, _cl_model)
                 _fut_opts     = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
                 _fut_stwit    = _pool.submit(run_quick_stocktwits)
-                _fut_sector   = _pool.submit(run_quick_sector_regime, _use_claude, _cl_model)
                 for _fut, _key in (
                     (_fut_regime,   "regime"),
                     (_fut_digest,   "digest"),
@@ -746,7 +745,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     (_fut_activism, "activism"),
                     (_fut_opts,     "opts"),
                     (_fut_stwit,    "social"),
-                    (_fut_sector,   "sector"),
                 ):
                     try:
                         _val = _fut.result()
@@ -792,13 +790,23 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         elif _key == "social" and _val:
                             st.session_state["_stocktwits_digest"] = _val
                             st.session_state["_stocktwits_digest_ts"] = _dt_qir.datetime.now()
-                        elif _key == "sector" and _val:
-                            for _k, _v in _val.items():
-                                st.session_state[_k] = _v
                         _results[_key] = bool(_val)
                     except Exception as _e:
                         _results[_key] = False
                         _r1_errors[_key] = str(_e)
+
+            # Sector×Regime runs after regime is written to session_state (needs quadrant)
+            with ThreadPoolExecutor(max_workers=1) as _pool_s:
+                _fut_sector = _pool_s.submit(run_quick_sector_regime, _use_claude, _cl_model)
+                try:
+                    _val_s = _fut_sector.result()
+                    if _val_s:
+                        for _k, _v in _val_s.items():
+                            st.session_state[_k] = _v
+                    _results["sector"] = bool(_val_s)
+                except Exception as _e:
+                    _results["sector"] = False
+                    _r1_errors["sector"] = str(_e)
 
         _regime_ok = _results.get("regime", False)
         if _regime_ok:

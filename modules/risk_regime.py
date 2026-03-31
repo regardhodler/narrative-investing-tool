@@ -716,7 +716,9 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None) 
     from services.claude_client import summarize_sector_regime
 
     try:
-        sector_data = get_sector_momentum()
+        # Bypass @st.cache_data — not safe from background threads; call the raw function
+        _fetch_fn = get_sector_momentum.__wrapped__ if hasattr(get_sector_momentum, "__wrapped__") else get_sector_momentum
+        sector_data = _fetch_fn()
         if not sector_data:
             return None
         regime_ctx = st.session_state.get("_regime_context") or {}

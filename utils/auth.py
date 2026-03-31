@@ -28,7 +28,7 @@ def auth_gate() -> None:
         ">TERMINALS</div>
         <div style="
             font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:400;
-            color:#475569;letter-spacing:0.06em;margin-bottom:2px;
+            color:#475569;letter-spacing:0.06em;margin-bottom:2px;text-align:center;
         ">providing excellent analytics, one losing trade at a time</div>
         <div style="
             font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:400;
