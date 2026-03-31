@@ -378,6 +378,32 @@ def render():
             f"{_of_ctx_v.get('action_bias', '')[:150]}"
         )
 
+    # Inject Fear & Greed Index (contrarian sentiment)
+    _fg_v = st.session_state.get("_fear_greed") or {}
+    if _fg_v:
+        _fg_chg = _fg_v.get("change_7d", 0)
+        _fg_chg_str = f" ({_fg_chg:+d} vs last week)" if _fg_chg else ""
+        signals_text += (
+            f"\nFear & Greed Index: {_fg_v.get('score','?')}/100 — {_fg_v.get('label','?')}{_fg_chg_str}"
+            f" | Contrarian implication: {'Oversold — potential bounce' if _fg_v.get('score',50) <= 25 else ('Overbought — potential reversal' if _fg_v.get('score',50) >= 75 else 'Neutral crowd sentiment')}"
+        )
+
+    # Inject AAII Sentiment (contrarian weekly survey)
+    _aaii_v = st.session_state.get("_aaii_sentiment") or {}
+    if _aaii_v:
+        signals_text += (
+            f"\nAAII Investor Sentiment (weekly): Bull {_aaii_v.get('bull_pct','?')}% / Bear {_aaii_v.get('bear_pct','?')}%"
+            f" | Spread {_aaii_v.get('bull_bear_spread','?'):+}% ({_aaii_v.get('label','?')})"
+        )
+
+    # Inject VIX term structure (volatility curve shape)
+    _vc_v = st.session_state.get("_vix_curve") or {}
+    if _vc_v:
+        signals_text += (
+            f"\nVIX Term Structure: {_vc_v.get('structure','?')}"
+            f" | VIX9D {_vc_v.get('vix9d','?')} / VIX {_vc_v.get('vix','?')} / VIX3M {_vc_v.get('vix3m','?')} / VIX6M {_vc_v.get('vix6m','?')}"
+        )
+
     _inst_b = st.session_state.get("_institutional_bias") or {}
     if _inst_b.get("ticker", "").upper() == ticker.upper():
         signals_text += (
@@ -582,6 +608,15 @@ def render():
     _of_v = st.session_state.get("_options_flow_context") or {}
     if _of_v:
         _inj_rows.append(("Macro Options Flow", f"{_of_v.get('label','')} · score {_of_v.get('options_score','?')}/100 — {_of_v.get('action_bias','')[:80]}"))
+    _fg_v2 = st.session_state.get("_fear_greed") or {}
+    if _fg_v2:
+        _inj_rows.append(("Fear & Greed", f"{_fg_v2.get('score','?')}/100 — {_fg_v2.get('label','')}"))
+    _aaii_v2 = st.session_state.get("_aaii_sentiment") or {}
+    if _aaii_v2:
+        _inj_rows.append(("AAII Sentiment", f"Bull {_aaii_v2.get('bull_pct','?')}% / Bear {_aaii_v2.get('bear_pct','?')}% (spread {_aaii_v2.get('bull_bear_spread','?'):+}%)"))
+    _vc_v2 = st.session_state.get("_vix_curve") or {}
+    if _vc_v2:
+        _inj_rows.append(("VIX Term Structure", f"{_vc_v2.get('structure','?')} — 9D:{_vc_v2.get('vix9d','?')} VIX:{_vc_v2.get('vix','?')} 3M:{_vc_v2.get('vix3m','?')} 6M:{_vc_v2.get('vix6m','?')}"))
     _ce_v2 = st.session_state.get("_current_events_digest", "")
     if _ce_v2:
         _inj_rows.append(("Current Events", _ce_v2[:120] + "…"))
@@ -616,6 +651,16 @@ def render():
             with st.expander("Debug: Signal data sent to LLM"):
                 st.code(signals_text)
         return
+
+    # Persist result so Forecast Tracker can quick-capture it
+    st.session_state["_last_valuation_result"] = {
+        "rating":     result.get("rating", "Hold"),
+        "confidence": result.get("confidence", 50),
+        "summary":    result.get("summary", ""),
+        "engine":     _cl_model or "llama-3.3-70b-versatile",
+        "ticker":     ticker,
+        "key_levels": result.get("key_levels", {}),
+    }
 
     _grad_color = "#c89b3c" if _selected_val_tier == "👑 Highly Regarded Mode" else "#FF8811"
     if _use_claude:

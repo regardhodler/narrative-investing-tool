@@ -105,6 +105,20 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
     if hl_text:
         parts.append("RSS HEADLINES:\n" + hl_text)
 
+    # FedSpeak RSS — inject recent Fed speeches/testimony as a grounding signal
+    try:
+        from services.free_data import fetch_fedspeech_rss as _fed_rss
+        _speeches = _fed_rss(max_items=5)
+        if _speeches:
+            _fed_lines = "\n".join(
+                f"• [{s['speaker'] or 'Fed Official'}] {s['title']}"
+                + (f" ({s['published'][:16]})" if s.get("published") else "")
+                for s in _speeches
+            )
+            parts.append("FEDSPEAK (recent speeches/testimony):\n" + _fed_lines)
+    except Exception:
+        pass
+
     if not parts:
         return False
 

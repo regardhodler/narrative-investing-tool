@@ -279,6 +279,30 @@ _SIGNAL_REGISTRY = [
         "preview_fn": _prev_options_flow,
         "run_hint": "Quick Intel Run → Round 1 (options flow auto-runs)",
     },
+    {
+        "label": "Fear & Greed Index",
+        "key": "_fear_greed",
+        "ts_key": "_fear_greed_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": lambda v: f"Score: {v.get('score','?')}/100 — {v.get('label','?')} ({v.get('source','?')}) | 7d change: {v.get('change_7d', 0):+d}" if isinstance(v, dict) else str(v)[:80],
+        "run_hint": "Quick Intel Run → Round 1 (Market Sentiment)",
+    },
+    {
+        "label": "AAII Investor Sentiment",
+        "key": "_aaii_sentiment",
+        "ts_key": "_aaii_sentiment_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": lambda v: f"Bull {v.get('bull_pct','?')}% / Bear {v.get('bear_pct','?')}% | Spread {v.get('bull_bear_spread','?'):+}% ({v.get('label','?')})" if isinstance(v, dict) else str(v)[:80],
+        "run_hint": "Quick Intel Run → Round 1 (Market Sentiment)",
+    },
+    {
+        "label": "VIX Term Structure (9D/VIX/3M/6M)",
+        "key": "_vix_curve",
+        "ts_key": "_vix_curve_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": lambda v: f"{v.get('structure','?')} | VIX9D:{v.get('vix9d','?')} VIX:{v.get('vix','?')} 3M:{v.get('vix3m','?')} 6M:{v.get('vix6m','?')}" if isinstance(v, dict) else str(v)[:80],
+        "run_hint": "Quick Intel Run → Round 1 (Market Sentiment)",
+    },
 ]
 
 _CRITICAL_KEYS = {"_regime_context", "_dominant_rate_path", "_rate_path_probs"}

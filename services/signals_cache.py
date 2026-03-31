@@ -124,6 +124,13 @@ _SIGNAL_KEYS = [
     "_sector_regime_digest",
     "_sector_regime_digest_ts",
     "_sector_regime_digest_engine",
+    # Free sentiment signals (Fear & Greed, AAII, VIX curve)
+    "_fear_greed",
+    "_fear_greed_ts",
+    "_aaii_sentiment",
+    "_aaii_sentiment_ts",
+    "_vix_curve",
+    "_vix_curve_ts",
 ]
 
 

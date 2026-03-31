@@ -424,6 +424,9 @@ def _render_qir_dashboard() -> None:
         ("Activism",  "_activism_digest"),
         ("Risk Snap", "_portfolio_risk_snapshot"),
         ("Earnings",  "_qir_earnings_risk"),
+        ("F&G Index", "_fear_greed"),
+        ("AAII",      "_aaii_sentiment"),
+        ("VIX Curve", "_vix_curve"),
     ]
     _fresh_count = sum(1 for _, k in _sig_checks if st.session_state.get(k))
     _total_sigs = len(_sig_checks)
@@ -610,8 +613,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_sector_regime_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
-    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Sector×Regime", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
+    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_sector_regime_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest", "_fear_greed", "_aaii_sentiment", "_vix_curve"]
+    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Sector×Regime", "Macro Synopsis", "Risk Snapshot", "Social Sentiment", "F&G Index", "AAII Sentiment", "VIX Curve"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -726,25 +729,38 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         from modules.whale_buyers import run_quick_whale, run_quick_activism
         from modules.options_activity import run_quick_options_flow
         from services.stocktwits_client import run_quick_stocktwits
+        from services.free_data import fetch_sentiment_snapshot
 
-        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Sector×Regime · Social (parallel)..."):
+        def _run_sentiment() -> dict:
+            """Fetch Fear & Greed + AAII + VIX curve in parallel."""
+            snap = fetch_sentiment_snapshot()
+            return {
+                "_fear_greed":       snap.get("fear_greed"),
+                "_aaii_sentiment":   snap.get("aaii"),
+                "_vix_curve":        snap.get("vix_curve"),
+                "_fedspeech":        snap.get("fedspeech") or [],
+            }
+
+        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Sector×Regime · Social · Sentiment (parallel)..."):
             _r1_errors = {}
             _macro_ctx, _fred_data = None, None
             import datetime as _dt_qir
-            with ThreadPoolExecutor(max_workers=6) as _pool:
+            with ThreadPoolExecutor(max_workers=7) as _pool:
                 _fut_regime   = _pool.submit(run_quick_regime, _use_claude, _cl_model)
                 _fut_digest   = _pool.submit(run_quick_digest, _use_claude, _cl_model)
                 _fut_whale    = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
                 _fut_activism = _pool.submit(run_quick_activism, _use_claude, _cl_model)
                 _fut_opts     = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
                 _fut_stwit    = _pool.submit(run_quick_stocktwits)
+                _fut_sentiment = _pool.submit(_run_sentiment)
                 for _fut, _key in (
-                    (_fut_regime,   "regime"),
-                    (_fut_digest,   "digest"),
-                    (_fut_whale,    "whale"),
-                    (_fut_activism, "activism"),
-                    (_fut_opts,     "opts"),
-                    (_fut_stwit,    "social"),
+                    (_fut_regime,     "regime"),
+                    (_fut_digest,     "digest"),
+                    (_fut_whale,      "whale"),
+                    (_fut_activism,   "activism"),
+                    (_fut_opts,       "opts"),
+                    (_fut_stwit,      "social"),
+                    (_fut_sentiment,  "sentiment"),
                 ):
                     try:
                         _val = _fut.result()
@@ -790,6 +806,13 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         elif _key == "social" and _val:
                             st.session_state["_stocktwits_digest"] = _val
                             st.session_state["_stocktwits_digest_ts"] = _dt_qir.datetime.now()
+                        elif _key == "sentiment" and _val:
+                            import datetime as _sdt
+                            _now_s = _sdt.datetime.now()
+                            for _sk in ("_fear_greed", "_aaii_sentiment", "_vix_curve", "_fedspeech"):
+                                if _val.get(_sk) is not None:
+                                    st.session_state[_sk] = _val[_sk]
+                                    st.session_state[_sk + "_ts"] = _now_s
                         _results[_key] = bool(_val)
                     except Exception as _e:
                         _results[_key] = False
@@ -839,6 +862,16 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             st.success(f"✅ Social Sentiment — {_st_mood} ({_st_bull}% bull) · trending: {_st_top}")
         else:
             st.warning(f"⚠ Social Sentiment: {_r1_errors.get('social', 'StockTwits unavailable')}")
+        if _results.get("sentiment"):
+            _fg_r1 = st.session_state.get("_fear_greed") or {}
+            _vc_r1 = st.session_state.get("_vix_curve") or {}
+            _aaii_r1 = st.session_state.get("_aaii_sentiment") or {}
+            _fg_str = f"F&G {_fg_r1.get('score','?')} ({_fg_r1.get('label','?')})" if _fg_r1 else "F&G N/A"
+            _vc_str = f"VIX curve: {_vc_r1.get('structure','?')}" if _vc_r1 else "VIX curve N/A"
+            _aa_str = f"AAII: {_aaii_r1.get('label','?')} (spread {_aaii_r1.get('bull_bear_spread','?')}%)" if _aaii_r1 else "AAII N/A"
+            st.success(f"✅ Market Sentiment — {_fg_str} · {_vc_str} · {_aa_str}")
+        else:
+            st.warning(f"⚠ Market Sentiment: {_r1_errors.get('sentiment', 'data unavailable')}")
         if _results.get("sector"):
             st.success("✅ Sector×Regime Digest — done")
         else:
@@ -1359,14 +1392,14 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
 <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">DATA SOURCES</div>
 <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">
-  {''.join(f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px 8px;color:#94a3b8;">{s}</span>' for s in ['yfinance (prices, options, fundamentals)','FRED API (macro series)','RSS / news feeds','SEC EDGAR (13F, 13D, Form 4)','StockTwits social sentiment','📱 Telegram inbox','Polymarket Gist (Black Swans)'])}
+  {''.join(f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;padding:2px 8px;color:#94a3b8;">{s}</span>' for s in ['yfinance (prices, options, fundamentals)','FRED API (macro series)','RSS / news feeds','SEC EDGAR (13F, 13D, Form 4)','StockTwits social sentiment','📱 Telegram inbox','Polymarket Gist (Black Swans)','alternative.me (Fear & Greed)','AAII.com (investor survey)','FederalReserve.gov RSS (FedSpeak)'])}
 </div>
 
 <div style="color:#334155;font-size:16px;margin-bottom:8px;padding-left:4px;">↓</div>
 
 <div style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">QIR ROUND 1 — parallel <span style="font-weight:400;color:#475569;">(runs simultaneously)</span></div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:6px;">
-  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Tactical Regime','Current Events Digest','Options Flow (SPY macro)','Whale Activity (13F)','Activism Digest (13D)','Social Sentiment (StockTwits)'])}
+  {''.join(f'<div style="background:#0f172a;border:1px solid {_oc}44;border-radius:3px;padding:3px 8px;color:{_oc};">{s}</div>' for s in ['Regime + Quadrant','Tactical Regime','Current Events Digest (+ FedSpeak RSS)','Options Flow (SPY macro)','Whale Activity (13F)','Activism Digest (13D)','Social Sentiment (StockTwits)','Market Sentiment (F&G · AAII · VIX Curve)'])}
 </div>
 <div style="color:#64748b;font-size:10px;margin-bottom:2px;">↳ then sequentially:</div>
 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:14px;">
@@ -1394,15 +1427,19 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 <div style="display:flex;flex-direction:column;gap:4px;">
   <div style="background:#0c1a0c;border:1px solid #22c55e44;border-radius:4px;padding:6px 10px;">
     <span style="color:#22c55e;font-weight:700;">Portfolio Intelligence</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot · social sentiment</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot · social sentiment · F&G · AAII · VIX curve</span>
   </div>
   <div style="background:#1a1200;border:1px solid #f59e0b44;border-radius:4px;padding:6px 10px;">
     <span style="color:#f59e0b;font-weight:700;">Discovery (Cross-Signal Plays)</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · regime plays · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · regime plays · doom · whales · activism · sector×regime · options flow · news · swans · trending · auto-trending · risk snapshot · F&G · AAII · VIX curve</span>
   </div>
   <div style="background:#0d1117;border:1px solid #3b82f644;border-radius:4px;padding:6px 10px;">
     <span style="color:#3b82f6;font-weight:700;">Valuation (AI Rating)</span>
-    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · doom · whales · activism · sector×regime · macro options flow · news · swans · trending · auto-trending · per-ticker options/insider/congress/institutional · portfolio risk</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">regime · tactical · rate path · fed plays · doom · whales · activism · sector×regime · macro options flow · news · swans · trending · auto-trending · per-ticker options/insider/congress/institutional · portfolio risk · F&G · AAII · VIX curve</span>
+  </div>
+  <div style="background:#120d1a;border:1px solid #a855f744;border-radius:4px;padding:6px 10px;">
+    <span style="color:#a855f7;font-weight:700;">Tactical Regime (9 signals)</span>
+    <span style="color:#475569;font-size:10px;margin-left:8px;">VIX level · VIX term structure · SPY MAs · momentum · breadth · VIX full curve · CBOE SKEW · Fear&Greed (contrarian) · AAII (contrarian)</span>
   </div>
   <div style="background:#120d1a;border:1px solid #a855f744;border-radius:4px;padding:6px 10px;">
     <span style="color:#a855f7;font-weight:700;">Signal Audit</span>
@@ -1411,9 +1448,11 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 </div>
 
 <div style="margin-top:12px;padding-top:8px;border-top:1px solid #1e293b;color:#475569;font-size:10px;line-height:1.8;">
-  📱 Telegram inbox → Current Events Digest → all consumers<br>
+  📱 Telegram inbox → Current Events Digest + FedSpeak RSS (Fed.gov) → all consumers<br>
   🔄 Sector×Regime = 11 SPDR ETFs momentum × Dalio quadrant → confirms or flags divergence<br>
-  📡 Options Flow (SPY) = macro P/C ratio + gamma exposure + put wall → market positioning layer
+  📡 Options Flow (SPY) = macro P/C ratio + gamma exposure + put wall → market positioning layer<br>
+  😱 Fear & Greed (alternative.me) + AAII survey → contrarian signals in Tactical Regime + Valuation<br>
+  📈 VIX Term Structure (9D/VIX/3M/6M) → full vol curve shape → Tactical Regime signal
 </div>
 
 </div>""",

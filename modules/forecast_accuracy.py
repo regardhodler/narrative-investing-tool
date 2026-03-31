@@ -56,6 +56,11 @@ def _read_current_signals() -> dict:
     if isinstance(tac, dict):
         out["tactical"] = tac
 
+    # Short squeeze thesis (from Short Squeeze Radar)
+    sq = st.session_state.get("sq_thesis")
+    if isinstance(sq, dict) and sq.get("ticker") and sq.get("text"):
+        out["squeeze"] = sq
+
     return out
 
 
@@ -108,6 +113,17 @@ def _render_log_tab():
                 "fed", None,
                 sc, int(f_.get("prob_pct", 50)),
                 f"Fed dominant rate path: {sc}", "",
+                None,
+            ))
+        if "squeeze" in signals:
+            sq = signals["squeeze"]
+            sq_ticker = sq.get("ticker", "?")
+            sq_preview = sq.get("text", "")[:120].replace("\n", " ")
+            caps.append((
+                f"🔥 Squeeze: {sq_ticker} — {sq_preview}…",
+                "squeeze", sq_ticker,
+                f"Squeeze candidate: {sq_ticker}", 65,
+                sq.get("text", "")[:500], "",
                 None,
             ))
 

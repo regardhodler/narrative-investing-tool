@@ -148,6 +148,9 @@ CORE_TICKERS = {
     "UUP": "USD Bull ETF",
     "^VIX": "VIX",
     "^VIX3M": "VIX 3-Month",  # Used for VIX term structure (contango/backwardation)
+    "^VIX9D": "VIX 9-Day",    # Short-term fear spike detector (VIX9D/VIX ratio)
+    "^VIX6M": "VIX 6-Month",  # Used for full VIX term structure curve
+    "^SKEW": "CBOE SKEW",     # Tail-risk demand (OTM put buying pressure)
     "HYG": "High Yield Corp",
     "LQD": "Inv Grade Corp",
     "RSP": "S&P 500 Equal Weight",  # Used for market breadth signal (RSP/SPY ratio)
@@ -669,6 +672,14 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
 
     top_sigs = macro.get("top_signals", [])[:8]
     sig_lines = [f"- {s['name']}: z={s['score']:+.2f} ({s.get('label', '')})" for s in top_sigs]
+    # Append Fear & Greed as a supplemental signal in the summary
+    try:
+        from services.free_data import fetch_fear_greed
+        _fg = fetch_fear_greed()
+        if _fg:
+            sig_lines.append(f"- Fear & Greed Index: {_fg['score']}/100 — {_fg['label']} (contrarian)")
+    except Exception:
+        pass
     signal_summary = "\n".join(sig_lines)
     norm_score = (macro.get("macro_score", 50) - 50) / 50
 
@@ -2080,10 +2091,12 @@ def _render_sector_rotation_tab(quadrant: str, regime: str) -> None:
 
 @st.cache_data(ttl=14400, show_spinner=False)
 def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
-    """5-signal tactical regime score operating on a days-to-weeks timeframe.
+    """9-signal tactical regime score operating on a days-to-weeks timeframe.
 
     Signals: VIX level+trend, VIX term structure, SPY vs MAs,
-             short-term momentum, market breadth trend (RSP/SPY).
+             short-term momentum, market breadth trend (RSP/SPY),
+             VIX full curve (9D/VIX/3M/6M), CBOE SKEW,
+             Fear & Greed (contrarian), AAII sentiment (contrarian).
     Returns: tactical_score (0-100), label, action_bias, signals list.
     """
     # ── Signal 1: VIX Level + 5d Trend ───────────────────────────────────────
@@ -2167,9 +2180,88 @@ def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
             sig5_score   = _clamp(ratio_5d_chg / 1.0)  # 1% ratio move = full score
             breadth_display = f"{ratio_5d_chg:+.2f}% 5d"
 
+    # ── Signal 6: VIX Term Structure Full Curve (VIX9D / VIX / VIX3M / VIX6M) ─
+    vix9d_snap  = snaps.get("^VIX9D")
+    vix6m_snap  = snaps.get("^VIX6M")
+    vix9d_level = float(vix9d_snap.series.dropna().iloc[-1]) if (
+        vix9d_snap and vix9d_snap.series is not None and len(vix9d_snap.series.dropna())
+    ) else None
+    vix6m_level = float(vix6m_snap.series.dropna().iloc[-1]) if (
+        vix6m_snap and vix6m_snap.series is not None and len(vix6m_snap.series.dropna())
+    ) else None
+
+    sig6_score   = 0.0
+    curve_display = "N/A"
+    if vix9d_level and vix_level and vix3m_level and vix6m_level:
+        # Full curve contango = bullish, backwardation = bearish
+        # VIX9D < VIX < VIX3M < VIX6M = full contango (+1)
+        # VIX9D > VIX > VIX3M = full backwardation (-1)
+        short_inv  = vix9d_level / vix_level       # <1 = calm near-term
+        mid_inv    = vix_level   / vix3m_level     # <1 = calm medium-term
+        long_inv   = vix3m_level / vix6m_level     # <1 = calm long-term
+        # Contango score: all <1 → +1, all >1 → -1
+        contango_avg = (short_inv + mid_inv + long_inv) / 3.0
+        sig6_score   = _clamp((1.0 - contango_avg) / 0.15)
+        curve_display = f"9D:{vix9d_level:.1f} VIX:{vix_level:.1f} 3M:{vix3m_level:.1f} 6M:{vix6m_level:.1f}"
+    elif vix9d_level and vix_level:
+        # Fallback: just 9D/spot ratio
+        ratio9d    = vix9d_level / vix_level
+        sig6_score = _clamp((1.0 - ratio9d) / 0.15)
+        curve_display = f"9D:{vix9d_level:.1f} / VIX:{vix_level:.1f} = {ratio9d:.3f}"
+
+    # ── Signal 7: CBOE SKEW — Tail Risk / OTM Put Demand ─────────────────────
+    skew_snap   = snaps.get("^SKEW")
+    sig7_score  = 0.0
+    skew_display = "N/A"
+    if skew_snap and skew_snap.series is not None:
+        skew_s = skew_snap.series.dropna()
+        if len(skew_s) >= 1:
+            skew_val = float(skew_s.iloc[-1])
+            # SKEW: 100 = normal, 130+ = elevated tail risk, 150+ = extreme
+            # High SKEW = institutional demand for crash protection = bearish signal
+            sig7_score   = _clamp((120.0 - skew_val) / 20.0)  # 100→+1, 120→0, 140→-1
+            skew_display = f"{skew_val:.1f}"
+            if len(skew_s) >= 5:
+                skew_5d_chg = float(skew_s.iloc[-1] - skew_s.iloc[-5])
+                skew_display += f" ({skew_5d_chg:+.1f} 5d)"
+
+    # ── Signal 8: Fear & Greed (contrarian) ──────────────────────────────────
+    sig8_score  = 0.0
+    fg_display  = "N/A"
+    try:
+        from services.free_data import fetch_fear_greed as _fetch_fg
+        _fg = _fetch_fg()
+        if _fg:
+            score_val = int(_fg.get("score", 50))
+            # Contrarian: extreme fear (0) → +1 bullish; extreme greed (100) → -1 bearish
+            sig8_score = _clamp((50 - score_val) / 50.0)
+            fg_display = f"{score_val} — {_fg.get('label','?')}"
+            chg7 = _fg.get("change_7d", 0)
+            if chg7:
+                fg_display += f" ({chg7:+d} 7d)"
+    except Exception:
+        pass
+
+    # ── Signal 9: AAII Sentiment (contrarian) ─────────────────────────────────
+    sig9_score   = 0.0
+    aaii_display = "N/A"
+    try:
+        from services.free_data import fetch_aaii_sentiment as _fetch_aaii
+        _aaii = _fetch_aaii()
+        if _aaii:
+            spread = float(_aaii.get("bull_bear_spread", 0))
+            # Contrarian: extreme bear (spread < -30) → +1; extreme bull (spread > 30) → -1
+            sig9_score   = _clamp(-spread / 30.0)
+            aaii_display = (
+                f"Bull {_aaii.get('bull_pct','?')}% / Bear {_aaii.get('bear_pct','?')}%"
+                f" (spread {spread:+.1f}%)"
+            )
+    except Exception:
+        pass
+
     # ── Weighted aggregate ────────────────────────────────────────────────────
-    _scores  = [sig1_score, sig2_score, sig3_score, sig4_score, sig5_score]
-    _weights = [2.0,        2.0,        1.5,        1.5,        1.0]
+    _scores  = [sig1_score, sig2_score, sig3_score, sig4_score, sig5_score, sig6_score, sig7_score, sig8_score, sig9_score]
+    _weights = [2.0,        2.0,        1.5,        1.5,        1.0,        1.5,        1.0,        1.0,        0.8]
     agg      = float(np.average(_scores, weights=_weights))
     tactical_score = int(round((agg + 1.0) * 50))
 
@@ -2191,11 +2283,15 @@ def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
         _color_key  = "red"
 
     signal_rows = [
-        {"Signal": "VIX Level + 5d Trend",        "Value": vix_display,     "Score": round(sig1_score, 3), "Direction": _score_to_bucket(sig1_score)[1]},
-        {"Signal": "VIX Term Structure (VIX/VIX3M)","Value": ts_display,    "Score": round(sig2_score, 3), "Direction": _score_to_bucket(sig2_score)[1]},
-        {"Signal": "SPY vs 20d/50d MA",            "Value": spy_ma_display,  "Score": round(sig3_score, 3), "Direction": _score_to_bucket(sig3_score)[1]},
-        {"Signal": "SPY Momentum (5d vs 20d ROC)", "Value": roc_display,     "Score": round(sig4_score, 3), "Direction": _score_to_bucket(sig4_score)[1]},
-        {"Signal": "Breadth Trend (RSP/SPY 5d)",   "Value": breadth_display, "Score": round(sig5_score, 3), "Direction": _score_to_bucket(sig5_score)[1]},
+        {"Signal": "VIX Level + 5d Trend",          "Value": vix_display,     "Score": round(sig1_score, 3), "Direction": _score_to_bucket(sig1_score)[1]},
+        {"Signal": "VIX Term Structure (VIX/VIX3M)", "Value": ts_display,     "Score": round(sig2_score, 3), "Direction": _score_to_bucket(sig2_score)[1]},
+        {"Signal": "SPY vs 20d/50d MA",              "Value": spy_ma_display,  "Score": round(sig3_score, 3), "Direction": _score_to_bucket(sig3_score)[1]},
+        {"Signal": "SPY Momentum (5d vs 20d ROC)",   "Value": roc_display,     "Score": round(sig4_score, 3), "Direction": _score_to_bucket(sig4_score)[1]},
+        {"Signal": "Breadth Trend (RSP/SPY 5d)",     "Value": breadth_display, "Score": round(sig5_score, 3), "Direction": _score_to_bucket(sig5_score)[1]},
+        {"Signal": "VIX Curve (9D/VIX/3M/6M)",      "Value": curve_display,   "Score": round(sig6_score, 3), "Direction": _score_to_bucket(sig6_score)[1]},
+        {"Signal": "CBOE SKEW (Tail Risk)",          "Value": skew_display,    "Score": round(sig7_score, 3), "Direction": _score_to_bucket(sig7_score)[1]},
+        {"Signal": "Fear & Greed (Contrarian)",      "Value": fg_display,      "Score": round(sig8_score, 3), "Direction": _score_to_bucket(sig8_score)[1]},
+        {"Signal": "AAII Sentiment (Contrarian)",    "Value": aaii_display,    "Score": round(sig9_score, 3), "Direction": _score_to_bucket(sig9_score)[1]},
     ]
 
     return {

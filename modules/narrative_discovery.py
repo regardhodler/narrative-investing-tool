@@ -602,6 +602,24 @@ def render():
                 "",
                 "_portfolio_risk_snapshot_ts",
             ),
+            (
+                bool(st.session_state.get("_fear_greed")),
+                "Fear & Greed",
+                f"{st.session_state['_fear_greed'].get('score','?')}/100 — {st.session_state['_fear_greed'].get('label','?')}" if st.session_state.get("_fear_greed") else "",
+                "_fear_greed_ts",
+            ),
+            (
+                bool(st.session_state.get("_aaii_sentiment")),
+                "AAII Sentiment",
+                f"Spread {st.session_state['_aaii_sentiment'].get('bull_bear_spread','?'):+}% ({st.session_state['_aaii_sentiment'].get('label','?')})" if st.session_state.get("_aaii_sentiment") else "",
+                "_aaii_sentiment_ts",
+            ),
+            (
+                bool(st.session_state.get("_vix_curve")),
+                "VIX Curve",
+                st.session_state["_vix_curve"].get("structure", "") if st.session_state.get("_vix_curve") else "",
+                "_vix_curve_ts",
+            ),
         ]
 
         _n_loaded = sum(1 for ok, *_ in _ctx_signals if ok)
@@ -811,6 +829,22 @@ def render():
                     _enrichment_parts.append(
                         f"[Macro Options Flow (SPY): {_of_nd.get('label', '')} "
                         f"(score {_of_nd.get('options_score', 50)}/100) — {_of_nd.get('action_bias', '')[:150]}]"
+                    )
+
+                # Fear & Greed Index (contrarian sentiment)
+                _fg_nd = st.session_state.get("_fear_greed") or {}
+                if _fg_nd:
+                    _enrichment_parts.append(
+                        f"[Fear & Greed Index: {_fg_nd.get('score','?')}/100 — {_fg_nd.get('label','?')} "
+                        f"(contrarian: {'oversold potential bounce' if _fg_nd.get('score',50) <= 25 else ('overbought reversal risk' if _fg_nd.get('score',50) >= 75 else 'neutral crowd')})]"
+                    )
+
+                # AAII Sentiment (weekly contrarian)
+                _aaii_nd = st.session_state.get("_aaii_sentiment") or {}
+                if _aaii_nd:
+                    _enrichment_parts.append(
+                        f"[AAII Sentiment: Bull {_aaii_nd.get('bull_pct','?')}% / Bear {_aaii_nd.get('bear_pct','?')}%"
+                        f" — spread {_aaii_nd.get('bull_bear_spread','?'):+}% ({_aaii_nd.get('label','?')})]"
                     )
 
                 # Portfolio Risk Snapshot (from Quick Intel Run or Trade Journal)
