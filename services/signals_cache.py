@@ -120,6 +120,10 @@ _SIGNAL_KEYS = [
     "_activism_digest",
     "_activism_digest_ts",
     "_activism_digest_engine",
+    # Sector Regime Digest (sector rotation × macro regime AI synthesis)
+    "_sector_regime_digest",
+    "_sector_regime_digest_ts",
+    "_sector_regime_digest_engine",
 ]
 
 

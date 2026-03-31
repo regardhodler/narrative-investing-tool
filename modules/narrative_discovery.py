@@ -579,6 +579,12 @@ def render():
                 "_activism_digest_ts",
             ),
             (
+                bool(st.session_state.get("_sector_regime_digest")),
+                "Sector×Regime",
+                st.session_state.get("_sector_regime_digest_engine", ""),
+                "_sector_regime_digest_ts",
+            ),
+            (
                 bool(st.session_state.get("_current_events_digest")),
                 "Current Events",
                 st.session_state.get("_current_events_engine", ""),
@@ -745,6 +751,11 @@ def render():
                 _activism_cached = st.session_state.get("_activism_digest")
                 if _activism_cached:
                     _enrichment_parts.append(f"[Activism Campaigns (13D): {_activism_cached[:300]}]")
+
+                # Sector×Regime digest
+                _srd_disc = st.session_state.get("_sector_regime_digest")
+                if _srd_disc:
+                    _enrichment_parts.append(f"[Sector×Regime: {_srd_disc[:300]}]")
 
                 # AI Regime Plays (sector/stock picks for current regime)
                 _rp_plays_cached = st.session_state.get("_rp_plays_result")

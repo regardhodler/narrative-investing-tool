@@ -610,8 +610,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
-    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
+    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_sector_regime_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest"]
+    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Sector×Regime", "Macro Synopsis", "Risk Snapshot", "Social Sentiment"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -721,23 +721,24 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
         # ── Round 1 (parallel): Regime + Current Events + Whale + Options Flow + StockTwits ──
         # These five are fully independent — run concurrently to save time.
-        from modules.risk_regime import run_quick_regime
+        from modules.risk_regime import run_quick_regime, run_quick_sector_regime
         from modules.current_events import run_quick_digest
         from modules.whale_buyers import run_quick_whale, run_quick_activism
         from modules.options_activity import run_quick_options_flow
         from services.stocktwits_client import run_quick_stocktwits
 
-        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Social (parallel)..."):
+        with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Sector×Regime · Social (parallel)..."):
             _r1_errors = {}
             _macro_ctx, _fred_data = None, None
             import datetime as _dt_qir
-            with ThreadPoolExecutor(max_workers=6) as _pool:
+            with ThreadPoolExecutor(max_workers=7) as _pool:
                 _fut_regime   = _pool.submit(run_quick_regime, _use_claude, _cl_model)
                 _fut_digest   = _pool.submit(run_quick_digest, _use_claude, _cl_model)
                 _fut_whale    = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
                 _fut_activism = _pool.submit(run_quick_activism, _use_claude, _cl_model)
                 _fut_opts     = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
                 _fut_stwit    = _pool.submit(run_quick_stocktwits)
+                _fut_sector   = _pool.submit(run_quick_sector_regime, _use_claude, _cl_model)
                 for _fut, _key in (
                     (_fut_regime,   "regime"),
                     (_fut_digest,   "digest"),
@@ -745,6 +746,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     (_fut_activism, "activism"),
                     (_fut_opts,     "opts"),
                     (_fut_stwit,    "social"),
+                    (_fut_sector,   "sector"),
                 ):
                     try:
                         _val = _fut.result()
@@ -790,6 +792,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         elif _key == "social" and _val:
                             st.session_state["_stocktwits_digest"] = _val
                             st.session_state["_stocktwits_digest_ts"] = _dt_qir.datetime.now()
+                        elif _key == "sector" and _val:
+                            for _k, _v in _val.items():
+                                st.session_state[_k] = _v
                         _results[_key] = bool(_val)
                     except Exception as _e:
                         _results[_key] = False
@@ -828,6 +833,10 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             st.success(f"✅ Social Sentiment — {_st_mood} ({_st_bull}% bull) · trending: {_st_top}")
         else:
             st.warning(f"⚠ Social Sentiment: {_r1_errors.get('social', 'StockTwits unavailable')}")
+        if _results.get("sector"):
+            st.success("✅ Sector×Regime Digest — done")
+        else:
+            st.warning(f"⚠ Sector×Regime: {_r1_errors.get('sector', 'regime not ready or no sector data')}")
 
         # ── Round 2 (parallel): Fed + Doom + Black Swans ──────────────────────
         # Fed uses regime output from Round 1. Doom reads digest from session_state.
@@ -947,6 +956,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _activism = st.session_state.get("_activism_digest", "")
                 if _activism:
                     _sig_parts.append(f"ACTIVISM CAMPAIGNS: {_activism[:300]}")
+                _sector_reg = st.session_state.get("_sector_regime_digest", "")
+                if _sector_reg:
+                    _sig_parts.append(f"SECTOR×REGIME: {_sector_reg[:300]}")
                 _bs = st.session_state.get("_custom_swans", {})
                 if _bs:
                     _bs_summary = "; ".join(
@@ -1308,6 +1320,15 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 st.markdown(
                     f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
                     f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_activism}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _srd = st.session_state.get("_sector_regime_digest", "")
+        if _srd:
+            with st.expander("🔄 Sector×Regime Digest", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_srd}</div>',
                     unsafe_allow_html=True,
                 )
 

@@ -26,9 +26,6 @@ def auth_gate() -> None:
             font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:300;
             color:{COLORS['text']};letter-spacing:0.18em;margin-bottom:8px;
         ">TERMINALS</div>
-            font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:300;
-            color:{COLORS['text']};letter-spacing:0.18em;margin-bottom:8px;
-        ">TERMINALS</div>
         <div style="
             font-family:'JetBrains Mono',Consolas,monospace;font-size:13px;font-weight:400;
             color:#475569;letter-spacing:0.06em;margin-bottom:2px;

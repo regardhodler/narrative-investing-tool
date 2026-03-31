@@ -650,18 +650,18 @@
     "price": 210.71
   },
   "_options_sentiment": {
-    "ticker": "OIH",
-    "sentiment": "BEARISH",
-    "pc_ratio": 1.655,
-    "call_vol": 786,
-    "put_vol": 1301
+    "ticker": "GOOG",
+    "sentiment": "NEUTRAL",
+    "pc_ratio": 0.894,
+    "call_vol": 64434,
+    "put_vol": 57602
   },
   "_unusual_activity_sentiment": {
-    "ticker": "OIH",
-    "sentiment": "BEARISH",
-    "call_pct": 0.0,
-    "put_pct": 100.0,
-    "flagged_contracts": 1
+    "ticker": "GOOG",
+    "sentiment": "BULLISH",
+    "call_pct": 77.6,
+    "put_pct": 22.4,
+    "flagged_contracts": 15
   },
   "_institutional_bias": {
     "ticker": "GOOG",
@@ -669,17 +669,17 @@
     "weighted_pct": 2.42
   },
   "_insider_net_flow": {
-    "ticker": "CVX",
+    "ticker": "GOOG",
     "bias": "BEARISH",
     "buy_pct": 0.0,
     "buy_value": 0,
-    "sell_value": 119575434,
-    "n_trades": 65
+    "sell_value": 20184658,
+    "n_trades": 90
   },
   "_congress_bias": {
-    "ticker": "CVX",
-    "bias": "NEUTRAL",
-    "buy_pct": 45.4
+    "ticker": "GOOG",
+    "bias": "BULLISH",
+    "buy_pct": 69.8
   },
   "_macro_synopsis": {
     "conviction": "BEARISH",

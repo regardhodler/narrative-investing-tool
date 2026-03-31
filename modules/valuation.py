@@ -330,6 +330,11 @@ def render():
     if _activism_dig:
         signals_text += f"\nActivism Campaigns (13D): {_activism_dig[:400]}"
 
+    # Inject Sector×Regime digest (sector momentum vs macro regime confirmation)
+    _srd_val = st.session_state.get("_sector_regime_digest")
+    if _srd_val:
+        signals_text += f"\nSector×Regime: {_srd_val[:350]}"
+
     # Inject Trending Narratives (market attention signals from Google Trends + news)
     _tn_val = st.session_state.get("_trending_narratives")
     if _tn_val:

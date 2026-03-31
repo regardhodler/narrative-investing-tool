@@ -703,6 +703,46 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq
 
 
+def run_quick_sector_regime(use_claude: bool = False, model: str | None = None) -> dict | None:
+    """Background helper for Quick Intel Run — Sector Rotation × Macro Regime digest.
+
+    Fetches 11-sector SPDR momentum, merges with cached regime context,
+    calls AI to produce a plain-prose tactical digest.
+    Returns a dict ready for main-thread session_state write, or None on failure.
+    """
+    import streamlit as st
+    import datetime as _dt
+    from services.sector_rotation import get_sector_momentum
+    from services.claude_client import summarize_sector_regime
+
+    try:
+        sector_data = get_sector_momentum()
+        if not sector_data:
+            return None
+        regime_ctx = st.session_state.get("_regime_context") or {}
+        if not regime_ctx.get("quadrant"):
+            return None
+        digest = summarize_sector_regime(
+            sector_data=sector_data,
+            regime_context=regime_ctx,
+            use_claude=use_claude,
+            model=model,
+        )
+        if not digest or digest.startswith("Error"):
+            return None
+        _tier = (
+            "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6")
+            else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+        )
+        return {
+            "_sector_regime_digest":        digest,
+            "_sector_regime_digest_ts":     _dt.datetime.now(),
+            "_sector_regime_digest_engine": _tier,
+        }
+    except Exception:
+        return None
+
+
 # ─────────────────────────────────────────────
 # SPY GAMMA MODE
 # ─────────────────────────────────────────────

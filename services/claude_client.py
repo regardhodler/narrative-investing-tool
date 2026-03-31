@@ -911,6 +911,107 @@ Whale activity data:
     return text
 
 
+def summarize_sector_regime(
+    sector_data: list,
+    regime_context: dict,
+    use_claude: bool = False,
+    model: str = None,
+) -> str:
+    """Merge sector rotation momentum with macro regime to produce a tactical digest.
+
+    Args:
+        sector_data: List of sector dicts from get_sector_momentum() — each has
+                     ticker, name, ret_4w, ret_12w, ret_26w, rank_4w, rank_12w.
+        regime_context: _regime_context dict with regime, score, quadrant, signal_summary.
+    Returns:
+        A single prose paragraph (≤250 words) for injection into downstream prompts.
+    """
+    from services.sector_rotation import QUADRANT_ALIGNMENT
+    from datetime import date as _date
+
+    _today = _date.today().isoformat()
+
+    quadrant = regime_context.get("quadrant", "Unknown")
+    regime   = regime_context.get("regime", "Unknown")
+    score    = regime_context.get("score", 0)
+    aligned  = set(QUADRANT_ALIGNMENT.get(quadrant, []))
+
+    leaders  = sector_data[:3]
+    laggards = sector_data[-3:]
+
+    def _fmt(s):
+        r4 = f"{s['ret_4w']:+.1f}%" if s.get("ret_4w") is not None else "N/A"
+        r12 = f"{s['ret_12w']:+.1f}%" if s.get("ret_12w") is not None else "N/A"
+        flag = " ✓ALIGNED" if s["ticker"] in aligned else ""
+        return f"{s['ticker']} ({s['name']}) 4W:{r4} 12W:{r12}{flag}"
+
+    leaders_str  = " | ".join(_fmt(s) for s in leaders)
+    laggards_str = " | ".join(_fmt(s) for s in laggards)
+    aligned_leading = [s for s in leaders if s["ticker"] in aligned]
+    confirm = "CONFIRMED" if len(aligned_leading) >= 2 else ("PARTIAL" if len(aligned_leading) == 1 else "DIVERGING")
+
+    prompt = f"""You are a macro-tactical strategist. As of {_today}, synthesize sector rotation momentum with the macro regime.
+
+MACRO REGIME: {regime} | Score: {score:+.2f} | Dalio Quadrant: {quadrant}
+REGIME-ALIGNED SECTORS: {', '.join(aligned) or 'None'}
+
+SECTOR MOMENTUM LEADERS (4W): {leaders_str}
+SECTOR MOMENTUM LAGGARDS (4W): {laggards_str}
+REGIME CONFIRMATION STATUS: {confirm} ({len(aligned_leading)}/3 leaders are regime-aligned)
+
+Write a single tactical paragraph (max 200 words) covering:
+1. Whether sector momentum CONFIRMS or DIVERGES from the macro regime
+2. The 1-2 highest-conviction sector plays right now (specific ETF + rationale)
+3. Any notable rotation signal (e.g. defensives leading in a Risk-On regime = warning)
+4. A one-sentence trading implication
+
+Be direct. No headers. No bullet points. Use specific ETF tickers."""
+
+    text = ""
+    if use_claude and model and model.startswith("grok-"):
+        try:
+            import os, requests as _req
+            resp = _req.post(
+                "https://api.x.ai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.environ.get('XAI_API_KEY','')}", "Content-Type": "application/json"},
+                json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 600, "temperature": 0.3},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception:
+            pass
+
+    if not text and use_claude:
+        try:
+            import os, anthropic as _ant
+            client = _ant.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+            msg = client.messages.create(
+                model=model or "claude-haiku-4-5",
+                max_tokens=600,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = msg.content[0].text.strip()
+        except Exception:
+            pass
+
+    if not text:
+        try:
+            import os, requests as _req
+            resp = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {os.environ.get('GROQ_API_KEY','')}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "max_tokens": 600, "temperature": 0.3},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            text = resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            return f"Error generating sector regime digest: {e}"
+
+    return text
+
+
 def summarize_activism_filings(filings_text: str, use_claude: bool = False, model: str = None) -> str:
     """Analyze SC 13D/13G activism filings and generate an investment intelligence summary.
 

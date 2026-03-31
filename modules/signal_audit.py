@@ -264,6 +264,14 @@ _SIGNAL_REGISTRY = [
         "run_hint": "Whale Movement → Activism tab → Generate Activism Analysis",
     },
     {
+        "label": "Sector×Regime Digest",
+        "key": "_sector_regime_digest",
+        "ts_key": "_sector_regime_digest_ts",
+        "valuation": True, "discovery": True, "portfolio": True,
+        "preview_fn": _prev_text,
+        "run_hint": "Quick Intel Run → Round 1 (auto-runs after regime loads)",
+    },
+    {
         "label": "Macro Options Flow (SPY)",
         "key": "_options_flow_context",
         "ts_key": "_options_flow_context_ts",
