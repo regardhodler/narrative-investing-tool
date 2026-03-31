@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-03-30T21:09:34",
+  "generated_at": "2026-03-31T15:00:50",
   "regime": {
     "label": "Neutral — Leaning Risk-Off",
-    "score": -0.14,
+    "score": -0.12,
     "quadrant": "Stagflation",
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-1.00 ()\n- Market Breadth (RSP/SPY): z=+0.92 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Fear & Greed Index: 11/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-0.86 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Market Breadth (RSP/SPY): z=+0.77 ()\n- Fear & Greed Index: 11/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 34,
-    "label": "Risk-Off Signal",
-    "action_bias": "Elevated vol + weak momentum. Defensive posture warranted — hedge or step aside."
+    "score": 39,
+    "label": "Caution / Reduce",
+    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
@@ -20,10 +20,10 @@
   },
   "rate_path": {
     "top_scenario": "hold",
-    "top_prob": 0.665,
+    "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "**Stagflationary pressures intensify in Neutral-Risk-Off regime (-0.14 score), as Qatar's helium production collapse prompts AirGas force majeure—critical for TSMC's chip lithography amid Strait of Hormuz LNG risks—compounding oil's surge past $115/bbl on Kuwaiti tanker drone strike, validating high-energy inflation narrative despite China's Caixin PMI rebound to yearly highs.** Japan's long-end JGB yields spike (10Y 2.37%, 30Y 3.69%, 40Y ~3.9%) with USDJPY >160 fuels BOJ intervention fears and carry unwind, while Oracle CDS hits GFC peaks signals tech distress. **Actionable risks: Semicon supply shock (short TSMC proxies), oil-gold decoupling per historical crises; opportunities: Defense names on Trump war rhetoric, Chinese industrials on PMI strength.**",
+  "current_events_digest": "Within the current neutral-leaning risk-off macro regime, characterized by stagflation concerns, recent events have reinforced the dominant narrative of supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical supply chains, potentially exacerbating inflationary pressures. Meanwhile, the sharp rise in Japan's bond yields, noted by Ricky Ho, suggests a bearish outlook for the long end of the curve, which could further complicate the macroeconomic landscape. These developments confirm the stagflation thesis, underscoring actionable risks in the energy and technology sectors, particularly for companies reliant on helium, such as TSMC, as flagged by Mario Nawfal.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",

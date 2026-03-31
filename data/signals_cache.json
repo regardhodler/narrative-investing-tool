@@ -1,91 +1,145 @@
 {
   "_regime_context": {
     "regime": "Neutral \u2014 Leaning Risk-Off",
-    "score": -0.14,
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-1.00 ()\n- Market Breadth (RSP/SPY): z=+0.92 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Fear & Greed Index: 11/100 \u2014 Extreme Fear (contrarian)",
+    "score": -0.12,
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-0.86 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Market Breadth (RSP/SPY): z=+0.77 ()\n- Fear & Greed Index: 11/100 \u2014 Extreme Fear (contrarian)",
     "quadrant": "Stagflation"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-03-30T21:09:19.686787"
+    "__datetime__": "2026-03-31T15:00:31.253238"
   },
   "_rp_plays_result": {
-    "sectors": [],
-    "stocks": [],
-    "bonds": [],
-    "rationale": ""
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
+        "name": "Materials",
+        "conviction": 2
+      },
+      {
+        "name": "Utilities",
+        "conviction": 1
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "XOM is a strong energy play with a stable dividend yield, making it attractive in a risk-off environment with rising commodity prices.",
+        "conviction": 3
+      },
+      {
+        "ticker": "FCX",
+        "reason": "FCX is a copper mining company that benefits from rising commodity prices, particularly copper.",
+        "conviction": 2
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NEE is a utility company with a stable dividend yield, providing a safe haven in a risk-off environment.",
+        "conviction": 1
+      },
+      {
+        "ticker": "PG",
+        "reason": "PG is a consumer staples company with a stable dividend yield, providing a defensive play in a risk-off environment.",
+        "conviction": 1
+      },
+      {
+        "ticker": "DUK",
+        "reason": "DUK is a utility company with a stable dividend yield, providing a safe haven in a risk-off environment.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TLT",
+        "reason": "TLT is a long-term Treasury bond ETF that benefits from a risk-off environment with rising demand for safe-haven assets.",
+        "conviction": 2
+      },
+      {
+        "ticker": "IEF",
+        "reason": "IEF is an intermediate-term Treasury bond ETF that provides a relatively safe haven in a risk-off environment.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "The current Neutral \u2014 Leaning Risk-Off regime suggests a cautious approach, with a focus on defensive sectors and stocks that benefit from rising commodity prices. The strong conviction in Energy and Materials sectors is driven by the positive commodity trend signal, while the moderate conviction in Utilities and Consumer Staples sectors is driven by their defensive nature. The stock picks are selected based on their ability to thrive in a risk-off environment, with a focus on stable dividend yields and safe-haven assets."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.6653657334171021,
-      "implied_rate": 3.6449966430664062,
+      "prob": 0.665526225301367,
+      "implied_rate": 3.6399993896484375,
       "source": "yfinance"
     },
     {
       "scenario": "cut_25",
-      "prob": 0.15695038234134703,
-      "implied_rate": 3.6449966430664062,
+      "prob": 0.1659515597053382,
+      "implied_rate": 3.6399993896484375,
       "source": "yfinance"
     },
     {
       "scenario": "cut_50",
-      "prob": 0.002301922852286354,
-      "implied_rate": 3.6449966430664062,
+      "prob": 0.002572906134776094,
+      "implied_rate": 3.6399993896484375,
       "source": "yfinance"
     },
     {
       "scenario": "hike_25",
-      "prob": 0.17538196138926443,
-      "implied_rate": 3.6449966430664062,
+      "prob": 0.16594930885851863,
+      "implied_rate": 3.6399993896484375,
       "source": "yfinance"
     }
   ],
-  "_current_events_digest": "**Stagflationary pressures intensify in Neutral-Risk-Off regime (-0.14 score), as Qatar's helium production collapse prompts AirGas force majeure\u2014critical for TSMC's chip lithography amid Strait of Hormuz LNG risks\u2014compounding oil's surge past $115/bbl on Kuwaiti tanker drone strike, validating high-energy inflation narrative despite China's Caixin PMI rebound to yearly highs.** Japan's long-end JGB yields spike (10Y 2.37%, 30Y 3.69%, 40Y ~3.9%) with USDJPY >160 fuels BOJ intervention fears and carry unwind, while Oracle CDS hits GFC peaks signals tech distress. **Actionable risks: Semicon supply shock (short TSMC proxies), oil-gold decoupling per historical crises; opportunities: Defense names on Trump war rhetoric, Chinese industrials on PMI strength.**",
+  "_current_events_digest": "Within the current neutral-leaning risk-off macro regime, characterized by stagflation concerns, recent events have reinforced the dominant narrative of supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical supply chains, potentially exacerbating inflationary pressures. Meanwhile, the sharp rise in Japan's bond yields, noted by Ricky Ho, suggests a bearish outlook for the long end of the curve, which could further complicate the macroeconomic landscape. These developments confirm the stagflation thesis, underscoring actionable risks in the energy and technology sectors, particularly for companies reliant on helium, such as TSMC, as flagged by Mario Nawfal.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-03-30T21:09:31.672786"
+    "__datetime__": "2026-03-31T15:00:35.398143"
   },
-  "_current_events_engine": "\ud83e\udde0 Regard Mode",
+  "_current_events_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 34,
-    "label": "Risk-Off Signal",
-    "action_bias": "Elevated vol + weak momentum. Defensive posture warranted \u2014 hedge or step aside.",
+    "tactical_score": 39,
+    "label": "Caution / Reduce",
+    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "30.6 (+4.5 5d)",
-        "Score": -1.0,
+        "Value": "27.5 (+0.6 5d)",
+        "Score": -0.677,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "1.051",
-        "Score": -0.34,
-        "Direction": "Risk-Off"
+        "Value": "1.019",
+        "Score": -0.127,
+        "Direction": "Neutral \u2014 Leaning Risk-Off"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "-4.5%/20d  -6.6%/50d",
+        "Value": "-3.3%/20d  -5.5%/50d",
         "Score": -0.4,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d -3.6%  20d -7.7%",
-        "Score": -0.931,
+        "Value": "5d -2.2%  20d -5.9%",
+        "Score": -0.597,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "+1.75% 5d",
-        "Score": 1.0,
+        "Value": "+0.64% 5d",
+        "Score": 0.645,
         "Direction": "Risk-On"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:30.6 VIX:30.6 3M:29.1 6M:29.7",
-        "Score": -0.069,
-        "Direction": "Neutral \u2014 Leaning Risk-Off"
+        "Value": "9D:27.2 VIX:27.5 3M:27.0 6M:28.0",
+        "Score": 0.062,
+        "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
@@ -108,11 +162,11 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-03-30T21:09:19.686790"
+    "__datetime__": "2026-03-31T15:00:31.253242"
   },
-  "_tactical_analysis": "Tactical Regime: Risk-Off Signal (34/100). AI analysis unavailable: 429 Client Error: Too Many Requests for url: https://api.groq.com/openai/v1/chat/completions",
+  "_tactical_analysis": "The combined signal picture suggests a cautious stance, with a Tactical Regime score of 39/100, indicating reduced risk appetite. The majority of the signals lean towards a Risk-Off posture, with the VIX Level and Momentum signals being particularly bearish, at -0.677 and -0.597, respectively. The VIX Level of 27.5, with a 5-day trend of +0.6, indicates increased volatility and risk aversion. The SPY vs 20d/50d MA signals also point to a Risk-Off environment, with the SPY trading -3.3% and -5.5% below its 20-day and 50-day moving averages, respectively.\n\nThe most dominant signals right now are the VIX-related metrics, including the VIX Level, VIX Term Structure, and VIX Curve. The VIX Term Structure, at 1.019, is slightly bearish, while the VIX Curve, with a score of +0.062, is neutral to slightly bullish. However, the CBOE SKEW, at 142.2, with a 5-day change of -0.4, is strongly bearish, indicating increased tail risk. The Fear & Greed indicator, at 11, is in Extreme Fear territory, which is contrarian bullish, but not enough to override the overall bearish signal picture. The Breadth Trend signal, at +0.64% 5-day, is a rare bullish outlier, but its impact is limited by the broader Risk-Off environment.\n\nGiven this setup, the concrete action implication is to reduce exposure to risky assets. With the Tactical Regime score at 39/100 and the majority of signals pointing to a Risk-Off environment, it's prudent to decrease position sizes or hedge existing positions. The VIX Level and Momentum signals, in particular, suggest that volatility and downside risk are increasing. While the Fear & Greed indicator is contrarian bullish, it's not enough to justify adding to positions at this time. Instead, traders should focus on preserving capital and waiting for a more favorable risk-reward environment to re-enter the market. A reduction of 10-20% in position size or a corresponding hedge would be a reasonable response to this signal picture.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-03-30T21:09:19.686791"
+    "__datetime__": "2026-03-31T15:00:31.253243"
   },
   "_data_quality": {
     "score": 70,
@@ -128,6 +182,6 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-03-30T21:09:19.686792"
+    "__datetime__": "2026-03-31T15:00:31.253244"
   }
 }
