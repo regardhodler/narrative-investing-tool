@@ -19,7 +19,7 @@ def auth_gate() -> None:
         margin:8vh auto 0 auto;max-width:420px;
     ">
         <div style="
-            font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:700;
+            font-family:'JetBrains Mono',Consolas,monospace;font-size:84px;font-weight:700;
             color:{COLORS['bloomberg_orange']};letter-spacing:0.12em;margin-bottom:4px;
         ">REGARD</div>
         <div style="
