@@ -795,18 +795,16 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         _results[_key] = False
                         _r1_errors[_key] = str(_e)
 
-            # Sector×Regime runs after regime is written to session_state (needs quadrant)
-            with ThreadPoolExecutor(max_workers=1) as _pool_s:
-                _fut_sector = _pool_s.submit(run_quick_sector_regime, _use_claude, _cl_model)
-                try:
-                    _val_s = _fut_sector.result()
-                    if _val_s:
-                        for _k, _v in _val_s.items():
-                            st.session_state[_k] = _v
-                    _results["sector"] = bool(_val_s)
-                except Exception as _e:
-                    _results["sector"] = False
-                    _r1_errors["sector"] = str(_e)
+            # Sector×Regime runs after regime resolves — call directly (needs regime_ctx)
+            try:
+                _val_s = run_quick_sector_regime(_use_claude, _cl_model, regime_ctx=_regime_ctx)
+                if _val_s:
+                    for _k, _v in _val_s.items():
+                        st.session_state[_k] = _v
+                _results["sector"] = bool(_val_s)
+            except Exception as _e:
+                _results["sector"] = False
+                _r1_errors["sector"] = str(_e)
 
         _regime_ok = _results.get("regime", False)
         if _regime_ok:

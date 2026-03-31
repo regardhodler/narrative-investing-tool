@@ -20,7 +20,7 @@ def auth_gate() -> None:
     ">
         <div style="
             font-family:'JetBrains Mono',Consolas,monospace;font-size:84px;font-weight:700;
-            color:{COLORS['bloomberg_orange']};letter-spacing:0.12em;margin-bottom:4px;
+            color:{COLORS['bloomberg_orange']};letter-spacing:0.12em;margin-bottom:0px;
         ">REGARD</div>
         <div style="
             font-family:'JetBrains Mono',Consolas,monospace;font-size:42px;font-weight:300;

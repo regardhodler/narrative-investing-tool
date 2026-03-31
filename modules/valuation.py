@@ -559,6 +559,47 @@ def render():
     with st.expander("📊 Full Signal Transparency (AI Inputs)", expanded=False):
         _render_signal_transparency(signals)
 
+    # ── Cross-module injected signals (visible preview) ────────────────────────
+    _inj_rows = []
+    _rc_v = st.session_state.get("_regime_context") or {}
+    if _rc_v.get("regime"):
+        _inj_rows.append(("Macro Regime", f"{_rc_v['regime']} · {_rc_v.get('quadrant','')} · score {_rc_v.get('score',0):+.2f}"))
+    _tac_v = st.session_state.get("_tactical_context") or {}
+    if _tac_v:
+        _inj_rows.append(("Tactical Regime", f"{_tac_v.get('tactical_score','?')}/100 · {_tac_v.get('label','')} — {_tac_v.get('action_bias','')[:80]}"))
+    _doom_v = st.session_state.get("_doom_briefing", "")
+    if _doom_v:
+        _inj_rows.append(("Doom Briefing", _doom_v[:120] + "…"))
+    _whale_v = st.session_state.get("_whale_summary", "")
+    if _whale_v:
+        _inj_rows.append(("Whale Activity", _whale_v[:120] + "…"))
+    _act_v = st.session_state.get("_activism_digest", "")
+    if _act_v:
+        _inj_rows.append(("Activism (13D)", _act_v[:120] + "…"))
+    _srd_v2 = st.session_state.get("_sector_regime_digest", "")
+    if _srd_v2:
+        _inj_rows.append(("Sector×Regime", _srd_v2[:120] + "…"))
+    _of_v = st.session_state.get("_options_flow_context") or {}
+    if _of_v:
+        _inj_rows.append(("Macro Options Flow", f"{_of_v.get('label','')} · score {_of_v.get('options_score','?')}/100 — {_of_v.get('action_bias','')[:80]}"))
+    _ce_v2 = st.session_state.get("_current_events_digest", "")
+    if _ce_v2:
+        _inj_rows.append(("Current Events", _ce_v2[:120] + "…"))
+
+    if _inj_rows:
+        _inj_html = "".join(
+            f'<tr>'
+            f'<td style="padding:3px 12px 3px 0;white-space:nowrap;color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">{lbl}</td>'
+            f'<td style="padding:3px 0;color:#94a3b8;font-size:11px;font-family:\'JetBrains Mono\',monospace;">{val}</td>'
+            f'</tr>'
+            for lbl, val in _inj_rows
+        )
+        with st.expander(f"📡 Injected AI Context ({len(_inj_rows)} signals)", expanded=False):
+            st.markdown(
+                f'<table style="width:100%;border-collapse:collapse;">{_inj_html}</table>',
+                unsafe_allow_html=True,
+            )
+
     with st.spinner("Generating AI valuation..."):
         from services.claude_client import generate_valuation
         _ce_val = st.session_state.get("_current_events_digest", "")

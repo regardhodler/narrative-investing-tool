@@ -703,11 +703,12 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq
 
 
-def run_quick_sector_regime(use_claude: bool = False, model: str | None = None) -> dict | None:
+def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, regime_ctx: dict | None = None) -> dict | None:
     """Background helper for Quick Intel Run — Sector Rotation × Macro Regime digest.
 
-    Fetches 11-sector SPDR momentum, merges with cached regime context,
+    Fetches 11-sector SPDR momentum, merges with regime context,
     calls AI to produce a plain-prose tactical digest.
+    regime_ctx can be passed directly to avoid session_state reads from threads.
     Returns a dict ready for main-thread session_state write, or None on failure.
     """
     import streamlit as st
@@ -721,12 +722,13 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None) 
         sector_data = _fetch_fn()
         if not sector_data:
             return None
-        regime_ctx = st.session_state.get("_regime_context") or {}
-        if not regime_ctx.get("quadrant"):
+        # Prefer explicitly passed regime_ctx, fall back to session_state (main-thread calls only)
+        _ctx = regime_ctx or st.session_state.get("_regime_context") or {}
+        if not _ctx.get("quadrant"):
             return None
         digest = summarize_sector_regime(
             sector_data=sector_data,
-            regime_context=regime_ctx,
+            regime_context=_ctx,
             use_claude=use_claude,
             model=model,
         )
