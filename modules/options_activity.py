@@ -74,6 +74,21 @@ def render():
         unsafe_allow_html=True,
     )
 
+    # Inline log button
+    from modules.forecast_accuracy import render_log_button
+    _oc1, _oc2 = st.columns([4, 1])
+    with _oc2:
+        _opt_conf = 70 if sentiment != "NEUTRAL" else 50
+        render_log_button(
+            signal_type="valuation",
+            prediction="Buy" if sentiment == "BULLISH" else ("Sell" if sentiment == "BEARISH" else "Hold"),
+            confidence=_opt_conf,
+            summary=f"Options flow signal: {sentiment} — P/C ratio {pc_ratio:.2f} (call vol {int(call_vol):,} / put vol {int(put_vol):,})",
+            ticker=ticker,
+            key=f"opt_log_{ticker}_{sentiment}",
+            label="📌 Log Signal",
+        )
+
     # Persist P/C ratio signal for downstream use (valuation, portfolio intelligence)
     st.session_state["_options_sentiment"] = {
         "ticker": ticker,

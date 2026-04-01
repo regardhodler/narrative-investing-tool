@@ -2590,7 +2590,7 @@ def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
     ts   = tactical["tactical_score"]
 
     # ── Score header ─────────────────────────────────────────────────────────
-    c1, c2, c3 = st.columns([1, 1, 2])
+    c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
     with c1:
         st.markdown(bloomberg_metric("TACTICAL SCORE", f"{ts}/100", _col), unsafe_allow_html=True)
     with c2:
@@ -2601,6 +2601,17 @@ def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
             f'font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12px;color:{COLORS["text"]};">'
             f'<b style="color:{_oc};">ACTION BIAS</b><br>{tactical["action_bias"]}</div>',
             unsafe_allow_html=True,
+        )
+    with c4:
+        from modules.forecast_accuracy import render_log_button
+        render_log_button(
+            signal_type="regime",
+            prediction=tactical["label"],
+            confidence=int(min(90, max(40, ts))),
+            summary=f"Tactical regime: {tactical['label']} (score {ts}/100). Action bias: {tactical['action_bias']}",
+            model="Tactical Composite",
+            key=f"tac_log_{tactical['label']}_{ts}",
+            label="📌 Log",
         )
 
     # ── Gauge ────────────────────────────────────────────────────────────────

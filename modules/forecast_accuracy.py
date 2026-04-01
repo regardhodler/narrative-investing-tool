@@ -11,6 +11,36 @@ from datetime import datetime, timedelta
 from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 
 
+# ── Inline log button (importable by any module) ───────────────────────────────
+
+def render_log_button(
+    signal_type: str,
+    prediction: str,
+    confidence: int,
+    summary: str,
+    model: str = "Groq Llama 3.3",
+    ticker: str | None = None,
+    target_price: float | None = None,
+    horizon_days: int = 30,
+    key: str = "log_btn",
+    label: str = "📌 Log Forecast",
+):
+    """Render a one-click forecast logging button. Import this into any module."""
+    from services.forecast_tracker import log_forecast
+    if st.button(label, key=key, use_container_width=True, help="Log this signal to Forecast Accuracy Tracker"):
+        fid = log_forecast(
+            signal_type=signal_type,
+            prediction=prediction,
+            confidence=confidence,
+            summary=summary,
+            model=model,
+            ticker=ticker,
+            target_price=target_price,
+            horizon_days=horizon_days,
+        )
+        st.toast(f"📌 Logged! [{fid}] — check Forecast Tracker to track outcome", icon="✅")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _outcome_badge(outcome: str | None) -> str:

@@ -465,6 +465,27 @@ def _render_qir_dashboard() -> None:
         unsafe_allow_html=True,
     )
 
+    # ── Inline log button for QIR macro verdict ───────────────────────────
+    if _populated and _verdict_label:
+        from modules.forecast_accuracy import render_log_button
+        _qir_conf = int(min(95, max(40, (_tac_score + _of_score) / 2)))
+        _qir_summary = (
+            f"Regime: {_regime_label} ({_regime_score:+.2f}) | "
+            f"Tactical: {_tac.get('label','')} ({_tac_score}/100) | "
+            f"Opt Flow: {_of.get('label','')} ({_of_score}/100)"
+        )
+        _qc1, _qc2 = st.columns([4, 1])
+        with _qc2:
+            render_log_button(
+                signal_type="regime",
+                prediction=_verdict_label,
+                confidence=_qir_conf,
+                summary=_qir_summary,
+                model="QIR Composite",
+                key=f"qir_log_{_verdict_label}_{_tac_score}",
+                label="📌 Log Signal",
+            )
+
 
 def render():
     _oc = COLORS["bloomberg_orange"]

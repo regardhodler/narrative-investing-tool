@@ -670,6 +670,24 @@ def render():
             unsafe_allow_html=True,
         )
     _render_rating_banner(result)
+
+    # ── Inline forecast log button ─────────────────────────────────────────────
+    _v = st.session_state.get("_last_valuation_result") or {}
+    if _v.get("rating"):
+        from modules.forecast_accuracy import render_log_button
+        _cl, _cr = st.columns([4, 1])
+        with _cr:
+            render_log_button(
+                signal_type="valuation",
+                prediction=_v["rating"],
+                confidence=_v.get("confidence", 65),
+                summary=_v.get("summary", ""),
+                model=_v.get("engine", ""),
+                ticker=ticker,
+                target_price=_v.get("key_levels", {}).get("resistance"),
+                key=f"val_log_{ticker}_{_v['rating']}",
+            )
+
     _render_signal_scorecard(signals)
     _render_analysis(result)
 

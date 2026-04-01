@@ -481,3 +481,15 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
             f'{_cached_thesis["text"]}</div>',
             unsafe_allow_html=True,
         )
+        # Inline log button
+        from modules.forecast_accuracy import render_log_button
+        _sc1, _sc2 = st.columns([4, 1])
+        with _sc2:
+            render_log_button(
+                signal_type="squeeze",
+                prediction=f"Squeeze candidate: {_ticker}",
+                confidence=65,
+                summary=_cached_thesis["text"][:500],
+                ticker=_ticker,
+                key=f"sq_log_{_ticker}",
+            )
