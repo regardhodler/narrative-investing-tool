@@ -4,6 +4,7 @@ Logs AI predictions from any module, auto-evaluates outcomes against price moves
 and shows accuracy stats by signal type, model, and confidence tier.
 """
 
+import io
 import streamlit as st
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -230,6 +231,23 @@ def _render_dashboard_tab():
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
+    # Streak row
+    streak_type = stats.get("current_streak_type")
+    streak_n = stats.get("current_streak", 0)
+    streak_color = COLORS["positive"] if streak_type == "correct" else (COLORS["negative"] if streak_type == "incorrect" else COLORS["text_dim"])
+    streak_label = f"{'🔥' if streak_type == 'correct' else '❄️'} {streak_n} {streak_type or '—'} in a row" if streak_n else "—"
+
+    cols2 = st.columns(4)
+    streak_metrics = [
+        ("CURRENT STREAK", streak_label, streak_color),
+        ("BEST WIN STREAK", str(stats.get("best_correct_streak", 0)), COLORS["positive"]),
+        ("WORST LOSS STREAK", str(stats.get("worst_incorrect_streak", 0)), COLORS["negative"]),
+        ("AVG RETURN (✗)", f"{stats['avg_return_incorrect']:+.1f}%" if stats.get("avg_return_incorrect") is not None else "—", COLORS["negative"]),
+    ]
+    for col, (label, val, color) in zip(cols2, streak_metrics):
+        with col:
+            st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
+
     st.markdown(f'<div style="height:16px;"></div>', unsafe_allow_html=True)
 
     col_left, col_right = st.columns(2)
@@ -336,14 +354,19 @@ def _render_dashboard_tab():
 def _render_history_tab():
     from services.forecast_tracker import get_stats, evaluate_pending, mark_outcome, delete_forecast
 
+    # Auto-evaluate on load
+    updated = evaluate_pending()
+    if updated:
+        st.toast(f"Auto-evaluated {updated} forecast(s)", icon="🔍")
+
     log = st.session_state.get("_forecast_log") or []
 
     if not log:
         st.info("No forecasts logged yet.")
         return
 
-    # Controls
-    c1, c2, c3 = st.columns([2, 2, 1])
+    # Controls row
+    c1, c2, c3, c4 = st.columns([2, 2, 1, 1])
     with c1:
         filter_type = st.selectbox("Filter by type", ["All"] + ["valuation", "squeeze", "regime", "fed", "manual"], key="fa_filter_type")
     with c2:
@@ -353,6 +376,35 @@ def _render_history_tab():
             n = evaluate_pending(force=False)
             st.toast(f"Evaluated {n} forecast(s)")
             st.rerun()
+    with c4:
+        # CSV export
+        try:
+            import pandas as pd
+            df_rows = []
+            for e in log:
+                ts = e.get("timestamp")
+                ts_str = ts.isoformat() if hasattr(ts, "isoformat") else str(ts or "")
+                ctx = e.get("market_context") or {}
+                df_rows.append({
+                    "id": e.get("id"), "type": e.get("signal_type"), "ticker": e.get("ticker"),
+                    "prediction": e.get("prediction"), "confidence": e.get("confidence"),
+                    "model": e.get("model"), "horizon_days": e.get("horizon_days"),
+                    "timestamp": ts_str, "outcome": e.get("outcome"),
+                    "return_pct": e.get("return_pct"), "price_at_forecast": e.get("price_at_forecast"),
+                    "price_at_eval": e.get("price_at_eval"),
+                    "regime_at_log": ctx.get("regime"), "quadrant_at_log": ctx.get("quadrant"),
+                    "fg_at_log": ctx.get("fear_greed_score"), "vix_structure_at_log": ctx.get("vix_structure"),
+                    "notes": e.get("notes"),
+                })
+            csv_buf = io.StringIO()
+            pd.DataFrame(df_rows).to_csv(csv_buf, index=False)
+            st.download_button(
+                "⬇ CSV", data=csv_buf.getvalue(),
+                file_name=f"forecast_log_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv", use_container_width=True,
+            )
+        except Exception:
+            pass
 
     # Apply filters
     filtered = log
@@ -434,6 +486,35 @@ def _render_history_tab():
                         unsafe_allow_html=True,
                     )
 
+                # Market context at log time
+                ctx = entry.get("market_context")
+                if ctx:
+                    ctx_parts = []
+                    if ctx.get("quadrant"): ctx_parts.append(f"Regime: {ctx['quadrant']}")
+                    if ctx.get("fear_greed_score") is not None: ctx_parts.append(f"F&G: {ctx['fear_greed_score']} ({ctx.get('fear_greed_label','')})")
+                    if ctx.get("vix_structure"): ctx_parts.append(f"VIX: {ctx['vix_structure']}")
+                    if ctx.get("fed_path"): ctx_parts.append(f"Fed: {ctx['fed_path']} ({ctx.get('fed_path_prob',0):.0f}%)")
+                    if ctx_parts:
+                        st.markdown(
+                            f'<div style="color:{COLORS["text_dim"]};font-size:10px;'
+                            f'background:{COLORS["surface"]};border:1px solid {COLORS["border"]}44;'
+                            f'padding:6px 10px;border-radius:4px;margin-bottom:8px;">'
+                            f'📸 Context at log: {" · ".join(ctx_parts)}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+                # Post-mortem (stored)
+                postmortem = entry.get("postmortem")
+                if postmortem:
+                    st.markdown(
+                        f'<div style="color:{COLORS["yellow"]};font-size:10px;font-weight:700;'
+                        f'letter-spacing:0.06em;margin-bottom:4px;">🧠 AI POST-MORTEM</div>'
+                        f'<div style="color:{COLORS["text_dim"]};font-size:11px;'
+                        f'background:{COLORS["surface"]};border:1px solid {COLORS["yellow"]}33;'
+                        f'padding:8px 10px;border-radius:4px;margin-bottom:8px;">{postmortem}</div>',
+                        unsafe_allow_html=True,
+                    )
+
                 st.markdown(_outcome_badge(outcome), unsafe_allow_html=True)
 
             with col2:
@@ -445,9 +526,169 @@ def _render_history_tab():
                     if st.button("✗ Wrong", key=f"mi_{fid}", use_container_width=True):
                         mark_outcome(fid, "incorrect")
                         st.rerun()
+
+                # AI post-mortem for incorrect calls
+                if outcome == "incorrect" and not entry.get("postmortem"):
+                    if st.button("🧠 Analyze", key=f"pm_{fid}", use_container_width=True, help="AI post-mortem: why was this call wrong?"):
+                        with st.spinner("Analyzing..."):
+                            _run_postmortem(entry)
+                        st.rerun()
+
                 if st.button("🗑 Delete", key=f"del_{fid}", use_container_width=True):
                     delete_forecast(fid)
                     st.rerun()
+
+
+# ── AI Post-mortem ─────────────────────────────────────────────────────────────
+
+def _run_postmortem(entry: dict) -> None:
+    """Call Groq to generate a post-mortem on a wrong forecast. Writes to entry in-place."""
+    try:
+        import os, requests
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            st.warning("GROQ_API_KEY not set — post-mortem unavailable.")
+            return
+        ctx = entry.get("market_context") or {}
+        ctx_str = ", ".join(f"{k}: {v}" for k, v in ctx.items() if v is not None) or "unavailable"
+        ret = entry.get("return_pct")
+        ret_str = f"{ret:+.1f}%" if ret is not None else "unknown"
+        prompt = (
+            f"You are an investment analyst reviewing a failed AI prediction.\n\n"
+            f"ORIGINAL CALL: {entry.get('signal_type','').upper()} → {entry.get('prediction','?')}\n"
+            f"TICKER: {entry.get('ticker') or 'MACRO'}\n"
+            f"CONFIDENCE: {entry.get('confidence',0)}%\n"
+            f"THESIS: {(entry.get('summary') or '')[:400]}\n"
+            f"MARKET CONTEXT AT LOG TIME: {ctx_str}\n"
+            f"ACTUAL RETURN: {ret_str} (call was WRONG)\n\n"
+            f"In 3-4 sentences, identify the most likely reason this call failed. "
+            f"Be specific: was it the wrong regime, mean-reversion, macro shift, overconfidence? "
+            f"Do not hedge. Give a direct post-mortem."
+        )
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "max_tokens": 220},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        result = resp.json()["choices"][0]["message"]["content"].strip()
+        entry["postmortem"] = result
+        log = st.session_state.get("_forecast_log") or []
+        for e in log:
+            if e.get("id") == entry.get("id"):
+                e["postmortem"] = result
+                break
+        st.session_state["_forecast_log"] = log
+    except Exception as ex:
+        st.warning(f"Post-mortem failed: {ex}")
+
+
+# ── Tab: P&L Simulation ────────────────────────────────────────────────────────
+
+def _render_pnl_tab():
+    from services.forecast_tracker import get_stats
+
+    stats = get_stats()
+    log = stats.get("log", [])
+    resolved = [e for e in log if e.get("outcome") in ("correct", "incorrect") and e.get("return_pct") is not None]
+
+    if len(resolved) < 2:
+        st.info("Need at least 2 resolved forecasts with price data to simulate P&L.")
+        return
+
+    st.markdown(
+        f'<div style="color:{COLORS["text_dim"]};font-size:12px;margin-bottom:12px;">'
+        f'Simulates equal-weight $1,000 per resolved valuation/squeeze call. '
+        f'Assumes you entered at price@log and exited at price@eval.</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Filter to tradeable types
+    tradeable = [e for e in resolved if e.get("signal_type") in ("valuation", "squeeze")]
+    if not tradeable:
+        st.info("No resolved valuation or squeeze forecasts with price data yet.")
+        return
+
+    # Sort chronologically
+    tradeable.sort(key=lambda e: e.get("timestamp") or "")
+
+    position_size = 1000.0
+    equity = position_size  # starting capital per trade (not cumulative)
+    cumulative = 0.0
+    curve_x, curve_y = [], []
+    total_invested = 0.0
+    wins, losses = 0, 0
+
+    for e in tradeable:
+        ts = e.get("timestamp")
+        ts_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts or "")[:10]
+        ret_pct = e.get("return_pct", 0) or 0
+        # For sell/short calls, invert the return
+        prediction = e.get("prediction", "")
+        if prediction in ("Sell", "Strong Sell"):
+            ret_pct = -ret_pct
+        pnl = position_size * (ret_pct / 100)
+        cumulative += pnl
+        total_invested += position_size
+        if e.get("outcome") == "correct":
+            wins += 1
+        else:
+            losses += 1
+        curve_x.append(f"{ts_str} [{e.get('ticker','?')}]")
+        curve_y.append(round(cumulative, 2))
+
+    total_return_pct = round(cumulative / total_invested * 100, 2) if total_invested else 0
+
+    # Summary metrics
+    col1, col2, col3, col4 = st.columns(4)
+    pnl_color = COLORS["positive"] if cumulative >= 0 else COLORS["negative"]
+    with col1:
+        st.markdown(bloomberg_metric("TOTAL P&L", f"${cumulative:+,.0f}", pnl_color), unsafe_allow_html=True)
+    with col2:
+        st.markdown(bloomberg_metric("RETURN ON CAPITAL", f"{total_return_pct:+.1f}%", pnl_color), unsafe_allow_html=True)
+    with col3:
+        st.markdown(bloomberg_metric("WINNING TRADES", str(wins), COLORS["positive"]), unsafe_allow_html=True)
+    with col4:
+        st.markdown(bloomberg_metric("LOSING TRADES", str(losses), COLORS["negative"]), unsafe_allow_html=True)
+
+    st.markdown(f'<div style="height:12px;"></div>', unsafe_allow_html=True)
+
+    # Equity curve
+    bar_colors = []
+    prev = 0.0
+    for y in curve_y:
+        bar_colors.append(COLORS["positive"] if y >= prev else COLORS["negative"])
+        prev = y
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=curve_x, y=curve_y,
+        marker_color=bar_colors,
+        text=[f"${v:+,.0f}" for v in curve_y],
+        textposition="outside",
+        textfont=dict(size=9),
+        name="Cumulative P&L",
+    ))
+    fig.add_hline(y=0, line_color=COLORS["text_dim"], line_width=1)
+    fig.update_layout(
+        paper_bgcolor=COLORS["bg"],
+        plot_bgcolor=COLORS["bg"],
+        font=dict(family="JetBrains Mono, Consolas, monospace", color=COLORS["text"], size=10),
+        xaxis=dict(title="Trade (date · ticker)", gridcolor=COLORS["grid"], tickangle=-45),
+        yaxis=dict(title="Cumulative P&L ($)", gridcolor=COLORS["grid"]),
+        margin=dict(l=50, r=20, t=20, b=100),
+        height=340,
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown(
+        f'<div style="color:{COLORS["text_dim"]};font-size:10px;">'
+        f'* $1,000 position size per trade. Sell/Strong Sell calls short the position. '
+        f'Does not account for slippage, fees, or compounding.</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ── Main render ────────────────────────────────────────────────────────────────
@@ -464,10 +705,13 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab_dash, tab_log, tab_hist = st.tabs(["📊 Accuracy Dashboard", "🔮 Log Forecast", "📋 History"])
+    tab_dash, tab_pnl, tab_log, tab_hist = st.tabs(["📊 Accuracy Dashboard", "💰 P&L Simulation", "🔮 Log Forecast", "📋 History"])
 
     with tab_dash:
         _render_dashboard_tab()
+
+    with tab_pnl:
+        _render_pnl_tab()
 
     with tab_log:
         _render_log_tab()

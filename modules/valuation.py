@@ -1627,6 +1627,14 @@ def _score_fundamentals(data: dict | None) -> tuple[str, str]:
         return ("unavailable", "No data")
     pe = data.get("pe_ratio")
     growth = data.get("earnings_growth")
+    try:
+        pe = float(pe) if pe is not None else None
+    except (TypeError, ValueError):
+        pe = None
+    try:
+        growth = float(growth) if growth is not None else None
+    except (TypeError, ValueError):
+        growth = None
     if pe and growth:
         if pe < 25 and growth and growth > 0:
             return ("bullish", f"P/E {pe:.1f} · Growth {growth * 100:.0f}%")
@@ -1741,72 +1749,113 @@ def _get_regime_erp() -> tuple[float, str]:
 # Sector profiles ported from Stock Ticker Checker / build_model.py
 # Each profile sets per-sector growth clamps, terminal growth, and optional WACC premium
 _SECTOR_PROFILES = {
+    # default_growth_yr1: Damodaran Jan 2026 sector revenue CAGR (histgr.html)
+    # default_fcf_margin: Damodaran Jan 2026 net margin proxy for FCF (margin.html)
     "High-Growth Tech": {
         "growth_yr1_clamp": (0.03, 0.55),
         "growth_yr610_clamp": (0.02, 0.35),
         "terminal_growth": 0.04,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.19,   # Software Sys/App 19.56%
+        "default_fcf_margin": 0.20,   # Software net margin 25.49% → FCF ~20%
     },
     "Consumer Cyclical": {
         "growth_yr1_clamp": (0.02, 0.40),
         "growth_yr610_clamp": (0.02, 0.25),
         "terminal_growth": 0.035,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.10,   # Retail General 9.92%
+        "default_fcf_margin": 0.06,   # Retail net margin 5.61%
     },
     "Consumer Defensive": {
         "growth_yr1_clamp": (0.01, 0.20),
         "growth_yr610_clamp": (0.01, 0.12),
         "terminal_growth": 0.03,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.06,   # Food/Beverage/Household avg ~7%
+        "default_fcf_margin": 0.09,   # Household Products 11.68%, Food 2.82% → avg ~9%
     },
     "Healthcare": {
         "growth_yr1_clamp": (0.02, 0.45),
         "growth_yr610_clamp": (0.02, 0.25),
         "terminal_growth": 0.035,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.14,   # Healthcare Products 18.41% + Support 13.12% blend
+        "default_fcf_margin": 0.10,   # Pharma 18.54%, Support Services 1.25% → blended ~10%
     },
     "Energy/Materials/Industrials": {
         "growth_yr1_clamp": (0.00, 0.35),
         "growth_yr610_clamp": (0.01, 0.15),
         "terminal_growth": 0.025,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.09,   # Oil/Gas 4.62% + Machinery 10.37% + Metals 8.67% avg
+        "default_fcf_margin": 0.09,   # Oil/Gas Integrated 8.30%, Metals 10.52% avg
     },
     "Utilities": {
         "growth_yr1_clamp": (0.01, 0.15),
         "growth_yr610_clamp": (0.01, 0.08),
         "terminal_growth": 0.025,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.06,   # Utility General 5.33%
+        "default_fcf_margin": 0.12,   # Utility General net margin 14.18% (regulated)
     },
     "Growth-Platform": {
         "growth_yr1_clamp": (0.15, 0.45),
         "growth_yr610_clamp": (0.08, 0.20),
         "terminal_growth": 0.035,
         "wacc_premium": 0.01,
+        "default_growth_yr1": 0.25,   # Software Internet 29.18%; near-profitability platforms
+        "default_fcf_margin": 0.08,   # Approaching profitability — thin but positive FCF
     },
     "High-SBC-Tech": {
         "growth_yr1_clamp": (0.15, 0.50),
         "growth_yr610_clamp": (0.08, 0.25),
         "terminal_growth": 0.035,
         "wacc_premium": 0.015,
+        "default_growth_yr1": 0.16,   # Semiconductor 11.18% + Software blend
+        "default_fcf_margin": 0.12,   # Semiconductor net margin 30.45% → FCF ~12% after SBC
     },
     "Cyclical-Commodity": {
         "growth_yr1_clamp": (0.00, 0.20),
         "growth_yr610_clamp": (0.01, 0.10),
         "terminal_growth": 0.02,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.08,   # Steel 11.37% + Metals 8.67% through-cycle avg
+        "default_fcf_margin": 0.06,   # Compressed through-cycle margins; Steel 1.93%
     },
     "Mature-Stable": {
         "growth_yr1_clamp": (0.03, 0.08),
         "growth_yr610_clamp": (0.02, 0.05),
         "terminal_growth": 0.025,
         "wacc_premium": 0.0,
+        "default_growth_yr1": 0.05,   # Telecom Wireless 3.70% + Railroads 4.91% avg
+        "default_fcf_margin": 0.11,   # Railroads 24.73%, Telecom 12.24% → blended ~11%
     },
     "Early-Stage-PreProfit": {
         "growth_yr1_clamp": (0.20, 0.60),
         "growth_yr610_clamp": (0.10, 0.30),
         "terminal_growth": 0.03,
         "wacc_premium": 0.03,
+        "default_growth_yr1": 0.25,   # Biotech 28.93% + Internet 29.18% avg
+        "default_fcf_margin": -0.05,  # Cash-burning — negative FCF expected pre-profit
     },
+}
+
+# Regime multipliers applied to sector default growth and margin at DCF compute time
+# Source: Damodaran base rates × macro regime adjustment
+_REGIME_GROWTH_MULT: dict[str, float] = {
+    "Goldilocks":  1.00,   # base rates — expansion with controlled inflation
+    "Reflation":   1.10,   # +10% — inflationary growth lifts nominal revenue
+    "Stagflation": 0.75,   # -25% — demand destruction, hardest environment
+    "Deflation":   0.80,   # -20% — recession reduces volume and pricing power
+    "Transition":  0.95,   # slight caution — no dominant regime
+}
+_REGIME_MARGIN_MULT: dict[str, float] = {
+    "Goldilocks":  1.00,
+    "Reflation":   0.95,   # input cost inflation compresses margins slightly
+    "Stagflation": 0.85,   # worst — costs sticky, revenue weak
+    "Deflation":   0.90,   # deflation helps input costs but hurts pricing
+    "Transition":  0.97,
 }
 
 _SECTOR_ARCHETYPE_MAP = {
@@ -1951,8 +2000,20 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
         return None
 
     if latest_fcf <= 0:
-        # Can't do DCF on negative FCF
-        return {"error": "negative_fcf", "latest_fcf": latest_fcf, "company_name": company_name}
+        # Try revenue × sector FCF margin fallback before giving up
+        _revenue = info.get("totalRevenue") or 0
+        if _revenue:
+            _quadrant = (st.session_state.get("_regime_context") or {}).get("quadrant", "Transition")
+            _m_mult = _REGIME_MARGIN_MULT.get(_quadrant, 1.0)
+            _prof = _SECTOR_PROFILES[_detect_sector_profile(info)]
+            _fcf_margin = _prof.get("default_fcf_margin", 0.08) * _m_mult
+            latest_fcf = _revenue * _fcf_margin
+        if latest_fcf <= 0:
+            return {"error": "negative_fcf", "latest_fcf": latest_fcf, "company_name": company_name}
+
+    # ── Sector profile (sector-specific growth clamps + terminal growth) ──
+    profile_name = _detect_sector_profile(info)
+    profile = _SECTOR_PROFILES[profile_name]
 
     # ── Historical FCF growth (for fallback) ──
     hist_fcf_growth = None
@@ -1976,11 +2037,10 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
     elif hist_fcf_growth and abs(hist_fcf_growth) < 1:
         initial_growth = float(hist_fcf_growth)
     else:
-        initial_growth = 0.08  # fallback 8%
-
-    # ── Sector profile (sector-specific growth clamps + terminal growth) ──
-    profile_name = _detect_sector_profile(info)
-    profile = _SECTOR_PROFILES[profile_name]
+        # Damodaran sector default, adjusted for current macro regime
+        _quadrant = (st.session_state.get("_regime_context") or {}).get("quadrant", "Transition")
+        _g_mult = _REGIME_GROWTH_MULT.get(_quadrant, 1.0)
+        initial_growth = profile.get("default_growth_yr1", 0.08) * _g_mult
 
     # Clamp initial growth using sector-specific bounds
     _min_g, _max_g = profile["growth_yr1_clamp"]

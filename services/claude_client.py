@@ -45,11 +45,13 @@ def _call_xai(
         body["temperature"] = temperature
     if json_mode and not _is_reasoning:
         body["response_format"] = {"type": "json_object"}
+    # Reasoning models think internally — they need much more time than 30s
+    _timeout = 120 if _is_reasoning else 45
     resp = requests.post(
         XAI_API_URL,
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         json=body,
-        timeout=30,
+        timeout=_timeout,
     )
     if not resp.ok:
         raise ValueError(f"xAI {resp.status_code}: {resp.text[:500]}")
@@ -392,8 +394,8 @@ Rules:
         try:
             text = _call_xai([{"role": "user", "content": prompt}], _cl_model, 1500, 0.3)
         except Exception as e:
-            st.warning(f"Narrative grouping failed (xAI error): {e}")
-            return []
+            st.warning(f"xAI timed out — falling back to Groq ({type(e).__name__})")
+            # text stays "" → falls through to Groq below
     elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
         try:
             import anthropic
@@ -407,7 +409,9 @@ Rules:
         except Exception as e:
             st.warning(f"Narrative grouping failed (Claude error): {e}")
             return []
-    else:
+
+    # Groq fallback: used in Freeloader Mode OR when xAI/Claude failed
+    if not text:
         api_key = os.getenv("GROQ_API_KEY", "")
         if not api_key:
             st.warning("GROQ_API_KEY not set — cannot group tickers by narrative.")

@@ -159,7 +159,21 @@ def _render_trending_narratives():
     _oc = COLORS["bloomberg_orange"]
     st.markdown(
         f'<div style="font-size:13px;color:{_oc};font-weight:700;'
-        f'letter-spacing:0.08em;margin-bottom:4px;">🔥 TRENDING NARRATIVES</div>',
+        f'letter-spacing:0.08em;margin-bottom:6px;">🔥 TRENDING NARRATIVES</div>'
+        f'<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">'
+        f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;'
+        f'padding:2px 8px;font-size:10px;color:#94a3b8;font-family:\'JetBrains Mono\',Consolas,monospace;">📡 Google Trends</span>'
+        f'<span style="color:#334155;font-size:10px;">+</span>'
+        f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;'
+        f'padding:2px 8px;font-size:10px;color:#94a3b8;font-family:\'JetBrains Mono\',Consolas,monospace;">📰 News Headlines (RSS)</span>'
+        f'<span style="color:#334155;font-size:10px;">→</span>'
+        f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;'
+        f'padding:2px 8px;font-size:10px;color:{_oc};font-family:\'JetBrains Mono\',Consolas,monospace;">🧠 AI Narrative Grouping</span>'
+        f'</div>'
+        f'<div style="font-size:11px;color:#475569;margin-bottom:8px;">'
+        f'Identifies what macro <b style="color:#64748b;">themes</b> the market is focused on. '
+        f'Output: narrative themes with associated tickers — not individual stock picks.'
+        f'</div>',
         unsafe_allow_html=True,
     )
 
@@ -387,9 +401,6 @@ def render():
     except Exception:
         pass
 
-    # ── Trending Narratives (AI-powered) ──────────────────────────────────
-    _render_trending_narratives()
-
     # ── Cross-Signal Macro Plays ───────────────────────────────────────────
     import os
     _has_api_key = bool(os.getenv("ANTHROPIC_API_KEY"))
@@ -400,7 +411,7 @@ def render():
         "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
     }
 
-    with st.expander("📡 Cross-Signal Macro Plays", expanded=False):
+    with st.expander("📡 Cross-Signal Macro Plays", expanded=True):
         _macro_ctx = _get_macro_context_for_plays()
         _regime = _macro_ctx["regime"]
         _stress = _macro_ctx["stress"]
@@ -678,6 +689,7 @@ def render():
         if _gen_plays or st.session_state.get("_plays_result"):
             if _gen_plays:
                 _use_cl, _cl_model = _use_cl_play, _cl_model_play
+                _selected_play_model = st.session_state.get("play_engine_radio", "⚡ Freeloader Mode")
                 _signal_summary = (
                     f"VIX: {_vix}, HY Spread: {_hy}bps, Yield Curve: {_yc:+.2f}%, "
                     f"System Stress: {_stress}, SPY 1-day: {_macro_ctx['spy_1d']:+.2f}%, "
@@ -1078,11 +1090,38 @@ def render():
                 unsafe_allow_html=True,
             )
 
+    # ── Trending Narratives (AI-powered) ──────────────────────────────────
     st.markdown("---")
-    st.markdown("#### Ticker & Narrative Research")
-    st.caption("Look up a specific ticker or explore a named narrative")
+    _render_trending_narratives()
 
-    mode = st.radio("Mode", ["Manual", "Auto — Trending"], horizontal=True)
+    st.markdown("---")
+    _oc2 = COLORS["bloomberg_orange"]
+    st.markdown(
+        f'<div style="font-size:13px;color:{_oc2};font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">🔍 TICKER & NARRATIVE RESEARCH</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+        f'<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;">'
+        f'<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:3px;">Manual</div>'
+        f'<div style="font-size:10px;color:#475569;line-height:1.5;">You pick the ticker or theme '
+        f'→ deep research on that specific name. Macro fit score, sector alignment, tailwinds & headwinds.</div>'
+        f'</div>'
+        f'<div style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:10px 12px;">'
+        f'<div style="font-size:11px;font-weight:700;color:#e2e8f0;margin-bottom:3px;">Auto — Trending</div>'
+        f'<div style="display:flex;gap:4px;margin-bottom:4px;">'
+        f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;'
+        f'padding:1px 6px;font-size:9px;color:#94a3b8;font-family:\'JetBrains Mono\',Consolas,monospace;">📈 Yahoo Finance movers</span>'
+        f'<span style="font-size:9px;color:#334155;">→</span>'
+        f'<span style="background:#1e293b;border:1px solid #334155;border-radius:3px;'
+        f'padding:1px 6px;font-size:9px;color:{_oc2};font-family:\'JetBrains Mono\',Consolas,monospace;">🧠 AI ticker grouping</span>'
+        f'</div>'
+        f'<div style="font-size:10px;color:#475569;line-height:1.5;">What is actually moving with price. '
+        f'Groups movers by theme — ticker-first, not narrative-first.</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    mode = st.radio("Mode", ["Manual", "Auto — Trending"], horizontal=True, label_visibility="collapsed")
 
     if mode == "Auto — Trending":
         _render_auto()

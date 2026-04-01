@@ -28,6 +28,7 @@ QUADRANT_ALIGNMENT: dict[str, list[str]] = {
     "Reflation":   ["XLE", "XLB", "XLF", "XLI", "XLY"],
     "Stagflation": ["XLE", "XLB", "XLU", "XLP", "XLV"],
     "Deflation":   ["XLU", "XLV", "XLP", "XLRE"],
+    "Transition":  ["XLV", "XLP", "XLU", "XLF"],   # defensive tilt — no dominant theme
 }
 
 # Map yfinance sector strings → SPDR ETF ticker

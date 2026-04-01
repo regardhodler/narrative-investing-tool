@@ -85,6 +85,33 @@ def _auto_outcome(entry: dict, current_price: float) -> tuple[str, float]:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+def _capture_market_context() -> dict:
+    """Snapshot key market signals from session state at time of logging."""
+    ctx: dict = {}
+    regime = st.session_state.get("_regime_context")
+    if isinstance(regime, dict):
+        ctx["regime"] = regime.get("regime", "")
+        ctx["quadrant"] = regime.get("quadrant", "")
+        ctx["regime_score"] = regime.get("score", None)
+
+    fg = st.session_state.get("_fear_greed")
+    if isinstance(fg, dict):
+        ctx["fear_greed_score"] = fg.get("score")
+        ctx["fear_greed_label"] = fg.get("label")
+
+    vix = st.session_state.get("_vix_curve")
+    if isinstance(vix, dict):
+        ctx["vix_spot"] = vix.get("vix_spot")
+        ctx["vix_structure"] = vix.get("structure")
+
+    rp = st.session_state.get("_dominant_rate_path")
+    if isinstance(rp, dict):
+        ctx["fed_path"] = rp.get("scenario")
+        ctx["fed_path_prob"] = rp.get("prob_pct")
+
+    return ctx
+
+
 def log_forecast(
     signal_type: str,
     prediction: str,
@@ -116,6 +143,7 @@ def log_forecast(
         "outcome": None,
         "return_pct": None,
         "notes": notes,
+        "market_context": _capture_market_context(),
     }
 
     log = _get_log()
@@ -159,7 +187,33 @@ def evaluate_pending(force: bool = False) -> int:
             entry["price_at_eval"] = price
             entry["evaluated_at"] = now
             updated += 1
-        # regime/fed/manual require user marking — skip auto-eval
+        elif sig_type == "regime":
+            # Auto-eval: compare predicted quadrant vs current quadrant
+            ctx = entry.get("market_context", {})
+            predicted_quadrant = ctx.get("quadrant") or entry.get("prediction", "")
+            current_regime = st.session_state.get("_regime_context") or {}
+            current_quadrant = current_regime.get("quadrant", "")
+            if current_quadrant:
+                outcome = "correct" if predicted_quadrant.lower() in current_quadrant.lower() or current_quadrant.lower() in predicted_quadrant.lower() else "incorrect"
+                entry["outcome"] = outcome
+                entry["evaluated_at"] = now
+                updated += 1
+        elif sig_type == "fed":
+            # Auto-eval: compare predicted scenario vs current dominant path
+            ctx = entry.get("market_context", {})
+            predicted_path = ctx.get("fed_path") or entry.get("prediction", "")
+            current_rp = st.session_state.get("_dominant_rate_path") or {}
+            current_path = current_rp.get("scenario", "")
+            if current_path:
+                outcome = "correct" if predicted_path.lower() == current_path.lower() else "incorrect"
+                entry["outcome"] = outcome
+                entry["evaluated_at"] = now
+                updated += 1
+        elif not ticker and sig_type not in ("regime", "fed", "manual"):
+            # Can't auto-eval without a ticker — mark expired
+            entry["outcome"] = "expired"
+            entry["evaluated_at"] = now
+            updated += 1
 
     if updated:
         _set_log(log)
@@ -234,9 +288,41 @@ def get_stats() -> dict:
             acc = round(sum(1 for e in bucket if e["outcome"] == "correct") / len(bucket) * 100, 1)
             calibration.append({"label": f"{low}-{high}", "accuracy": acc, "n": len(bucket)})
 
+    # Streak tracking (chronological order — oldest first)
+    chrono = sorted(resolved, key=lambda e: e.get("timestamp") or "", reverse=False)
+    outcomes_seq = [e["outcome"] for e in chrono]
+    current_streak = 0
+    current_streak_type = None
+    best_correct = 0
+    worst_incorrect = 0
+    tmp = 0
+    tmp_type = None
+    for o in outcomes_seq:
+        if o == tmp_type:
+            tmp += 1
+        else:
+            tmp = 1
+            tmp_type = o
+        if tmp_type == "correct":
+            best_correct = max(best_correct, tmp)
+        else:
+            worst_incorrect = max(worst_incorrect, tmp)
+    # current streak = last N in a row
+    if outcomes_seq:
+        current_streak_type = outcomes_seq[-1]
+        current_streak = 0
+        for o in reversed(outcomes_seq):
+            if o == current_streak_type:
+                current_streak += 1
+            else:
+                break
+
     # Average return on correct calls
     correct_returns = [e["return_pct"] for e in resolved if e["outcome"] == "correct" and e.get("return_pct") is not None]
     avg_return_correct = round(sum(correct_returns) / len(correct_returns), 2) if correct_returns else None
+
+    incorrect_returns = [e["return_pct"] for e in resolved if e["outcome"] == "incorrect" and e.get("return_pct") is not None]
+    avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
 
     return {
         "total": len(log),
@@ -249,4 +335,10 @@ def get_stats() -> dict:
         "by_model": by_model,
         "calibration": calibration,
         "avg_return_correct": avg_return_correct,
+        "avg_return_incorrect": avg_return_incorrect,
+        "current_streak": current_streak,
+        "current_streak_type": current_streak_type,
+        "best_correct_streak": best_correct,
+        "worst_incorrect_streak": worst_incorrect,
+        "log": log,  # full log for P&L sim
     }

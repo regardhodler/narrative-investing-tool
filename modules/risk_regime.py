@@ -360,6 +360,10 @@ def _sector_rotation_recs(quadrant: str, regime: str, snaps: dict[str, AssetSnap
             "Favor": [("TLT", "20Y+ Treasuries"), ("IEF", "10Y Treasuries"), ("GLD", "Gold"), ("LQD", "IG Bonds")],
             "Avoid": [("XLE", "Energy"), ("USO", "Oil"), ("JNK", "High Yield"), ("EEM", "Emerging Markets")],
         },
+        "Transition": {
+            "Favor": [("GLD", "Gold"), ("IEF", "10Y Treasuries"), ("XLV", "Healthcare"), ("XLP", "Staples")],
+            "Avoid": [("JNK", "High Yield"), ("EEM", "Emerging Markets")],
+        },
     }
 
     mapping = quadrant_map.get(quadrant, quadrant_map["Goldilocks"])
@@ -432,9 +436,11 @@ def _risk_management_alerts(macro: dict, snaps: dict[str, AssetSnapshot]) -> lis
     if cs_score < -0.3:
         alerts.append("Credit spreads widening — stress in high-yield markets signals deteriorating risk appetite.")
 
-    # Stagflation
+    # Stagflation (true tail risk — only fires when both growth and inflation signals are clearly adverse)
     if macro["quadrant"] == "Stagflation":
         alerts.append("Stagflation quadrant — worst environment for traditional balanced portfolios. Consider real assets and cash.")
+    elif macro["quadrant"] == "Transition":
+        alerts.append("Transition quadrant — growth and inflation signals are mixed. No dominant regime. Reduce new risk until a clear direction emerges.")
 
     # Dollar surge
     uup_snap = snaps.get("UUP")
@@ -1241,16 +1247,29 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         1.0 if (commodity_trend is not None and commodity_trend > 0) else -1.0,
     ])
 
-    growth_dir = "Rising" if growth_signal >= 0 else "Falling"
-    inflation_dir = "Rising" if inflation_direction_value >= 0 else "Falling"
-    if growth_dir == "Rising" and inflation_dir == "Rising":
+    # Require meaningful magnitude before assigning a directional quadrant.
+    # Stagflation is a tail risk — not triggered by marginal softness + marginal inflation.
+    _G_THRESH = 0.15   # growth_signal must exceed this to count as "Rising"
+    _I_THRESH = 0.25   # inflation_direction_value must exceed this to count as "Rising"
+    g_rising  = growth_signal          >  _G_THRESH
+    g_falling = growth_signal          < -_G_THRESH
+    i_rising  = inflation_direction_value >  _I_THRESH
+    i_falling = inflation_direction_value < -_I_THRESH
+
+    if g_rising and i_rising:
         quadrant = "Reflation"
-    elif growth_dir == "Rising" and inflation_dir == "Falling":
+    elif g_rising and i_falling:
         quadrant = "Goldilocks"
-    elif growth_dir == "Falling" and inflation_dir == "Rising":
-        quadrant = "Stagflation"
-    else:
+    elif g_falling and i_rising:
+        quadrant = "Stagflation"   # genuine tail — requires both to be clearly adverse
+    elif g_falling and i_falling:
         quadrant = "Deflation"
+    else:
+        quadrant = "Transition"    # signals are mixed/flat — no dominant regime
+
+    # Human-readable direction strings (used in summary text and UI)
+    growth_dir    = "Rising" if g_rising else ("Falling" if g_falling else "Mixed")
+    inflation_dir = "Rising" if i_rising else ("Falling" if i_falling else "Mixed")
 
     if capex_vs_liquidity is None:
         cycle_stage = "Cycle signal unavailable"
@@ -1475,6 +1494,20 @@ def _make_regime_history() -> go.Figure | None:
     fig.add_hline(y=thresh_hi, line_dash="dash", line_color=COLORS["green"], opacity=0.5)
     fig.add_hline(y=thresh_lo, line_dash="dash", line_color=COLORS["red"], opacity=0.5)
 
+    # Gray vertical bands for Transition periods
+    _t_periods = _get_transition_periods(history)
+    for _tp in _t_periods:
+        _x0 = pd.to_datetime(_tp["start"])
+        _x1 = pd.to_datetime(_tp["end"]) if _tp["end"] != "Ongoing" else df["date"].max()
+        fig.add_vrect(x0=_x0, x1=_x1, fillcolor="#475569", opacity=0.12, layer="below", line_width=0)
+        if _tp["duration"] >= 3:
+            _mid = _x0 + (_x1 - _x0) / 2
+            fig.add_annotation(
+                x=_mid, y=y_range[1] * 0.92,
+                text="T", showarrow=False,
+                font=dict(size=9, color="#94a3b8", family="JetBrains Mono, Consolas, monospace"),
+            )
+
     fig.update_layout(
         height=300,
         margin=dict(l=40, r=20, t=30, b=30),
@@ -1484,6 +1517,57 @@ def _make_regime_history() -> go.Figure | None:
     )
     apply_dark_layout(fig, title="Regime Score History")
     return fig
+
+
+_QUADRANT_CENTROIDS = {
+    "Goldilocks":  ( 0.55, -0.55),
+    "Reflation":   ( 0.55,  0.55),
+    "Stagflation": (-0.55,  0.55),
+    "Deflation":   (-0.55, -0.55),
+}
+
+
+def _transition_lean(run: list[dict]) -> str:
+    """Return the quadrant centroid nearest to the mean (growth, inflation) during a Transition run."""
+    g = float(np.mean([e.get("growth_signal") or 0.0 for e in run]))
+    i = float(np.mean([e.get("inflation_signal") or 0.0 for e in run]))
+    return min(_QUADRANT_CENTROIDS, key=lambda k: (g - _QUADRANT_CENTROIDS[k][0])**2 + (i - _QUADRANT_CENTROIDS[k][1])**2)
+
+
+def _get_transition_periods(history: list[dict]) -> list[dict]:
+    """Detect contiguous Transition quadrant runs in sorted history.
+
+    Returns list of dicts: {start, end, duration, resolved_to, lean, entry_score, exit_score}
+    """
+    periods = []
+    run: list[dict] = []
+    for entry in sorted(history, key=lambda x: x["date"]):
+        if entry.get("quadrant") == "Transition":
+            run.append(entry)
+        else:
+            if run:
+                periods.append({
+                    "start":       run[0]["date"],
+                    "end":         run[-1]["date"],
+                    "duration":    len(run),
+                    "resolved_to": entry.get("quadrant", "Unknown"),
+                    "lean":        _transition_lean(run),
+                    "entry_score": run[0].get("macro_score", 50),
+                    "exit_score":  run[-1].get("macro_score", 50),
+                })
+                run = []
+    # Ongoing Transition (no resolution yet)
+    if run:
+        periods.append({
+            "start":       run[0]["date"],
+            "end":         "Ongoing",
+            "duration":    len(run),
+            "resolved_to": "Ongoing",
+            "lean":        _transition_lean(run),
+            "entry_score": run[0].get("macro_score", 50),
+            "exit_score":  run[-1].get("macro_score", 50),
+        })
+    return periods
 
 
 def _growth_proxy_from_signals(s: dict) -> float:
@@ -1527,12 +1611,6 @@ def _make_quadrant_scatter() -> go.Figure | None:
     fig = go.Figure()
 
     # Quadrant background zones (low opacity)
-    _zone_cfg = [
-        (0, 1, 0, 1,  "#22c55e", "Goldilocks"),    # growth+, inflation-  (right, bottom)
-        (0, 1, 0, 1,  "#f59e0b", "Reflation"),     # growth+, inflation+  (right, top)
-        (-1, 0, 0, 1, "#ef4444", "Stagflation"),   # growth-, inflation+  (left, top)
-        (-1, 0, -1, 0,"#3b82f6", "Deflation"),     # growth-, inflation-  (left, bottom)
-    ]
     quadrant_zones = [
         # (x0, x1, y0, y1, color, label)
         (0,  1,  -1,  0,  "#22c55e", "Goldilocks"),
@@ -1550,16 +1628,40 @@ def _make_quadrant_scatter() -> go.Figure | None:
             opacity=0.55,
         )
 
-    # Historical trail (all but last)
-    if len(xs) > 1:
+    # Transition "no man's land" buffer zone — the threshold band around the origin
+    _G_THRESH, _I_THRESH = 0.15, 0.25
+    fig.add_shape(type="rect", x0=-_G_THRESH, x1=_G_THRESH, y0=-_I_THRESH, y1=_I_THRESH,
+                  fillcolor="#475569", opacity=0.08, line_color="#475569", line_width=1,
+                  line_dash="dot")
+    fig.add_annotation(x=0, y=0, text="Transition", showarrow=False,
+                       font=dict(size=10, color="#64748b", family="JetBrains Mono, Consolas, monospace"))
+
+    # Split history into directional vs Transition dots
+    _hist_end = len(xs) - 1  # exclude current
+    _dir_idx  = [i for i in range(_hist_end) if quadrants[i] != "Transition"]
+    _trans_idx = [i for i in range(_hist_end) if quadrants[i] == "Transition"]
+
+    # Historical trail — directional dots
+    if _dir_idx:
         fig.add_trace(go.Scatter(
-            x=xs[:-1], y=ys[:-1],
+            x=[xs[i] for i in _dir_idx], y=[ys[i] for i in _dir_idx],
             mode="markers",
-            marker=dict(color=dot_colors[:-1], size=7, opacity=0.7,
-                        line=dict(width=0)),
+            marker=dict(color=[dot_colors[i] for i in _dir_idx], size=7, opacity=0.7, line=dict(width=0)),
             hovertemplate="<b>%{customdata[0]}</b><br>Growth: %{x:.2f} | Inflation: %{y:.2f}<br>%{customdata[1]}<extra></extra>",
-            customdata=list(zip(dates[:-1], quadrants[:-1])),
+            customdata=[(dates[i], quadrants[i]) for i in _dir_idx],
             name="History",
+        ))
+
+    # Transition-period dots — diamonds in slate gray
+    if _trans_idx:
+        fig.add_trace(go.Scatter(
+            x=[xs[i] for i in _trans_idx], y=[ys[i] for i in _trans_idx],
+            mode="markers",
+            marker=dict(color="#94a3b8", size=8, symbol="diamond", opacity=0.8,
+                        line=dict(color="#64748b", width=1)),
+            hovertemplate="<b>%{customdata[0]}</b><br>Growth: %{x:.2f} | Inflation: %{y:.2f}<br>Transition<extra></extra>",
+            customdata=[(dates[i], quadrants[i]) for i in _trans_idx],
+            name="Transition",
         ))
 
     # Current dot (last entry)
@@ -1618,6 +1720,183 @@ def _make_category_radar(signals: list[dict]) -> go.Figure | None:
         height=380, margin=dict(l=40, r=40, t=30, b=30), showlegend=False,
     )
     apply_dark_layout(fig)
+    return fig
+
+
+def _render_transition_log(current_quadrant: str, current_score: int) -> None:
+    """Render the Transition Period Log — start/end/duration/lean/resolution for each period."""
+    history = _load_history()
+    if not history:
+        return
+    periods = _get_transition_periods(history)
+    if not periods:
+        return
+
+    _qcolors = {
+        "Goldilocks":  "#22c55e",
+        "Reflation":   "#f59e0b",
+        "Stagflation": "#ef4444",
+        "Deflation":   "#60a5fa",
+        "Ongoing":     "#94a3b8",
+        "Unknown":     "#475569",
+    }
+
+    # ── Current Transition banner ─────────────────────────────────────────
+    if current_quadrant == "Transition":
+        _ongoing = next((p for p in periods if p["resolved_to"] == "Ongoing"), None)
+        if _ongoing:
+            _days = _ongoing["duration"]
+            _lean = _ongoing["lean"]
+            _lean_color = _qcolors.get(_lean, "#94a3b8")
+            _score_delta = current_score - _ongoing["entry_score"]
+            _delta_str = f"{_score_delta:+d}" if _score_delta != 0 else "flat"
+            st.markdown(
+                f'<div style="background:#1a1200;border:2px solid #f59e0b;border-radius:8px;'
+                f'padding:12px 16px;margin-bottom:12px;">'
+                f'<div style="color:#f59e0b;font-weight:700;font-size:12px;letter-spacing:0.05em;margin-bottom:4px;">'
+                f'⚠ IN TRANSITION — DAY {_days}</div>'
+                f'<div style="font-size:11px;color:#94a3b8;font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'Leaning → <span style="color:{_lean_color};font-weight:700;">{_lean}</span>'
+                f' &nbsp;·&nbsp; Score since entry: <span style="color:#e2e8f0;">{_delta_str} pts</span>'
+                f'<br><span style="color:#64748b;font-size:10px;">No new entries until ≥2 of 3 QIR layers align. '
+                f'Reduce size if leaning toward Stagflation or Deflation.</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Transition log table ──────────────────────────────────────────────
+    _sorted = sorted(periods, key=lambda p: p["start"], reverse=True)
+    _rows = []
+    for p in _sorted:
+        _rc  = _qcolors.get(p["resolved_to"], "#475569")
+        _lc  = _qcolors.get(p["lean"], "#94a3b8")
+        _end = p["end"] if p["end"] != "Ongoing" else "<span style='color:#94a3b8'>Ongoing</span>"
+        _res = (f'<span style="color:{_rc};font-weight:600;">{p["resolved_to"]}</span>'
+                if p["resolved_to"] != "Ongoing"
+                else f'<span style="color:#94a3b8;">Ongoing</span>')
+        _delta = p["exit_score"] - p["entry_score"]
+        _delta_str = f'<span style="color:{"#22c55e" if _delta > 0 else "#ef4444" if _delta < 0 else "#94a3b8"};">{_delta:+d}</span>'
+        _rows.append(
+            f'<tr>'
+            f'<td style="padding:4px 8px;">{p["start"]}</td>'
+            f'<td style="padding:4px 8px;">{_end}</td>'
+            f'<td style="padding:4px 8px;text-align:center;">{p["duration"]}d</td>'
+            f'<td style="padding:4px 8px;color:{_lc};">{p["lean"]}</td>'
+            f'<td style="padding:4px 8px;">{_res}</td>'
+            f'<td style="padding:4px 8px;text-align:center;">{_delta_str}</td>'
+            f'</tr>'
+        )
+
+    _hdr = (
+        '<tr style="color:#475569;font-size:10px;letter-spacing:0.05em;border-bottom:1px solid #1e293b;">'
+        '<th style="padding:4px 8px;text-align:left;">START</th>'
+        '<th style="padding:4px 8px;text-align:left;">END</th>'
+        '<th style="padding:4px 8px;text-align:center;">DAYS</th>'
+        '<th style="padding:4px 8px;text-align:left;">LEANING</th>'
+        '<th style="padding:4px 8px;text-align:left;">RESOLVED →</th>'
+        '<th style="padding:4px 8px;text-align:center;">SCORE Δ</th>'
+        '</tr>'
+    )
+    st.markdown(
+        f'<div style="font-size:11px;font-family:\'JetBrains Mono\',Consolas,monospace;">'
+        f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">TRANSITION LOG</div>'
+        f'<table style="width:100%;border-collapse:collapse;color:#e2e8f0;">'
+        f'{_hdr}{"".join(_rows)}'
+        f'</table></div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Resolution base rates ─────────────────────────────────────────────
+    _resolved = [p["resolved_to"] for p in periods if p["resolved_to"] != "Ongoing"]
+    if _resolved:
+        from collections import Counter
+        _counts = Counter(_resolved)
+        _rate_parts = [
+            f'<span style="color:{_qcolors.get(q, "#94a3b8")};">{q} {n}×</span>'
+            for q, n in sorted(_counts.items(), key=lambda x: -x[1])
+        ]
+        _ongoing_count = sum(1 for p in periods if p["resolved_to"] == "Ongoing")
+        if _ongoing_count:
+            _rate_parts.append(f'<span style="color:#94a3b8;">Ongoing {_ongoing_count}×</span>')
+        st.markdown(
+            f'<div style="font-size:10px;color:#475569;font-family:\'JetBrains Mono\',Consolas,monospace;'
+            f'margin-top:8px;">HISTORICAL RESOLUTIONS: {" · ".join(_rate_parts)}</div>',
+            unsafe_allow_html=True,
+        )
+
+
+def _make_quadrant_probability(growth_signal: float, inflation_signal: float) -> go.Figure:
+    """Horizontal bar chart showing probability mass across the 5 regime quadrants.
+
+    Uses softmax over negative squared Euclidean distance to each quadrant centroid
+    in (growth, inflation) signal space. Sorted descending so dominant quadrant is on top.
+    """
+    import numpy as np
+
+    # Centroids in (growth, inflation) space — placed at ±0.5 beyond the thresholds
+    centroids = {
+        "Goldilocks":  ( 0.55, -0.55),
+        "Reflation":   ( 0.55,  0.55),
+        "Stagflation": (-0.55,  0.55),
+        "Deflation":   (-0.55, -0.55),
+        "Transition":  ( 0.0,   0.0),
+    }
+    quadrant_colors = {
+        "Goldilocks":  "#22c55e",
+        "Reflation":   "#f59e0b",
+        "Stagflation": "#ef4444",
+        "Deflation":   "#60a5fa",
+        "Transition":  "#94a3b8",
+    }
+
+    pt = np.array([growth_signal, inflation_signal])
+    names = list(centroids.keys())
+    dists = np.array([np.sum((pt - np.array(c)) ** 2) for c in centroids.values()])
+    # Temperature=0.5 sharpens the distribution so small differences register
+    logits = -dists / 0.5
+    probs  = np.exp(logits - logits.max())
+    probs  = probs / probs.sum()
+
+    # Sort descending
+    order  = np.argsort(probs)[::-1]
+    labels = [names[i] for i in order]
+    values = [float(probs[i]) for i in order]
+    colors = [quadrant_colors[n] for n in labels]
+    pct    = [f"{v * 100:.0f}%" for v in values]
+
+    fig = go.Figure(go.Bar(
+        x=values,
+        y=labels,
+        orientation="h",
+        marker_color=colors,
+        marker_line_width=0,
+        text=pct,
+        textposition="outside",
+        textfont={"size": 11, "color": "#94a3b8", "family": "JetBrains Mono, Consolas, monospace"},
+        hovertemplate="%{y}: %{text}<extra></extra>",
+    ))
+    apply_dark_layout(fig)
+    fig.update_layout(
+        height=180,
+        margin=dict(l=10, r=50, t=24, b=8),
+        title=dict(
+            text="QUADRANT PROBABILITY DISTRIBUTION",
+            font=dict(size=10, color="#475569", family="JetBrains Mono, Consolas, monospace"),
+            x=0,
+        ),
+        xaxis=dict(
+            range=[0, 1],
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+        ),
+        yaxis=dict(
+            tickfont=dict(size=11, color="#e2e8f0", family="JetBrains Mono, Consolas, monospace"),
+            autorange="reversed",
+        ),
+        plot_bgcolor="#0d1117",
+        paper_bgcolor="#0d1117",
+    )
     return fig
 
 
@@ -2558,6 +2837,28 @@ def render():
                 f'| GROWTH {macro["growth_dir"]} | INFLATION {macro["inflation_dir"]}</div>',
                 unsafe_allow_html=True,
             )
+
+        # ── Quadrant Probability Distribution ──
+        _g = macro.get("growth_signal", 0.0) or 0.0
+        _i = macro.get("inflation_signal", 0.0) or 0.0
+        st.plotly_chart(
+            _make_quadrant_probability(_g, _i),
+            use_container_width=True,
+        )
+        st.markdown(
+            '<div style="font-size:10px;color:#475569;font-family:\'JetBrains Mono\',Consolas,monospace;'
+            'line-height:1.8;margin-top:-8px;margin-bottom:12px;">'
+            '<span style="color:#64748b;font-weight:700;letter-spacing:0.05em;">HOW TO READ</span><br>'
+            '<span style="color:#22c55e;">■</span> <b style="color:#94a3b8;">60%+</b> — Confirmed regime. Trade with the trend.<br>'
+            '<span style="color:#f59e0b;">■</span> <b style="color:#94a3b8;">40–60%</b> — Leaning but not decisive. Reduce size, wait for confirmation.<br>'
+            '<span style="color:#ef4444;">■</span> <b style="color:#94a3b8;">No quadrant above 35%</b> — Genuine uncertainty. Hold, no new entries.<br>'
+            '<span style="color:#94a3b8;">■</span> <b style="color:#94a3b8;">Transition dominant</b> — Regime is shifting. Watch which quadrant is gaining mass day over day.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Transition Period Log ──
+        _render_transition_log(macro.get("quadrant", ""), macro.get("macro_score", 50))
 
         # ── Signal Radar ──
         radar_fig = _make_category_radar(macro["signals"])

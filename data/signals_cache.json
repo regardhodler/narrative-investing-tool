@@ -1,12 +1,12 @@
 {
   "_regime_context": {
     "regime": "Neutral \u2014 Leaning Risk-Off",
-    "score": -0.12,
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-0.86 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Market Breadth (RSP/SPY): z=+0.77 ()\n- Fear & Greed Index: 11/100 \u2014 Extreme Fear (contrarian)",
+    "score": -0.08,
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.80 ()\n- Credit Spreads (HY vs Treasuries): z=-0.79 ()\n- VIX (Equity Volatility): z=-0.78 ()\n- Market Breadth (RSP/SPY): z=+0.72 ()\n- Global Manufacturing (EWG+FXI): z=-0.64 ()\n- Fear & Greed Index: 11/100 \u2014 Extreme Fear (contrarian)",
     "quadrant": "Stagflation"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-03-31T15:00:31.253238"
+    "__datetime__": "2026-03-31T17:29:13.523026"
   },
   "_rp_plays_result": {
     "sectors": [
@@ -15,135 +15,480 @@
         "conviction": 3
       },
       {
-        "name": "Materials",
+        "name": "Utilities",
         "conviction": 2
       },
       {
-        "name": "Utilities",
-        "conviction": 1
+        "name": "Consumer Staples",
+        "conviction": 2
       },
       {
-        "name": "Consumer Staples",
+        "name": "Healthcare",
         "conviction": 1
       }
     ],
     "stocks": [
       {
         "ticker": "XOM",
-        "reason": "XOM is a strong energy play with a stable dividend yield, making it attractive in a risk-off environment with rising commodity prices.",
+        "reason": "Exxon benefits from strong oil price trends amid positive commodity z-score.",
         "conviction": 3
       },
       {
-        "ticker": "FCX",
-        "reason": "FCX is a copper mining company that benefits from rising commodity prices, particularly copper.",
+        "ticker": "NEE",
+        "reason": "NextEra Energy offers defensive utility exposure resilient to equity weakness.",
         "conviction": 2
       },
       {
-        "ticker": "NEE",
-        "reason": "NEE is a utility company with a stable dividend yield, providing a safe haven in a risk-off environment.",
-        "conviction": 1
-      },
-      {
         "ticker": "PG",
-        "reason": "PG is a consumer staples company with a stable dividend yield, providing a defensive play in a risk-off environment.",
-        "conviction": 1
+        "reason": "Procter & Gamble provides recession-resistant consumer staples amid low sentiment.",
+        "conviction": 2
       },
       {
-        "ticker": "DUK",
-        "reason": "DUK is a utility company with a stable dividend yield, providing a safe haven in a risk-off environment.",
+        "ticker": "JNJ",
+        "reason": "Johnson & Johnson delivers stable healthcare earnings in risk-off environment.",
+        "conviction": 2
+      },
+      {
+        "ticker": "WMT",
+        "reason": "Walmart thrives on value-seeking consumers during extreme fear periods.",
         "conviction": 1
       }
     ],
     "bonds": [
       {
-        "ticker": "TLT",
-        "reason": "TLT is a long-term Treasury bond ETF that benefits from a risk-off environment with rising demand for safe-haven assets.",
+        "ticker": "SHY",
+        "reason": "Short-term treasuries minimize duration risk with elevated term premium.",
         "conviction": 2
       },
       {
         "ticker": "IEF",
-        "reason": "IEF is an intermediate-term Treasury bond ETF that provides a relatively safe haven in a risk-off environment.",
+        "reason": "Intermediate treasuries serve as safe haven amid high VIX and wide credit spreads.",
+        "conviction": 2
+      },
+      {
+        "ticker": "TIP",
+        "reason": "TIPS hedge inflation from strong commodities while providing real yield protection.",
         "conviction": 1
       }
     ],
-    "rationale": "The current Neutral \u2014 Leaning Risk-Off regime suggests a cautious approach, with a focus on defensive sectors and stocks that benefit from rising commodity prices. The strong conviction in Energy and Materials sectors is driven by the positive commodity trend signal, while the moderate conviction in Utilities and Consumer Staples sectors is driven by their defensive nature. The stock picks are selected based on their ability to thrive in a risk-off environment, with a focus on stable dividend yields and safe-haven assets."
+    "rationale": "In this neutral leaning risk-off regime, weak equity trends, high VIX, widening credit spreads, and poor sentiment favor defensive sectors like utilities and staples that hold up in downturns, while strong commodity signals make energy a standout contrarian buy. Extreme fear in the Fear & Greed Index signals potential oversold conditions for quality names. Elevated term premium warrants short-duration treasuries over long bonds for safety."
   },
-  "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
+  "_rp_plays_last_tier": "\ud83e\udde0 Regard Mode",
+  "_fed_funds_rate": 3.64,
+  "_dominant_rate_path": {
+    "scenario": "hold",
+    "prob_pct": 68.6
+  },
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.665526225301367,
+      "prob": 0.6864966763909444,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "source": "yfinance",
+      "delta": 0.0
     },
     {
       "scenario": "cut_25",
-      "prob": 0.1659515597053382,
+      "prob": 0.12961131177344987,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "source": "yfinance",
+      "delta": 0.0
     },
     {
       "scenario": "cut_50",
-      "prob": 0.002572906134776094,
+      "prob": 0.0014287620509255607,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "source": "yfinance",
+      "delta": 0.0
     },
     {
       "scenario": "hike_25",
-      "prob": 0.16594930885851863,
+      "prob": 0.18246324978468031,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "source": "yfinance",
+      "delta": 0.0
     }
   ],
-  "_current_events_digest": "Within the current neutral-leaning risk-off macro regime, characterized by stagflation concerns, recent events have reinforced the dominant narrative of supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical supply chains, potentially exacerbating inflationary pressures. Meanwhile, the sharp rise in Japan's bond yields, noted by Ricky Ho, suggests a bearish outlook for the long end of the curve, which could further complicate the macroeconomic landscape. These developments confirm the stagflation thesis, underscoring actionable risks in the energy and technology sectors, particularly for companies reliant on helium, such as TSMC, as flagged by Mario Nawfal.",
-  "_current_events_digest_ts": {
-    "__datetime__": "2026-03-31T15:00:35.398143"
+  "_rate_path_probs_ts": {
+    "__datetime__": "2026-03-31T17:29:45.083056"
   },
-  "_current_events_engine": "\u26a1 Freeloader Mode",
+  "_fed_plays_result": {
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
+        "name": "Utilities",
+        "conviction": 2
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 2
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "ExxonMobil benefits from sustained high oil prices amid stagflationary pressures and supply constraints.",
+        "conviction": 3
+      },
+      {
+        "ticker": "CVX",
+        "reason": "Chevron offers strong upstream exposure with robust cash flows in an inflationary environment.",
+        "conviction": 2
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NextEra Energy provides defensive utility exposure with growth from renewables in a risk-off setting.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Johnson & Johnson delivers stable healthcare demand resilient to economic slowdowns.",
+        "conviction": 2
+      },
+      {
+        "ticker": "PG",
+        "reason": "Procter & Gamble's essential consumer products ensure steady revenues during stagflation.",
+        "conviction": 2
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TIP",
+        "reason": "iShares TIPS Bond ETF hedges against persistent inflation in stagflation.",
+        "conviction": 3
+      },
+      {
+        "ticker": "SHY",
+        "reason": "iShares 1-3 Year Treasury Bond ETF offers safety and liquidity in risk-off conditions with steady rates.",
+        "conviction": 2
+      },
+      {
+        "ticker": "IEF",
+        "reason": "iShares 7-10 Year Treasury Bond ETF provides moderate duration protection if rates hold steady.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "In a stagflation quadrant with neutral leaning risk-off and steady rates, defensive sectors like energy, utilities, staples, and healthcare offer resilience against slow growth and inflation. Energy receives highest conviction due to pricing power from commodity tightness. Bonds emphasize inflation protection and short-duration safety to navigate uncertainty without excessive rate sensitivity."
+  },
+  "_fed_plays_result_ts": {
+    "__datetime__": "2026-03-31T17:29:45.083059"
+  },
+  "_fed_plays_engine": "\ud83e\udde0 Regard Mode",
+  "_chain_narration": "The most likely Fed rate path is a hold, with a 68.65% probability. This transmits through credit markets via contained spreads supporting investment-grade (LQD) and high-yield (HYG) bonds, keeps housing flat with stable mortgage rates limiting homebuilder activity (ITB), and sustains employment in stagflation via neutral short rates avoiding growth shocks. Benefiting assets include utilities (XLU) and financials (XLF) from risk-off stability, while growth/tech (QQQ, XLK) and discretionary (XLY) face headwinds amid leaning risk-off pressures.",
+  "_chain_narration_engine": "\ud83e\udde0 Regard Mode",
+  "_doom_briefing": "**STRESS LEVEL: 3/10**\n\n- Composite Stress Score stands at 26.2/100, indicating moderate overall pressure.\n- Regional Banks show average 1M return of -6.8% and drawdown of -18.5%, signaling sector-specific strain with potential for localized contagion given deposit and lending exposures.\n- Commercial Real Estate records average 1M return of -4.0% and drawdown of -13.8%, reflecting ongoing valuation declines tied to regional bank holdings.\n- Private Equity Exposure exhibits drawdown of -36.6% despite average 1M return of +2.0%, highlighting deep embedded losses in illiquid portfolios with interconnected bank and insurer holdings.\n- Subprime/Consumer Credit displays drawdown of -31.9% and average 1M return of -1.3%, pointing to consumer credit deterioration.\n- HY Credit Spread (OAS) at 3.46 and IG Credit Spread at 0.93 indicate widened but contained corporate funding costs.\n\nCredit spreads and yield curve (10Y-2Y at 0.51) remain within norms, limiting immediate cascading default risks. Watchlist drawdowns in Private Equity (-36.6%) and Subprime (-31.9%) warrant monitoring for spillovers to banks and consumer lending. Absent escalation in Regional Banks or CRE metrics, systemic stress is unlikely to intensify near-term.",
+  "_doom_briefing_ts": {
+    "__datetime__": "2026-03-31T17:29:49.435024"
+  },
+  "_doom_briefing_engine": "\ud83e\udde0 Regard Mode",
+  "_whale_summary": "**Major Themes and Sector Convergence**  \nInstitutions like BlackRock, Vanguard, and State Street are heavily converging on AI-driven technology and semiconductor leaders, alongside select mega-cap tech and healthcare names. The largest position increases highlight NVIDIA (NVDA), Alphabet (GOOGL), Apple (AAPL), and Eli Lilly (LLY), signaling strong conviction in AI infrastructure, cloud computing, consumer tech durability, and GLP-1 drug momentum. Semiconductors stand out with Micron Technology (MU) and Broadcom (AVGO) seeing sharp ramps, while healthcare gets a boost via LLY. Total increases exceed $300 billion across these top moves, dwarfing decreases.\n\n**Names with Highest Conviction (Multiple Whales Buying)**  \nAlphabet (GOOGL) shows the strongest multi-manager conviction, with Vanguard adding $40.0 billion (+31.9%) and $31.6 billion (+31.4%) across class shares, plus BlackRock's $13.9 billion (+22.2%) and $11.0 billion (+20.2%) increases\u2014for a collective ~$97 billion influx. Apple (AAPL) follows closely, with BlackRock boosting by $43.7 billion (+24.5%) and Vanguard by $31.4 billion (+8.8%). Eli Lilly (LLY) garners bipartisan support via Vanguard's $26.3 billion (+42.6%) and State Street's $9.2 billion (+49.9%) adds. NVIDIA (NVDA) sees BlackRock's massive $62.2 billion (+37.6%) pile-on, while Micron (MU) jumps with Vanguard's $12.9 billion (+73.8%) and Broadcom (AVGO) with Vanguard's $9.1 billion (+5.8%).\n\n**Notable Exits and Position Reductions Signaling Shifts**  \nSeveral high-profile trims indicate profit-taking or rotations away from prior favorites. Microsoft (MSFT) faces coordinated selling, with Vanguard cutting $16.4 billion (-4.5%) and State Street $11.8 billion (-10.9%). Meta Platforms (META) sees State Street slash $14.7 billion (-15.4%) and Vanguard $9.5 billion (-6.7%). Vanguard fully pivots from Oracle (ORCL) by dropping $13.4 billion (-28.3%) and Netflix (NFLX) by $9.6 billion (-20.8%), suggesting reduced faith in enterprise software and streaming amid AI reallocations.\n\n**Overall Institutional Flow Patterns and Sentiment**  \nNet flows tilt decisively bullish on AI enablers and resilient growth leaders, with ~$280 billion in buys versus ~$75 billion in sells among top moves\u2014a 3.7x ratio favoring accumulation. BlackRock leads aggressively on NVDA, AAPL, MSFT (+$17.8B), GOOGL, and Amazon (AMZN +$9.7B), while Vanguard balances growth (GOOGL, LLY, MU, AVGO) with trims elsewhere. State Street amplifies LLY but pulls back from META and MSFT. This pattern reflects optimistic sentiment on AI secular trends and healthcare innovation, with tactical rotations out of mature cloud/streaming plays into higher-beta semis and pharma.",
+  "_whale_summary_ts": {
+    "__datetime__": "2026-03-31T17:29:28.267349"
+  },
+  "_whale_summary_engine": "\ud83e\udde0 Regard Mode",
+  "_plays_result": {
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
+        "name": "Utilities",
+        "conviction": 2
+      },
+      {
+        "name": "Consumer Staples",
+        "conviction": 2
+      },
+      {
+        "name": "Healthcare",
+        "conviction": 2
+      },
+      {
+        "name": "Materials (Real Assets)",
+        "conviction": 1
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "Exxon benefits directly from geopolitical supply shocks and commodity tightness driving oil prices higher in a stagflation regime with strong commodity z-scores.",
+        "conviction": 3
+      },
+      {
+        "ticker": "CVX",
+        "reason": "Chevron offers pricing power and dividend resilience amid Middle East supply disruptions and sticky inflation, with strong free cash flow supporting downside protection.",
+        "conviction": 3
+      },
+      {
+        "ticker": "NEE",
+        "reason": "NextEra provides defensive utility exposure with regulated earnings and inflation pass-through, well-suited to a Fed hold environment with no near-term rate cuts.",
+        "conviction": 2
+      },
+      {
+        "ticker": "PG",
+        "reason": "Procter & Gamble's pricing power and inelastic demand make it a core stagflation defensive as consumer sentiment deteriorates and growth falters.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JNJ",
+        "reason": "Johnson & Johnson offers low-beta healthcare exposure with stable earnings uncorrelated to economic cycles, appropriate given extreme fear and elevated system stress.",
+        "conviction": 2
+      },
+      {
+        "ticker": "GLD",
+        "reason": "Gold is a primary real asset hedge in stagflation with rising term premiums, geopolitical risk, and core PCE running hot at 3.1% YoY.",
+        "conviction": 3
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "TIP",
+        "reason": "TIPS provide direct inflation protection as core PCE remains elevated at 3.1% and the Fed is on hold with no cuts expected before 2027, preserving real purchasing power.",
+        "conviction": 3
+      },
+      {
+        "ticker": "SHY",
+        "reason": "Short-duration Treasuries minimize rate sensitivity while offering safety in a risk-off regime with elevated credit stress and bearish options flow on equities.",
+        "conviction": 2
+      },
+      {
+        "ticker": "IEF",
+        "reason": "Intermediate Treasuries offer moderate duration exposure with flight-to-quality demand in a risk-off environment, though rising global yields warrant limited sizing.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "The stagflation quadrant with a neutral-leaning risk-off regime score of -0.08 and extreme fear at 11/100 demands a defensive real-asset posture: energy leads on commodity z-scores of +1.00 and geopolitical supply shocks, while TIPS and gold hedge persistent inflation with core PCE at 3.1% and no Fed cuts before 2027. Defensive equities in utilities, staples, and healthcare provide downside cushion as equity trends, credit spreads, and consumer sentiment all register negative z-scores, and macro options flow signals significant bearish hedging at 22/100. Cyclicals, growth tech, and high-yield bonds should be avoided as credit risk remains HIGH and system stress is ELEVATED."
+  },
+  "_plays_engine": "\ud83d\udc51 Highly Regarded Mode",
+  "_current_events_digest": "Geopolitical supply shocks dominate as Qatar's helium production collapse triggers AirGas force majeure\u2014critical for TSMC's chip lithography amid 60-70% reliance on Hormuz-transiting LNG/helium\u2014exacerbating sticky inflation (core PCE +3.1% YoY) and Fed hawkishness with no cuts eyed before 2027. Bond markets signal regime shift: Japan yields spike (10yr 2.37%, 30yr 3.69%, 40yr ~3.9%), US 10yr ~4.4% correlating with Trump policy pauses per Kobeissi, while USDJPY >160 risks BOJ intervention and yen carry unwind. Actionable risks include Oracle CDS at GFC peaks and historical gold crashes in oil crises (per Prehn); opportunities in energy rotation (+33% YTD) versus tech correction (-20%).",
+  "_current_events_digest_ts": {
+    "__datetime__": "2026-03-31T17:29:13.348427"
+  },
+  "_current_events_engine": "\ud83e\udde0 Regard Mode",
+  "_trending_narratives": [
+    {
+      "narrative": "Middle East Oil Surge",
+      "evidence": "Oil soars 60% in March as Middle East crisis chokes energy supplies. Trump says US to end war in Iran within \u20182 to 3 weeks\u2019 and Cramer discusses market flip if U.S.-Iran war ends.",
+      "tickers": [
+        "USO",
+        "XLE",
+        "CVX",
+        "XOM",
+        "OXY"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "short",
+      "category": "commodity"
+    },
+    {
+      "narrative": "OpenAI Record Funding",
+      "evidence": "OpenAI raises $3bn from retail investors as part of record funding haul.",
+      "tickers": [
+        "MSFT",
+        "NVDA",
+        "GOOGL",
+        "ARKK",
+        "AI"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "medium",
+      "category": "tech"
+    },
+    {
+      "narrative": "Crypto SPAC Listing",
+      "evidence": "Crypto asset manager CoinShares to begin trading on Nasdaq through SPAC merger.",
+      "tickers": [
+        "COIN",
+        "MSTR",
+        "BITO",
+        "BLOK",
+        "WGMI"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "tech"
+    },
+    {
+      "narrative": "Nike China Sales Plunge",
+      "evidence": "Nike shares fall 9% on weak outlook, expected 20% sales decline in China. Nike expects more falling sales, as stock sinks amid worries turnaround is not working.",
+      "tickers": [
+        "NKE",
+        "LULU",
+        "DECK",
+        "ONON"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "sector"
+    },
+    {
+      "narrative": "Stock Market Volatility",
+      "evidence": "Investors brace for more stock-market volatility, as wild first quarter ends with biggest rally in a year. Stocks surge, ending a tough month on a high note. But there\u2019s skepticism about the rally.",
+      "tickers": [
+        "VXX",
+        "UVXY",
+        "SVXY",
+        "SPY",
+        "QQQ"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "macro"
+    }
+  ],
+  "_trending_narratives_ts": {
+    "__datetime__": "2026-03-31T17:32:48.273161"
+  },
+  "_trending_narratives_tf": "1W",
+  "_auto_trending_groups": [
+    {
+      "narrative": "Commodity Super-Cycle",
+      "description": "Mining and energy producers benefiting from inflation pressures and supply shortages in metals and natural gas.",
+      "tickers": [
+        "RIO",
+        "B",
+        "BKV"
+      ],
+      "conviction": "HIGH",
+      "regime_alignment": "aligned",
+      "rationale": "Stagflationary environment with risk-off lean boosts commodities as inflation hedges."
+    },
+    {
+      "narrative": "Discretionary Downturn",
+      "description": "Consumer-facing stocks in apparel, luxury goods, gaming, and alternative proteins under pressure from weakening demand.",
+      "tickers": [
+        "NKE",
+        "RH",
+        "WYNN",
+        "BYND"
+      ],
+      "conviction": "HIGH",
+      "regime_alignment": "aligned",
+      "rationale": "Risk-off stagflation squeezes discretionary spending and cyclical sectors."
+    },
+    {
+      "narrative": "Crypto Rally",
+      "description": "Cryptocurrencies and related platforms surging amid speculative fervor.",
+      "tickers": [
+        "COIN",
+        "BTC-USD",
+        "ETH-USD",
+        "XRP-USD",
+        "DEFT"
+      ],
+      "conviction": "HIGH",
+      "regime_alignment": "contrarian",
+      "rationale": "Speculative digital assets typically falter in risk-off stagflation but show resilience here."
+    },
+    {
+      "narrative": "AI Infrastructure Boom",
+      "description": "Semiconductor designers powering AI and data centers gaining momentum.",
+      "tickers": [
+        "MRVL",
+        "ADI"
+      ],
+      "conviction": "MEDIUM",
+      "regime_alignment": "contrarian",
+      "rationale": "Growth-oriented tech bucks stagflation headwinds on AI hype."
+    },
+    {
+      "narrative": "Biotech Momentum",
+      "description": "Pharmaceutical innovators with novel therapies and generics experiencing volatility.",
+      "tickers": [
+        "APLS",
+        "TEVA"
+      ],
+      "conviction": "MEDIUM",
+      "regime_alignment": "neutral",
+      "rationale": "Healthcare provides defensive stability amid stagflationary uncertainty."
+    },
+    {
+      "narrative": "Market Movers",
+      "description": "Assorted high-profile stocks driving broad market attention without clear thematic grouping.",
+      "tickers": [
+        "TSLA",
+        "BA",
+        "GS",
+        "ELAB"
+      ],
+      "conviction": "LOW",
+      "regime_alignment": "neutral",
+      "rationale": "Mixed exposure to growth, industrials, and financials with unclear macro fit."
+    }
+  ],
+  "_auto_trending_groups_ts": {
+    "__datetime__": "2026-03-31T18:03:36.581670"
+  },
+  "_auto_trending_groups_engine": "\ud83e\udde0 Regard Mode",
+  "_macro_synopsis": {
+    "conviction": "BEARISH",
+    "summary": "Tactical regime scores 50/100 (Caution/Reduce) amid VIX at 25.2 and SPY -3.8% below 50d MA, while options flow at 22/100 shows bearish hedging with P/C ratio 1.46 and put volume 5.9M vs calls 4.0M. Macro regime neutral-leaning risk-off (-0.08 score) in stagflation quadrant reinforced by regional bank -6.8% 1M returns and CRE -4.0% 1M amid geopolitical shocks and core PCE +3.1% YoY. Fed hold at 69% probability sustains contained spreads but limits upside.",
+    "key_points": [
+      "VIX 25.2 (-1.7 5d) and CBOE SKEW 145.4 drive tactical caution (50/100 score)",
+      "Options P/C 1.46 (bearish), IV skew 1.22, puts 5,938,462 vs calls 4,049,578 (22/100 score)",
+      "Doom stress 26.2/100 with banks -6.8% 1M/-18.5% drawdown, CRE -4.0% 1M/-13.8% drawdown in stagflation regime"
+    ],
+    "contradictions": [
+      "Whale convergence on NVDA, GOOGL, AI/semiconductors",
+      "Sector XLE +9.0% 4w/+32.1% 12w, XLB +0.7% confirming stagflation leaders"
+    ]
+  },
+  "_macro_synopsis_ts": {
+    "__datetime__": "2026-03-31T17:30:12.188085"
+  },
+  "_macro_synopsis_engine": "\ud83e\udde0 Regard Mode",
   "_tactical_context": {
-    "tactical_score": 39,
+    "tactical_score": 50,
     "label": "Caution / Reduce",
     "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "27.5 (+0.6 5d)",
-        "Score": -0.677,
+        "Value": "25.2 (-1.7 5d)",
+        "Score": -0.243,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "1.019",
-        "Score": -0.127,
-        "Direction": "Neutral \u2014 Leaning Risk-Off"
+        "Value": "0.988",
+        "Score": 0.08,
+        "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "-3.3%/20d  -5.5%/50d",
-        "Score": -0.4,
-        "Direction": "Risk-Off"
+        "Value": "-1.6%/20d  -3.8%/50d",
+        "Score": -0.168,
+        "Direction": "Neutral \u2014 Leaning Risk-Off"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d -2.2%  20d -5.9%",
-        "Score": -0.597,
-        "Direction": "Risk-Off"
+        "Value": "5d -0.4%  20d -4.1%",
+        "Score": 0.033,
+        "Direction": "True Neutral"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "+0.64% 5d",
-        "Score": 0.645,
+        "Value": "+0.44% 5d",
+        "Score": 0.437,
         "Direction": "Risk-On"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:27.2 VIX:27.5 3M:27.0 6M:28.0",
-        "Score": 0.062,
-        "Direction": "Neutral \u2014 Leaning Risk-On"
+        "Value": "9D:24.2 VIX:25.2 3M:25.5 6M:26.9",
+        "Score": 0.234,
+        "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "142.2 (-0.4 5d)",
+        "Value": "145.4 (+4.6 5d)",
         "Score": -1.0,
         "Direction": "Risk-Off"
       },
@@ -162,11 +507,47 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-03-31T15:00:31.253242"
+    "__datetime__": "2026-03-31T17:29:13.523394"
   },
-  "_tactical_analysis": "The combined signal picture suggests a cautious stance, with a Tactical Regime score of 39/100, indicating reduced risk appetite. The majority of the signals lean towards a Risk-Off posture, with the VIX Level and Momentum signals being particularly bearish, at -0.677 and -0.597, respectively. The VIX Level of 27.5, with a 5-day trend of +0.6, indicates increased volatility and risk aversion. The SPY vs 20d/50d MA signals also point to a Risk-Off environment, with the SPY trading -3.3% and -5.5% below its 20-day and 50-day moving averages, respectively.\n\nThe most dominant signals right now are the VIX-related metrics, including the VIX Level, VIX Term Structure, and VIX Curve. The VIX Term Structure, at 1.019, is slightly bearish, while the VIX Curve, with a score of +0.062, is neutral to slightly bullish. However, the CBOE SKEW, at 142.2, with a 5-day change of -0.4, is strongly bearish, indicating increased tail risk. The Fear & Greed indicator, at 11, is in Extreme Fear territory, which is contrarian bullish, but not enough to override the overall bearish signal picture. The Breadth Trend signal, at +0.64% 5-day, is a rare bullish outlier, but its impact is limited by the broader Risk-Off environment.\n\nGiven this setup, the concrete action implication is to reduce exposure to risky assets. With the Tactical Regime score at 39/100 and the majority of signals pointing to a Risk-Off environment, it's prudent to decrease position sizes or hedge existing positions. The VIX Level and Momentum signals, in particular, suggest that volatility and downside risk are increasing. While the Fear & Greed indicator is contrarian bullish, it's not enough to justify adding to positions at this time. Instead, traders should focus on preserving capital and waiting for a more favorable risk-reward environment to re-enter the market. A reduction of 10-20% in position size or a corresponding hedge would be a reasonable response to this signal picture.",
+  "_tactical_analysis": "**Mixed but Cautious Risk Appetite, Poor Entry Conditions.** The signal composite yields a Caution/Reduce regime (50/100 score) amid Neutral-Leaning Risk-Off macro, reflecting subdued short-term risk appetite. Risk-Off pressures dominate from VIX at 25.2 (-1.7 5d trend, -0.243 score) and SPY -1.6% below 20d MA / -3.8% below 50d MA (-0.168 score), signaling sustained volatility and technical weakness. Offsetting Risk-On inputs include RSP/SPY breadth +0.44% over 5d (+0.437 score), VIX curve steepness (9D:24.2 < VIX:25.2 < 3M:25.5 < 6M:26.9, +0.234 score), and Extreme Fear on Fear & Greed (11, +0.780 contrarian score), but these fail to greenlight entries given SPY 20d ROC at -4.1%.\n\n**Dominant: SKEW Tail Risk Overpowers Contrarian Relief.** CBOE SKEW at 145.4 (+4.6 5d, -1.000 score) is most dominant, flashing acute crash pricing that amplifies VIX's elevated level and overrides milder bear signals like SPY MAs. This matters as SKEW spikes >145 historically correlate with 5-10% SPX drawdowns within 10 days. Fear & Greed Extreme Fear (+0.780) and breadth (+0.437) provide counter-cyclical lift, hinting at oversold bounce potential, but VIX/VIX3M at 0.988 (+0.080) shows no contango unwind to confirm.\n\n**Action: Reduce Exposure.** Trim risk assets 20-25% immediately\u2014exit laggards below 50d MA, rotate to cash/T-bills yielding >4.5%. Hold no new longs; hedge beta with 1-2% VIX calls (25 strike) or SPY puts (5d expiry) if retaining core positions, targeting SKEW <140 for re-entry.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-03-31T15:00:31.253243"
+    "__datetime__": "2026-03-31T17:29:13.523565"
+  },
+  "_options_flow_context": {
+    "options_score": 22,
+    "label": "Bearish Hedging",
+    "action_bias": "Significant defensive positioning in options. Consider reducing risk exposure.",
+    "signals": [
+      {
+        "Signal": "P/C Ratio",
+        "Value": "1.46 (bearish)",
+        "Score": -1.0,
+        "Direction": "Bearish"
+      },
+      {
+        "Signal": "Gamma Zone",
+        "Value": "N/A (neutral)",
+        "Score": 0.0,
+        "Direction": "Neutral"
+      },
+      {
+        "Signal": "IV Skew (put/call)",
+        "Value": "1.22 (moderate)",
+        "Score": -0.607,
+        "Direction": "Bearish"
+      },
+      {
+        "Signal": "Unusual Activity",
+        "Value": "calls 4,049,578 vs puts 5,938,462 (mixed)",
+        "Score": -0.189,
+        "Direction": "Bearish"
+      }
+    ],
+    "pc_ratio": 1.459,
+    "raw_score": -0.562
+  },
+  "_options_flow_context_ts": {
+    "__datetime__": "2026-03-31T17:29:28.267834"
   },
   "_data_quality": {
     "score": 70,
@@ -182,6 +563,103 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-03-31T15:00:31.253244"
+    "__datetime__": "2026-03-31T17:29:13.523734"
+  },
+  "_portfolio_risk_snapshot": {
+    "beta": 0.38,
+    "var_95_pct": -2.8,
+    "var_99_pct": -4.52,
+    "cvar_95_pct": -3.92,
+    "var_95_dollar": -1435,
+    "total_value": 51301,
+    "position_count": 8,
+    "sector_weights": {
+      "Unknown": 77.8,
+      "Basic Materials": 7.6,
+      "Financial Services": 14.7
+    },
+    "max_position_weight": 20.9,
+    "top_position": "PHYS.TO",
+    "risk_flags": [
+      "\u26a0 High correlation: PSLV.TO / PHYS.TO (0.83) \u2014 limited diversification benefit"
+    ],
+    "stress_scenarios": [
+      {
+        "scenario": "2008 GFC",
+        "spy_shock_pct": -57,
+        "port_impact_pct": -36.8,
+        "port_impact_dollar": -18870
+      },
+      {
+        "scenario": "COVID Crash",
+        "spy_shock_pct": -34,
+        "port_impact_pct": -21.9,
+        "port_impact_dollar": -11256
+      },
+      {
+        "scenario": "2022 Rate Shock",
+        "spy_shock_pct": -25,
+        "port_impact_pct": -16.1,
+        "port_impact_dollar": -8276
+      },
+      {
+        "scenario": "Flash Crash",
+        "spy_shock_pct": -10,
+        "port_impact_pct": -6.5,
+        "port_impact_dollar": -3311
+      },
+      {
+        "scenario": "VIX Spike +200%",
+        "spy_shock_pct": -15,
+        "port_impact_pct": -9.7,
+        "port_impact_dollar": -4966
+      }
+    ],
+    "worst_stress_pct": -36.8
+  },
+  "_portfolio_risk_snapshot_ts": {
+    "__datetime__": "2026-03-31T17:30:23.505884"
+  },
+  "_risk_matrix_interpretation": {
+    "alert_level": "MODERATE",
+    "summary": "Stagflation leaning risk-off favors the portfolio's low beta (0.38) and gold-heavy tilt as an inflation hedge, aligning well with deteriorating short-term conditions. VaR (-2.8%) and CVaR (-3.92%) are appropriate for cautionary regime, but high PHYS.TO concentration (20.9%) and PSLV correlation (0.83) limit diversification. Most dangerous stress: 2022 Rate Shock (-16.1%), given persistent inflation risks.",
+    "action_items": [
+      "Trim PHYS.TO to <15% of portfolio to reduce concentration",
+      "Sell 50% of PSLV.TO to mitigate correlation risk and improve diversification",
+      "Tighten portfolio stops to -4% VaR equivalent and reduce total exposure by 10-20%"
+    ]
+  },
+  "_activism_digest": "### Significant 13D Analyses\n\n**Baker Bros. Advisors LP (13D on Bicycle Therapeutics PLC - BCYC):** Baker Bros., a prolific biotech activist, likely aims for board seats or a strategic sale, given BCYC's pipeline of oncology therapeutics trading at a 60% discount to cash and peak sales estimates amid clinical setbacks. Target vulnerabilities include weak governance (high insider ownership but stagnant R&D productivity) and depressed valuation (EV/NPV <0.5x). Historically, Baker succeeds in 70% of biotech campaigns via settlements (e.g., board wins at Incyte, Exelixis), often within 6-9 months. Success probability: 65%; timeline: Q2-Q3 2025 settlement likely drives 30-50% upside.\n\n**Cerberus Capital Management II (13D on Eos Energy Enterprises - EOSE):** Cerberus, a distressed debt specialist, targets asset sale or recapitalization of EOSE's zinc-battery tech amid bankruptcy risks and $500M+ debt load. Vulnerabilities: overleveraged balance sheet (debt/equity >5x), execution delays in energy storage contracts, and 80% YTD share drop. Cerberus wins 55% of distressed energy plays (e.g., control of Dycom), typically via restructurings in 4-12 months. Success probability: 70%; timeline: H1 2025 debt exchange or sale, positioning longs for 2-3x recovery.\n\n**Madryn Asset Management (13D on Neuronetics - STIM):** Madryn, healthcare-focused, pushes for CEO change or buyback in STIM's transcranial magnetic stimulation devices, undervalued at 0.3x sales despite TMS market growth. Vulnerabilities: governance lapses (dilutive raises), insider entrenchment, and post-COVID revenue trough. Madryn settles 80% of medtech cases (e.g., board at Inspire Medical), averaging 5-7 months. Success probability: 75%; timeline: Q2 2025 proxy fight, target 40% re-rating on capital return.\n\n**Frazier Life Sciences X (13D on NewAmsterdam Pharma - NAMS):** Frazier seeks board influence or spinoff of NAMS' obicetrapib CVD drug candidate, trading at 40% discount to Phase 3 data risk-adjusted NPV. Vulnerabilities: concentrated founder control, high cash burn ($200M runway <2 years), depressed Euro-listed valuation. Frazier's life sciences activism yields 60% success (e.g., sales processes at Audentes), in 6-12 months. Success probability: 60%; timeline: Mid-2025 Phase 3 readout catalyzes M&A, 50% upside.\n\n**Centerbridge Credit Partners (13D on Garrett Motion - GTX):** Centerbridge targets buyback or merger in GTX's auto turbo tech post-Emerging Markets exposure, with EV/EBITDA at 3x cycle low. Vulnerabilities: weak governance (legacy Chapter 11 overhang), cyclical auto slumps. Centerbridge prevails in 65% credit activist plays (e.g., accelerated paydowns at Avantor), within 3-6 months. Success probability: 70%; timeline: Q1 2025 special dividend, 25-35% near-term pop.\n\n**Joseph S. Steinberg (13D on Vitesse Energy - VTS):** Steinberg, energy vet, likely demands asset sales or buyback from VTS' non-op Bakken/DJ Basin positions, undervalued at 5x FCF yield amid oil volatility. Vulnerabilities: insider entrenchment (high ownership), inefficient capital allocation. Individual energy activists win 50% via sales (e.g., similar to Saba at EGT), in 6-9 months. Success probability: 55%; timeline: H2 2025 divestitures, attractive for 20-30% yield play.\n\n**Alfred M. Rankin et al. (multiple 13Ds on NACCO Industries - NC):** Rankin group (insider coalition?) pushes for spinoff of NC's mining/equipment segments, trading at 0.4x book amid coal transition pressures. Vulnerabilities: family control, stagnant ROE <5%. Insider-led campaigns in industrials settle 75% (e.g., spin-offs at Allegion), quickly. Success probability: 80%; timeline: Q2 2025 announcement, 40% unlock.\n\n### Cross-Filing Synthesis\n\nBiotech/pharma draws the most activism (BCYC, NAMS, STIM; ~30% of filings), followed by energy/industrials (EOSE, VTS, NC; 25%) and niche credit plays (GTX, LRFC). Common themes: governance fixes in high-burn biotechs (board seats, sales to Big Pharma), distressed restructurings in energy storage/auto (debt-for-equity, asset flips), and capital returns in undervalued small caps (buybacks amid $5T dry powder). This wave signals a risk-on recovery in 2026, with activists hunting 2022-24 beaten-down names (avg. targets down 50-70% from peaks) amid lower rates, M&A thaw, and commodity rebounds\u2014favor long baskets in biotech/energy targets (e.g., equal-weight BCYC/EOSE/VTS for 40% 12-month return), short governance holdouts, and monitor for proxy fights by Q2.",
+  "_activism_digest_ts": {
+    "__datetime__": "2026-03-31T17:29:06.082540"
+  },
+  "_activism_digest_engine": "\ud83e\udde0 Regard Mode",
+  "_sector_regime_digest": "Sector momentum strongly confirms the Neutral-Leaning Risk-Off macro regime in Stagflation, as all three 4-week leaders\u2014XLE (+9.0%), XLB (+0.7%), and XLU (-1.1%)\u2014are regime-aligned, while cyclicals like XLI, XLY, and XLC lag sharply. Highest-conviction plays are XLE for its explosive +32.1% 12-week momentum amid persistent energy supply tightness, and XLB as a steady stagflation hedge with improving relative strength. No notable rotation warnings, as defensives dominate without cyclical creep. Tactically overweight XLE and XLB, underweight XLY and XLI for 1-4 week holds.",
+  "_sector_regime_digest_ts": {
+    "__datetime__": "2026-03-31T17:29:34.935349"
+  },
+  "_sector_regime_digest_engine": "\ud83e\udde0 Regard Mode",
+  "_fear_greed": {
+    "score": 11,
+    "label": "Extreme Fear",
+    "change_7d": 0,
+    "source": "alternative.me",
+    "fetched_at": "2026-03-31T23:28:30.416776+00:00"
+  },
+  "_fear_greed_ts": {
+    "__datetime__": "2026-03-31T17:29:28.267885"
+  },
+  "_vix_curve": {
+    "vix9d": null,
+    "vix": null,
+    "vix3m": null,
+    "vix6m": 26.93,
+    "contango_9d_3m": null,
+    "contango_spot_3m": null,
+    "structure": "Unknown",
+    "fetched_at": "2026-03-31T23:28:29.222178+00:00"
+  },
+  "_vix_curve_ts": {
+    "__datetime__": "2026-03-31T17:29:28.267885"
   }
 }

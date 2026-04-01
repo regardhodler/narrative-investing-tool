@@ -137,13 +137,13 @@ _PATTERNS = {
     "GENUINE_UNCERTAINTY": {
         "label": "GENUINE UNCERTAINTY",
         "color": "#475569",
-        "interpretation": "No edge — signals are conflicting with no clear majority direction.",
-        "buy_tier": "NOT A BUYING ENV",
-        "short_tier": "NOT A SHORTING ENV",
+        "interpretation": "No edge — signals are conflicting with no clear majority direction. Hold existing positions. No new entries until at least 2 of 3 layers align.",
+        "buy_tier": "HOLD — NO NEW LONGS",
+        "short_tier": "HOLD — NO NEW SHORTS",
         "instruments_buy": [],
         "instruments_short": [],
-        "entry_buy": "Wait for at least 2 of 3 layers to align before committing capital.",
-        "entry_short": "No directional edge in either direction — stay patient.",
+        "entry_buy": "Hold existing longs. No new entries — wait for regime, tactical, or options flow to confirm a direction.",
+        "entry_short": "Hold existing shorts. No new entries — no directional edge in either direction.",
     },
 }
 
@@ -1384,6 +1384,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 f'</div>',
                 unsafe_allow_html=True,
             )
+
+        # Rerun so the Intelligence Dashboard at the top reflects freshly-populated session_state
+        st.rerun()
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):
