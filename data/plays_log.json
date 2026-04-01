@@ -11439,5 +11439,107 @@
       "overlay": null,
       "regime": "Risk-Off"
     }
+  },
+  {
+    "id": "20260331_211220_53",
+    "timestamp": "2026-03-31T21:12:20.530392",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "DEFENSIVE",
+      "risk_score": 4,
+      "narrative": "Portfolio's inflation hedges (gold/silver) and defensives (utilities/healthcare) suit stagflation risk-off. Low beta/VaR resilient, but metals concentration and no energy exposure limit upside.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits risk-off USDJPY surge.",
+          "risk_factors": [
+            "Carry trade volatility",
+            "FX intervention"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper benefits commodity supercycle in stagflation.",
+          "risk_factors": [
+            "China demand",
+            "Supply disruptions"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Silver shortage play good for inflation, but high correlation to PHYS.TO.",
+          "risk_factors": [
+            "Metals correlation",
+            "Gold drawdown risk"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis uncertain in risk-off Fed hold.",
+          "risk_factors": [
+            "Policy delay",
+            "Growth sensitivity"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive thrives in stagflation.",
+          "risk_factors": [
+            "Sector rotation",
+            "Rate sensitivity"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Gold hedge vs debt/inflation strong, but 20.9% overweight risky.",
+          "risk_factors": [
+            "Concentration",
+            "Opportunity cost"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Venezuela exposure vulnerable in risk-off EM stress.",
+          "risk_factors": [
+            "Geopolitical",
+            "Credit spreads"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "ADD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive leader in AI/stagflation regime.",
+          "risk_factors": [
+            "Rate path",
+            "Sector yield"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce PHYS.TO/PSLV concentration",
+        "Add energy like XLE",
+        "Hold utilities/healthcare"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "DEFENSIVE"
+    }
   }
 ]

@@ -136,6 +136,12 @@ def render_regime_strip() -> None:
             f'<div style="line-height:1;">{_dots}</div>'
             f'<div style="font-size:10px;color:{_rc};font-weight:700;margin-top:4px;">'
             f'{_last.get("regime", "")} · {_last_score:.0f}</div>'
+            f'<div style="font-size:9px;color:#334155;margin-top:3px;line-height:1.4;">'
+            f'Each dot = 1 day &nbsp;'
+            f'<span style="color:#22c55e;">●</span> Risk-On &nbsp;'
+            f'<span style="color:#f59e0b;">●</span> Neutral &nbsp;'
+            f'<span style="color:#ef4444;">●</span> Risk-Off'
+            f'</div>'
             f'</div>',
             unsafe_allow_html=True,
         )

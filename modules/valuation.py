@@ -2044,22 +2044,50 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
             hist_fcf_growth = (newest / oldest) ** (1 / n_years) - 1
 
     # ── Growth rate estimates ──
-    # Analyst growth estimate (forward)
-    analyst_growth = info.get("earningsGrowth")  # next year
+    # Priority (SWS-aligned, most forward-looking first):
+    # 1. Analyst 5-yr EPS CAGR consensus — exact input SWS uses (Yahoo "+5y" row)
+    # 2. Revenue growth (trailing YOY — stable, appropriate for FCF projection)
+    # 3. Historical FCF CAGR (backward-looking sanity anchor)
+    # 4. Damodaran sector default × regime multiplier
+    # NOTE: earningsGrowth (trailing YOY EPS) intentionally excluded — in high-growth
+    #       years (e.g. GOOGL 2024: +34%) it inflates the DCF by 1.5–2× vs SWS.
     revenue_growth = info.get("revenueGrowth")
 
-    # Pick best available growth estimate for initial rate
-    if analyst_growth and abs(analyst_growth) < 1:
-        initial_growth = float(analyst_growth)
-    elif revenue_growth and abs(revenue_growth) < 1:
+    # 1. Analyst 5-yr EPS CAGR — matches SWS methodology exactly
+    growth_source = "Sector Default"
+    initial_growth = None
+    try:
+        _ge = stock.growth_estimates
+        if _ge is not None and not _ge.empty:
+            # yfinance growth_estimates: rows = periods (0q,1q,0y,1y,+5y,-5y), cols vary
+            for _period in ["+5y", "5y", "nextFiveYears"]:
+                if _period in _ge.index:
+                    _row = _ge.loc[_period]
+                    # value may be in first numeric column (ticker name or "Growth")
+                    _val = None
+                    for _v in _row:
+                        if isinstance(_v, (int, float)) and not pd.isna(_v):
+                            _val = float(_v)
+                            break
+                    if _val is not None and 0 < abs(_val) < 1.0:
+                        initial_growth = _val
+                        growth_source = "5yr EPS CAGR"
+                        break
+    except Exception:
+        pass
+
+    if initial_growth is None and revenue_growth and abs(revenue_growth) < 1:
         initial_growth = float(revenue_growth)
-    elif hist_fcf_growth and abs(hist_fcf_growth) < 1:
+        growth_source = "Revenue Growth"
+    if initial_growth is None and hist_fcf_growth and abs(hist_fcf_growth) < 1:
         initial_growth = float(hist_fcf_growth)
-    else:
+        growth_source = "Hist. FCF CAGR"
+    if initial_growth is None:
         # Damodaran sector default, adjusted for current macro regime
         _quadrant = (st.session_state.get("_regime_context") or {}).get("quadrant", "Transition")
         _g_mult = _REGIME_GROWTH_MULT.get(_quadrant, 1.0)
         initial_growth = profile.get("default_growth_yr1", 0.08) * _g_mult
+        growth_source = "Sector Default"
 
     # Clamp initial growth using sector-specific bounds
     _min_g, _max_g = profile["growth_yr1_clamp"]
@@ -2134,15 +2162,18 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
     terminal_value = terminal_fcf / (discount_rate - terminal_growth)
     pv_terminal = terminal_value / (1 + discount_rate) ** 10
 
+    # ── Net cash/debt adjustment (SWS methodology) ──
+    # Enterprise Value (PV of FCFs) ± net cash → Equity Value
+    # Net cash positive (cash-rich): adds to equity; net debt negative: reduces it
+    total_cash = info.get("totalCash") or info.get("cash") or 0
+    net_cash = float(total_cash) - float(total_debt)  # positive = net cash, negative = net debt
+
     # ── Intrinsic Value ──
-    total_equity_value = pv_stage1 + pv_terminal
+    total_equity_value = pv_stage1 + pv_terminal + net_cash
     intrinsic_per_share = total_equity_value / shares
 
     # ── Discount/Premium ──
     discount_pct = (intrinsic_per_share / current_price - 1) * 100
-
-    # Growth source labels
-    growth_source = "Analyst Est." if analyst_growth else ("Hist. FCF" if hist_fcf_growth else "Default")
 
     return {
         "company_name": company_name,
@@ -2173,6 +2204,7 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
         "beta_source": beta_source,
         "profile_name": profile_name,
         "mid_growth": mid_growth,
+        "net_cash": net_cash,
     }
 
 
@@ -2521,9 +2553,16 @@ def _render_dcf(ticker: str) -> dict | None:
             st.metric("Terminal Growth", f"{dcf['terminal_growth']*100:.2f}%")
             st.caption(f"Sector profile: {dcf.get('profile_name', 'Default')}")
 
+        _net_cash = dcf.get("net_cash", 0)
+        _net_cash_str = (
+            f"Net Cash +{_fmt_big(_net_cash)}" if _net_cash > 0
+            else f"Net Debt −{_fmt_big(abs(_net_cash))}" if _net_cash < 0
+            else "Net Cash $0"
+        )
         st.markdown(
             f"**Latest Reported FCF:** {_fmt_big(dcf['latest_fcf'])} | "
             f"**Initial Growth:** {dcf['initial_growth']*100:.1f}% ({dcf['growth_source']}) | "
+            f"**{_net_cash_str}** | "
             f"**Shares Outstanding:** {dcf['shares']/1e9:.3f}B"
         )
 
