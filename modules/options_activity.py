@@ -85,6 +85,7 @@ def render():
             confidence=_opt_conf,
             summary=f"Options flow signal: {sentiment} — P/C ratio {pc_ratio:.2f} (call vol {int(call_vol):,} / put vol {int(put_vol):,})",
             ticker=ticker,
+            horizon_days=7,  # options flow is very short-lived
             key=f"opt_log_{ticker}_{sentiment}",
             label="📌 Log Signal",
         )

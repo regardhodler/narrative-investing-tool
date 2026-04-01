@@ -2610,6 +2610,7 @@ def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
             confidence=int(min(90, max(40, ts))),
             summary=f"Tactical regime: {tactical['label']} (score {ts}/100). Action bias: {tactical['action_bias']}",
             model="Tactical Composite",
+            horizon_days=14,  # days-to-weeks tactical window
             key=f"tac_log_{tactical['label']}_{ts}",
             label="📌 Log",
         )

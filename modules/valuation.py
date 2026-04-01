@@ -685,6 +685,7 @@ def render():
                 model=_v.get("engine", ""),
                 ticker=ticker,
                 target_price=_v.get("key_levels", {}).get("resistance"),
+                horizon_days=60,  # fundamental thesis needs time
                 key=f"val_log_{ticker}_{_v['rating']}",
             )
 

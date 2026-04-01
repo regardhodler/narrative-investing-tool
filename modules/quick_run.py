@@ -482,6 +482,7 @@ def _render_qir_dashboard() -> None:
                 confidence=_qir_conf,
                 summary=_qir_summary,
                 model="QIR Composite",
+                horizon_days=21,  # tactical weeks window
                 key=f"qir_log_{_verdict_label}_{_tac_score}",
                 label="📌 Log Signal",
             )

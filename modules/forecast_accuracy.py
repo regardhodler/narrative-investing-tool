@@ -203,9 +203,15 @@ def _render_log_tab():
             prediction = st.text_input("Prediction", placeholder="Buy / Goldilocks / Hold…")
             confidence = st.slider("Confidence", 0, 100, 65)
 
+        # Smart default horizon based on signal type
+        _default_horizons = {"valuation": 60, "squeeze": 14, "regime": 14, "fed": 30, "manual": 30}
+        _horizon_options = [7, 14, 21, 30, 60, 90]
+        _sig_type_val = sig_type  # captured from selectbox above
+        _default_idx = _horizon_options.index(_default_horizons.get(_sig_type_val, 30)) if _default_horizons.get(_sig_type_val, 30) in _horizon_options else 3
+
         c3, c4 = st.columns(2)
         with c3:
-            horizon = st.selectbox("Evaluation Horizon", [7, 14, 30, 60, 90], index=2, format_func=lambda x: f"{x} days")
+            horizon = st.selectbox("Evaluation Horizon", _horizon_options, index=_default_idx, format_func=lambda x: f"{x} days")
         with c4:
             model_sel = st.selectbox("Model Used", list(MODEL_LABELS.values()) + ["Other"])
 
@@ -488,9 +494,18 @@ def _render_history_tab():
         fid = entry.get("id", "")
 
         eval_due_str = "—"
+        days_elapsed = 0
+        days_remaining = None
+        early_check = None
         if ts:
             eval_due = ts + timedelta(days=horizon)
             eval_due_str = eval_due.strftime("%Y-%m-%d")
+            now_dt = datetime.now()
+            days_elapsed = max(0, (now_dt - ts).days)
+            days_remaining = max(0, (eval_due - now_dt).days)
+            # Early check: at ≥50% of horizon, fetch live price and check direction
+            if outcome in (None, "pending") and ticker and days_elapsed >= horizon // 2:
+                early_check = "halfway"
 
         price_at = entry.get("price_at_forecast")
         price_eval = entry.get("price_at_eval")
@@ -498,11 +513,31 @@ def _render_history_tab():
         price_eval_str = f"${price_eval:.2f}" if price_eval else "—"
 
         tc = _type_color(sig_type)
+        # Build expander title — add early check indicator if halfway
+        _early_flag = " 🟡" if early_check and outcome in (None, "pending") else ""
+        _days_flag = f" · {days_remaining}d left" if days_remaining is not None and outcome in (None, "pending") else ""
         with st.expander(
-            f"[{fid}] {sig_type.upper()} · {ticker or 'MACRO'} · {prediction} · {ts_str}",
+            f"[{fid}] {sig_type.upper()} · {ticker or 'MACRO'} · {prediction} · {ts_str}{_days_flag}{_early_flag}",
             expanded=False,
         ):
             col1, col2 = st.columns([3, 1])
+            with col1:
+                # Horizon progress bar for pending forecasts
+                if outcome in (None, "pending") and horizon > 0:
+                    pct = min(100, int(days_elapsed / horizon * 100))
+                    bar_color = COLORS["yellow"] if pct < 75 else COLORS["bloomberg_orange"]
+                    halfway_marker = "⬆" if pct >= 50 else ""
+                    st.markdown(
+                        f'<div style="margin-bottom:8px;">'
+                        f'<div style="display:flex;justify-content:space-between;font-size:10px;color:{COLORS["text_dim"]};margin-bottom:3px;">'
+                        f'<span>Horizon progress: day {days_elapsed}/{horizon} ({pct}%)</span>'
+                        f'<span style="color:{COLORS["bloomberg_orange"]}">{halfway_marker} {"HALFWAY — early check" if pct >= 50 else f"{days_remaining}d remaining"}</span>'
+                        f'</div>'
+                        f'<div style="background:{COLORS["surface"]};border-radius:3px;height:6px;overflow:hidden;">'
+                        f'<div style="width:{pct}%;background:{bar_color};height:100%;border-radius:3px;transition:width 0.3s;"></div>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
             with col1:
                 st.markdown(
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'

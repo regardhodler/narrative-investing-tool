@@ -491,5 +491,6 @@ def _render_squeeze_detail(r: dict, scan_row: dict) -> None:
                 confidence=65,
                 summary=_cached_thesis["text"][:500],
                 ticker=_ticker,
+                horizon_days=14,  # squeeze momentum burns out fast
                 key=f"sq_log_{_ticker}",
             )
