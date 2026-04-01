@@ -231,18 +231,32 @@ def _render_dashboard_tab():
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
+    # Alpha row
+    avg_alpha = stats.get("avg_alpha")
+    pos_alpha_rate = stats.get("positive_alpha_rate")
+    alpha_color = COLORS["positive"] if avg_alpha is not None and avg_alpha > 0 else (COLORS["negative"] if avg_alpha is not None and avg_alpha < 0 else COLORS["text_dim"])
+    cols_alpha = st.columns(4)
+    alpha_metrics = [
+        ("AVG ALPHA vs SPY", f"{avg_alpha:+.2f}%" if avg_alpha is not None else "—", alpha_color),
+        ("BEAT SPY RATE", f"{pos_alpha_rate:.0f}%" if pos_alpha_rate is not None else "—", alpha_color),
+        ("AVG RETURN (✗)", f"{stats['avg_return_incorrect']:+.1f}%" if stats.get("avg_return_incorrect") is not None else "—", COLORS["negative"]),
+        ("ALPHA CALLS", str(sum(1 for e in stats.get("log",[]) if e.get("alpha_pct") is not None)), COLORS["text_dim"]),
+    ]
+    for col, (label, val, color) in zip(cols_alpha, alpha_metrics):
+        with col:
+            st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
+
     # Streak row
     streak_type = stats.get("current_streak_type")
     streak_n = stats.get("current_streak", 0)
     streak_color = COLORS["positive"] if streak_type == "correct" else (COLORS["negative"] if streak_type == "incorrect" else COLORS["text_dim"])
     streak_label = f"{'🔥' if streak_type == 'correct' else '❄️'} {streak_n} {streak_type or '—'} in a row" if streak_n else "—"
 
-    cols2 = st.columns(4)
+    cols2 = st.columns(3)
     streak_metrics = [
         ("CURRENT STREAK", streak_label, streak_color),
         ("BEST WIN STREAK", str(stats.get("best_correct_streak", 0)), COLORS["positive"]),
         ("WORST LOSS STREAK", str(stats.get("worst_incorrect_streak", 0)), COLORS["negative"]),
-        ("AVG RETURN (✗)", f"{stats['avg_return_incorrect']:+.1f}%" if stats.get("avg_return_incorrect") is not None else "—", COLORS["negative"]),
     ]
     for col, (label, val, color) in zip(cols2, streak_metrics):
         with col:
@@ -390,8 +404,12 @@ def _render_history_tab():
                     "prediction": e.get("prediction"), "confidence": e.get("confidence"),
                     "model": e.get("model"), "horizon_days": e.get("horizon_days"),
                     "timestamp": ts_str, "outcome": e.get("outcome"),
-                    "return_pct": e.get("return_pct"), "price_at_forecast": e.get("price_at_forecast"),
+                    "return_pct": e.get("return_pct"), "spy_return_pct": e.get("spy_return_pct"),
+                    "alpha_pct": e.get("alpha_pct"),
+                    "price_at_forecast": e.get("price_at_forecast"),
                     "price_at_eval": e.get("price_at_eval"),
+                    "spy_price_at_forecast": e.get("spy_price_at_forecast"),
+                    "spy_price_at_eval": e.get("spy_price_at_eval"),
                     "regime_at_log": ctx.get("regime"), "quadrant_at_log": ctx.get("quadrant"),
                     "fg_at_log": ctx.get("fear_greed_score"), "vix_structure_at_log": ctx.get("vix_structure"),
                     "notes": e.get("notes"),
@@ -468,11 +486,12 @@ def _render_history_tab():
                     f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};text-transform:uppercase;letter-spacing:0.08em;">Return</div>'
                     f'<div style="font-size:14px;color:{COLORS["positive"] if ret and ret > 0 else COLORS["negative"] if ret and ret < 0 else COLORS["text"]};font-weight:700;margin-top:2px;">{ret_str}</div></div>'
                     f'</div>'
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px;">'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px;">'
                     f'<div><span style="color:{COLORS["text_dim"]}">Model:</span> <span style="color:{COLORS["text"]}">{model}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Log:</span> <span style="color:{COLORS["text"]}">{price_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Eval:</span> <span style="color:{COLORS["text"]}">{price_eval_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Eval due:</span> <span style="color:{COLORS["text"]}">{eval_due_str}</span></div>'
+                    f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -614,9 +633,9 @@ def _render_pnl_tab():
     tradeable.sort(key=lambda e: e.get("timestamp") or "")
 
     position_size = 1000.0
-    equity = position_size  # starting capital per trade (not cumulative)
     cumulative = 0.0
-    curve_x, curve_y = [], []
+    spy_cumulative = 0.0
+    curve_x, curve_y, spy_curve_y, alpha_curve_y = [], [], [], []
     total_invested = 0.0
     wins, losses = 0, 0
 
@@ -624,37 +643,50 @@ def _render_pnl_tab():
         ts = e.get("timestamp")
         ts_str = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else str(ts or "")[:10]
         ret_pct = e.get("return_pct", 0) or 0
-        # For sell/short calls, invert the return
+        spy_ret_pct = e.get("spy_return_pct") or 0
         prediction = e.get("prediction", "")
         if prediction in ("Sell", "Strong Sell"):
             ret_pct = -ret_pct
+            spy_ret_pct = -spy_ret_pct  # benchmark also inverted (you were short)
         pnl = position_size * (ret_pct / 100)
+        spy_pnl = position_size * (spy_ret_pct / 100)
         cumulative += pnl
+        spy_cumulative += spy_pnl
         total_invested += position_size
         if e.get("outcome") == "correct":
             wins += 1
         else:
             losses += 1
-        curve_x.append(f"{ts_str} [{e.get('ticker','?')}]")
+        label = f"{ts_str} [{e.get('ticker','?')}]"
+        curve_x.append(label)
         curve_y.append(round(cumulative, 2))
+        spy_curve_y.append(round(spy_cumulative, 2))
+        alpha_curve_y.append(round(cumulative - spy_cumulative, 2))
 
     total_return_pct = round(cumulative / total_invested * 100, 2) if total_invested else 0
+    spy_return_total = round(spy_cumulative / total_invested * 100, 2) if total_invested else 0
+    alpha_total = round(total_return_pct - spy_return_total, 2)
 
     # Summary metrics
-    col1, col2, col3, col4 = st.columns(4)
     pnl_color = COLORS["positive"] if cumulative >= 0 else COLORS["negative"]
+    alpha_color = COLORS["positive"] if alpha_total > 0 else COLORS["negative"]
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     with col1:
         st.markdown(bloomberg_metric("TOTAL P&L", f"${cumulative:+,.0f}", pnl_color), unsafe_allow_html=True)
     with col2:
-        st.markdown(bloomberg_metric("RETURN ON CAPITAL", f"{total_return_pct:+.1f}%", pnl_color), unsafe_allow_html=True)
+        st.markdown(bloomberg_metric("YOUR RETURN", f"{total_return_pct:+.1f}%", pnl_color), unsafe_allow_html=True)
     with col3:
-        st.markdown(bloomberg_metric("WINNING TRADES", str(wins), COLORS["positive"]), unsafe_allow_html=True)
+        st.markdown(bloomberg_metric("SPY RETURN", f"{spy_return_total:+.1f}%", COLORS["text_dim"]), unsafe_allow_html=True)
     with col4:
+        st.markdown(bloomberg_metric("TOTAL ALPHA", f"{alpha_total:+.2f}%", alpha_color), unsafe_allow_html=True)
+    with col5:
+        st.markdown(bloomberg_metric("WINNING TRADES", str(wins), COLORS["positive"]), unsafe_allow_html=True)
+    with col6:
         st.markdown(bloomberg_metric("LOSING TRADES", str(losses), COLORS["negative"]), unsafe_allow_html=True)
 
     st.markdown(f'<div style="height:12px;"></div>', unsafe_allow_html=True)
 
-    # Equity curve
+    # Equity curve with SPY overlay
     bar_colors = []
     prev = 0.0
     for y in curve_y:
@@ -665,21 +697,33 @@ def _render_pnl_tab():
     fig.add_trace(go.Bar(
         x=curve_x, y=curve_y,
         marker_color=bar_colors,
-        text=[f"${v:+,.0f}" for v in curve_y],
-        textposition="outside",
-        textfont=dict(size=9),
-        name="Cumulative P&L",
+        name="Your calls P&L",
+        opacity=0.8,
     ))
-    fig.add_hline(y=0, line_color=COLORS["text_dim"], line_width=1)
+    if any(v != 0 for v in spy_curve_y):
+        fig.add_trace(go.Scatter(
+            x=curve_x, y=spy_curve_y,
+            mode="lines+markers",
+            line=dict(color=COLORS["text_dim"], width=2, dash="dot"),
+            marker=dict(size=5),
+            name="SPY equivalent",
+        ))
+        fig.add_trace(go.Scatter(
+            x=curve_x, y=alpha_curve_y,
+            mode="lines",
+            line=dict(color=COLORS["bloomberg_orange"], width=2),
+            name="Alpha (your - SPY)",
+        ))
+    fig.add_hline(y=0, line_color=COLORS["border"], line_width=1)
     fig.update_layout(
         paper_bgcolor=COLORS["bg"],
         plot_bgcolor=COLORS["bg"],
         font=dict(family="JetBrains Mono, Consolas, monospace", color=COLORS["text"], size=10),
         xaxis=dict(title="Trade (date · ticker)", gridcolor=COLORS["grid"], tickangle=-45),
         yaxis=dict(title="Cumulative P&L ($)", gridcolor=COLORS["grid"]),
+        legend=dict(bgcolor=COLORS["surface"], bordercolor=COLORS["border"], borderwidth=1, font=dict(size=10)),
         margin=dict(l=50, r=20, t=20, b=100),
-        height=340,
-        showlegend=False,
+        height=360,
     )
     st.plotly_chart(fig, use_container_width=True)
 

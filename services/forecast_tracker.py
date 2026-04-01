@@ -54,6 +54,10 @@ def _fetch_price(ticker: str) -> Optional[float]:
         return None
 
 
+def _fetch_spy_price() -> Optional[float]:
+    return _fetch_price("SPY")
+
+
 def _auto_outcome(entry: dict, current_price: float) -> tuple[str, float]:
     """Determine outcome and return_pct given current price."""
     price_at = entry.get("price_at_forecast")
@@ -125,6 +129,7 @@ def log_forecast(
 ) -> str:
     """Log a new forecast. Returns the forecast ID."""
     price_at = _fetch_price(ticker) if ticker else None
+    spy_price_at = _fetch_spy_price()
 
     entry = {
         "id": str(uuid.uuid4())[:8],
@@ -134,14 +139,18 @@ def log_forecast(
         "confidence": confidence,
         "summary": summary,
         "price_at_forecast": price_at,
+        "spy_price_at_forecast": spy_price_at,
         "target_price": target_price,
         "horizon_days": horizon_days,
         "timestamp": datetime.now(),
         "model": MODEL_LABELS.get(model, model),
         "evaluated_at": None,
         "price_at_eval": None,
+        "spy_price_at_eval": None,
         "outcome": None,
         "return_pct": None,
+        "spy_return_pct": None,
+        "alpha_pct": None,
         "notes": notes,
         "market_context": _capture_market_context(),
     }
@@ -186,6 +195,21 @@ def evaluate_pending(force: bool = False) -> int:
             entry["return_pct"] = ret
             entry["price_at_eval"] = price
             entry["evaluated_at"] = now
+
+            # SPY benchmark — compute alpha
+            spy_now = _fetch_spy_price()
+            spy_at = entry.get("spy_price_at_forecast")
+            if spy_now and spy_at and spy_at > 0:
+                spy_ret = round((spy_now - spy_at) / spy_at * 100, 2)
+                entry["spy_price_at_eval"] = spy_now
+                entry["spy_return_pct"] = spy_ret
+                # For Sell calls, alpha = -ticker_ret - spy_ret (you shorted)
+                prediction = entry.get("prediction", "")
+                if prediction in ("Sell", "Strong Sell"):
+                    entry["alpha_pct"] = round(-ret - spy_ret, 2)
+                else:
+                    entry["alpha_pct"] = round(ret - spy_ret, 2)
+
             updated += 1
         elif sig_type == "regime":
             # Auto-eval: compare predicted quadrant vs current quadrant
@@ -324,6 +348,11 @@ def get_stats() -> dict:
     incorrect_returns = [e["return_pct"] for e in resolved if e["outcome"] == "incorrect" and e.get("return_pct") is not None]
     avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
 
+    # Alpha vs SPY (only entries with alpha_pct set)
+    alphas = [e["alpha_pct"] for e in resolved if e.get("alpha_pct") is not None]
+    avg_alpha = round(sum(alphas) / len(alphas), 2) if alphas else None
+    positive_alpha_rate = round(sum(1 for a in alphas if a > 0) / len(alphas) * 100, 1) if alphas else None
+
     return {
         "total": len(log),
         "total_resolved": total_resolved,
@@ -336,9 +365,11 @@ def get_stats() -> dict:
         "calibration": calibration,
         "avg_return_correct": avg_return_correct,
         "avg_return_incorrect": avg_return_incorrect,
+        "avg_alpha": avg_alpha,
+        "positive_alpha_rate": positive_alpha_rate,
         "current_streak": current_streak,
         "current_streak_type": current_streak_type,
         "best_correct_streak": best_correct,
         "worst_incorrect_streak": worst_incorrect,
-        "log": log,  # full log for P&L sim
+        "log": log,
     }
