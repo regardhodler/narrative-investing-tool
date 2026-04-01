@@ -244,6 +244,82 @@ def _auto_outcome(entry: dict, current_price: float) -> tuple[str, float]:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+def backtest_atr(ticker: str, date_str: str, direction: str, confidence: int = 70) -> Optional[dict]:
+    """Simulate an ATR trailing stop trade on any ticker from any past date.
+
+    Args:
+        ticker:     e.g. "SPY"
+        date_str:   ISO format "YYYY-MM-DD"
+        direction:  "Buy" or "Sell"
+        confidence: 0-100
+
+    Returns dict with:
+        outcome, return_pct, exit_date, exit_price, exit_reason,
+        atr_at_log, stop_at_log, target_at_log,
+        price_at_entry, highs, lows, closes, dates   (full history for charting)
+    or None on data failure.
+    """
+    try:
+        ts = datetime.fromisoformat(date_str)
+    except ValueError:
+        return None
+
+    import yfinance as yf
+    import pandas as pd
+
+    # Fetch entry price (close on that date)
+    lookback = ts - timedelta(days=_ATR_PERIOD * 2 + 10)
+    hist = yf.Ticker(ticker).history(start=lookback.strftime("%Y-%m-%d"), auto_adjust=True)
+    if hist is None or hist.empty:
+        return None
+
+    # Find entry price = close on or after date_str
+    since_ts = pd.Timestamp(ts).tz_localize(hist.index.tzinfo) if hist.index.tzinfo else pd.Timestamp(ts)
+    entry_row = hist[hist.index >= since_ts]
+    if entry_row.empty:
+        return None
+    price_at = float(entry_row["Close"].iloc[0])
+
+    synthetic = {
+        "ticker":            ticker,
+        "timestamp":         ts.isoformat(),
+        "price_at_forecast": price_at,
+        "prediction":        direction,
+        "signal_type":       "valuation",
+        "confidence":        confidence,
+    }
+
+    result = _evaluate_atr_trailing(synthetic)
+    if result is None:
+        # Trade still open — return partial with full history
+        data = _fetch_atr_and_history(ticker, ts)
+        if not data:
+            return None
+        return {
+            "outcome":       "open",
+            "return_pct":    None,
+            "exit_date":     None,
+            "exit_price":    None,
+            "exit_reason":   "still_open",
+            "atr_at_log":    data.get("atr"),
+            "stop_at_log":   price_at - _ATR_MULT_STOP * data["atr"] if direction == "Buy" else price_at + _ATR_MULT_STOP * data["atr"],
+            "target_at_log": price_at + _ATR_MULT_TARGET * data["atr"] if direction == "Buy" else price_at - _ATR_MULT_TARGET * data["atr"],
+            "price_at_entry": price_at,
+            "highs":  data["highs"],
+            "lows":   data["lows"],
+            "closes": data["closes"],
+            "dates":  data["dates"],
+        }
+
+    data = _fetch_atr_and_history(ticker, ts)
+    result["price_at_entry"] = price_at
+    result["highs"]   = data["highs"]  if data else []
+    result["lows"]    = data["lows"]   if data else []
+    result["closes"]  = data["closes"] if data else []
+    result["dates"]   = data["dates"]  if data else []
+    return result
+
+
 def _capture_market_context() -> dict:
     """Snapshot key market signals from session state at time of logging."""
     ctx: dict = {}
@@ -566,6 +642,28 @@ def get_stats() -> dict:
     avg_return_correct   = round(sum(correct_returns)   / len(correct_returns),   2) if correct_returns   else None
     avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
 
+    # Win rate by regime context (VIX bucket + quadrant stored at log time)
+    by_regime: dict[str, dict] = {}
+    for e in price_resolved:
+        ctx = e.get("market_context") or {}
+        quadrant = ctx.get("quadrant") or "Unknown"
+        vix = ctx.get("vix")
+        vix_bucket = (
+            "VIX<15 (calm)"       if vix and vix < 15  else
+            "VIX 15–20 (normal)"  if vix and vix < 20  else
+            "VIX 20–30 (elevated)" if vix and vix < 30 else
+            "VIX>30 (stress)"     if vix               else
+            "VIX unknown"
+        )
+        key = f"{quadrant} | {vix_bucket}"
+        if key not in by_regime:
+            by_regime[key] = {"correct": 0, "total": 0, "quadrant": quadrant, "vix_bucket": vix_bucket}
+        by_regime[key]["total"] += 1
+        if e["outcome"] == "correct":
+            by_regime[key]["correct"] += 1
+    for d in by_regime.values():
+        d["accuracy"] = round(d["correct"] / d["total"] * 100, 1) if d["total"] else 0.0
+
     return {
         "total": len(log),
         "total_resolved": total_resolved,
@@ -578,16 +676,17 @@ def get_stats() -> dict:
         "price_resolved":       len(price_resolved),
         "macro_accuracy":       macro_accuracy,
         "macro_resolved":       len(macro_resolved),
-        "by_type": by_type,
-        "by_model": by_model,
+        "by_type":    by_type,
+        "by_model":   by_model,
+        "by_regime":  by_regime,
         "calibration": calibration,
-        "avg_return_correct": avg_return_correct,
+        "avg_return_correct":   avg_return_correct,
         "avg_return_incorrect": avg_return_incorrect,
-        "avg_alpha": avg_alpha,
-        "positive_alpha_rate": positive_alpha_rate,
-        "current_streak": current_streak,
-        "current_streak_type": current_streak_type,
-        "best_correct_streak": best_correct,
-        "worst_incorrect_streak": worst_incorrect,
+        "avg_alpha":            avg_alpha,
+        "positive_alpha_rate":  positive_alpha_rate,
+        "current_streak":          current_streak,
+        "current_streak_type":     current_streak_type,
+        "best_correct_streak":     best_correct,
+        "worst_incorrect_streak":  worst_incorrect,
         "log": log,
     }
