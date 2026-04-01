@@ -27,14 +27,14 @@ def render():
         return
 
     with st.spinner("Collecting market signals..."):
-        signals = _collect_signals(ticker)
-
-    if not signals:
-        st.warning("Could not collect enough data for valuation — yfinance may be rate-limiting or the ticker is invalid.")
-        if st.button("🔄 Retry", key="valuation_retry"):
-            _collect_signals.clear()
-            st.rerun()
-        return
+        try:
+            signals = _collect_signals(ticker)
+        except Exception as _e:
+            st.warning(f"Could not collect data for **{ticker}** — {_e}. yfinance may be rate-limiting; try again in a moment.")
+            if st.button("🔄 Retry", key="valuation_retry"):
+                _collect_signals.clear()
+                st.rerun()
+            return
 
     from datetime import datetime
 
@@ -718,17 +718,15 @@ def render():
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=3600)
-def _collect_signals(ticker: str) -> dict | None:
-    """Gather signals from yfinance and existing services into a structured dict."""
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info or {}
-        # Guard: yfinance sometimes returns empty dict on rate-limit / transient failure.
-        # Require at least a price field — otherwise we have nothing to work with.
-        if not info.get("currentPrice") and not info.get("regularMarketPrice"):
-            return None
-    except Exception:
-        return None
+def _collect_signals(ticker: str) -> dict:
+    """Gather signals from yfinance and existing services into a structured dict.
+    Raises RuntimeError on failure so Streamlit does not cache the bad result.
+    """
+    stock = yf.Ticker(ticker)
+    info = stock.info or {}
+    # Require at least one price field — empty info = rate-limit or bad ticker
+    if not info.get("currentPrice") and not info.get("regularMarketPrice") and not info.get("previousClose"):
+        raise RuntimeError(f"yfinance returned no price data for {ticker}")
 
     signals = {}
 
