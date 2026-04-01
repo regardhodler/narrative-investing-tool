@@ -545,17 +545,26 @@ def get_stats() -> dict:
             else:
                 break
 
-    # Average return on correct calls
-    correct_returns = [e["return_pct"] for e in resolved if e["outcome"] == "correct" and e.get("return_pct") is not None]
-    avg_return_correct = round(sum(correct_returns) / len(correct_returns), 2) if correct_returns else None
+    # Split: price-based (valuation/squeeze) vs macro (regime/fed/manual)
+    _price_types = ("valuation", "squeeze")
+    price_resolved  = [e for e in resolved if e.get("signal_type") in _price_types]
+    macro_resolved  = [e for e in resolved if e.get("signal_type") not in _price_types]
 
-    incorrect_returns = [e["return_pct"] for e in resolved if e["outcome"] == "incorrect" and e.get("return_pct") is not None]
-    avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
+    price_correct   = sum(1 for e in price_resolved if e["outcome"] == "correct")
+    macro_correct   = sum(1 for e in macro_resolved if e["outcome"] == "correct")
+    price_accuracy  = round(price_correct / len(price_resolved) * 100, 1) if price_resolved else None
+    macro_accuracy  = round(macro_correct / len(macro_resolved) * 100, 1) if macro_resolved else None
 
-    # Alpha vs SPY (only entries with alpha_pct set)
-    alphas = [e["alpha_pct"] for e in resolved if e.get("alpha_pct") is not None]
+    # Alpha vs SPY — price-based only
+    alphas = [e["alpha_pct"] for e in price_resolved if e.get("alpha_pct") is not None]
     avg_alpha = round(sum(alphas) / len(alphas), 2) if alphas else None
     positive_alpha_rate = round(sum(1 for a in alphas if a > 0) / len(alphas) * 100, 1) if alphas else None
+
+    # Returns — price-based only
+    correct_returns   = [e["return_pct"] for e in price_resolved if e["outcome"] == "correct"   and e.get("return_pct") is not None]
+    incorrect_returns = [e["return_pct"] for e in price_resolved if e["outcome"] == "incorrect" and e.get("return_pct") is not None]
+    avg_return_correct   = round(sum(correct_returns)   / len(correct_returns),   2) if correct_returns   else None
+    avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
 
     return {
         "total": len(log),
@@ -564,6 +573,11 @@ def get_stats() -> dict:
         "expired": len(expired),
         "correct": correct,
         "accuracy": accuracy,
+        # Split accuracy
+        "price_accuracy":       price_accuracy,
+        "price_resolved":       len(price_resolved),
+        "macro_accuracy":       macro_accuracy,
+        "macro_resolved":       len(macro_resolved),
         "by_type": by_type,
         "by_model": by_model,
         "calibration": calibration,

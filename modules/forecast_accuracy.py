@@ -266,48 +266,76 @@ def _render_dashboard_tab():
         st.info("No forecasts logged yet. Use the **Log Forecast** tab to start tracking.")
         return
 
-    # Top metrics
-    acc_color = COLORS["positive"] if stats["accuracy"] >= 55 else (COLORS["yellow"] if stats["accuracy"] >= 45 else COLORS["negative"])
-    cols = st.columns(5)
-    metrics = [
-        ("TOTAL LOGGED", str(stats["total"]), None),
-        ("RESOLVED", str(stats["total_resolved"]), None),
-        ("PENDING", str(stats["pending"]), COLORS["blue"]),
-        ("ACCURACY", f"{stats['accuracy']}%", acc_color),
-        ("AVG RETURN (✓)", f"{stats['avg_return_correct']:+.1f}%" if stats["avg_return_correct"] is not None else "—", COLORS["positive"]),
-    ]
-    for col, (label, val, color) in zip(cols, metrics):
+    # ── Row 1: Overall counts ─────────────────────────────────────────────────
+    cols = st.columns(3)
+    for col, (label, val, color) in zip(cols, [
+        ("TOTAL LOGGED", str(stats["total"]),          None),
+        ("RESOLVED",     str(stats["total_resolved"]), None),
+        ("PENDING",      str(stats["pending"]),        COLORS["blue"]),
+    ]):
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
-    # Alpha row
-    avg_alpha = stats.get("avg_alpha")
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px 0;"></div>', unsafe_allow_html=True)
+
+    # ── Row 2: Signal accuracy (macro — no price) ─────────────────────────────
+    st.markdown(
+        f'<div style="color:{COLORS["blue"]};font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">📡 SIGNAL ACCURACY — REGIME / FED / MACRO</div>',
+        unsafe_allow_html=True,
+    )
+    macro_acc   = stats.get("macro_accuracy")
+    macro_res   = stats.get("macro_resolved", 0)
+    macro_color = COLORS["positive"] if macro_acc is not None and macro_acc >= 55 else (COLORS["yellow"] if macro_acc is not None and macro_acc >= 45 else COLORS["negative"]) if macro_acc is not None else COLORS["text_dim"]
+    cols_macro = st.columns(3)
+    for col, (label, val, color) in zip(cols_macro, [
+        ("MACRO ACCURACY",  f"{macro_acc:.1f}%" if macro_acc is not None else "—",  macro_color),
+        ("MACRO RESOLVED",  str(macro_res),                                           None),
+        ("MACRO CORRECT",   str(stats.get("correct", 0) - sum(1 for e in stats.get("log",[]) if e.get("outcome") == "correct" and e.get("signal_type") in ("valuation","squeeze"))), COLORS["positive"]),
+    ]):
+        with col:
+            st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
+
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px 0;"></div>', unsafe_allow_html=True)
+
+    # ── Row 3: Price accuracy (ATR-based — valuation / squeeze) ───────────────
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:10px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">📈 PRICE ACCURACY — VALUATION / SQUEEZE (ATR EXIT)</div>',
+        unsafe_allow_html=True,
+    )
+    price_acc   = stats.get("price_accuracy")
+    price_res   = stats.get("price_resolved", 0)
+    price_color = COLORS["positive"] if price_acc is not None and price_acc >= 55 else (COLORS["yellow"] if price_acc is not None and price_acc >= 45 else COLORS["negative"]) if price_acc is not None else COLORS["text_dim"]
+    avg_alpha      = stats.get("avg_alpha")
     pos_alpha_rate = stats.get("positive_alpha_rate")
-    alpha_color = COLORS["positive"] if avg_alpha is not None and avg_alpha > 0 else (COLORS["negative"] if avg_alpha is not None and avg_alpha < 0 else COLORS["text_dim"])
-    cols_alpha = st.columns(4)
-    alpha_metrics = [
-        ("AVG ALPHA vs SPY", f"{avg_alpha:+.2f}%" if avg_alpha is not None else "—", alpha_color),
-        ("BEAT SPY RATE", f"{pos_alpha_rate:.0f}%" if pos_alpha_rate is not None else "—", alpha_color),
-        ("AVG RETURN (✗)", f"{stats['avg_return_incorrect']:+.1f}%" if stats.get("avg_return_incorrect") is not None else "—", COLORS["negative"]),
-        ("ALPHA CALLS", str(sum(1 for e in stats.get("log",[]) if e.get("alpha_pct") is not None)), COLORS["text_dim"]),
-    ]
-    for col, (label, val, color) in zip(cols_alpha, alpha_metrics):
+    alpha_color    = COLORS["positive"] if avg_alpha is not None and avg_alpha > 0 else (COLORS["negative"] if avg_alpha is not None and avg_alpha < 0 else COLORS["text_dim"])
+    alpha_calls    = sum(1 for e in stats.get("log", []) if e.get("alpha_pct") is not None)
+
+    cols_price = st.columns(6)
+    for col, (label, val, color) in zip(cols_price, [
+        ("PRICE ACCURACY",   f"{price_acc:.1f}%" if price_acc is not None else "—",                                                       price_color),
+        ("PRICE RESOLVED",   str(price_res),                                                                                               None),
+        ("AVG RETURN (✓)",   f"{stats['avg_return_correct']:+.1f}%"   if stats.get("avg_return_correct")   is not None else "—",          COLORS["positive"]),
+        ("AVG RETURN (✗)",   f"{stats['avg_return_incorrect']:+.1f}%" if stats.get("avg_return_incorrect") is not None else "—",          COLORS["negative"]),
+        ("AVG ALPHA vs SPY", f"{avg_alpha:+.2f}%" if avg_alpha is not None else "—",                                                      alpha_color),
+        ("BEAT SPY RATE",    f"{pos_alpha_rate:.0f}%" if pos_alpha_rate is not None else "—",                                             alpha_color),
+    ]):
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
-    # Streak row
-    streak_type = stats.get("current_streak_type")
-    streak_n = stats.get("current_streak", 0)
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px 0;"></div>', unsafe_allow_html=True)
+
+    # ── Row 4: Streaks ────────────────────────────────────────────────────────
+    streak_type  = stats.get("current_streak_type")
+    streak_n     = stats.get("current_streak", 0)
     streak_color = COLORS["positive"] if streak_type == "correct" else (COLORS["negative"] if streak_type == "incorrect" else COLORS["text_dim"])
     streak_label = f"{'🔥' if streak_type == 'correct' else '❄️'} {streak_n} {streak_type or '—'} in a row" if streak_n else "—"
 
     cols2 = st.columns(3)
-    streak_metrics = [
-        ("CURRENT STREAK", streak_label, streak_color),
-        ("BEST WIN STREAK", str(stats.get("best_correct_streak", 0)), COLORS["positive"]),
+    for col, (label, val, color) in zip(cols2, [
+        ("CURRENT STREAK",    streak_label,                               streak_color),
+        ("BEST WIN STREAK",   str(stats.get("best_correct_streak", 0)),   COLORS["positive"]),
         ("WORST LOSS STREAK", str(stats.get("worst_incorrect_streak", 0)), COLORS["negative"]),
-    ]
-    for col, (label, val, color) in zip(cols2, streak_metrics):
+    ]):
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
