@@ -507,6 +507,277 @@ def _build_markdown_export(open_trades: list) -> str:
     return "\n".join(body_parts)
 
 
+def _build_pipeline_export() -> str:
+    """Build a structured pipeline map of the entire app for AI review."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    ctx = st.session_state.get("_regime_context") or {}
+    regime = ctx.get("regime", "unknown")
+    quadrant = ctx.get("quadrant", "unknown")
+
+    lines = [
+        "# REGARDED TERMINALS — PIPELINE MAP",
+        f"Generated: {now_str}  |  Current Regime: {regime}  |  Quadrant: {quadrant}",
+        "Purpose: Full app pipeline description for AI gap-analysis.",
+        "Paste into Claude.ai/ChatGPT and ask: 'What signals, tools, or analytical layers is this pipeline missing?'",
+        "",
+        "---",
+        "## ARCHITECTURE OVERVIEW",
+        "",
+        "```",
+        "External Data Sources",
+        "  ├─ yfinance          → Market prices, OHLC, options chain",
+        "  ├─ SEC EDGAR API     → 13F filings, Form 4 insider trades, full-text search",
+        "  ├─ Google Trends     → Search interest (narrative momentum proxy)",
+        "  ├─ FRED / market     → VIX, yield curve, credit spreads, macro indicators",
+        "  └─ Congress API      → Congressional trade disclosures",
+        "",
+        "Services Layer  (services/)",
+        "  ├─ market_data.py    → Batch yfinance fetch, z-scores, AssetSnapshot dataclass",
+        "  ├─ sec_client.py     → SEC EDGAR rate-limited client (10 req/s), CIK mapping",
+        "  ├─ claude_client.py  → Claude AI synthesis (Anthropic API)",
+        "  ├─ congress_client.py→ Congressional trades feed",
+        "  ├─ trends_client.py  → Google Trends pytrends wrapper",
+        "  ├─ ibkr_client.py    → Interactive Brokers live connection (ib_insync)",
+        "  ├─ forecast_tracker.py → Signal logging, ATR evaluation, accuracy stats",
+        "  ├─ backtest_engine.py→ Strategy backtesting (ATR trailing stop exits)",
+        "  └─ signals_cache.py  → Session-state signal persistence",
+        "",
+        "Modules  (modules/)",
+        "  ├─ risk_regime.py        → Module 0: Cross-asset regime indicator",
+        "  ├─ narrative_discovery.py→ Module 1: AI-grouped narrative/ticker discovery",
+        "  ├─ narrative_pulse.py    → Module 2: Narrative sentiment tracking",
+        "  ├─ edgar_scanner.py      → Module 3: SEC EDGAR full-text filing search",
+        "  ├─ institutional.py      → Module 4: 13F institutional holdings analysis",
+        "  ├─ insider_congress.py   → Module 5: Form 4 insider + Congress trades",
+        "  ├─ options_activity.py   → Module 6: Options flow (unusual activity verdict)",
+        "  ├─ valuation.py          → Module 7: AI valuation + recommendation",
+        "  ├─ quick_run.py          → QIR Intelligence Dashboard (AI synthesis of all signals)",
+        "  ├─ forecast_accuracy.py  → Forecast Accuracy Tracker",
+        "  ├─ backtesting.py        → Strategy Backtest + Walk-Forward + ATR Replay",
+        "  ├─ stress_signals.py     → Doom/stress scenario briefing",
+        "  ├─ whale_buyers.py       → Institutional whale movement detection",
+        "  ├─ fed_forecaster.py     → Fed rate-path probability forecasting",
+        "  ├─ trade_journal.py      → Portfolio trade journal",
+        "  ├─ performance.py        → Portfolio performance + P&L",
+        "  ├─ macro_scorecard.py    → Cross-asset macro scorecard",
+        "  ├─ signal_audit.py       → Signal quality audit trail",
+        "  ├─ wyckoff.py            → Wyckoff price cycle analysis",
+        "  ├─ elliott_wave.py       → Elliott Wave pattern detection",
+        "  ├─ export_hub.py         → This export system",
+        "  └─ alerts_settings.py    → Alert thresholds + Telegram config",
+        "```",
+        "",
+        "---",
+        "## MODULE 0 — RISK REGIME INDICATOR",
+        "",
+        "**Purpose:** Classify the current macro environment so all other signals are regime-aware.",
+        "",
+        "**How it works:**",
+        "- Computes z-scores for 17+ cross-asset signals vs. their rolling 252-day history",
+        "- Signals: SPY momentum, VIX level, credit spreads (HYG/LQD), yield curve (2s10s),",
+        "  gold (GLD), USD (DXY), TLT (duration demand), small-cap vs large-cap (IWM/SPY),",
+        "  copper (Dr. Copper), oil (USO), semiconductor index (SOXX), emerging markets (EEM),",
+        "  high-beta vs low-vol ratio, put/call ratio",
+        "- Composite z-score → Risk-On / Neutral / Risk-Off regime label",
+        "- **Quadrant system:** Growth vs Inflation axis (4 quadrants: Goldilocks, Stagflation,",
+        "  Reflation, Deflation) derived from equity/bond/commodity/currency z-scores",
+        "- **Daily history:** Regime is saved with timestamp so signals can be evaluated",
+        "  against the regime that existed when they were logged",
+        "- **VIX buckets:** <15 calm, 15-20 normal, 20-30 elevated, >30 stress",
+        "",
+        "**Outputs stored in session state:**",
+        "- `_regime_context` → {regime, score, quadrant, signals dict, history}",
+        "- `_regime_context_ts` → timestamp of last run",
+        "- `_dominant_rate_path` → dominant Fed scenario from rate-path overlay",
+        "",
+        "---",
+        "## MODULE 1 — NARRATIVE DISCOVERY",
+        "",
+        "**Purpose:** Surface investment narratives (themes) and group tickers by them using AI.",
+        "",
+        "**How it works:**",
+        "- User enters a ticker or macro theme",
+        "- Google Trends data pulled for search momentum",
+        "- Claude AI groups related tickers by narrative theme (e.g. 'AI infrastructure', 'reshoring')",
+        "- Each narrative gets a momentum score, trend direction, and related ticker list",
+        "",
+        "---",
+        "## MODULE 2 — NARRATIVE PULSE",
+        "",
+        "**Purpose:** Track sentiment and momentum for a specific narrative over time.",
+        "",
+        "**How it works:**",
+        "- Pulls Google Trends weekly interest for a keyword",
+        "- Compares current vs. 4-week and 13-week averages",
+        "- Claude AI generates narrative sentiment summary (bullish/bearish/neutral)",
+        "- Stores trend momentum for cross-module use",
+        "",
+        "---",
+        "## MODULE 3 — EDGAR SCANNER",
+        "",
+        "**Purpose:** Search SEC EDGAR full-text search for specific keywords in filings.",
+        "",
+        "**How it works:**",
+        "- SEC EDGAR full-text search API (efts.sec.gov)",
+        "- Filters by form type (10-K, 10-Q, 8-K, etc.), date range, ticker",
+        "- Rate-limited at 10 req/s with retry logic",
+        "- Results include filing URL, description snippet, date filed",
+        "",
+        "---",
+        "## MODULE 4 — INSTITUTIONAL HOLDINGS (13F)",
+        "",
+        "**Purpose:** Track what institutional investors (hedge funds, pensions) are buying/selling.",
+        "",
+        "**How it works:**",
+        "- Pulls 13F filings from SEC EDGAR for any institution by CIK",
+        "- Parses holdings XML (primary_doc.xml in filing index)",
+        "- Diffs consecutive quarters to find new positions, increased stakes, exits",
+        "- CIK-to-ticker mapping built from EDGAR company_tickers.json",
+        "- Concurrent fetching with ThreadPoolExecutor (max 5 workers) to respect rate limits",
+        "",
+        "---",
+        "## MODULE 5 — INSIDER + CONGRESS TRADES",
+        "",
+        "**Purpose:** Track insider Form 4 filings and Congressional stock trades.",
+        "",
+        "**How it works:**",
+        "- **Insiders:** SEC EDGAR Form 4 filings parsed per ticker; extracts transaction type",
+        "  (P=Purchase, S=Sale), shares, price, date; filters for open-market buys only",
+        "- **Congress:** Congressional trade disclosure API (quiverquant-style); filters by",
+        "  party, chamber, recency; flags when multiple members trade same ticker",
+        "- Cluster detection: 3+ insider buys within 30-day window = cluster signal",
+        "",
+        "---",
+        "## MODULE 6 — OPTIONS FLOW",
+        "",
+        "**Purpose:** Detect unusual options activity as a directional signal.",
+        "",
+        "**How it works:**",
+        "- Pulls live options chain via yfinance for a given ticker",
+        "- Computes open interest, volume, implied volatility per strike",
+        "- Identifies unusual activity: volume/OI ratio > 3, far-OTM large premium flows",
+        "- Aggregates call vs put bias → sentiment verdict (Bullish / Bearish / Neutral)",
+        "- Stores verdict in session state for QIR synthesis and ATR trade logging",
+        "",
+        "---",
+        "## MODULE 7 — AI VALUATION",
+        "",
+        "**Purpose:** Generate an AI-powered valuation and trade recommendation for a ticker.",
+        "",
+        "**How it works:**",
+        "- Fetches fundamental data (P/E, EPS, revenue growth, debt/equity) via yfinance",
+        "- Pulls regime context, options verdict, insider data from session state",
+        "- Sends all data to Claude AI which outputs:",
+        "  - Fair value estimate (DCF / comparable)",
+        "  - Bull/base/bear case scenarios",
+        "  - Conviction score (1-10)",
+        "  - Buy / Hold / Sell recommendation",
+        "- Logging: user can log the recommendation to Forecast Accuracy Tracker with one click",
+        "",
+        "---",
+        "## QIR — QUICK INTELLIGENCE REPORT (Synthesis Layer)",
+        "",
+        "**Purpose:** Single-screen synthesis of all active signals into a macro verdict.",
+        "",
+        "**How it works:**",
+        "- Reads all signal data from session state (regime, options, insider, institutional,",
+        "  Fed rate path, narrative sentiment, whale movement, black swans)",
+        "- Sends unified context to Claude AI",
+        "- Outputs: Macro verdict label (e.g. BULLISH CONFIRMATION, BEARISH CONFIRMATION,",
+        "  PULLBACK IN UPTREND, LATE CYCLE SQUEEZE, GENUINE UNCERTAINTY, etc.)",
+        "- **Auto-logging:** Verdict is auto-logged to Forecast Tracker as a macro signal",
+        "- **SPY Trade button:** User can log a SPY Buy/Sell ATR trade alongside the macro verdict",
+        "- Verdict → SPY direction mapping:",
+        "  - BULLISH CONFIRMATION / PULLBACK IN UPTREND / OPTIONS FLOW DIVERGENCE /",
+        "    BEAR MARKET BOUNCE → Buy SPY",
+        "  - BEARISH CONFIRMATION / LATE CYCLE SQUEEZE → Sell SPY",
+        "  - GENUINE UNCERTAINTY → disabled",
+        "",
+        "---",
+        "## FORECAST ACCURACY TRACKER",
+        "",
+        "**Purpose:** Measure whether the AI's signals actually worked (honest signal quality).",
+        "",
+        "**Signal types:**",
+        "- `valuation` — ticker-based calls from Module 7 or QIR SPY trades → ATR exit",
+        "- `squeeze` — squeeze/momentum signals → ATR exit",
+        "- `regime` — macro regime direction calls → calendar horizon (no price to trail)",
+        "- `fed` — Fed rate-path scenario calls → calendar horizon",
+        "- `manual` — user-entered custom calls → calendar horizon",
+        "",
+        "**ATR Exit Engine:**",
+        "- ATR period: 14 days",
+        "- Trailing stop: 2.0 × ATR below high watermark (long) / above low watermark (short)",
+        "- Profit target: 3.0 × ATR from entry",
+        "- R:R ratio: 1.5:1 (target ÷ stop)",
+        "- No forced calendar close for ticker signals — stays pending until ATR fires",
+        "- Rationale: calendar exits corrupt accuracy stats (a great early call looks wrong)",
+        "",
+        "**Accuracy split:**",
+        "- Macro accuracy: regime + fed calls (correct direction %)",
+        "- Price accuracy: valuation + squeeze calls (target hit % vs stop hit %)",
+        "- SPY alpha: (ticker return) - (SPY return) over same hold period",
+        "",
+        "**Regime win-rate breakdown:**",
+        "- Groups price calls by macro quadrant + VIX bucket at log time",
+        "- Shows which regime conditions produce the best signal quality",
+        "",
+        "---",
+        "## BACKTESTING ENGINE",
+        "",
+        "**Strategies:**",
+        "1. **SMA Crossover** — Golden cross (short SMA > long SMA) → ATR trailing exit",
+        "2. **VIX Spike** — Contrarian buy SPY when VIX crosses threshold → ATR exit",
+        "3. **Regime Flip** — Buy SPY on Risk-Off → Risk-On transition → ATR exit",
+        "4. **Insider Cluster** — Buy on 3+ insider purchases in rolling window → ATR exit",
+        "",
+        "**ATR Exit in backtests:**",
+        "- Same engine as live tracker: trailing stop on watermark, target fires on intraday H/L",
+        "- Overlapping trade prevention: skips new signals if existing trade is still open",
+        "- Exit reason tracked: profit_target / trailing_stop / data_end",
+        "",
+        "**Validation:**",
+        "- Walk-forward: N sliding windows (train → test), OOS win-rate vs IS win-rate",
+        "- OOS confidence: HIGH (≥55% OOS win rate + positive return), MODERATE, LOW",
+        "- ATR Replay tab: simulate a single trade on any ticker/date to verify engine behavior",
+        "",
+        "---",
+        "## DATA FRESHNESS + CACHING",
+        "",
+        "- `@st.cache_data(ttl=3600)` — most market data (1-hour cache)",
+        "- `@st.cache_data(ttl=86400)` — SEC CIK maps, slow-moving reference data (24-hour)",
+        "- SEC rate limit: 10 req/s enforced by `_rate_limit()` sleep in sec_client.py",
+        "- ThreadPoolExecutor(max_workers=5) for concurrent SEC fetches",
+        "- yfinance batch download: `droplevel('Ticker', axis=1)` handles MultiIndex columns",
+        "",
+        "---",
+        "## ALERT + NOTIFICATION SYSTEM",
+        "",
+        "- Telegram bot integration: send_message(), send_document() via telegram_client.py",
+        "- Alert thresholds configured in alerts_settings.py (VIX spike, regime change, etc.)",
+        "- ATR fire notification: banner shown in Forecast Tracker when a trade resolves",
+        "- Export Hub: any briefing document can be sent to Telegram as a file",
+        "",
+        "---",
+        "## AUTHENTICATION",
+        "",
+        "- Password gate via APP_PASSWORD environment variable",
+        "- Set in .env file; loaded via python-dotenv at app startup",
+        "",
+        "---",
+        "## WHAT THIS PIPELINE DOES NOT CURRENTLY HAVE",
+        "(Fill this in by asking the AI to review the above)",
+        "",
+        "Suggested prompt: 'Given this full pipeline map, what analytical capabilities, data sources,",
+        "signal types, or risk measures would you add to make this a more complete investment",
+        "intelligence system? List gaps by priority.'",
+        "",
+        "---",
+        f"Pipeline Map generated by Regarded Terminals | {now_str}",
+    ]
+    return "\n".join(lines)
+
+
 def _build_json_export(open_trades: list) -> str:
     from services.signals_cache import _SIGNAL_KEYS
     payload = {}
@@ -751,7 +1022,71 @@ def render():
             unsafe_allow_html=True,
         )
 
-    # --- Section D: Suggested prompts ---
+    # --- Section D: Pipeline Map Export ---
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:4px;">PIPELINE MAP EXPORT</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Exports a full structured description of every module, signal, data source, and "
+        "engine in this app. Paste into any AI to find gaps, missing signals, or architecture improvements."
+    )
+
+    if st.button("🗺 Generate Pipeline Map", key="export_pipeline_gen"):
+        with st.spinner("Building pipeline map..."):
+            _pipeline_content = _build_pipeline_export()
+        st.session_state["_pipeline_content"] = _pipeline_content
+
+    _pipe = st.session_state.get("_pipeline_content")
+    if _pipe:
+        _pipe_filename = f"regarded_terminals_pipeline_{datetime.now().strftime('%Y%m%d')}.txt"
+        col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
+        with col_p1:
+            st.download_button(
+                label="💾 Download Pipeline Map",
+                data=_pipe,
+                file_name=_pipe_filename,
+                mime="text/plain",
+                key="export_pipeline_dl",
+            )
+        with col_p2:
+            try:
+                from services.telegram_client import is_configured as _tg_ok2, send_document as _tg_send_doc2
+                if _tg_ok2():
+                    if st.button("📲 Send Pipeline to Telegram", key="export_pipeline_tg"):
+                        with st.spinner("Sending to Telegram..."):
+                            _ok2 = _tg_send_doc2(_pipe_filename, _pipe,
+                                                  caption=f"🗺 Regarded Terminals Pipeline Map — {datetime.now().strftime('%Y-%m-%d')}")
+                        if _ok2:
+                            st.success("✅ Sent to Telegram")
+                        else:
+                            st.error("❌ Telegram send failed")
+                else:
+                    st.caption("📲 Telegram not configured")
+            except ImportError:
+                st.caption("📲 Telegram not configured")
+        with col_p3:
+            st.markdown(
+                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
+                f'{len(_pipe.splitlines())} lines · {len(_pipe):,} chars · ~{len(_pipe)//4:,} tokens</div>',
+                unsafe_allow_html=True,
+            )
+        with st.expander("Preview Pipeline Map", expanded=False):
+            st.code(_pipe[:3000] + ("\n…[truncated]" if len(_pipe) > 3000 else ""), language="markdown")
+
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
+            f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;font-size:12px;color:#bbb;">'
+            f'💡 <b>Suggested prompt:</b> <i>"Given this full pipeline map of my investment tool, '
+            f'what analytical capabilities, data sources, or signal types are missing? '
+            f'List gaps by priority with a brief explanation for each."</i>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # --- Section E: Suggested prompts ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
