@@ -208,31 +208,9 @@ def _evaluate_atr_trailing(entry: dict) -> Optional[dict]:
                         "exit_price": trailing_stop, "exit_reason": "trailing_stop",
                         "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
 
-    # Horizon end — evaluate at final close
-    final_close = closes[-1]
-    if is_short:
-        ret = round((price_at - final_close) / price_at * 100, 2)
-    else:
-        ret = round((final_close - price_at) / price_at * 100, 2)
-
-    # Use existing threshold logic for horizon-end outcome
-    if sig_type == "valuation":
-        direction, threshold = _THRESHOLDS["valuation"].get(prediction, ("up", 0.02))
-    elif sig_type == "squeeze":
-        direction, threshold = _THRESHOLDS["squeeze"]["default"]
-    else:
-        direction, threshold = ("up", 0.02)
-
-    if direction == "up":
-        outcome = "correct" if (final_close - price_at) / price_at >= threshold else "incorrect"
-    elif direction == "down":
-        outcome = "correct" if (price_at - final_close) / price_at >= threshold else "incorrect"
-    else:
-        outcome = "correct" if abs(final_close - price_at) / price_at <= threshold else "incorrect"
-
-    return {"outcome": outcome, "return_pct": ret, "exit_date": dates[-1],
-            "exit_price": final_close, "exit_reason": "horizon_end",
-            "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+    # Neither stop nor target triggered — trade is still open
+    # Return None so the caller keeps the entry as pending
+    return None
 
 
 def _auto_outcome(entry: dict, current_price: float) -> tuple[str, float]:
@@ -400,38 +378,26 @@ def evaluate_pending(force: bool = False) -> int:
         ticker   = entry.get("ticker", "")
 
         if sig_type in ("valuation", "squeeze") and ticker:
-            # ATR trailing stop/target — always run once past halfway; full walk past horizon
+            # ATR trailing stop/target — only exit when stop or target fires
             days_elapsed = (now - ts).days
             if not force and days_elapsed < 1:
                 continue  # need at least 1 trading day
 
             atr_result = _evaluate_atr_trailing(entry)
             if atr_result is None:
-                # Fallback: simple price check at horizon end
-                if not force and now < eval_due:
-                    continue
-                price = _fetch_price(ticker)
-                if price is None:
-                    continue
-                outcome, ret = _auto_outcome(entry, price)
-                entry["outcome"]       = outcome
-                entry["return_pct"]    = ret
-                entry["price_at_eval"] = price
-                entry["exit_reason"]   = "horizon_end_fallback"
-            else:
-                entry["outcome"]       = atr_result["outcome"]
-                entry["return_pct"]    = atr_result["return_pct"]
-                entry["price_at_eval"] = atr_result["exit_price"]
-                entry["exit_reason"]   = atr_result["exit_reason"]
-                entry["exit_date"]     = atr_result["exit_date"]
-                if atr_result.get("atr_at_log") and not entry.get("atr_at_log"):
-                    entry["atr_at_log"]    = atr_result["atr_at_log"]
-                    entry["stop_at_log"]   = atr_result["stop_at_log"]
-                    entry["target_at_log"] = atr_result["target_at_log"]
+                # No trigger yet — keep pending, update ATR levels if newly available
+                continue
 
-                # Only finalize if actually triggered or past horizon
-                if atr_result["exit_reason"] == "horizon_end" and not force and now < eval_due:
-                    continue  # not yet at horizon, keep pending
+            # Stop or target triggered — finalize
+            entry["outcome"]       = atr_result["outcome"]
+            entry["return_pct"]    = atr_result["return_pct"]
+            entry["price_at_eval"] = atr_result["exit_price"]
+            entry["exit_reason"]   = atr_result["exit_reason"]
+            entry["exit_date"]     = atr_result["exit_date"]
+            if atr_result.get("atr_at_log") and not entry.get("atr_at_log"):
+                entry["atr_at_log"]    = atr_result["atr_at_log"]
+                entry["stop_at_log"]   = atr_result["stop_at_log"]
+                entry["target_at_log"] = atr_result["target_at_log"]
 
             entry["evaluated_at"] = now
 

@@ -203,15 +203,26 @@ def _render_log_tab():
             prediction = st.text_input("Prediction", placeholder="Buy / Goldilocks / Hold…")
             confidence = st.slider("Confidence", 0, 100, 65)
 
-        # Smart default horizon based on signal type
-        _default_horizons = {"valuation": 60, "squeeze": 14, "regime": 14, "fed": 30, "manual": 30}
+        # Smart default horizon — only used for regime/fed/manual (not ticker-based ATR signals)
+        _is_atr_signal = sig_type in ("valuation", "squeeze")
+        _default_horizons = {"regime": 14, "fed": 30, "manual": 30}
         _horizon_options = [7, 14, 21, 30, 60, 90]
-        _sig_type_val = sig_type  # captured from selectbox above
-        _default_idx = _horizon_options.index(_default_horizons.get(_sig_type_val, 30)) if _default_horizons.get(_sig_type_val, 30) in _horizon_options else 3
+        _default_idx = _horizon_options.index(_default_horizons.get(sig_type, 30)) if _default_horizons.get(sig_type, 30) in _horizon_options else 3
 
         c3, c4 = st.columns(2)
         with c3:
-            horizon = st.selectbox("Evaluation Horizon", _horizon_options, index=_default_idx, format_func=lambda x: f"{x} days")
+            if _is_atr_signal:
+                st.markdown(
+                    f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                    f'border-left:3px solid {COLORS["bloomberg_orange"]};padding:8px 10px;border-radius:4px;font-size:11px;">'
+                    f'<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;margin-bottom:2px;">📡 ATR EXIT — No fixed date</div>'
+                    f'<div style="color:{COLORS["text_dim"]};">Closes on 🎯 target (3×ATR) or 🛑 trailing stop (2×ATR)</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                horizon = None  # no horizon for ATR-based signals
+            else:
+                horizon = st.selectbox("Evaluation Horizon", _horizon_options, index=_default_idx, format_func=lambda x: f"{x} days")
         with c4:
             model_sel = st.selectbox("Model Used", list(MODEL_LABELS.values()) + ["Other"])
 
@@ -223,16 +234,18 @@ def _render_log_tab():
             if not prediction.strip():
                 st.error("Prediction cannot be empty.")
             else:
-                fid = log_forecast(
+                kwargs = dict(
                     signal_type=sig_type,
                     prediction=prediction.strip(),
                     confidence=confidence,
                     summary=summary_in,
                     model=model_sel,
                     ticker=ticker_in.strip().upper() or None,
-                    horizon_days=horizon,
                     notes=notes_in,
                 )
+                if horizon is not None:
+                    kwargs["horizon_days"] = horizon
+                fid = log_forecast(**kwargs)
                 st.success(f"Forecast logged! ID: **{fid}**")
                 st.rerun()
 
@@ -495,17 +508,16 @@ def _render_history_tab():
 
         eval_due_str = "—"
         days_elapsed = 0
-        days_remaining = None
-        early_check = None
+        days_open_str = "—"
+        is_atr_signal = sig_type in ("valuation", "squeeze") and ticker
         if ts:
-            eval_due = ts + timedelta(days=horizon)
-            eval_due_str = eval_due.strftime("%Y-%m-%d")
             now_dt = datetime.now()
             days_elapsed = max(0, (now_dt - ts).days)
-            days_remaining = max(0, (eval_due - now_dt).days)
-            # Early check: at ≥50% of horizon, fetch live price and check direction
-            if outcome in (None, "pending") and ticker and days_elapsed >= horizon // 2:
-                early_check = "halfway"
+            days_open_str = f"{days_elapsed}d"
+            if not is_atr_signal:
+                horizon = entry.get("horizon_days", 30)
+                eval_due = ts + timedelta(days=horizon)
+                eval_due_str = eval_due.strftime("%Y-%m-%d")
 
         price_at = entry.get("price_at_forecast")
         price_eval = entry.get("price_at_eval")
@@ -513,31 +525,62 @@ def _render_history_tab():
         price_eval_str = f"${price_eval:.2f}" if price_eval else "—"
 
         tc = _type_color(sig_type)
-        # Build expander title — add early check indicator if halfway
-        _early_flag = " 🟡" if early_check and outcome in (None, "pending") else ""
-        _days_flag = f" · {days_remaining}d left" if days_remaining is not None and outcome in (None, "pending") else ""
+        _open_flag = f" · {days_open_str} open" if outcome in (None, "pending") else ""
         with st.expander(
-            f"[{fid}] {sig_type.upper()} · {ticker or 'MACRO'} · {prediction} · {ts_str}{_days_flag}{_early_flag}",
+            f"[{fid}] {sig_type.upper()} · {ticker or 'MACRO'} · {prediction} · {ts_str}{_open_flag}",
             expanded=False,
         ):
             col1, col2 = st.columns([3, 1])
             with col1:
-                # Horizon progress bar for pending forecasts
-                if outcome in (None, "pending") and horizon > 0:
-                    pct = min(100, int(days_elapsed / horizon * 100))
-                    bar_color = COLORS["yellow"] if pct < 75 else COLORS["bloomberg_orange"]
-                    halfway_marker = "⬆" if pct >= 50 else ""
-                    st.markdown(
-                        f'<div style="margin-bottom:8px;">'
-                        f'<div style="display:flex;justify-content:space-between;font-size:10px;color:{COLORS["text_dim"]};margin-bottom:3px;">'
-                        f'<span>Horizon progress: day {days_elapsed}/{horizon} ({pct}%)</span>'
-                        f'<span style="color:{COLORS["bloomberg_orange"]}">{halfway_marker} {"HALFWAY — early check" if pct >= 50 else f"{days_remaining}d remaining"}</span>'
-                        f'</div>'
-                        f'<div style="background:{COLORS["surface"]};border-radius:3px;height:6px;overflow:hidden;">'
-                        f'<div style="width:{pct}%;background:{bar_color};height:100%;border-radius:3px;transition:width 0.3s;"></div>'
-                        f'</div></div>',
-                        unsafe_allow_html=True,
-                    )
+                # ATR live status for pending ticker signals
+                if outcome in (None, "pending") and is_atr_signal:
+                    stop_l  = entry.get("stop_at_log")
+                    tgt_l   = entry.get("target_at_log")
+                    p_at    = entry.get("price_at_forecast")
+                    if stop_l and tgt_l and p_at:
+                        is_short = prediction in ("Sell", "Strong Sell")
+                        risk     = abs(p_at - stop_l)
+                        reward   = abs(tgt_l - p_at)
+                        rr_str   = f"{reward/risk:.1f}:1" if risk > 0 else "—"
+                        st.markdown(
+                            f'<div style="display:flex;gap:10px;margin-bottom:8px;font-size:11px;">'
+                            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["negative"]}33;'
+                            f'border-left:3px solid {COLORS["negative"]};padding:6px 10px;border-radius:4px;flex:1;">'
+                            f'<div style="color:{COLORS["negative"]};font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">🛑 Stop</div>'
+                            f'<div style="color:{COLORS["text"]};font-weight:700;">${stop_l:.2f}</div></div>'
+                            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["positive"]}33;'
+                            f'border-left:3px solid {COLORS["positive"]};padding:6px 10px;border-radius:4px;flex:1;">'
+                            f'<div style="color:{COLORS["positive"]};font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">🎯 Target</div>'
+                            f'<div style="color:{COLORS["text"]};font-weight:700;">${tgt_l:.2f}</div></div>'
+                            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                            f'padding:6px 10px;border-radius:4px;flex:1;">'
+                            f'<div style="color:{COLORS["bloomberg_orange"]};font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">R:R</div>'
+                            f'<div style="color:{COLORS["text"]};font-weight:700;">{rr_str}</div></div>'
+                            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                            f'padding:6px 10px;border-radius:4px;flex:1;">'
+                            f'<div style="color:{COLORS["text_dim"]};font-size:10px;text-transform:uppercase;letter-spacing:0.08em;">Open</div>'
+                            f'<div style="color:{COLORS["text"]};font-weight:700;">{days_open_str}</div></div>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
+                elif outcome in (None, "pending") and not is_atr_signal:
+                    # Horizon progress bar for regime/fed/manual
+                    horizon = entry.get("horizon_days", 30)
+                    if horizon and horizon > 0:
+                        pct = min(100, int(days_elapsed / horizon * 100))
+                        days_remaining = max(0, horizon - days_elapsed)
+                        bar_color = COLORS["yellow"] if pct < 75 else COLORS["bloomberg_orange"]
+                        st.markdown(
+                            f'<div style="margin-bottom:8px;">'
+                            f'<div style="display:flex;justify-content:space-between;font-size:10px;color:{COLORS["text_dim"]};margin-bottom:3px;">'
+                            f'<span>Horizon progress: day {days_elapsed}/{horizon} ({pct}%)</span>'
+                            f'<span style="color:{COLORS["bloomberg_orange"]}">{days_remaining}d remaining</span>'
+                            f'</div>'
+                            f'<div style="background:{COLORS["surface"]};border-radius:3px;height:6px;overflow:hidden;">'
+                            f'<div style="width:{pct}%;background:{bar_color};height:100%;border-radius:3px;transition:width 0.3s;"></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True,
+                        )
             with col1:
                 st.markdown(
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'
@@ -555,7 +598,7 @@ def _render_history_tab():
                     f'<div><span style="color:{COLORS["text_dim"]}">Model:</span> <span style="color:{COLORS["text"]}">{model}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Log:</span> <span style="color:{COLORS["text"]}">{price_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Eval:</span> <span style="color:{COLORS["text"]}">{price_eval_str}</span></div>'
-                    f'<div><span style="color:{COLORS["text_dim"]}">Eval due:</span> <span style="color:{COLORS["text"]}">{eval_due_str}</span></div>'
+                    f'<div><span style="color:{COLORS["text_dim"]}">{"Days Open" if is_atr_signal else "Eval Due"}:</span> <span style="color:{COLORS["text"]}">{days_open_str if is_atr_signal else eval_due_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
                     f'</div>'
                     + (
