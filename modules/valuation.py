@@ -30,7 +30,10 @@ def render():
         signals = _collect_signals(ticker)
 
     if not signals:
-        st.warning("Could not collect enough data for valuation.")
+        st.warning("Could not collect enough data for valuation — yfinance may be rate-limiting or the ticker is invalid.")
+        if st.button("🔄 Retry", key="valuation_retry"):
+            _collect_signals.clear()
+            st.rerun()
         return
 
     from datetime import datetime
@@ -720,6 +723,10 @@ def _collect_signals(ticker: str) -> dict | None:
     try:
         stock = yf.Ticker(ticker)
         info = stock.info or {}
+        # Guard: yfinance sometimes returns empty dict on rate-limit / transient failure.
+        # Require at least a price field — otherwise we have nothing to work with.
+        if not info.get("currentPrice") and not info.get("regularMarketPrice"):
+            return None
     except Exception:
         return None
 

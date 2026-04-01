@@ -424,69 +424,60 @@
   "_factor_analysis_engine": "\ud83e\udde0 Regard Mode",
   "_trending_narratives": [
     {
-      "narrative": "Middle East Oil Surge",
-      "evidence": "Oil soars 60% in March as Middle East crisis chokes energy supplies. Trump says US to end war in Iran within \u20182 to 3 weeks\u2019 and Cramer discusses market flip if U.S.-Iran war ends.",
+      "narrative": "Iran War Resolution",
+      "evidence": "Trump says Iran war could end in weeks, and Trump says US could withdraw from Iran \u2018whether we have a deal or not\u2019",
       "tickers": [
         "USO",
-        "XLE",
-        "CVX",
-        "XOM",
-        "OXY"
-      ],
-      "conviction": "HIGH",
-      "timeframe": "short",
-      "category": "commodity"
-    },
-    {
-      "narrative": "OpenAI Record Funding",
-      "evidence": "OpenAI raises $3bn from retail investors as part of record funding haul.",
-      "tickers": [
-        "MSFT",
-        "NVDA",
-        "GOOGL",
-        "ARKK",
-        "AI"
-      ],
-      "conviction": "HIGH",
-      "timeframe": "medium",
-      "category": "tech"
-    },
-    {
-      "narrative": "Crypto SPAC Listing",
-      "evidence": "Crypto asset manager CoinShares to begin trading on Nasdaq through SPAC merger.",
-      "tickers": [
-        "COIN",
-        "MSTR",
-        "BITO",
-        "BLOK",
-        "WGMI"
+        "UCO",
+        "XLE"
       ],
       "conviction": "MEDIUM",
       "timeframe": "short",
-      "category": "tech"
+      "category": "geopolitical"
     },
     {
-      "narrative": "Nike China Sales Plunge",
-      "evidence": "Nike shares fall 9% on weak outlook, expected 20% sales decline in China. Nike expects more falling sales, as stock sinks amid worries turnaround is not working.",
+      "narrative": "Chinese Government Bonds",
+      "evidence": "Chinese government bonds emerge as lone war haven",
       "tickers": [
-        "NKE",
-        "LULU",
-        "DECK",
-        "ONON"
+        "CHLC",
+        "GBF",
+        "ASHR"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "medium",
+      "category": "macro"
+    },
+    {
+      "narrative": "Tech Sector Rebound",
+      "evidence": "Here are 12 top tech-themed stock picks from UBS analysts, and Markets rebound on hopes war will end soon",
+      "tickers": [
+        "QQQ",
+        "XLK",
+        "AAPL"
       ],
       "conviction": "MEDIUM",
       "timeframe": "short",
       "category": "sector"
     },
     {
-      "narrative": "Stock Market Volatility",
-      "evidence": "Investors brace for more stock-market volatility, as wild first quarter ends with biggest rally in a year. Stocks surge, ending a tough month on a high note. But there\u2019s skepticism about the rally.",
+      "narrative": "Oil Price Volatility",
+      "evidence": "Oil extends gains after record monthly rally as Trump signals Iran war exit amid energy disruptions",
       "tickers": [
-        "VXX",
-        "UVXY",
-        "SVXY",
-        "SPY",
-        "QQQ"
+        "USO",
+        "OIL",
+        "XOM"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "short",
+      "category": "commodity"
+    },
+    {
+      "narrative": "Asia Market Rebound",
+      "evidence": "South Korea's Kospi leads rebound in Asia markets as Trump says Iran war could end in weeks",
+      "tickers": [
+        "EWY",
+        "EWH",
+        "AXJL"
       ],
       "conviction": "MEDIUM",
       "timeframe": "short",
@@ -494,7 +485,7 @@
     }
   ],
   "_trending_narratives_ts": {
-    "__datetime__": "2026-03-31T17:32:48.273161"
+    "__datetime__": "2026-03-31T21:56:41.260745"
   },
   "_trending_narratives_tf": "1W",
   "_auto_trending_groups": [
