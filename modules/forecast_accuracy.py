@@ -992,15 +992,13 @@ def _render_backtest_tab():
     )
 
     with st.form("backtest_form"):
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         with c1:
             bt_ticker = st.text_input("Ticker", placeholder="SPY", value="SPY")
         with c2:
             bt_date = st.date_input("Entry Date", value=datetime.now() - timedelta(days=30))
         with c3:
             bt_dir = st.selectbox("Direction", ["Buy", "Sell"])
-        with c4:
-            bt_conf = st.slider("Confidence", 0, 100, 70)
         bt_submit = st.form_submit_button("▶ Run Backtest", use_container_width=True)
 
     if bt_submit:
@@ -1009,7 +1007,7 @@ def _render_backtest_tab():
             return
 
         with st.spinner(f"Fetching {bt_ticker.upper()} data from {bt_date}…"):
-            result = backtest_atr(bt_ticker.strip().upper(), str(bt_date), bt_dir, bt_conf)
+            result = backtest_atr(bt_ticker.strip().upper(), str(bt_date), bt_dir)
 
         if result is None:
             st.error("Could not fetch price data. Check ticker and date.")
