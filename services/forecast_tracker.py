@@ -58,6 +58,183 @@ def _fetch_spy_price() -> Optional[float]:
     return _fetch_price("SPY")
 
 
+# ── ATR trailing stop engine ───────────────────────────────────────────────────
+
+_ATR_MULT_STOP   = 2.0   # trailing stop = high_watermark - N×ATR
+_ATR_MULT_TARGET = 3.0   # profit target = entry + N×ATR  (1.5:1 R:R)
+_ATR_PERIOD      = 14
+
+def _fetch_atr_and_history(ticker: str, since: datetime) -> Optional[dict]:
+    """Fetch ATR(14) and daily OHLC history since log date.
+
+    Returns dict with:
+        atr          float   ATR at log date (used for stop/target levels)
+        highs        list    daily highs since log date
+        lows         list    daily lows since log date
+        closes       list    daily closes since log date
+        dates        list    date strings
+    """
+    try:
+        import yfinance as yf
+        import pandas as pd
+
+        ticker_obj = yf.Ticker(ticker)
+        # Fetch enough history for ATR(14) + all days since log
+        lookback_start = since - timedelta(days=_ATR_PERIOD * 2 + 10)
+        hist = ticker_obj.history(start=lookback_start.strftime("%Y-%m-%d"), auto_adjust=True)
+        if hist is None or len(hist) < _ATR_PERIOD + 2:
+            return None
+
+        # Compute ATR(14) using True Range
+        high = hist["High"]
+        low  = hist["Low"]
+        close_prev = hist["Close"].shift(1)
+        tr = pd.concat([
+            high - low,
+            (high - close_prev).abs(),
+            (low  - close_prev).abs(),
+        ], axis=1).max(axis=1)
+        atr_series = tr.rolling(_ATR_PERIOD).mean()
+
+        # ATR at the log date (last value before/at since)
+        pre_log = atr_series[atr_series.index <= pd.Timestamp(since).tz_localize(atr_series.index.tzinfo)]
+        if pre_log.empty:
+            pre_log = atr_series
+        atr_at_log = float(pre_log.iloc[-1])
+
+        # History AFTER log date
+        since_ts = pd.Timestamp(since).tz_localize(hist.index.tzinfo) if hist.index.tzinfo else pd.Timestamp(since)
+        post = hist[hist.index > since_ts]
+        if post.empty:
+            return {"atr": atr_at_log, "highs": [], "lows": [], "closes": [], "dates": []}
+
+        return {
+            "atr":    atr_at_log,
+            "highs":  post["High"].tolist(),
+            "lows":   post["Low"].tolist(),
+            "closes": post["Close"].tolist(),
+            "dates":  [str(d)[:10] for d in post.index],
+        }
+    except Exception:
+        return None
+
+
+def _evaluate_atr_trailing(entry: dict) -> Optional[dict]:
+    """Walk price history with ATR trailing stop + profit target.
+
+    Returns dict with outcome, return_pct, exit_date, exit_price, exit_reason
+    or None if insufficient data.
+    """
+    ticker = entry.get("ticker", "")
+    if not ticker:
+        return None
+
+    ts = entry.get("timestamp")
+    if isinstance(ts, str):
+        ts = datetime.fromisoformat(ts)
+    if not ts:
+        return None
+
+    price_at = entry.get("price_at_forecast")
+    if not price_at or price_at <= 0:
+        return None
+
+    data = _fetch_atr_and_history(ticker, ts)
+    if not data or not data["closes"]:
+        return None
+
+    atr = data["atr"]
+    if atr <= 0:
+        return None
+
+    prediction = entry.get("prediction", "")
+    sig_type    = entry.get("signal_type", "")
+    is_short    = prediction in ("Sell", "Strong Sell")
+
+    stop_dist   = _ATR_MULT_STOP   * atr
+    target_dist = _ATR_MULT_TARGET * atr
+
+    if is_short:
+        stop_level   = price_at + stop_dist    # initial stop above entry
+        target_level = price_at - target_dist  # target below entry
+    else:
+        stop_level   = price_at - stop_dist    # initial stop below entry
+        target_level = price_at + target_dist  # target above entry
+
+    watermark = price_at  # tracks best price in our direction
+    trailing_stop = stop_level
+
+    highs, lows, closes, dates = data["highs"], data["lows"], data["closes"], data["dates"]
+
+    for i, (h, l, c, d) in enumerate(zip(highs, lows, closes, dates)):
+        if is_short:
+            # Update watermark (lowest low)
+            if l < watermark:
+                watermark = l
+                trailing_stop = watermark + stop_dist
+
+            # Check profit target (intraday low)
+            if l <= target_level:
+                ret = round((price_at - target_level) / price_at * 100, 2)
+                return {"outcome": "correct", "return_pct": ret, "exit_date": d,
+                        "exit_price": target_level, "exit_reason": "profit_target",
+                        "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+
+            # Check trailing stop (intraday high)
+            if h >= trailing_stop:
+                ret = round((price_at - trailing_stop) / price_at * 100, 2)
+                outcome = "correct" if ret > 0 else "incorrect"
+                return {"outcome": outcome, "return_pct": ret, "exit_date": d,
+                        "exit_price": trailing_stop, "exit_reason": "trailing_stop",
+                        "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+        else:
+            # Update watermark (highest high)
+            if h > watermark:
+                watermark = h
+                trailing_stop = watermark - stop_dist
+
+            # Check profit target (intraday high)
+            if h >= target_level:
+                ret = round((target_level - price_at) / price_at * 100, 2)
+                return {"outcome": "correct", "return_pct": ret, "exit_date": d,
+                        "exit_price": target_level, "exit_reason": "profit_target",
+                        "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+
+            # Check trailing stop (intraday low)
+            if l <= trailing_stop:
+                ret = round((trailing_stop - price_at) / price_at * 100, 2)
+                outcome = "correct" if ret > 0 else "incorrect"
+                return {"outcome": outcome, "return_pct": ret, "exit_date": d,
+                        "exit_price": trailing_stop, "exit_reason": "trailing_stop",
+                        "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+
+    # Horizon end — evaluate at final close
+    final_close = closes[-1]
+    if is_short:
+        ret = round((price_at - final_close) / price_at * 100, 2)
+    else:
+        ret = round((final_close - price_at) / price_at * 100, 2)
+
+    # Use existing threshold logic for horizon-end outcome
+    if sig_type == "valuation":
+        direction, threshold = _THRESHOLDS["valuation"].get(prediction, ("up", 0.02))
+    elif sig_type == "squeeze":
+        direction, threshold = _THRESHOLDS["squeeze"]["default"]
+    else:
+        direction, threshold = ("up", 0.02)
+
+    if direction == "up":
+        outcome = "correct" if (final_close - price_at) / price_at >= threshold else "incorrect"
+    elif direction == "down":
+        outcome = "correct" if (price_at - final_close) / price_at >= threshold else "incorrect"
+    else:
+        outcome = "correct" if abs(final_close - price_at) / price_at <= threshold else "incorrect"
+
+    return {"outcome": outcome, "return_pct": ret, "exit_date": dates[-1],
+            "exit_price": final_close, "exit_reason": "horizon_end",
+            "atr_at_log": atr, "stop_at_log": stop_level, "target_at_log": target_level}
+
+
 def _auto_outcome(entry: dict, current_price: float) -> tuple[str, float]:
     """Determine outcome and return_pct given current price."""
     price_at = entry.get("price_at_forecast")
@@ -131,6 +308,31 @@ def log_forecast(
     price_at = _fetch_price(ticker) if ticker else None
     spy_price_at = _fetch_spy_price()
 
+    # ATR-based stop and target levels at log time
+    atr_at_log    = None
+    stop_at_log   = None
+    target_at_log = None
+    if ticker and price_at:
+        try:
+            import yfinance as yf, pandas as pd
+            _h = yf.Ticker(ticker).history(period=f"{_ATR_PERIOD * 2 + 10}d", auto_adjust=True)
+            if _h is not None and len(_h) >= _ATR_PERIOD + 2:
+                _tr = pd.concat([
+                    _h["High"] - _h["Low"],
+                    (_h["High"] - _h["Close"].shift(1)).abs(),
+                    (_h["Low"]  - _h["Close"].shift(1)).abs(),
+                ], axis=1).max(axis=1)
+                atr_at_log = round(float(_tr.rolling(_ATR_PERIOD).mean().iloc[-1]), 4)
+                is_short = prediction in ("Sell", "Strong Sell")
+                if is_short:
+                    stop_at_log   = round(price_at + _ATR_MULT_STOP   * atr_at_log, 4)
+                    target_at_log = round(price_at - _ATR_MULT_TARGET * atr_at_log, 4)
+                else:
+                    stop_at_log   = round(price_at - _ATR_MULT_STOP   * atr_at_log, 4)
+                    target_at_log = round(price_at + _ATR_MULT_TARGET * atr_at_log, 4)
+        except Exception:
+            pass
+
     entry = {
         "id": str(uuid.uuid4())[:8],
         "signal_type": signal_type,
@@ -141,6 +343,9 @@ def log_forecast(
         "price_at_forecast": price_at,
         "spy_price_at_forecast": spy_price_at,
         "target_price": target_price,
+        "atr_at_log": atr_at_log,
+        "stop_at_log": stop_at_log,
+        "target_at_log": target_at_log,
         "horizon_days": horizon_days,
         "timestamp": datetime.now(),
         "model": MODEL_LABELS.get(model, model),
@@ -151,6 +356,8 @@ def log_forecast(
         "return_pct": None,
         "spy_return_pct": None,
         "alpha_pct": None,
+        "exit_reason": None,
+        "exit_date": None,
         "notes": notes,
         "market_context": _capture_market_context(),
     }
@@ -162,7 +369,16 @@ def log_forecast(
 
 
 def evaluate_pending(force: bool = False) -> int:
-    """Auto-evaluate all past-horizon forecasts. Returns count updated."""
+    """Auto-evaluate all past-horizon forecasts using ATR trailing stop/target engine.
+
+    For valuation/squeeze with a ticker:
+      - Walks full price history since log date
+      - Trailing stop: high_watermark - 2×ATR (longs) or low_watermark + 2×ATR (shorts)
+      - Profit target: entry + 3×ATR (longs) or entry - 3×ATR (shorts)
+      - If neither triggered, evaluates at horizon end price
+
+    Regime/fed/manual still evaluate at horizon end (no price data).
+    """
     log = _get_log()
     now = datetime.now()
     updated = 0
@@ -180,35 +396,57 @@ def evaluate_pending(force: bool = False) -> int:
         horizon = entry.get("horizon_days", 30)
         eval_due = ts + timedelta(days=horizon)
 
-        if not force and now < eval_due:
-            continue
-
         sig_type = entry.get("signal_type", "")
-        ticker = entry.get("ticker", "")
+        ticker   = entry.get("ticker", "")
 
         if sig_type in ("valuation", "squeeze") and ticker:
-            price = _fetch_price(ticker)
-            if price is None:
-                continue
-            outcome, ret = _auto_outcome(entry, price)
-            entry["outcome"] = outcome
-            entry["return_pct"] = ret
-            entry["price_at_eval"] = price
+            # ATR trailing stop/target — always run once past halfway; full walk past horizon
+            days_elapsed = (now - ts).days
+            if not force and days_elapsed < 1:
+                continue  # need at least 1 trading day
+
+            atr_result = _evaluate_atr_trailing(entry)
+            if atr_result is None:
+                # Fallback: simple price check at horizon end
+                if not force and now < eval_due:
+                    continue
+                price = _fetch_price(ticker)
+                if price is None:
+                    continue
+                outcome, ret = _auto_outcome(entry, price)
+                entry["outcome"]       = outcome
+                entry["return_pct"]    = ret
+                entry["price_at_eval"] = price
+                entry["exit_reason"]   = "horizon_end_fallback"
+            else:
+                entry["outcome"]       = atr_result["outcome"]
+                entry["return_pct"]    = atr_result["return_pct"]
+                entry["price_at_eval"] = atr_result["exit_price"]
+                entry["exit_reason"]   = atr_result["exit_reason"]
+                entry["exit_date"]     = atr_result["exit_date"]
+                if atr_result.get("atr_at_log") and not entry.get("atr_at_log"):
+                    entry["atr_at_log"]    = atr_result["atr_at_log"]
+                    entry["stop_at_log"]   = atr_result["stop_at_log"]
+                    entry["target_at_log"] = atr_result["target_at_log"]
+
+                # Only finalize if actually triggered or past horizon
+                if atr_result["exit_reason"] == "horizon_end" and not force and now < eval_due:
+                    continue  # not yet at horizon, keep pending
+
             entry["evaluated_at"] = now
 
             # SPY benchmark — compute alpha
             spy_now = _fetch_spy_price()
-            spy_at = entry.get("spy_price_at_forecast")
+            spy_at  = entry.get("spy_price_at_forecast")
             if spy_now and spy_at and spy_at > 0:
                 spy_ret = round((spy_now - spy_at) / spy_at * 100, 2)
                 entry["spy_price_at_eval"] = spy_now
-                entry["spy_return_pct"] = spy_ret
-                # For Sell calls, alpha = -ticker_ret - spy_ret (you shorted)
+                entry["spy_return_pct"]    = spy_ret
                 prediction = entry.get("prediction", "")
                 if prediction in ("Sell", "Strong Sell"):
-                    entry["alpha_pct"] = round(-ret - spy_ret, 2)
+                    entry["alpha_pct"] = round(-(entry["return_pct"] or 0) - spy_ret, 2)
                 else:
-                    entry["alpha_pct"] = round(ret - spy_ret, 2)
+                    entry["alpha_pct"] = round((entry["return_pct"] or 0) - spy_ret, 2)
 
             updated += 1
         elif sig_type == "regime":

@@ -557,7 +557,18 @@ def _render_history_tab():
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Eval:</span> <span style="color:{COLORS["text"]}">{price_eval_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Eval due:</span> <span style="color:{COLORS["text"]}">{eval_due_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
-                    f'</div>',
+                    f'</div>'
+                    + (
+                        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px;">'
+                        f'<div><span style="color:{COLORS["text_dim"]}">ATR@Log:</span> <span style="color:{COLORS["text"]}">{f"${entry["atr_at_log"]:.2f}" if entry.get("atr_at_log") else "—"}</span></div>'
+                        f'<div><span style="color:{COLORS["negative"]}">Stop:</span> <span style="color:{COLORS["text"]}">{f"${entry["stop_at_log"]:.2f}" if entry.get("stop_at_log") else "—"}</span></div>'
+                        f'<div><span style="color:{COLORS["positive"]}">Target:</span> <span style="color:{COLORS["text"]}">{f"${entry["target_at_log"]:.2f}" if entry.get("target_at_log") else "—"}</span></div>'
+                        f'<div><span style="color:{COLORS["text_dim"]}">Exit:</span> <span style="color:{COLORS["bloomberg_orange"]}">'
+                        + {"profit_target": "🎯 Target", "trailing_stop": "🛑 Trailing Stop", "horizon_end": "⏱ Horizon", "horizon_end_fallback": "⏱ Horizon"}.get(entry.get("exit_reason", ""), entry.get("exit_reason") or "—")
+                        + f'</span> <span style="color:{COLORS["text_dim"]};font-size:10px;">{entry.get("exit_date") or ""}</span></div>'
+                        f'</div>'
+                        if entry.get("atr_at_log") or entry.get("exit_reason") else ""
+                    ),
                     unsafe_allow_html=True,
                 )
 
