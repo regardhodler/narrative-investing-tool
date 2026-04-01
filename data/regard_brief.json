@@ -1,29 +1,29 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-03-31T15:00:50",
+  "generated_at": "2026-04-01T15:04:13",
   "regime": {
     "label": "Neutral — Leaning Risk-Off",
-    "score": -0.12,
+    "score": -0.06,
     "quadrant": "Stagflation",
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-1.00 ()\n- Global Manufacturing (EWG+FXI): z=-0.86 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Real Yields (10Y TIPS): z=-0.80 ()\n- Market Breadth (RSP/SPY): z=+0.77 ()\n- Fear & Greed Index: 11/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Credit Spreads (HY vs Treasuries): z=-0.79 ()\n- Commodity Trend (Oil + Copper): z=+0.78 ()\n- VIX (Equity Volatility): z=-0.66 ()\n- Market Breadth (RSP/SPY): z=+0.66 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.58 ()\n- Fear & Greed Index: 8/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 39,
-    "label": "Caution / Reduce",
-    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
+    "score": 53,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
-    "interpretation": "No edge — signals are conflicting with no clear majority direction.",
-    "buy_tier": "NOT A BUYING ENV",
-    "short_tier": "NOT A SHORTING ENV"
+    "interpretation": "No edge — signals are conflicting with no clear majority direction. Hold existing positions. No new entries until at least 2 of 3 layers align.",
+    "buy_tier": "HOLD — NO NEW LONGS",
+    "short_tier": "HOLD — NO NEW SHORTS"
   },
   "rate_path": {
     "top_scenario": "hold",
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "Within the current neutral-leaning risk-off macro regime, characterized by stagflation concerns, recent events have reinforced the dominant narrative of supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical supply chains, potentially exacerbating inflationary pressures. Meanwhile, the sharp rise in Japan's bond yields, noted by Ricky Ho, suggests a bearish outlook for the long end of the curve, which could further complicate the macroeconomic landscape. These developments confirm the stagflation thesis, underscoring actionable risks in the energy and technology sectors, particularly for companies reliant on helium, such as TSMC, as flagged by Mario Nawfal.",
+  "current_events_digest": "In the current neutral, risk-off macro regime with a stagflationary bias, recent events confirm the dominant narrative of supply chain disruptions and rising costs. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as highlighted by zerohedge, exacerbates concerns over critical component shortages, particularly for Taiwan's chip industry, which relies heavily on helium for production. Meanwhile, Japan's bond market yields are rising sharply, with the 10-year yield reaching 2.37%, signaling a bearish outlook. These developments underscore the potential for further inflationary pressures and economic instability, aligning with the regime's stagflationary characteristics.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
