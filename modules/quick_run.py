@@ -468,13 +468,25 @@ def _render_qir_dashboard() -> None:
     # ── Inline log button for QIR macro verdict ───────────────────────────
     if _populated and _verdict_label:
         from modules.forecast_accuracy import render_log_button
+        from services.forecast_tracker import log_forecast
+
         _qir_conf = int(min(95, max(40, (_tac_score + _of_score) / 2)))
         _qir_summary = (
             f"Regime: {_regime_label} ({_regime_score:+.2f}) | "
             f"Tactical: {_tac.get('label','')} ({_tac_score}/100) | "
             f"Opt Flow: {_of.get('label','')} ({_of_score}/100)"
         )
-        _qc1, _qc2 = st.columns([4, 1])
+
+        # Map verdict to SPY direction
+        _buy_verdicts  = {"BULLISH CONFIRMATION", "PULLBACK IN UPTREND", "OPTIONS FLOW DIVERGENCE", "BEAR MARKET BOUNCE"}
+        _sell_verdicts = {"BEARISH CONFIRMATION", "LATE CYCLE SQUEEZE"}
+        _spy_prediction = (
+            "Buy"  if _verdict_label in _buy_verdicts  else
+            "Sell" if _verdict_label in _sell_verdicts else
+            None
+        )
+
+        _qc1, _qc2, _qc3 = st.columns([3, 1, 1])
         with _qc2:
             render_log_button(
                 signal_type="regime",
@@ -482,10 +494,27 @@ def _render_qir_dashboard() -> None:
                 confidence=_qir_conf,
                 summary=_qir_summary,
                 model="QIR Composite",
-                horizon_days=21,  # tactical weeks window
+                horizon_days=21,
                 key=f"qir_log_{_verdict_label}_{_tac_score}",
                 label="📌 Log Signal",
             )
+        with _qc3:
+            if _spy_prediction:
+                _spy_label = "📈 Trade SPY Long" if _spy_prediction == "Buy" else "📉 Trade SPY Short"
+                if st.button(_spy_label, key=f"qir_spy_{_verdict_label}_{_tac_score}", use_container_width=True,
+                             help="Log this QIR verdict as a SPY ATR trade in Forecast Tracker"):
+                    _fid = log_forecast(
+                        signal_type="valuation",
+                        prediction=_spy_prediction,
+                        confidence=_qir_conf,
+                        summary=f"QIR verdict: {_verdict_label} | {_qir_summary}",
+                        model="QIR Composite",
+                        ticker="SPY",
+                    )
+                    st.toast(f"📌 SPY {_spy_prediction} logged! [{_fid}] — ATR trailing stop active", icon="✅")
+            else:
+                st.button("🚫 No SPY Trade", key=f"qir_spy_none_{_tac_score}", use_container_width=True,
+                          disabled=True, help=f"{_verdict_label} — no clear directional edge for SPY")
 
 
 def render():
