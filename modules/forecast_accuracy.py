@@ -411,6 +411,59 @@ def _render_dashboard_tab():
         )
         st.plotly_chart(fig, use_container_width=True)
 
+    # Methodology explainer
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:20px 0 12px 0;"></div>', unsafe_allow_html=True)
+    with st.expander("📖 How this tracker works & why the data is reliable", expanded=False):
+        st.markdown(
+            f"""<div style="color:{COLORS["text_dim"]};font-size:12px;line-height:1.7;">
+
+<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;letter-spacing:0.08em;margin-bottom:6px;">
+WHY CALENDAR DATES ARE UNRELIABLE
+</div>
+Traditional backtests close a trade on day 30, 60, or 90 regardless of what the market is doing.
+That introduces arbitrary noise — a great call can be early, a bad call can look right by accident.
+This tracker eliminates that bias entirely for price-based signals.
+
+<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;letter-spacing:0.08em;margin-top:12px;margin-bottom:6px;">
+HOW ATR EXIT WORKS
+</div>
+Every ticker-based forecast (Valuation, Squeeze) is evaluated using a <b style="color:{COLORS["text"]};">real price simulation</b>
+that walks actual daily OHLC data from your log date forward:
+
+<ul style="margin:6px 0 6px 18px;padding:0;">
+<li><b style="color:{COLORS["positive"]};">🎯 Profit Target</b> — entry price ± <b>3×ATR(14)</b>. Triggered when intraday high/low touches the level. ATR(14) is the 14-day Average True Range at the time of logging — a volatility-normalized target that automatically adjusts to each ticker's behavior.</li>
+<li><b style="color:{COLORS["negative"]};">🛑 Trailing Stop</b> — begins at ± <b>2×ATR(14)</b> from entry, then trails the high watermark (longs) or low watermark (shorts). It only moves in your favor — never against you.</li>
+<li><b style="color:{COLORS["text"]};">Still open</b> — if neither has triggered, the trade stays pending. No forced close.</li>
+</ul>
+
+This gives a <b style="color:{COLORS["text"]};">1.5:1 reward-to-risk ratio</b> on every trade entry,
+and lets winners run while cutting losers at a volatility-defined level.
+
+<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;letter-spacing:0.08em;margin-top:12px;margin-bottom:6px;">
+DATA SOURCE & ACCURACY
+</div>
+Prices come from <b style="color:{COLORS["text"]};">Yahoo Finance (yfinance)</b> — adjusted OHLC data, the same source used
+by most quant platforms. ATR is computed from True Range: <code style="color:{COLORS["text"]};background:{COLORS["surface"]};padding:1px 4px;border-radius:2px;">max(H-L, |H-Prev_Close|, |L-Prev_Close|)</code> rolled over 14 days.
+The trailing stop and target levels are locked at log time and stored — they don't change retroactively.
+
+<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;letter-spacing:0.08em;margin-top:12px;margin-bottom:6px;">
+SPY ALPHA
+</div>
+Every resolved call shows alpha vs SPY — the return above (or below) what a passive SPY hold would have returned
+over the same period. This is the only honest measure of whether AI signal generation actually adds value.
+A 60% accuracy rate that lags SPY by 3% annually is not useful. One that beats SPY is.
+
+<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;font-size:11px;letter-spacing:0.08em;margin-top:12px;margin-bottom:6px;">
+REGIME & FED CALLS
+</div>
+Macro calls (Regime, Fed path) don't have a price to trail, so they use a horizon-based window.
+Outcome is determined by comparing the predicted regime/rate-path to the current live state
+when the window closes.
+
+</div>""",
+            unsafe_allow_html=True,
+        )
+
 
 # ── Tab: History ───────────────────────────────────────────────────────────────
 

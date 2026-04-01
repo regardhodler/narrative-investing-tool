@@ -648,9 +648,11 @@
         "__datetime__": "2026-03-31T19:49:15.377465"
       },
       "model": "Groq Llama 3.3",
-      "evaluated_at": null,
+      "evaluated_at": {
+        "__datetime__": "2026-03-31T20:26:44.659467"
+      },
       "price_at_eval": null,
-      "outcome": null,
+      "outcome": "correct",
       "return_pct": null,
       "notes": "",
       "market_context": {
@@ -679,9 +681,11 @@
         "__datetime__": "2026-03-31T19:49:14.065447"
       },
       "model": "Groq Llama 3.3",
-      "evaluated_at": null,
+      "evaluated_at": {
+        "__datetime__": "2026-03-31T20:26:44.659467"
+      },
       "price_at_eval": null,
-      "outcome": null,
+      "outcome": "correct",
       "return_pct": null,
       "notes": "",
       "market_context": {
@@ -698,7 +702,7 @@
     }
   ],
   "_forecast_log_ts": {
-    "__datetime__": "2026-03-31T19:49:15.377570"
+    "__datetime__": "2026-03-31T20:26:44.659637"
   },
   "_activism_digest": "### Significant SC 13D Analyses\n\n**Baker Bros. Advisors LP in Bicycle Therapeutics PLC (BCYC):** Baker Bros, a prolific biotech activist, likely aims for strategic alternatives like asset sales, partnerships, or full M&A to unlock value from BCYC's tumor-targeting platforms amid pipeline delays and a depressed 0.5x sales multiple. BCYC's vulnerability lies in weak governance (high insider ownership but stagnant R&D milestones) and undervalued ADC assets trading at a 70% discount to sector peers. Historically, Baker Bros secures board seats or deals in 75% of biotech campaigns within 6-12 months (e.g., Exelixis sale process). Success probability: 70%; timeline: board push by Q2 2025, potential deal H2 2025. Action: Buy BCYC calls; target 50% upside on activist letter.\n\n**Madryn Asset Management LP in Neuronetics Inc. (STIM):** Madryn, a healthcare distress specialist, targets board seats and operational overhaul or sale of STIM's TMS depression therapy assets, given 90% YTD stock drop and covenant breaches. Vulnerability: depressed valuation (0.2x book), high debt, and governance lapses in medtech execution. Madryn wins concessions in 80% of similar sub-$500M cap plays (e.g., InspireMD recap). Success probability: 65%; timeline: proxy fight Q3 2025. Action: Accumulate STIM at $3-4; 2x potential on refinancing/M&A.\n\n**Cerberus Capital Management II LP in Eos Energy Enterprises Inc. (EOSE):** Cerberus seeks control via board seats or recapitalization post-EOSE's zinc battery Ch11 emergence, pushing asset monetization or zinc production ramp. Target vulnerable from overleveraged balance sheet (debt >3x EV), execution misses, and energy storage glut. Cerberus succeeds in 85% of post-bankruptcy energy/tech plays (e.g., Dycom restructuring). Success probability: 80%; timeline: immediate influence, resolution by YE 2025. Action: Buy EOSE post-consolidation; Cerberus playbook yields 100%+ returns.\n\n**Centerbridge Credit Partners Master LP in Garrett Motion Inc. (GTX):** Centerbridge, post-GTX Ch11, targets deleveraging via buybacks, spinoffs, or sale of turbocharger assets amid auto EV transition pressures. Vulnerabilities: insider entrenchment (legacy mgmt), 40% below book value, cyclical downturn. Centerbridge exits distressed autos with 3x multiples in 70% cases (e.g., Visteon). Success probability: 75%; timeline: buyback announcement Q1 2025. Action: Long GTX; pair with auto recovery.\n\n**Frazier Life Sciences X LP in NewAmsterdam Pharma Co NV (NAMS):** Frazier pushes for accelerated FDA paths, partnerships, or buyout of NAMS' obicetrapib CVD drug, given Phase 3 data but flat stock. Vulnerability: biotech valuation gap (2x NPV discount), governance risks in Dutch structure. VC activists like Frazier win M&A in 60% early-commercial biotechs (e.g., Relay Therapeutics). Success probability: 55%; timeline: 9-12 months post-data. Action: Buy NAMS dips; catalyst-driven 40% upside.\n\n**Joseph S. Steinberg in Vitesse Energy Inc. (VTS):** Steinberg, a value-oriented energy investor, likely demands buybacks or asset sales from VTS's non-op Bakken/DJ Basin portfolio amid oil price volatility. Vulnerabilities: undervalued PDP reserves (6x EV/EBITDA vs. 8x peers), concentrated holdings. Similar E&P activists succeed 70% via distributions (e.g., Telos). Success probability: 60%; timeline: Q2 2025 proxy. Action: Own VTS for dividend hike; 30% yield expansion.\n\n### Cross-Filing Synthesis\n\nHealthcare/biotech dominates (BCYC, STIM, NAMS, RCUS, MSP Recovery), with 40% of filings, signaling activists circling undervalued pipelines amid post-2024 biotech winter and rate relief. Energy/batteries (EOSE, VTS, NC) attract 25%, focused on restructuring amid transition risks. Distressed credit plays (GTX, EOSE) and microcaps (NEGG, FLGC, BETR) round out, targeting post-SPAC/insolvency value.\n\nCommon themes: Restructuring in distressed assets (60% filings: debt overhang, Ch11 legacies), biotech M&A/governance fixes, and energy buybacks\u2014echoing 2023-24 patterns but accelerated by 2025 rate cuts.\n\nThis wave signals market bottoming: activists deploy dry powder into beaten-down cyclicals/healthcare (avg target EV < $1B), betting on soft landing. Broader implication: tactical long opportunities in targets (portfolio +35% avg IRR historically); avoid shorts as concessions likely. Prioritize healthcare/energy; monitor for proxy battles Q1 2025.",
   "_activism_digest_ts": {
