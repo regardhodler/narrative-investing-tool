@@ -975,141 +975,8 @@ def _render_pnl_tab():
         unsafe_allow_html=True,
     )
 
-
 
-# ── Tab: Backtest ───────────────────────────────────────────────────────────────
 
-def _render_backtest_tab():
-    from services.forecast_tracker import backtest_atr, _ATR_MULT_STOP, _ATR_MULT_TARGET
-
-    st.markdown(
-        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
-        f'letter-spacing:0.08em;margin-bottom:4px;">🔁 ATR REPLAY BACKTESTER</div>'
-        f'<div style="color:{COLORS["text_dim"]};font-size:11px;margin-bottom:14px;">'
-        f'Simulate an ATR trailing stop trade on any ticker from any past date. '
-        f'Uses the same 2×ATR stop / 3×ATR target engine as live tracking.</div>',
-        unsafe_allow_html=True,
-    )
-
-    with st.form("backtest_form"):
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            bt_ticker = st.text_input("Ticker", placeholder="SPY", value="SPY")
-        with c2:
-            bt_date = st.date_input("Entry Date", value=datetime.now() - timedelta(days=30))
-        with c3:
-            bt_dir = st.selectbox("Direction", ["Buy", "Sell"])
-        bt_submit = st.form_submit_button("▶ Run Backtest", use_container_width=True)
-
-    if bt_submit:
-        if not bt_ticker.strip():
-            st.error("Enter a ticker.")
-            return
-
-        with st.spinner(f"Fetching {bt_ticker.upper()} data from {bt_date}…"):
-            result = backtest_atr(bt_ticker.strip().upper(), str(bt_date), bt_dir)
-
-        if result is None:
-            st.error("Could not fetch price data. Check ticker and date.")
-            return
-
-        # ── Outcome banner
-        outcome    = result.get("outcome", "open")
-        ret        = result.get("return_pct")
-        exit_r     = result.get("exit_reason", "")
-        exit_label = {"profit_target": "🎯 Profit Target", "trailing_stop": "🛑 Trailing Stop", "still_open": "📡 Still Open"}.get(exit_r, exit_r)
-        out_color  = COLORS["positive"] if outcome == "correct" else (COLORS["negative"] if outcome == "incorrect" else COLORS["blue"])
-        out_label  = {"correct": "✅ CORRECT", "incorrect": "❌ WRONG", "open": "📡 STILL OPEN"}.get(outcome, outcome.upper())
-
-        c1, c2, c3, c4 = st.columns(4)
-        for col, (label, val, color) in zip([c1,c2,c3,c4], [
-            ("OUTCOME",    out_label,                                                       out_color),
-            ("RETURN",     f"{ret:+.2f}%" if ret is not None else "Pending",                out_color),
-            ("EXIT",       exit_label,                                                       COLORS["bloomberg_orange"]),
-            ("EXIT DATE",  result.get("exit_date") or "—",                                  COLORS["text_dim"]),
-        ]):
-            with col:
-                st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
-
-        # ATR levels
-        atr    = result.get("atr_at_log")
-        stop_l = result.get("stop_at_log")
-        tgt_l  = result.get("target_at_log")
-        entry  = result.get("price_at_entry")
-        if atr:
-            c1, c2, c3, c4 = st.columns(4)
-            for col, (label, val, color) in zip([c1,c2,c3,c4], [
-                ("ENTRY PRICE",  f"${entry:.2f}" if entry else "—",       COLORS["text"]),
-                ("ATR(14)",      f"${atr:.2f}",                           COLORS["text_dim"]),
-                (f"STOP (2×ATR)", f"${stop_l:.2f}" if stop_l else "—",   COLORS["negative"]),
-                (f"TARGET (3×ATR)", f"${tgt_l:.2f}" if tgt_l else "—",   COLORS["positive"]),
-            ]):
-                with col:
-                    st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
-
-        # Price chart with stop/target lines
-        dates  = result.get("dates", [])
-        closes = result.get("closes", [])
-        highs  = result.get("highs", [])
-        lows   = result.get("lows", [])
-
-        if dates and closes:
-            st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px 0;"></div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
-                f'letter-spacing:0.08em;margin-bottom:8px;">PRICE WALK SINCE ENTRY</div>',
-                unsafe_allow_html=True,
-            )
-
-            # Compute trailing stop path for chart
-            is_short = bt_dir == "Sell"
-            stop_dist = (atr or 0) * 2.0
-            watermark = entry
-            stop_path = []
-            for h, l in zip(highs, lows):
-                if is_short:
-                    if l < watermark:
-                        watermark = l
-                    stop_path.append(watermark + stop_dist)
-                else:
-                    if h > watermark:
-                        watermark = h
-                    stop_path.append(watermark - stop_dist)
-
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=dates, open=closes, high=highs, low=lows, close=closes,
-                increasing_line_color=COLORS["positive"], decreasing_line_color=COLORS["negative"],
-                name="Price", showlegend=False,
-            ))
-            # Entry line
-            fig.add_hline(y=entry, line_color=COLORS["text_dim"], line_dash="dot", line_width=1,
-                          annotation_text=f"Entry ${entry:.2f}", annotation_position="left")
-            # Target line
-            if tgt_l:
-                fig.add_hline(y=tgt_l, line_color=COLORS["positive"], line_dash="dash", line_width=1,
-                              annotation_text=f"Target ${tgt_l:.2f}", annotation_position="left")
-            # Trailing stop path
-            if stop_path:
-                fig.add_trace(go.Scatter(
-                    x=dates, y=stop_path,
-                    mode="lines", line=dict(color=COLORS["negative"], width=1, dash="dash"),
-                    name="Trailing Stop",
-                ))
-            # Exit marker
-            if result.get("exit_date") and result.get("exit_price"):
-                fig.add_trace(go.Scatter(
-                    x=[result["exit_date"]], y=[result["exit_price"]],
-                    mode="markers",
-                    marker=dict(size=12, color=out_color, symbol="x"),
-                    name=exit_label,
-                ))
-            apply_dark_layout(fig)
-            fig.update_layout(
-                height=340, margin=dict(l=60, r=20, t=20, b=40),
-                xaxis_rangeslider_visible=False,
-            )
-            st.plotly_chart(fig, use_container_width=True)
 
 
 # ── Main render ────────────────────────────────────────────────────────────────
@@ -1126,7 +993,7 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab_dash, tab_pnl, tab_log, tab_hist, tab_bt = st.tabs(["📊 Accuracy Dashboard", "💰 P&L Simulation", "🔮 Log Forecast", "📋 History", "🔁 Backtest"])
+    tab_dash, tab_pnl, tab_log, tab_hist = st.tabs(["📊 Accuracy Dashboard", "💰 P&L Simulation", "🔮 Log Forecast", "📋 History"])
 
     with tab_dash:
         _render_dashboard_tab()
@@ -1139,6 +1006,3 @@ def render():
 
     with tab_hist:
         _render_history_tab()
-
-    with tab_bt:
-        _render_backtest_tab()

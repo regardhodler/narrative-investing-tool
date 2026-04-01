@@ -6,6 +6,10 @@ Backtestable signals:
 - VIX Spikes (VIX > threshold → buy SPY)
 - Regime Flips (Risk-Off → Risk-On from regime_history.json)
 - Insider Clusters (3+ buys in 30 days on same stock)
+
+All strategies use ATR-based exits (trailing stop + profit target) instead of
+fixed hold days. Each trade stays open until 2×ATR trailing stop or 3×ATR
+profit target fires, giving a natural 1.5:1 R:R on every signal.
 """
 
 import json
@@ -15,6 +19,10 @@ import pandas as pd
 import yfinance as yf
 import streamlit as st
 from dataclasses import dataclass, field
+
+_ATR_PERIOD      = 14
+_DEFAULT_STOP    = 2.0   # multiplier — trailing stop
+_DEFAULT_TARGET  = 3.0   # multiplier — profit target
 
 
 @dataclass
@@ -28,6 +36,91 @@ class BacktestResult:
     num_trades: int = 0
     trades: list[dict] = field(default_factory=list)
     equity_curve: list[float] = field(default_factory=list)
+    exit_reason_counts: dict = field(default_factory=dict)
+
+
+# ── ATR exit engine ────────────────────────────────────────────────────────────
+
+def _atr_exit_trade(
+    df: pd.DataFrame,
+    entry_idx: int,
+    is_short: bool = False,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
+) -> dict:
+    """Walk OHLC forward from entry_idx using ATR trailing stop + profit target.
+
+    Returns trade dict with entry_date, exit_date, entry_price, exit_price,
+    return_pct, exit_reason, atr.
+    """
+    # ATR(14) at entry — use pre-entry window
+    pre = df.iloc[max(0, entry_idx - _ATR_PERIOD * 2): entry_idx + 1]
+    high_pre  = pre["High"]
+    low_pre   = pre["Low"]
+    cp        = pre["Close"].shift(1)
+    tr = pd.concat([high_pre - low_pre, (high_pre - cp).abs(), (low_pre - cp).abs()], axis=1).max(axis=1)
+    atr = float(tr.rolling(_ATR_PERIOD).mean().iloc[-1]) if len(tr) >= _ATR_PERIOD else float(tr.mean())
+    if np.isnan(atr) or atr <= 0:
+        atr = float(df["Close"].iloc[entry_idx]) * 0.02  # fallback: 2% of price
+
+    entry_price = float(df["Close"].iloc[entry_idx])
+    entry_date  = str(df.index[entry_idx].date())
+    stop_dist   = atr * atr_stop_mult
+    target_dist = atr * atr_target_mult
+
+    if is_short:
+        stop_level   = entry_price + stop_dist
+        target_level = entry_price - target_dist
+    else:
+        stop_level   = entry_price - stop_dist
+        target_level = entry_price + target_dist
+
+    watermark     = entry_price
+    trailing_stop = stop_level
+
+    # Walk forward
+    for i in range(entry_idx + 1, len(df)):
+        h = float(df["High"].iloc[i])
+        l = float(df["Low"].iloc[i])
+        c = float(df["Close"].iloc[i])
+        d = str(df.index[i].date())
+
+        if is_short:
+            if l < watermark:
+                watermark     = l
+                trailing_stop = watermark + stop_dist
+            if l <= target_level:
+                ret = round((entry_price - target_level) / entry_price * 100, 2)
+                return {"entry_date": entry_date, "exit_date": d, "entry_price": round(entry_price, 2),
+                        "exit_price": round(target_level, 2), "return_pct": ret,
+                        "exit_reason": "profit_target", "atr": round(atr, 2)}
+            if h >= trailing_stop:
+                ret = round((entry_price - trailing_stop) / entry_price * 100, 2)
+                return {"entry_date": entry_date, "exit_date": d, "entry_price": round(entry_price, 2),
+                        "exit_price": round(trailing_stop, 2), "return_pct": ret,
+                        "exit_reason": "trailing_stop", "atr": round(atr, 2)}
+        else:
+            if h > watermark:
+                watermark     = h
+                trailing_stop = watermark - stop_dist
+            if h >= target_level:
+                ret = round((target_level - entry_price) / entry_price * 100, 2)
+                return {"entry_date": entry_date, "exit_date": d, "entry_price": round(entry_price, 2),
+                        "exit_price": round(target_level, 2), "return_pct": ret,
+                        "exit_reason": "profit_target", "atr": round(atr, 2)}
+            if l <= trailing_stop:
+                ret = round((trailing_stop - entry_price) / entry_price * 100, 2)
+                return {"entry_date": entry_date, "exit_date": d, "entry_price": round(entry_price, 2),
+                        "exit_price": round(trailing_stop, 2), "return_pct": ret,
+                        "exit_reason": "trailing_stop", "atr": round(atr, 2)}
+
+    # Reached end of data — close at last price
+    last_price = float(df["Close"].iloc[-1])
+    last_date  = str(df.index[-1].date())
+    ret = round(((entry_price - last_price) if is_short else (last_price - entry_price)) / entry_price * 100, 2)
+    return {"entry_date": entry_date, "exit_date": last_date, "entry_price": round(entry_price, 2),
+            "exit_price": round(last_price, 2), "return_pct": ret,
+            "exit_reason": "data_end", "atr": round(atr, 2)}
 
 
 def _compute_metrics(trades: list[dict], initial_capital: float = 10000) -> BacktestResult:
@@ -44,6 +137,11 @@ def _compute_metrics(trades: list[dict], initial_capital: float = 10000) -> Back
     result.win_rate = len(wins) / len(returns) * 100 if returns else 0
     result.avg_return = np.mean(returns) if returns else 0
     result.total_return = sum(returns)
+
+    # Exit reason breakdown
+    for t in trades:
+        r = t.get("exit_reason", "unknown")
+        result.exit_reason_counts[r] = result.exit_reason_counts.get(r, 0) + 1
 
     # Equity curve
     equity = [initial_capital]
@@ -65,41 +163,47 @@ def _compute_metrics(trades: list[dict], initial_capital: float = 10000) -> Back
     return result
 
 
-@st.cache_data(ttl=3600)
-def backtest_sma_crossover(ticker: str = "SPY", short_window: int = 50, long_window: int = 200,
-                           holding_days: int = 20, lookback_years: int = 5) -> BacktestResult:
-    """Backtest SMA crossover (golden cross = buy signal)."""
+def _fetch_ohlc(ticker: str, lookback_years: int) -> pd.DataFrame | None:
+    """Fetch adjusted OHLC with High/Low columns for ATR computation."""
     df = yf.download(ticker, period=f"{lookback_years}y", interval="1d", progress=False, auto_adjust=True)
     if df is None or df.empty:
-        return BacktestResult(signal_name="SMA Crossover", ticker=ticker)
+        return None
     if isinstance(df.columns, pd.MultiIndex):
         df = df.droplevel("Ticker", axis=1)
+    df = df[["Open", "High", "Low", "Close"]].dropna()
+    return df if len(df) > _ATR_PERIOD + 5 else None
 
-    close = df["Close"].dropna()
-    if len(close) < long_window + holding_days:
+
+@st.cache_data(ttl=3600)
+def backtest_sma_crossover(
+    ticker: str = "SPY",
+    short_window: int = 50,
+    long_window: int = 200,
+    lookback_years: int = 5,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
+) -> BacktestResult:
+    """Backtest SMA crossover (golden cross = buy) with ATR trailing stop/target."""
+    df = _fetch_ohlc(ticker, lookback_years)
+    if df is None or len(df) < long_window + _ATR_PERIOD:
         return BacktestResult(signal_name="SMA Crossover", ticker=ticker)
 
+    close     = df["Close"]
     sma_short = close.rolling(short_window).mean()
-    sma_long = close.rolling(long_window).mean()
-
-    # Detect golden crosses (short crosses above long)
-    cross = (sma_short > sma_long) & (sma_short.shift(1) <= sma_long.shift(1))
+    sma_long  = close.rolling(long_window).mean()
+    cross     = (sma_short > sma_long) & (sma_short.shift(1) <= sma_long.shift(1))
     signal_dates = cross[cross].index
 
     trades = []
+    in_trade_until = None
     for entry_date in signal_dates:
-        idx = close.index.get_loc(entry_date)
-        exit_idx = min(idx + holding_days, len(close) - 1)
-        entry_price = float(close.iloc[idx])
-        exit_price = float(close.iloc[exit_idx])
-        ret = (exit_price / entry_price - 1) * 100
-        trades.append({
-            "entry_date": str(entry_date.date()),
-            "exit_date": str(close.index[exit_idx].date()),
-            "entry_price": round(entry_price, 2),
-            "exit_price": round(exit_price, 2),
-            "return_pct": round(ret, 2),
-        })
+        if in_trade_until and entry_date <= in_trade_until:
+            continue  # skip overlapping signals
+        idx = df.index.get_loc(entry_date)
+        trade = _atr_exit_trade(df, idx, is_short=False,
+                                atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+        trades.append(trade)
+        in_trade_until = pd.Timestamp(trade["exit_date"])
 
     result = _compute_metrics(trades)
     result.signal_name = f"SMA {short_window}/{long_window} Crossover"
@@ -108,46 +212,39 @@ def backtest_sma_crossover(ticker: str = "SPY", short_window: int = 50, long_win
 
 
 @st.cache_data(ttl=3600)
-def backtest_vix_spike(vix_threshold: float = 25, holding_days: int = 20,
-                       lookback_years: int = 5) -> BacktestResult:
-    """Backtest buying SPY when VIX spikes above threshold."""
-    vix = yf.download("^VIX", period=f"{lookback_years}y", interval="1d", progress=False, auto_adjust=True)
-    spy = yf.download("SPY", period=f"{lookback_years}y", interval="1d", progress=False, auto_adjust=True)
+def backtest_vix_spike(
+    vix_threshold: float = 25,
+    lookback_years: int = 5,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
+) -> BacktestResult:
+    """Backtest buying SPY when VIX spikes above threshold — ATR trailing stop/target exit."""
+    vix_raw = yf.download("^VIX", period=f"{lookback_years}y", interval="1d", progress=False, auto_adjust=True)
+    spy_df  = _fetch_ohlc("SPY", lookback_years)
 
-    if vix is None or spy is None or vix.empty or spy.empty:
+    if vix_raw is None or vix_raw.empty or spy_df is None:
         return BacktestResult(signal_name="VIX Spike", ticker="SPY")
-    if isinstance(vix.columns, pd.MultiIndex):
-        vix = vix.droplevel("Ticker", axis=1)
-    if isinstance(spy.columns, pd.MultiIndex):
-        spy = spy.droplevel("Ticker", axis=1)
+    if isinstance(vix_raw.columns, pd.MultiIndex):
+        vix_raw = vix_raw.droplevel("Ticker", axis=1)
 
-    vix_close = vix["Close"].dropna()
-    spy_close = spy["Close"].dropna()
-
-    # Find VIX spike entries (crosses above threshold, wasn't above yesterday)
-    above = vix_close > vix_threshold
+    vix_close   = vix_raw["Close"].dropna()
+    above       = vix_close > vix_threshold
     cross_above = above & (~above.shift(1).fillna(False))
     signal_dates = cross_above[cross_above].index
 
     trades = []
+    in_trade_until = None
     for entry_date in signal_dates:
-        # Find matching SPY date
-        spy_dates = spy_close.index
-        valid = spy_dates[spy_dates >= entry_date]
+        if in_trade_until and entry_date <= in_trade_until:
+            continue
+        valid = spy_df.index[spy_df.index >= entry_date]
         if len(valid) < 2:
             continue
-        entry_idx = spy_close.index.get_loc(valid[0])
-        exit_idx = min(entry_idx + holding_days, len(spy_close) - 1)
-        entry_price = float(spy_close.iloc[entry_idx])
-        exit_price = float(spy_close.iloc[exit_idx])
-        ret = (exit_price / entry_price - 1) * 100
-        trades.append({
-            "entry_date": str(valid[0].date()),
-            "exit_date": str(spy_close.index[exit_idx].date()),
-            "entry_price": round(entry_price, 2),
-            "exit_price": round(exit_price, 2),
-            "return_pct": round(ret, 2),
-        })
+        idx = spy_df.index.get_loc(valid[0])
+        trade = _atr_exit_trade(spy_df, idx, is_short=False,
+                                atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+        trades.append(trade)
+        in_trade_until = pd.Timestamp(trade["exit_date"])
 
     result = _compute_metrics(trades)
     result.signal_name = f"VIX Spike (>{vix_threshold})"
@@ -156,58 +253,52 @@ def backtest_vix_spike(vix_threshold: float = 25, holding_days: int = 20,
 
 
 @st.cache_data(ttl=3600)
-def backtest_regime_flip(holding_days: int = 20) -> BacktestResult:
-    """Backtest buying SPY on Risk-Off → Risk-On regime flips."""
+def backtest_regime_flip(
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
+) -> BacktestResult:
+    """Backtest buying SPY on Risk-Off → Risk-On regime flips — ATR trailing stop/target exit."""
     history_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json")
     if not os.path.exists(history_file):
         return BacktestResult(signal_name="Regime Flip", ticker="SPY")
 
     with open(history_file) as f:
         history = json.load(f)
-
     if len(history) < 2:
         return BacktestResult(signal_name="Regime Flip", ticker="SPY")
 
-    # Find Risk-Off → Risk-On transitions
-    flip_dates = []
     entries = sorted(history, key=lambda x: x.get("date", ""))
-    for i in range(1, len(entries)):
-        prev_regime = entries[i - 1].get("regime", "")
-        curr_regime = entries[i].get("regime", "")
-        if "Off" in prev_regime and "On" in curr_regime:
-            flip_dates.append(entries[i]["date"])
-
+    flip_dates = [
+        entries[i]["date"]
+        for i in range(1, len(entries))
+        if "Off" in entries[i - 1].get("regime", "") and "On" in entries[i].get("regime", "")
+    ]
     if not flip_dates:
         return BacktestResult(signal_name="Regime Flip", ticker="SPY")
 
-    # Get SPY data covering the date range
     min_date = min(flip_dates)
-    spy = yf.download("SPY", start=min_date, progress=False, auto_adjust=True)
-    if spy is None or spy.empty:
+    spy_df = yf.download("SPY", start=min_date, progress=False, auto_adjust=True)
+    if spy_df is None or spy_df.empty:
         return BacktestResult(signal_name="Regime Flip", ticker="SPY")
-    if isinstance(spy.columns, pd.MultiIndex):
-        spy = spy.droplevel("Ticker", axis=1)
-    spy_close = spy["Close"].dropna()
+    if isinstance(spy_df.columns, pd.MultiIndex):
+        spy_df = spy_df.droplevel("Ticker", axis=1)
+    spy_df = spy_df[["Open", "High", "Low", "Close"]].dropna()
 
     trades = []
+    in_trade_until = None
     for date_str in flip_dates:
         try:
             target = pd.Timestamp(date_str)
-            valid = spy_close.index[spy_close.index >= target]
+            if in_trade_until and target <= in_trade_until:
+                continue
+            valid = spy_df.index[spy_df.index >= target]
             if len(valid) < 2:
                 continue
-            entry_idx = spy_close.index.get_loc(valid[0])
-            exit_idx = min(entry_idx + holding_days, len(spy_close) - 1)
-            entry_price = float(spy_close.iloc[entry_idx])
-            exit_price = float(spy_close.iloc[exit_idx])
-            ret = (exit_price / entry_price - 1) * 100
-            trades.append({
-                "entry_date": str(valid[0].date()),
-                "exit_date": str(spy_close.index[exit_idx].date()),
-                "entry_price": round(entry_price, 2),
-                "exit_price": round(exit_price, 2),
-                "return_pct": round(ret, 2),
-            })
+            idx = spy_df.index.get_loc(valid[0])
+            trade = _atr_exit_trade(spy_df, idx, is_short=False,
+                                    atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+            trades.append(trade)
+            in_trade_until = pd.Timestamp(trade["exit_date"])
         except Exception:
             continue
 
@@ -218,32 +309,35 @@ def backtest_regime_flip(holding_days: int = 20) -> BacktestResult:
 
 
 @st.cache_data(ttl=3600)
-def backtest_insider_cluster(ticker: str = "AAPL", min_buys: int = 3,
-                             cluster_days: int = 30, holding_days: int = 20) -> BacktestResult:
-    """Backtest buying when insider buy clusters detected."""
+def backtest_insider_cluster(
+    ticker: str = "AAPL",
+    min_buys: int = 3,
+    cluster_days: int = 30,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
+) -> BacktestResult:
+    """Backtest buying on insider buy clusters — ATR trailing stop/target exit."""
     from services.sec_client import get_insider_trades
 
-    df = get_insider_trades(ticker)
-    if df.empty:
+    df_ins = get_insider_trades(ticker)
+    if df_ins.empty:
         return BacktestResult(signal_name="Insider Cluster", ticker=ticker)
 
-    buys = df[df["type"] == "Purchase"].copy()
+    buys = df_ins[df_ins["type"] == "Purchase"].copy()
     if buys.empty:
         return BacktestResult(signal_name="Insider Cluster", ticker=ticker)
 
     buys["date"] = pd.to_datetime(buys["date"], errors="coerce")
     buys = buys.dropna(subset=["date"]).sort_values("date")
 
-    # Find clusters: rolling window of cluster_days with min_buys+ purchases
-    cluster_dates = []
     dates = buys["date"].tolist()
+    cluster_dates = []
     i = 0
     while i < len(dates):
         window_end = dates[i] + pd.Timedelta(days=cluster_days)
         count = sum(1 for d in dates[i:] if d <= window_end)
         if count >= min_buys:
             cluster_dates.append(dates[i])
-            # Skip past this cluster
             i += count
         else:
             i += 1
@@ -251,31 +345,23 @@ def backtest_insider_cluster(ticker: str = "AAPL", min_buys: int = 3,
     if not cluster_dates:
         return BacktestResult(signal_name="Insider Cluster", ticker=ticker)
 
-    # Get price data
-    price_data = yf.download(ticker, period="2y", interval="1d", progress=False, auto_adjust=True)
-    if price_data is None or price_data.empty:
+    price_df = _fetch_ohlc(ticker, lookback_years=2)
+    if price_df is None:
         return BacktestResult(signal_name="Insider Cluster", ticker=ticker)
-    if isinstance(price_data.columns, pd.MultiIndex):
-        price_data = price_data.droplevel("Ticker", axis=1)
-    close = price_data["Close"].dropna()
 
     trades = []
+    in_trade_until = None
     for entry_date in cluster_dates:
-        valid = close.index[close.index >= entry_date]
+        if in_trade_until and pd.Timestamp(entry_date) <= in_trade_until:
+            continue
+        valid = price_df.index[price_df.index >= pd.Timestamp(entry_date)]
         if len(valid) < 2:
             continue
-        entry_idx = close.index.get_loc(valid[0])
-        exit_idx = min(entry_idx + holding_days, len(close) - 1)
-        entry_price = float(close.iloc[entry_idx])
-        exit_price = float(close.iloc[exit_idx])
-        ret = (exit_price / entry_price - 1) * 100
-        trades.append({
-            "entry_date": str(valid[0].date()),
-            "exit_date": str(close.index[exit_idx].date()),
-            "entry_price": round(entry_price, 2),
-            "exit_price": round(exit_price, 2),
-            "return_pct": round(ret, 2),
-        })
+        idx = price_df.index.get_loc(valid[0])
+        trade = _atr_exit_trade(price_df, idx, is_short=False,
+                                atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+        trades.append(trade)
+        in_trade_until = pd.Timestamp(trade["exit_date"])
 
     result = _compute_metrics(trades)
     result.signal_name = f"Insider Cluster ({min_buys}+ buys/{cluster_days}d)"
@@ -313,20 +399,13 @@ def walk_forward_sma(
     ticker: str,
     short_w: int,
     long_w: int,
-    hold_days: int,
     train_months: int,
     test_months: int,
     lookback_years: int,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
 ) -> dict:
-    """Walk-forward validation for SMA crossover strategy.
-
-    Slides a (train_months + test_months) window across lookback_years of data,
-    stepping by test_months each time. Measures out-of-sample performance per window.
-
-    Returns dict with: windows, oos_equity, oos_win_rate, oos_avg_return,
-                       oos_total_trades, in_sample_win_rate, in_sample_avg_return,
-                       signal_name, ticker, confidence.
-    """
+    """Walk-forward validation for SMA crossover with ATR exits."""
     total_years = lookback_years + train_months / 12
     raw = yf.download(ticker, period=f"{int(total_years) + 1}y", interval="1d",
                       progress=False, auto_adjust=True)
@@ -335,31 +414,29 @@ def walk_forward_sma(
     if isinstance(raw.columns, pd.MultiIndex):
         raw = raw.droplevel("Ticker", axis=1)
 
-    close = raw["Close"].dropna()
-    if len(close) < long_w + hold_days + 20:
+    df = raw[["Open", "High", "Low", "Close"]].dropna()
+    if len(df) < long_w + _ATR_PERIOD + 20:
         return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
 
-    # Generate all crossover signals on the full series (no lookahead — SMAs are backward-looking)
+    close = df["Close"]
     sma_s = close.rolling(short_w).mean()
     sma_l = close.rolling(long_w).mean()
     cross = (sma_s > sma_l) & (sma_s.shift(1) <= sma_l.shift(1))
     signal_dates = cross[cross].index
 
-    # Build all trades over the full history
+    # Build all trades over full history (ATR exit)
     all_trades = []
+    in_trade_until = None
     for entry_date in signal_dates:
-        idx = close.index.get_loc(entry_date)
-        exit_idx = min(idx + hold_days, len(close) - 1)
-        entry_price = float(close.iloc[idx])
-        exit_price  = float(close.iloc[exit_idx])
-        ret = (exit_price / entry_price - 1) * 100
-        all_trades.append({
-            "entry_date": entry_date,
-            "exit_date":  close.index[exit_idx],
-            "entry_price": round(entry_price, 2),
-            "exit_price":  round(exit_price, 2),
-            "return_pct":  round(ret, 2),
-        })
+        if in_trade_until and entry_date <= in_trade_until:
+            continue
+        idx = df.index.get_loc(entry_date)
+        trade = _atr_exit_trade(df, idx, is_short=False,
+                                atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+        trade["entry_date"] = entry_date  # keep as Timestamp for window slicing
+        trade["exit_date"]  = pd.Timestamp(trade["exit_date"])
+        all_trades.append(trade)
+        in_trade_until = trade["exit_date"]
 
     if not all_trades:
         return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
@@ -435,12 +512,13 @@ def walk_forward_sma(
 @st.cache_data(ttl=3600)
 def walk_forward_vix(
     vix_threshold: float,
-    hold_days: int,
     train_months: int,
     test_months: int,
     lookback_years: int,
+    atr_stop_mult: float = _DEFAULT_STOP,
+    atr_target_mult: float = _DEFAULT_TARGET,
 ) -> dict:
-    """Walk-forward validation for VIX spike strategy."""
+    """Walk-forward validation for VIX spike strategy with ATR exits."""
     total_years = lookback_years + train_months / 12
     vix_raw = yf.download("^VIX", period=f"{int(total_years) + 1}y", interval="1d",
                           progress=False, auto_adjust=True)
@@ -452,33 +530,33 @@ def walk_forward_vix(
         if isinstance(_r.columns, pd.MultiIndex):
             _r.columns = _r.columns.droplevel("Ticker")
 
-    vix_c = vix_raw["Close"].dropna()
-    spy_c = spy_raw["Close"].dropna()
+    vix_c  = vix_raw["Close"].dropna()
+    spy_df = spy_raw[["Open", "High", "Low", "Close"]].dropna()
 
-    above = vix_c > vix_threshold
-    cross = above & (~above.shift(1).fillna(False))
+    above  = vix_c > vix_threshold
+    cross  = above & (~above.shift(1).fillna(False))
     signal_dates = cross[cross].index
 
     all_trades = []
+    in_trade_until = None
     for entry_date in signal_dates:
-        valid = spy_c.index[spy_c.index >= entry_date]
+        if in_trade_until and entry_date <= in_trade_until:
+            continue
+        valid = spy_df.index[spy_df.index >= entry_date]
         if len(valid) < 2:
             continue
-        entry_idx = spy_c.index.get_loc(valid[0])
-        exit_idx  = min(entry_idx + hold_days, len(spy_c) - 1)
-        entry_price = float(spy_c.iloc[entry_idx])
-        exit_price  = float(spy_c.iloc[exit_idx])
-        ret = (exit_price / entry_price - 1) * 100
-        all_trades.append({
-            "entry_date":  valid[0],
-            "return_pct":  round(ret, 2),
-        })
+        idx = spy_df.index.get_loc(valid[0])
+        trade = _atr_exit_trade(spy_df, idx, is_short=False,
+                                atr_stop_mult=atr_stop_mult, atr_target_mult=atr_target_mult)
+        trade["entry_date"] = valid[0]
+        all_trades.append(trade)
+        in_trade_until = pd.Timestamp(trade["exit_date"])
 
     if not all_trades:
         return {"windows": [], "oos_equity": [], "confidence": "INSUFFICIENT DATA"}
 
-    start = vix_c.index[0]
-    end   = vix_c.index[-1]
+    start    = vix_c.index[0]
+    end      = vix_c.index[-1]
     td_train = pd.DateOffset(months=train_months)
     td_test  = pd.DateOffset(months=test_months)
 
@@ -521,10 +599,10 @@ def walk_forward_vix(
             oos_equity.append(oos_equity[-1] * (1 + t["return_pct"] / 100))
 
     all_oos = [t for w in windows for t in w.get("test_trade_list", [])]
-    agg = _window_metrics([{"return_pct": t["return_pct"]} for t in all_oos])
-    all_is = [{"win_rate": w["train_win_rate"], "avg_return": w["train_avg_return"]} for w in windows if w["train_trades"] > 0]
-    is_win = round(float(np.mean([x["win_rate"] for x in all_is])), 1) if all_is else 0.0
-    is_ret = round(float(np.mean([x["avg_return"] for x in all_is])), 2) if all_is else 0.0
+    agg     = _window_metrics([{"return_pct": t["return_pct"]} for t in all_oos])
+    all_is  = [{"win_rate": w["train_win_rate"], "avg_return": w["train_avg_return"]} for w in windows if w["train_trades"] > 0]
+    is_win  = round(float(np.mean([x["win_rate"] for x in all_is])), 1) if all_is else 0.0
+    is_ret  = round(float(np.mean([x["avg_return"] for x in all_is])), 2) if all_is else 0.0
 
     return {
         "windows":              windows,
