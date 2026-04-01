@@ -32,7 +32,6 @@ def render():
         except Exception as _e:
             st.warning(f"Could not collect data for **{ticker}** — {_e}. yfinance may be rate-limiting; try again in a moment.")
             if st.button("🔄 Retry", key="valuation_retry"):
-                _collect_signals.clear()
                 st.rerun()
             return
 
@@ -721,12 +720,28 @@ def render():
 def _collect_signals(ticker: str) -> dict:
     """Gather signals from yfinance and existing services into a structured dict.
     Raises RuntimeError on failure so Streamlit does not cache the bad result.
+    Retries once with backoff on rate-limit (429 / Too Many Requests).
     """
-    stock = yf.Ticker(ticker)
-    info = stock.info or {}
-    # Require at least one price field — empty info = rate-limit or bad ticker
+    import time
+
+    info = {}
+    stock = None
+    for _attempt in range(3):
+        try:
+            stock = yf.Ticker(ticker)
+            info = stock.info or {}
+            if info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose"):
+                break  # good data — proceed
+            # Empty info = rate-limited or bad ticker; wait and retry
+            if _attempt < 2:
+                time.sleep(2 ** _attempt)  # 1s, 2s
+        except Exception:
+            if _attempt < 2:
+                time.sleep(2 ** _attempt)
+            continue
+
     if not info.get("currentPrice") and not info.get("regularMarketPrice") and not info.get("previousClose"):
-        raise RuntimeError(f"yfinance returned no price data for {ticker}")
+        raise RuntimeError(f"Too Many Requests — Yahoo Finance is rate-limiting. Wait 30s and retry.")
 
     signals = {}
 
