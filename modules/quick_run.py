@@ -1227,60 +1227,249 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         # Rerun so the Intelligence Dashboard at the top reflects freshly-populated session_state
         st.rerun()
 
-    # ── QIR Run History Sparkline ──────────────────────────────────────────
-    try:
-        from services.qir_history import load_qir_history as _load_hist
-        import plotly.graph_objects as _go
-        from utils.theme import apply_dark_layout as _adl
-        _hist = _load_hist()
-        if len(_hist) >= 2:
-            _conv_map = {"BULLISH": 1, "MIXED": 0, "UNCERTAIN": 0, "BEARISH": -1}
-            _dates    = [h["timestamp"][:10] for h in _hist[:14]][::-1]
-            _convs    = [_conv_map.get(h.get("conviction", ""), 0) for h in _hist[:14]][::-1]
-            _tacs     = [h.get("tactical_score", 50) for h in _hist[:14]][::-1]
-            _opts     = [h.get("options_score", 50)  for h in _hist[:14]][::-1]
-            _conv_colors = [
-                "#22c55e" if v == 1 else ("#ef4444" if v == -1 else "#f59e0b")
-                for v in _convs
-            ]
-            _fig_h = _go.Figure()
-            _fig_h.add_trace(_go.Bar(
-                x=_dates, y=_convs,
-                marker_color=_conv_colors,
-                name="Conviction",
-                opacity=0.7,
-            ))
-            _fig_h.add_trace(_go.Scatter(
-                x=_dates, y=[t / 100 for t in _tacs],
-                mode="lines+markers", name="Tactical",
-                line={"color": "#38bdf8", "width": 2},
-                marker={"size": 5},
-                yaxis="y2",
-            ))
-            _fig_h.add_trace(_go.Scatter(
-                x=_dates, y=[o / 100 for o in _opts],
-                mode="lines+markers", name="Opt Flow",
-                line={"color": "#a78bfa", "width": 2, "dash": "dot"},
-                marker={"size": 5},
-                yaxis="y2",
-            ))
-            _fig_h.update_layout(
-                height=140,
-                margin={"t": 4, "b": 4, "l": 4, "r": 4},
-                yaxis={"range": [-1.5, 1.5], "tickvals": [-1, 0, 1],
-                       "ticktext": ["BEAR", "MIX", "BULL"], "showgrid": False},
-                yaxis2={"range": [0, 1], "overlaying": "y", "side": "right",
-                        "showgrid": False, "tickformat": ".0%"},
-                legend={"orientation": "h", "y": -0.15, "font": {"size": 9}},
-                barmode="relative",
-            )
-            _adl(_fig_h)
+    # ── QIR Post-Run Summary (outside button handler — survives st.rerun()) ──
+    _last_ok    = st.session_state.get("_qir_last_n_ok")
+    _last_total = st.session_state.get("_qir_last_n_total")
+    if _last_ok is not None and _last_total is not None:
+        if _last_ok == _last_total:
             st.markdown(
-                '<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
-                'color:#475569;margin-top:12px;margin-bottom:2px;">QIR RUN HISTORY</div>',
+                f'<div style="background:#052e16;border:1px solid #22c55e44;border-radius:6px;'
+                f'padding:8px 14px;margin:10px 0 6px 0;font-size:12px;color:#22c55e;">'
+                f'✅ All {_last_total} intel modules ready</div>',
                 unsafe_allow_html=True,
             )
-            st.plotly_chart(_fig_h, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.warning(f"{_last_ok}/{_last_total} modules completed — check errors above.")
+
+        _synopsis = st.session_state.get("_macro_synopsis") or {}
+        if _synopsis.get("conviction"):
+            _conv = _synopsis["conviction"]
+            _conv_color = {"BULLISH": "#22c55e", "BEARISH": "#ef4444", "MIXED": "#f59e0b", "UNCERTAIN": "#94a3b8"}.get(_conv, "#94a3b8")
+            _conv_bg    = {"BULLISH": "#052e16", "BEARISH": "#1a0000", "MIXED": "#1a1200", "UNCERTAIN": "#0d1117"}.get(_conv, "#0d1117")
+            _kp_html = "".join(
+                f'<div style="color:#94a3b8;font-size:11px;padding:2px 0;"> · {kp}</div>'
+                for kp in _synopsis.get("key_points", [])
+            )
+            _ct_html = "".join(
+                f'<div style="color:#f59e0b;font-size:10px;padding:2px 0;">⚠ {ct}</div>'
+                for ct in _synopsis.get("contradictions", [])
+            )
+            _syn_eng = st.session_state.get("_macro_synopsis_engine", "")
+            _eng_span = f'<span style="font-size:10px;color:#555;margin-left:auto;">{_syn_eng}</span>' if _syn_eng else ""
+            st.markdown(
+                f'<div style="background:{_conv_bg};border:2px solid {_conv_color};border-radius:8px;'
+                f'padding:14px 18px;margin-top:10px;">'
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                f'<span style="background:{_conv_color};color:black;font-weight:800;font-size:12px;'
+                f'padding:3px 12px;border-radius:4px;letter-spacing:0.08em;">{_conv}</span>'
+                f'<span style="color:#64748b;font-size:10px;font-weight:700;letter-spacing:0.08em;">MACRO CONVICTION</span>'
+                f'{_eng_span}'
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:12px;line-height:1.6;margin-bottom:6px;">{_synopsis.get("summary","")}</div>'
+                f'{_kp_html}{_ct_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        _tac_ctx = st.session_state.get("_tactical_context", {})
+        _tac_ai  = st.session_state.get("_tactical_analysis", "")
+        if _tac_ctx:
+            _ts_val   = _tac_ctx.get("tactical_score", 50)
+            _tlabel   = _tac_ctx.get("label", "")
+            _tbias    = _tac_ctx.get("action_bias", "")
+            _tac_color = "#22c55e" if _ts_val >= 65 else ("#f59e0b" if _ts_val >= 38 else "#ef4444")
+            _tac_bg    = "#0c1a0c" if _ts_val >= 65 else ("#1a1200" if _ts_val >= 38 else "#1a0000")
+            with st.expander(f"⚡ Tactical Regime — {_tlabel} ({_ts_val}/100)", expanded=True):
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    f'<span style="background:{_tac_color};color:black;font-weight:800;font-size:11px;'
+                    f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_tlabel.upper()}</span>'
+                    f'<span style="color:{_tac_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;">{_ts_val}/100</span>'
+                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_tbias}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                _tac_sigs = _tac_ctx.get("signals", [])
+                if _tac_sigs:
+                    _sigs_html = ""
+                    for _sr in _tac_sigs:
+                        _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
+                        _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+                        _sigs_html += (
+                            f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
+                            f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
+                            f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
+                        )
+                    st.markdown(f'<div style="margin-bottom:8px;">{_sigs_html}</div>', unsafe_allow_html=True)
+                if _tac_ai:
+                    st.markdown(
+                        f'<div style="background:{_tac_bg};border-left:3px solid {_tac_color};'
+                        f'padding:10px 14px;font-size:12px;color:{COLORS["text"]};'
+                        f'line-height:1.8;white-space:pre-line;">{_tac_ai}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        _of_ctx = st.session_state.get("_options_flow_context") or {}
+        if _of_ctx:
+            _os_val   = _of_ctx.get("options_score", 50)
+            _of_label = _of_ctx.get("label", "")
+            _of_bias  = _of_ctx.get("action_bias", "")
+            _of_color = "#22c55e" if _os_val >= 65 else ("#f59e0b" if _os_val >= 38 else "#ef4444")
+            _of_bg    = "#0c1a0c" if _os_val >= 65 else ("#1a1200" if _os_val >= 38 else "#1a0000")
+            with st.expander(f"📊 Options Flow — {_of_label} ({_os_val}/100)", expanded=True):
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                    f'<span style="background:{_of_color};color:black;font-weight:800;font-size:11px;'
+                    f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_of_label.upper()}</span>'
+                    f'<span style="color:{_of_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:12px;font-weight:700;">{_os_val}/100</span>'
+                    f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_of_bias}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                _of_sigs = _of_ctx.get("signals", [])
+                if _of_sigs:
+                    _of_sigs_html = ""
+                    for _sr in _of_sigs:
+                        _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
+                        _arrow = "▲" if _sr["Score"] > 0.1 else ("▼" if _sr["Score"] < -0.1 else "◆")
+                        _of_sigs_html += (
+                            f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                            f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
+                            f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
+                            f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
+                        )
+                    st.markdown(f'<div style="margin-bottom:8px;">{_of_sigs_html}</div>', unsafe_allow_html=True)
+
+        _dp = st.session_state.get("_dominant_rate_path") or {}
+        if _dp:
+            _dp_labels = {"cut_25": "25bp Cut", "cut_50": "50bp Cut", "hold": "Hold", "hike_25": "25bp Hike"}
+            _dp_label  = _dp_labels.get(_dp.get("scenario", ""), _dp.get("scenario", ""))
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid {COLORS["border"]};border-radius:4px;'
+                f'padding:8px 12px;font-size:11px;color:{COLORS["text_dim"]};margin-top:8px;">'
+                f'📈 <b style="color:{COLORS["bloomberg_orange"]}">Fed Rate Path</b> — '
+                f'Dominant: <b style="color:{COLORS["text"]}">{_dp_label}</b> '
+                f'({_dp.get("prob_pct", 0):.0f}% probability)</div>',
+                unsafe_allow_html=True,
+            )
+
+        _plays = st.session_state.get("_rp_plays_result") or {}
+        if _plays:
+            _regime    = st.session_state.get("_regime_context", {})
+            _rlabel    = _regime.get("regime", "")
+            _quad      = _regime.get("quadrant", "")
+            with st.expander(f"📡 Regime: {_rlabel} · {_quad}", expanded=True):
+                _sectors = _plays.get("sectors", [])
+                _stocks  = _plays.get("stocks", [])
+                if _sectors:
+                    st.markdown("**Sectors:** " + " · ".join(
+                        f"{s.get('name','')} ({'★'*s.get('conviction',1)})" for s in _sectors[:4]
+                    ))
+                if _stocks:
+                    st.markdown("**Stocks:** " + " · ".join(
+                        f"{s.get('ticker','')} ({'★'*s.get('conviction',1)})" for s in _stocks[:4]
+                    ))
+
+        _digest = st.session_state.get("_current_events_digest", "")
+        if _digest:
+            with st.expander("🗞 News Digest", expanded=True):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_digest}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _doom = st.session_state.get("_doom_briefing", "")
+        if _doom:
+            with st.expander("💀 Doom Briefing", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_doom}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _chain = st.session_state.get("_chain_narration", "")
+        if _chain:
+            with st.expander("🔗 Policy Transmission", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_chain}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _whale = st.session_state.get("_whale_summary", "")
+        if _whale:
+            with st.expander("🐋 Whale Activity", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_whale}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _activism = st.session_state.get("_activism_digest", "")
+        if _activism:
+            with st.expander("🎯 Activism Campaigns (13D)", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_activism}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _srd = st.session_state.get("_sector_regime_digest", "")
+        if _srd:
+            with st.expander("🔄 Sector×Regime Digest", expanded=False):
+                st.markdown(
+                    f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
+                    f'font-size:11px;color:{COLORS["text"]};line-height:1.6;">{_srd}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        _bs = st.session_state.get("_custom_swans", {})
+        if _bs:
+            _bs_names = " · ".join(list(_bs.keys())[:3])
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid #4B5EAA44;border-radius:4px;'
+                f'padding:8px 12px;font-size:11px;color:{COLORS["text_dim"]};margin-top:6px;">'
+                f'🦢 <b style="color:#8899CC">Black Swans</b> — '
+                f'{len(_bs)} scenarios: <span style="color:{COLORS["text"]}">{_bs_names}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── QIR Run History — conviction dot row ──────────────────────────────
+    try:
+        from services.qir_history import load_qir_history as _load_hist
+        _hist = _load_hist()
+        if _hist:
+            _dot_colors = {"BULLISH": "#22c55e", "BEARISH": "#ef4444", "MIXED": "#f59e0b", "UNCERTAIN": "#64748b"}
+            _dots_html = ""
+            for _h in _hist[:10][::-1]:
+                _dc   = _dot_colors.get(_h.get("conviction", ""), "#334155")
+                _date = _h.get("timestamp", "")[:10]
+                _tac  = _h.get("tactical_score", 0)
+                _conv_label = _h.get("conviction", "")
+                _tip  = f"{_date} \u00b7 {_conv_label} \u00b7 Tac {_tac}"
+                _dots_html += (
+                    f'<div style="display:flex;flex-direction:column;align-items:center;gap:3px;">'
+                    f'<div style="width:14px;height:14px;border-radius:50%;background:{_dc};" '
+                    f'title="{_tip}"></div>'
+                    f'<span style="font-size:9px;color:#475569;">{_tac}</span>'
+                    f'</div>'
+                )
+            st.markdown(
+                f'<div style="margin-top:14px;">'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
+                f'color:#475569;margin-bottom:6px;">RUN HISTORY &nbsp;'
+                f'<span style="font-weight:400;color:#22c55e;">● BULL</span> &nbsp;'
+                f'<span style="font-weight:400;color:#ef4444;">● BEAR</span> &nbsp;'
+                f'<span style="font-weight:400;color:#f59e0b;">● MIX</span></div>'
+                f'<div style="display:flex;gap:10px;align-items:flex-end;">{_dots_html}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
     except Exception:
         pass
 
