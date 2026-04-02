@@ -637,21 +637,74 @@ def render():
                 unsafe_allow_html=True,
             )
 
-    with st.spinner("Generating AI valuation..."):
-        from services.claude_client import generate_valuation
-        _ce_val = st.session_state.get("_current_events_digest", "")
-        from services.claude_client import _fmt_tactical_ctx
-        _tac_val = _fmt_tactical_ctx(st.session_state.get("_tactical_context"))
-        result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model, current_events=_ce_val, tactical_context=_tac_val)
+    # ── Run AI Valuation button ────────────────────────────────────────────────
+    _cached_val = st.session_state.get("_last_valuation_result") or {}
+    _has_cached = _cached_val.get("ticker", "").upper() == ticker.upper()
+    _btn_label = "🔄 Refresh Valuation" if _has_cached else "🔍 Run AI Valuation"
 
-    if not result:
-        has_key = bool(os.getenv("GROQ_API_KEY", ""))
-        if not has_key:
-            st.error("GROQ_API_KEY is not set. Add it to your .env file or Streamlit Cloud secrets.")
+    _val_btn_col, _val_status_col = st.columns([1, 3])
+    with _val_btn_col:
+        _run_val_btn = st.button(_btn_label, key=f"run_val_btn_{ticker}", type="primary", use_container_width=True)
+    with _val_status_col:
+        _opt_now = st.session_state.get("_options_sentiment") or {}
+        if _opt_now.get("ticker", "").upper() == ticker.upper():
+            st.caption(f"✓ Options loaded · P/C {_opt_now.get('pc_ratio', '—')} · {_opt_now.get('sentiment', '—')}")
         else:
-            st.error("AI valuation failed — the LLM returned an unparseable response. Try again.")
-            with st.expander("Debug: Signal data sent to LLM"):
-                st.code(signals_text)
+            st.caption("⚠️ Options not loaded for this ticker — will auto-fetch on Run")
+
+    result = None
+
+    if _run_val_btn:
+        # 1. Fetch fresh ticker options + unusual activity
+        with st.spinner(f"Fetching live options flow for {ticker}..."):
+            _fresh_opts = _fetch_ticker_options_live(ticker)
+        if _fresh_opts.get("options_sentiment"):
+            st.session_state["_options_sentiment"] = _fresh_opts["options_sentiment"]
+            _ots = _fresh_opts["options_sentiment"]
+            signals_text += (
+                f"\nOptions Sentiment LIVE (P/C {_ots['pc_ratio']:.2f}): {_ots['sentiment']}"
+                f" | Call Vol {_ots['call_vol']:,} vs Put Vol {_ots['put_vol']:,}"
+            )
+        if _fresh_opts.get("unusual_activity"):
+            st.session_state["_unusual_activity_sentiment"] = _fresh_opts["unusual_activity"]
+            _uas = _fresh_opts["unusual_activity"]
+            signals_text += (
+                f"\nUnusual Options Activity LIVE: {_uas['sentiment']} "
+                f"({_uas['call_pct']:.0f}% calls / {_uas['put_pct']:.0f}% puts, "
+                f"{_uas['flagged_contracts']} flagged contracts)"
+            )
+
+        # 2. Clear signals cache so 13F + insider data is refetched fresh
+        _collect_signals.clear()
+
+        # 3. Run AI
+        with st.spinner("Generating AI valuation..."):
+            from services.claude_client import generate_valuation, _fmt_tactical_ctx
+            _ce_val = st.session_state.get("_current_events_digest", "")
+            _tac_val = _fmt_tactical_ctx(st.session_state.get("_tactical_context"))
+            result = generate_valuation(ticker, signals_text, use_claude=_use_claude, model=_cl_model, current_events=_ce_val, tactical_context=_tac_val)
+
+        if not result:
+            has_key = bool(os.getenv("GROQ_API_KEY", ""))
+            if not has_key:
+                st.error("GROQ_API_KEY is not set. Add it to your .env file or Streamlit Cloud secrets.")
+            else:
+                st.error("AI valuation failed — the LLM returned an unparseable response. Try again.")
+                with st.expander("Debug: Signal data sent to LLM"):
+                    st.code(signals_text)
+            return
+
+    elif _has_cached:
+        result = _cached_val
+    else:
+        st.markdown(
+            '<div style="padding:24px; background:#1A1A2E; border-radius:8px; text-align:center; '
+            'border:1px dashed #334155; margin:16px 0;">'
+            '<div style="color:#64748b; font-size:14px;">Click <strong>🔍 Run AI Valuation</strong> above to generate analysis with fresh data</div>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+        _render_signal_scorecard(signals)
         return
 
     # Persist result so Forecast Tracker can quick-capture it
@@ -715,6 +768,62 @@ def render():
         "and does not constitute financial advice. The DCF model uses estimates and assumptions "
         "that may not reflect actual future performance. Always do your own research."
     )
+
+
+# ---------------------------------------------------------------------------
+# Live options flow fetch (fresh per-ticker, 15-min cache)
+# ---------------------------------------------------------------------------
+
+@st.cache_data(ttl=900)
+def _fetch_ticker_options_live(ticker: str) -> dict:
+    """Fetch live options chain for ticker: P/C ratio, volumes, unusual activity.
+    Returns dict with 'options_sentiment' and 'unusual_activity' sub-dicts.
+    """
+    result = {}
+    try:
+        tk = yf.Ticker(ticker)
+        exps = tk.options[:3]
+        if not exps:
+            return result
+        call_vol = put_vol = 0.0
+        unusual_call = unusual_put = 0
+        for exp in exps:
+            try:
+                chain = tk.option_chain(exp)
+                calls, puts = chain.calls, chain.puts
+                call_vol += float(calls["volume"].fillna(0).sum()) if "volume" in calls.columns else 0
+                put_vol += float(puts["volume"].fillna(0).sum()) if "volume" in puts.columns else 0
+                if "volume" in calls.columns and "openInterest" in calls.columns:
+                    c2 = calls[calls["openInterest"] > 100]
+                    unusual_call += int((c2["volume"].fillna(0) / c2["openInterest"].replace(0, 1) > 2.0).sum())
+                if "volume" in puts.columns and "openInterest" in puts.columns:
+                    p2 = puts[puts["openInterest"] > 100]
+                    unusual_put += int((p2["volume"].fillna(0) / p2["openInterest"].replace(0, 1) > 2.0).sum())
+            except Exception:
+                continue
+        pc_ratio = put_vol / call_vol if call_vol > 0 else 1.0
+        sentiment = "BULLISH" if pc_ratio < 0.8 else "BEARISH" if pc_ratio > 1.2 else "NEUTRAL"
+        total_unusual = unusual_call + unusual_put
+        call_pct = unusual_call / total_unusual * 100 if total_unusual > 0 else 50.0
+        put_pct = unusual_put / total_unusual * 100 if total_unusual > 0 else 50.0
+        ua_sentiment = "BULLISH" if call_pct >= 65 else "BEARISH" if put_pct >= 65 else "MIXED"
+        result["options_sentiment"] = {
+            "ticker": ticker,
+            "sentiment": sentiment,
+            "pc_ratio": round(pc_ratio, 3),
+            "call_vol": int(call_vol),
+            "put_vol": int(put_vol),
+        }
+        result["unusual_activity"] = {
+            "ticker": ticker,
+            "sentiment": ua_sentiment,
+            "call_pct": round(call_pct, 1),
+            "put_pct": round(put_pct, 1),
+            "flagged_contracts": total_unusual,
+        }
+    except Exception:
+        pass
+    return result
 
 
 # ---------------------------------------------------------------------------
