@@ -1,0 +1,1878 @@
+[
+  {
+    "date": "2025-03-10",
+    "score": 26,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.120069",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-11",
+    "score": 30,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.122886",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-12",
+    "score": 34,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.125283",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-13",
+    "score": 35,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.127676",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-14",
+    "score": 43,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.129886",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-17",
+    "score": 50,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.132245",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-18",
+    "score": 50,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.134662",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-19",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.138864",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-20",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.141636",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-21",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.144932",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-24",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.147463",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-25",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.149844",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-26",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.153360",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-27",
+    "score": 49,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.156207",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-28",
+    "score": 38,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.158716",
+    "backfilled": true
+  },
+  {
+    "date": "2025-03-31",
+    "score": 31,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.161261",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-01",
+    "score": 34,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.163896",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-02",
+    "score": 40,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.166686",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-03",
+    "score": 22,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.171562",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-04",
+    "score": 18,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.174226",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-07",
+    "score": 15,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.177228",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-08",
+    "score": 14,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.179832",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-09",
+    "score": 15,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.182422",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-10",
+    "score": 16,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.184999",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-11",
+    "score": 36,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.188891",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-14",
+    "score": 42,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.191527",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-15",
+    "score": 44,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.194350",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-16",
+    "score": 36,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.196582",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-17",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.198790",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-21",
+    "score": 39,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.201093",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-22",
+    "score": 41,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.204777",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-23",
+    "score": 50,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.207216",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-24",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.209476",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-25",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.211721",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-28",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.213948",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-29",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.216161",
+    "backfilled": true
+  },
+  {
+    "date": "2025-04-30",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.219166",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-01",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.222686",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-02",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.225048",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-05",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.227401",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-06",
+    "score": 46,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.229774",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-07",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.233206",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-08",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.235647",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-09",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.238918",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-12",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.241441",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-13",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.243628",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-14",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.245927",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-15",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.248121",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-16",
+    "score": 69,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.250386",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-19",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.253492",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-20",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.256476",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-21",
+    "score": 50,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.259121",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-22",
+    "score": 47,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.261479",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-23",
+    "score": 41,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.263949",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-27",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.266316",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-28",
+    "score": 49,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.270217",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-29",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.273795",
+    "backfilled": true
+  },
+  {
+    "date": "2025-05-30",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.276271",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-02",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.278937",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-03",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.281689",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-04",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.284291",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-05",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.288921",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-06",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.292080",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-09",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.295339",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-10",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.298781",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-11",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.302226",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-12",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.306305",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-13",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.308946",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-16",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.311482",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-17",
+    "score": 44,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.314186",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-18",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.316786",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-20",
+    "score": 49,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.321462",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-23",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.324117",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-24",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.326631",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-25",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.329199",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-26",
+    "score": 69,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.331730",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-27",
+    "score": 70,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.334326",
+    "backfilled": true
+  },
+  {
+    "date": "2025-06-30",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.338814",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-01",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.341563",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-02",
+    "score": 71,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.344166",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-03",
+    "score": 70,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.346887",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-07",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.349489",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-08",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.353624",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-09",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.356686",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-10",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.359332",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-11",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.362025",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-14",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.364673",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-15",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.367281",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-16",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.371738",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-17",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.374517",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-18",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.377141",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-21",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.379696",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-22",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.382265",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-23",
+    "score": 71,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.385056",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-24",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.390106",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-25",
+    "score": 70,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.393229",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-28",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.395952",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-29",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.398615",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-30",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.401592",
+    "backfilled": true
+  },
+  {
+    "date": "2025-07-31",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.406024",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-01",
+    "score": 36,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.408817",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-04",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.411234",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-05",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.413629",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-06",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.416007",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-07",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.418560",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-08",
+    "score": 70,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.422726",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-11",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.425432",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-12",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.428035",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-13",
+    "score": 73,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.430901",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-14",
+    "score": 69,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.433573",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-15",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.437410",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-18",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.440157",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-19",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.442569",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-20",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.444987",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-21",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.447383",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-22",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.449719",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-25",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.452202",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-26",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.456930",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-27",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.459662",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-28",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.462355",
+    "backfilled": true
+  },
+  {
+    "date": "2025-08-29",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.465137",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-02",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.467811",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-03",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.472449",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-04",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.474929",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-05",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.477435",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-08",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.479765",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-09",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.482137",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-10",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.484490",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-11",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.488525",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-12",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.491077",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-15",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.493432",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-16",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.495746",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-17",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.498110",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-18",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.500496",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-19",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.504749",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-22",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.507254",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-23",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.509640",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-24",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.511990",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-25",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.514350",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-26",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.516686",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-29",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.522691",
+    "backfilled": true
+  },
+  {
+    "date": "2025-09-30",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.539950",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-01",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.544539",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-02",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.547808",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-03",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.550638",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-06",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.554748",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-07",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.557200",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-08",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.559562",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-09",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.561842",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-10",
+    "score": 35,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.564199",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-13",
+    "score": 43,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.566533",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-14",
+    "score": 44,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.569183",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-15",
+    "score": 46,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.572493",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-16",
+    "score": 38,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.575632",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-17",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.577989",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-20",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.580316",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-21",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.582688",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-22",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.585063",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-23",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.588693",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-24",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.591273",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-27",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.593629",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-28",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.595945",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-29",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.598291",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-30",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.600626",
+    "backfilled": true
+  },
+  {
+    "date": "2025-10-31",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.605302",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-03",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.608767",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-04",
+    "score": 45,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.612262",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-05",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.614692",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-06",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.617028",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-07",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.620200",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-10",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.623122",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-11",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.626251",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-12",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.628594",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-13",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.630922",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-14",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.633244",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-17",
+    "score": 39,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.635972",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-18",
+    "score": 36,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.639539",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-19",
+    "score": 37,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.642044",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-20",
+    "score": 30,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.644422",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-21",
+    "score": 44,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.646754",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-24",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.649124",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-25",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.651449",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-26",
+    "score": 75,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.655773",
+    "backfilled": true
+  },
+  {
+    "date": "2025-11-28",
+    "score": 76,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.658311",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-01",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.660672",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-02",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.663001",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-03",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.665351",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-04",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.667677",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-05",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.671120",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-08",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.673675",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-09",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.676071",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-10",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.678431",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-11",
+    "score": 69,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.680781",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-12",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.683041",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-15",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.685667",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-16",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.689343",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-17",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.692286",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-18",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.695141",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-19",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.697482",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-22",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.699809",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-23",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.702571",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-24",
+    "score": 71,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.705725",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-26",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.708299",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-29",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.710613",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-30",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.712934",
+    "backfilled": true
+  },
+  {
+    "date": "2025-12-31",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.715252",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-02",
+    "score": 59,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.717623",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-05",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.721187",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-06",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.723785",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-07",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.726118",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-08",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.728480",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-09",
+    "score": 69,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.730865",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-12",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.733219",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-13",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.736159",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-14",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.739741",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-15",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.742235",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-16",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.744581",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-20",
+    "score": 43,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.746815",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-21",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.749154",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-22",
+    "score": 65,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.751538",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-23",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.755805",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-26",
+    "score": 62,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.758755",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-27",
+    "score": 68,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.761096",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-28",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.763445",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-29",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.765696",
+    "backfilled": true
+  },
+  {
+    "date": "2026-01-30",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.768083",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-02",
+    "score": 58,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.772136",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-03",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.774633",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-04",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.776939",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-05",
+    "score": 41,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.779231",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-06",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.781566",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-09",
+    "score": 64,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.783819",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-10",
+    "score": 66,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.787530",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-11",
+    "score": 67,
+    "label": "Favorable Entry",
+    "logged_at": "2026-04-02T04:32:04.790332",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-12",
+    "score": 55,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.793411",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-13",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.795755",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-17",
+    "score": 47,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.798123",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-18",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.800400",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-19",
+    "score": 51,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.803689",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-20",
+    "score": 63,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.806385",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-23",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.808786",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-24",
+    "score": 57,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.811183",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-25",
+    "score": 60,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.813471",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-26",
+    "score": 61,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.815774",
+    "backfilled": true
+  },
+  {
+    "date": "2026-02-27",
+    "score": 54,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.818159",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-02",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.822163",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-03",
+    "score": 38,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.824466",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-04",
+    "score": 47,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.826819",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-05",
+    "score": 35,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.829118",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-06",
+    "score": 23,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.831413",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-09",
+    "score": 33,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.833692",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-10",
+    "score": 39,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.836598",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-11",
+    "score": 37,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.839478",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-12",
+    "score": 28,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.841922",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-13",
+    "score": 37,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.844695",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-16",
+    "score": 44,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.847040",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-17",
+    "score": 53,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.849346",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-18",
+    "score": 43,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.851709",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-19",
+    "score": 52,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-02T04:32:04.855919",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-20",
+    "score": 41,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.858440",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-23",
+    "score": 37,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.860812",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-24",
+    "score": 35,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.863127",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-25",
+    "score": 46,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.865385",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-26",
+    "score": 38,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.867758",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-27",
+    "score": 33,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.871585",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-30",
+    "score": 31,
+    "label": "Risk-Off Signal",
+    "logged_at": "2026-04-02T04:32:04.874208",
+    "backfilled": true
+  },
+  {
+    "date": "2026-03-31",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:32:04.876514",
+    "backfilled": true
+  },
+  {
+    "date": "2026-04-01",
+    "score": 48,
+    "label": "Caution / Reduce",
+    "logged_at": "2026-04-02T04:41:29.569707",
+    "backfilled": true
+  }
+]

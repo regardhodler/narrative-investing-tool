@@ -2544,15 +2544,29 @@ def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
     agg      = float(np.average(_scores, weights=_weights))
     tactical_score = int(round((agg + 1.0) * 50))
 
-    if tactical_score >= 65:
+    # ── Score history: persist + compute trajectory + dynamic thresholds ──────
+    from services.tactical_history import log_score, get_trajectory, get_percentile_thresholds
+    try:
+        # Persist today's score before computing label (label determined below)
+        _thresholds  = get_percentile_thresholds()
+        _trajectory  = get_trajectory()
+    except Exception:
+        _thresholds  = {"p10": 38, "p35": 52, "p65": 65, "is_dynamic": False, "n_samples": 0}
+        _trajectory  = {"delta": 0, "delta_5d": 0, "trend": "Stable", "score_avg": None, "direction": "→"}
+
+    _p10 = _thresholds["p10"]
+    _p35 = _thresholds["p35"]
+    _p65 = _thresholds["p65"]
+
+    if tactical_score >= _p65:
         label       = "Favorable Entry"
         action_bias = "Conditions support initiating or adding to risk positions on pullbacks."
         _color_key  = "green"
-    elif tactical_score >= 52:
+    elif tactical_score >= _p35:
         label       = "Neutral / Hold"
         action_bias = "Mixed short-term signals. Hold existing positions; await a clearer setup."
         _color_key  = "yellow"
-    elif tactical_score >= 38:
+    elif tactical_score >= _p10:
         label       = "Caution / Reduce"
         action_bias = "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
         _color_key  = "yellow"
@@ -2560,6 +2574,12 @@ def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
         label       = "Risk-Off Signal"
         action_bias = "Elevated vol + weak momentum. Defensive posture warranted — hedge or step aside."
         _color_key  = "red"
+
+    # Persist score now that label is determined
+    try:
+        log_score(tactical_score, label)
+    except Exception:
+        pass
 
     signal_rows = [
         {"Signal": "VIX Level + 5d Trend",          "Value": vix_display,     "Score": round(sig1_score, 3), "Direction": _score_to_bucket(sig1_score)[1]},
@@ -2580,6 +2600,8 @@ def _build_tactical_dashboard(snaps: dict[str, AssetSnapshot]) -> dict:
         "color_key":      _color_key,
         "signals":        signal_rows,
         "raw_score":      round(agg, 3),
+        "trajectory":     _trajectory,
+        "thresholds":     _thresholds,
     }
 
 
@@ -2590,11 +2612,38 @@ def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
     ts   = tactical["tactical_score"]
 
     # ── Score header ─────────────────────────────────────────────────────────
+    _traj      = tactical.get("trajectory", {})
+    _thresh    = tactical.get("thresholds", {"p10": 38, "p35": 52, "p65": 65, "is_dynamic": False, "n_samples": 0})
+    _direction = _traj.get("direction", "→")
+    _delta     = _traj.get("delta", 0)
+    _trend     = _traj.get("trend", "Stable")
+    _delta_5d  = _traj.get("delta_5d", 0)
+    _avg       = _traj.get("score_avg")
+
+    _delta_color = COLORS["green"] if _delta > 0 else (COLORS["red"] if _delta < 0 else COLORS["text_dim"])
+    _delta_str   = f"{_direction} {'+' if _delta > 0 else ''}{_delta} (1d)" if _delta != 0 else f"{_direction} Flat"
+    _avg_str     = f"5d avg: {_avg}" if _avg is not None else ""
+
     c1, c2, c3, c4 = st.columns([1, 1, 2, 1])
     with c1:
-        st.markdown(bloomberg_metric("TACTICAL SCORE", f"{ts}/100", _col), unsafe_allow_html=True)
+        st.markdown(
+            bloomberg_metric("TACTICAL SCORE", f"{ts}/100", _col) +
+            f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;font-size:11px;'
+            f'color:{_delta_color};padding:0 14px 4px;">{_delta_str}</div>'
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};padding:0 14px;">{_avg_str}</div>',
+            unsafe_allow_html=True,
+        )
     with c2:
-        st.markdown(bloomberg_metric("SIGNAL", tactical["label"], _col), unsafe_allow_html=True)
+        _thresh_label = "SIGNAL (dynamic)" if _thresh["is_dynamic"] else "SIGNAL"
+        st.markdown(bloomberg_metric(_thresh_label, tactical["label"], _col), unsafe_allow_html=True)
+        _n = _thresh["n_samples"]
+        _thresh_note = f"Thresholds: {_thresh['p10']} / {_thresh['p35']} / {_thresh['p65']}"
+        _basis = f"({_n}d history)" if _thresh["is_dynamic"] else "(static, <30d data)"
+        st.markdown(
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};padding:0 14px;">'
+            f'{_thresh_note} {_basis}</div>',
+            unsafe_allow_html=True,
+        )
     with c3:
         st.markdown(
             f'<div style="border-left:3px solid {_col};padding:8px 14px;margin-top:6px;'
@@ -2690,13 +2739,23 @@ def _render_tactical_tab(tactical: dict, snaps: dict) -> None:
     # ── Timeframe context ─────────────────────────────────────────────────────
     st.markdown("---")
     _section_header("How to Use This Layer")
-    st.markdown("""
+    _p10d = _thresh["p10"]
+    _p35d = _thresh["p35"]
+    _p65d = _thresh["p65"]
+    _dyn_note = (
+        f"*Thresholds are dynamically calibrated from {_thresh['n_samples']} days of score history (rolling percentiles).*"
+        if _thresh["is_dynamic"]
+        else f"*Thresholds are static defaults — will switch to dynamic percentile-based thresholds after 30 days of score history.*"
+    )
+    st.markdown(f"""
 | Tactical Score | Label | Action |
 |---|---|---|
-| 65–100 | Favorable Entry | Add risk on dips, extend duration, reduce hedges |
-| 52–64 | Neutral / Hold | Maintain current exposure, no new initiations |
-| 38–51 | Caution / Reduce | Trim laggards, tighten stops, raise cash buffer |
-| 0–37 | Risk-Off Signal | Step aside or hedge — wait for score to recover above 45 |
+| {_p65d}–100 | Favorable Entry | Add risk on dips, extend duration, reduce hedges |
+| {_p35d}–{_p65d - 1} | Neutral / Hold | Maintain current exposure, no new initiations |
+| {_p10d}–{_p35d - 1} | Caution / Reduce | Trim laggards, tighten stops, raise cash buffer |
+| 0–{_p10d - 1} | Risk-Off Signal | Step aside or hedge — wait for score to recover above {_p10d + 7} |
+
+{_dyn_note}
 
 **Key principle:** The Macro Regime tells you *what* to own. The Tactical Regime tells you *when* to act.
 A Macro Risk-On + Tactical Caution = hold positions but don't add.
