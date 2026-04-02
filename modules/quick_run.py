@@ -1197,8 +1197,92 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             except Exception:
                 pass
 
+        # ── Save QIR run record to history ────────────────────────────────────
+        try:
+            import uuid as _uuid
+            from services.qir_history import QIRRunRecord, append_qir_run as _append_run
+            _rc_h  = st.session_state.get("_regime_context") or {}
+            _tac_h = st.session_state.get("_tactical_context") or {}
+            _of_h  = st.session_state.get("_options_flow_context") or {}
+            _syn_h = st.session_state.get("_macro_synopsis") or {}
+            _n_ok_h = st.session_state.get("_qir_last_n_ok", 0)
+            _n_tot_h = st.session_state.get("_qir_last_n_total", 0)
+            _eng_h = st.session_state.get("_macro_synopsis_engine", "")
+            _append_run(QIRRunRecord(
+                run_id=str(_uuid.uuid4())[:8],
+                timestamp=__import__("datetime").datetime.now().isoformat(),
+                pattern=st.session_state.get("_qir_last_pattern", ""),
+                conviction=_syn_h.get("conviction", ""),
+                tactical_score=int(_tac_h.get("tactical_score", 0)),
+                options_score=float(_of_h.get("options_score", 0)),
+                regime_label=_rc_h.get("regime", ""),
+                quadrant=_rc_h.get("quadrant", ""),
+                n_ok=_n_ok_h,
+                n_total=_n_tot_h,
+                engine=_eng_h,
+            ))
+        except Exception:
+            pass
+
         # Rerun so the Intelligence Dashboard at the top reflects freshly-populated session_state
         st.rerun()
+
+    # ── QIR Run History Sparkline ──────────────────────────────────────────
+    try:
+        from services.qir_history import load_qir_history as _load_hist
+        import plotly.graph_objects as _go
+        from utils.theme import apply_dark_layout as _adl
+        _hist = _load_hist()
+        if len(_hist) >= 2:
+            _conv_map = {"BULLISH": 1, "MIXED": 0, "UNCERTAIN": 0, "BEARISH": -1}
+            _dates    = [h["timestamp"][:10] for h in _hist[:14]][::-1]
+            _convs    = [_conv_map.get(h.get("conviction", ""), 0) for h in _hist[:14]][::-1]
+            _tacs     = [h.get("tactical_score", 50) for h in _hist[:14]][::-1]
+            _opts     = [h.get("options_score", 50)  for h in _hist[:14]][::-1]
+            _conv_colors = [
+                "#22c55e" if v == 1 else ("#ef4444" if v == -1 else "#f59e0b")
+                for v in _convs
+            ]
+            _fig_h = _go.Figure()
+            _fig_h.add_trace(_go.Bar(
+                x=_dates, y=_convs,
+                marker_color=_conv_colors,
+                name="Conviction",
+                opacity=0.7,
+            ))
+            _fig_h.add_trace(_go.Scatter(
+                x=_dates, y=[t / 100 for t in _tacs],
+                mode="lines+markers", name="Tactical",
+                line={"color": "#38bdf8", "width": 2},
+                marker={"size": 5},
+                yaxis="y2",
+            ))
+            _fig_h.add_trace(_go.Scatter(
+                x=_dates, y=[o / 100 for o in _opts],
+                mode="lines+markers", name="Opt Flow",
+                line={"color": "#a78bfa", "width": 2, "dash": "dot"},
+                marker={"size": 5},
+                yaxis="y2",
+            ))
+            _fig_h.update_layout(
+                height=140,
+                margin={"t": 4, "b": 4, "l": 4, "r": 4},
+                yaxis={"range": [-1.5, 1.5], "tickvals": [-1, 0, 1],
+                       "ticktext": ["BEAR", "MIX", "BULL"], "showgrid": False},
+                yaxis2={"range": [0, 1], "overlaying": "y", "side": "right",
+                        "showgrid": False, "tickformat": ".0%"},
+                legend={"orientation": "h", "y": -0.15, "font": {"size": 9}},
+                barmode="relative",
+            )
+            _adl(_fig_h)
+            st.markdown(
+                '<div style="font-size:9px;font-weight:700;letter-spacing:0.1em;'
+                'color:#475569;margin-top:12px;margin-bottom:2px;">QIR RUN HISTORY</div>',
+                unsafe_allow_html=True,
+            )
+            st.plotly_chart(_fig_h, use_container_width=True, config={"displayModeBar": False})
+    except Exception:
+        pass
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):
