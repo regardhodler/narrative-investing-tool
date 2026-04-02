@@ -763,9 +763,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 > **Rule of thumb:** Tactical tells you *when* to enter. Options Flow tells you *what the crowd is doing today*. Alignment between both = higher conviction. Divergence = reduce size or wait.
         """)
 
-    # ── QIR Intelligence Dashboard ─────────────────────────────────────────────
-    _render_qir_dashboard()
-
     # ── Run button ─────────────────────────────────────────────────────────────
     if st.button("⚡ RUN ALL INTEL MODULES", type="primary", key="qr_run_all", use_container_width=True):
 
@@ -1224,8 +1221,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         except Exception:
             pass
 
-        # Rerun so the Intelligence Dashboard at the top reflects freshly-populated session_state
-        st.rerun()
+        # Flag that a fresh run just completed — dashboard below will re-render with new data
+        st.session_state["_qir_just_ran"] = True
 
     # ── QIR Post-Run Summary (outside button handler — survives st.rerun()) ──
     _last_ok    = st.session_state.get("_qir_last_n_ok")
@@ -1472,6 +1469,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             )
     except Exception:
         pass
+
+    # ── Intelligence Dashboard (always renders fresh after run) ───────────────
+    _render_qir_dashboard()
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):
