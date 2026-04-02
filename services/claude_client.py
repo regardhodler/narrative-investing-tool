@@ -518,8 +518,9 @@ Be specific, clinical, and use the actual signal values. No vague generalities."
 def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False, model: str = None, current_events: str = "", tactical_context: str = "") -> dict | None:
     """Generate an AI valuation and recommendation for a ticker via Groq or Claude.
 
-    Returns dict with keys: rating, confidence, summary, bullish_factors,
-    bearish_factors, key_levels, recommendation
+    Returns dict with keys: rating, confidence, time_horizon, summary,
+    conviction_drivers, bullish_factors, bearish_factors, signal_conflicts,
+    scenarios, key_levels, catalysts, recommendation
     """
     import re
 
@@ -534,20 +535,40 @@ def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False,
     _tac_block = (f"\nTACTICAL REGIME (days-to-weeks entry timing): {tactical_context}\n"
                   if tactical_context else "")
 
-    prompt = f"""You are an expert equity research analyst. Analysis date: {_today}. Based on the following data snapshot for {ticker}, provide a comprehensive valuation and recommendation.
+    prompt = f"""You are an expert equity research analyst. Analysis date: {_today}. Based on the following data snapshot for {ticker}, provide a comprehensive, multi-dimensional valuation and recommendation. You have access to cross-module signals including insider trades, 13F institutional flow, options activity, macro regime, sector rotation, and analyst revisions — use ALL of them to inform your analysis.
 
 {signals_text}{_ce_block}{_tac_block}
 
-Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys:
+Think carefully before responding. Identify the 2-3 signals most responsible for your rating. Flag any contradictions between signals. Build three concrete scenarios.
+
+Return ONLY valid JSON (no markdown fences, no extra text) with EXACTLY these keys:
 {{
   "rating": "Strong Buy" or "Buy" or "Hold" or "Sell" or "Strong Sell",
   "confidence": 0-100,
-  "summary": "2-3 sentence thesis",
-  "bullish_factors": ["factor1", "factor2", "factor3"],
-  "bearish_factors": ["factor1", "factor2", "factor3"],
-  "key_levels": {{"support": 123.45, "resistance": 234.56}},
-  "recommendation": "2-3 sentence guidance"
-}}"""
+  "time_horizon": "short: <bearish|neutral|bullish> (1-4 wks), medium: <bearish|neutral|bullish> (1-3 mo), long: <bearish|neutral|bullish> (3-12 mo)",
+  "summary": "2-3 sentence thesis integrating the most important cross-signal findings",
+  "conviction_drivers": ["top signal driving rating", "second signal", "third signal"],
+  "bullish_factors": ["specific bullish factor 1", "factor 2", "factor 3", "factor 4"],
+  "bearish_factors": ["specific bearish factor 1", "factor 2", "factor 3"],
+  "signal_conflicts": ["e.g. Options flow bullish but insiders net sold $3M", "second conflict if any"],
+  "scenarios": {{
+    "bull": {{"thesis": "1 sentence bull case", "target": 0.00, "probability": 35}},
+    "base": {{"thesis": "1 sentence base case", "target": 0.00, "probability": 45}},
+    "bear": {{"thesis": "1 sentence bear case", "target": 0.00, "probability": 20}}
+  }},
+  "key_levels": {{"support": 0.00, "resistance": 0.00, "stop_loss": 0.00, "target_1": 0.00, "target_2": 0.00}},
+  "catalysts": [
+    {{"event": "event name", "date": "YYYY-MM-DD or 'TBD'", "impact": "high|medium|low", "direction": "bullish|bearish|neutral"}}
+  ],
+  "recommendation": "2-3 sentence specific action guidance with entry/exit conditions"
+}}
+
+Rules:
+- bull+base+bear probabilities must sum to 100
+- conviction_drivers must reference actual signal values from the data (e.g. "RSI 68 + above all 3 SMAs")
+- signal_conflicts: list [] if none exist
+- catalysts: include earnings, FOMC, sector events — use exact dates from the data where available
+- All price targets must be realistic dollar amounts based on the current price in the data"""
 
     def _parse_valuation_json(text: str) -> dict | None:
         if "```" in text:
@@ -573,7 +594,7 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
     if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
         try:
             return _parse_valuation_json(_call_xai(
-                [{"role": "user", "content": prompt}], _cl_model, 1000, 0.1, system=_val_system))
+                [{"role": "user", "content": prompt}], _cl_model, 2000, 0.1, system=_val_system))
         except Exception as e:
             st.error(f"xAI API error: {e}")
             return None
@@ -583,7 +604,7 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             message = client.messages.create(
                 model=_cl_model,
-                max_tokens=1000,
+                max_tokens=2000,
                 temperature=0.1,
                 system=_val_system,
                 messages=[{"role": "user", "content": prompt}],
@@ -611,10 +632,10 @@ Return ONLY valid JSON (no markdown fences, no extra text) with these exact keys
                     {"role": "system", "content": "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."},
                     {"role": "user", "content": prompt},
                 ],
-                "max_tokens": 1000,
+                "max_tokens": 2000,
                 "temperature": 0.1,
             },
-            timeout=30,
+            timeout=45,
         )
         resp.raise_for_status()
         text = resp.json()["choices"][0]["message"]["content"].strip()

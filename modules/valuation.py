@@ -656,12 +656,17 @@ def render():
 
     # Persist result so Forecast Tracker can quick-capture it
     st.session_state["_last_valuation_result"] = {
-        "rating":     result.get("rating", "Hold"),
-        "confidence": result.get("confidence", 50),
-        "summary":    result.get("summary", ""),
-        "engine":     _cl_model or "llama-3.3-70b-versatile",
-        "ticker":     ticker,
-        "key_levels": result.get("key_levels", {}),
+        "rating":            result.get("rating", "Hold"),
+        "confidence":        result.get("confidence", 50),
+        "summary":           result.get("summary", ""),
+        "engine":            _cl_model or "llama-3.3-70b-versatile",
+        "ticker":            ticker,
+        "key_levels":        result.get("key_levels", {}),
+        "time_horizon":      result.get("time_horizon", ""),
+        "conviction_drivers": result.get("conviction_drivers", []),
+        "signal_conflicts":  result.get("signal_conflicts", []),
+        "scenarios":         result.get("scenarios", {}),
+        "catalysts":         result.get("catalysts", []),
     }
 
     _grad_color = "#c89b3c" if _selected_val_tier == "👑 Highly Regarded Mode" else "#FF8811"
@@ -1537,10 +1542,12 @@ def _render_signal_transparency(signals: dict):
 
 
 def _render_rating_banner(result: dict):
-    """Large colored rating badge + confidence meter."""
+    """Large colored rating badge + confidence meter + time horizon + conviction drivers."""
     rating = result.get("rating", "Hold")
     confidence = result.get("confidence", 50)
     color = RATING_COLORS.get(rating, COLORS["yellow"])
+    time_horizon = result.get("time_horizon", "")
+    conviction_drivers = result.get("conviction_drivers", [])
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -1552,12 +1559,32 @@ def _render_rating_banner(result: dict):
             f'</div>',
             unsafe_allow_html=True,
         )
+        if time_horizon:
+            st.markdown(
+                f'<div style="margin-top:8px; padding:10px; background:#1E1E2E; border-radius:8px; '
+                f'font-size:11px; color:#aaa; line-height:1.6;">'
+                f'<div style="color:#888; font-size:10px; font-weight:600; margin-bottom:4px;">TIME HORIZON</div>'
+                f'{time_horizon}</div>',
+                unsafe_allow_html=True,
+            )
     with col2:
         st.markdown("**Confidence**")
         st.progress(confidence / 100)
         st.caption(f"{confidence}% confidence based on available signals")
         if result.get("summary"):
             st.markdown(f"*{result['summary']}*")
+        if conviction_drivers:
+            drivers_html = "".join(
+                f'<div style="display:inline-block; background:#1E3A5F; color:#7EC8E3; '
+                f'padding:3px 10px; border-radius:12px; font-size:11px; margin:2px;">⚡ {d}</div>'
+                for d in conviction_drivers
+            )
+            st.markdown(
+                f'<div style="margin-top:8px;">'
+                f'<div style="font-size:11px; color:#888; margin-bottom:4px;">CONVICTION DRIVERS</div>'
+                f'{drivers_html}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _render_signal_scorecard(signals: dict):
@@ -1600,7 +1627,7 @@ def _render_signal_scorecard(signals: dict):
 
 
 def _render_analysis(result: dict):
-    """Bull/bear factors, key levels, recommendation."""
+    """Bull/bear factors, scenarios, signal conflicts, key levels, catalysts, recommendation."""
     # Bull vs Bear columns
     st.markdown("### Bull vs Bear Case")
     col_bull, col_bear = st.columns(2)
@@ -1627,17 +1654,93 @@ def _render_analysis(result: dict):
             st.markdown(f"- {factor}")
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Key Levels
+    # Signal Conflicts
+    conflicts = result.get("signal_conflicts", [])
+    if conflicts:
+        st.markdown("### ⚡ Signal Conflicts")
+        conflicts_html = "".join(
+            f'<div style="padding:8px 12px; margin:4px 0; background:#2A2020; border-left:3px solid #F59E0B; '
+            f'border-radius:4px; font-size:13px; color:#F59E0B;">⚠️ {c}</div>'
+            for c in conflicts
+        )
+        st.markdown(conflicts_html, unsafe_allow_html=True)
+
+    # Scenarios — Bull / Base / Bear
+    scenarios = result.get("scenarios", {})
+    if scenarios:
+        st.markdown("### Scenario Analysis")
+        sc_cols = st.columns(3)
+        scenario_cfg = [
+            ("bull",  "🐂 Bull Case",  "#1B3D2F", "#69F0AE"),
+            ("base",  "📊 Base Case",  "#1E2A3A", "#7EC8E3"),
+            ("bear",  "🐻 Bear Case",  "#3D1B1B", "#FF5252"),
+        ]
+        for col, (key, label, bg, accent) in zip(sc_cols, scenario_cfg):
+            sc = scenarios.get(key, {})
+            target = sc.get("target")
+            prob = sc.get("probability", "?")
+            thesis = sc.get("thesis", "")
+            with col:
+                target_str = f"${target:,.2f}" if isinstance(target, (int, float)) and target else "—"
+                st.markdown(
+                    f'<div style="background:{bg}; padding:14px; border-radius:8px; border-top:3px solid {accent};">'
+                    f'<div style="color:{accent}; font-weight:700; font-size:13px;">{label}</div>'
+                    f'<div style="font-size:22px; font-weight:800; margin:6px 0;">{target_str}</div>'
+                    f'<div style="font-size:11px; color:#888; margin-bottom:6px;">Probability: {prob}%</div>'
+                    f'<div style="font-size:12px; color:#ccc;">{thesis}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # Key Levels — expanded
     key_levels = result.get("key_levels", {})
-    if key_levels.get("support") or key_levels.get("resistance"):
-        st.markdown("### Key Levels")
-        lc, rc = st.columns(2)
-        with lc:
-            sup = key_levels.get("support")
-            st.metric("Support", f"${sup}" if sup else "N/A")
-        with rc:
-            res = key_levels.get("resistance")
-            st.metric("Resistance", f"${res}" if res else "N/A")
+    level_fields = [
+        ("stop_loss",   "Stop Loss",   "#FF5252"),
+        ("support",     "Support",     "#F59E0B"),
+        ("resistance",  "Resistance",  "#7EC8E3"),
+        ("target_1",    "Target 1",    "#69F0AE"),
+        ("target_2",    "Target 2",    "#00C853"),
+    ]
+    filled = [(label, key_levels[k], color) for k, label, color in level_fields if key_levels.get(k)]
+    if filled:
+        st.markdown("### Key Price Levels")
+        level_cols = st.columns(len(filled))
+        for col, (label, val, color) in zip(level_cols, filled):
+            with col:
+                val_str = f"${val:,.2f}" if isinstance(val, (int, float)) else f"${val}"
+                st.markdown(
+                    f'<div style="background:#1A1A2E; padding:12px; border-radius:8px; '
+                    f'border-top:3px solid {color}; text-align:center;">'
+                    f'<div style="font-size:11px; color:#888;">{label}</div>'
+                    f'<div style="font-size:18px; font-weight:700; color:{color};">{val_str}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # Catalysts
+    catalysts = result.get("catalysts", [])
+    if catalysts:
+        st.markdown("### 📅 Upcoming Catalysts")
+        impact_color = {"high": "#FF5252", "medium": "#F59E0B", "low": "#888"}
+        dir_icon = {"bullish": "🟢", "bearish": "🔴", "neutral": "🟡"}
+        cat_rows = ""
+        for c in catalysts:
+            evt = c.get("event", "")
+            date = c.get("date", "TBD")
+            impact = c.get("impact", "medium").lower()
+            direction = c.get("direction", "neutral").lower()
+            ic = impact_color.get(impact, "#888")
+            di = dir_icon.get(direction, "🟡")
+            cat_rows += (
+                f'<div style="display:flex; align-items:center; padding:8px 12px; margin:3px 0; '
+                f'background:#1A1A2E; border-radius:6px; gap:12px;">'
+                f'<div style="font-size:16px;">{di}</div>'
+                f'<div style="flex:1;"><div style="font-size:13px; color:#eee;">{evt}</div>'
+                f'<div style="font-size:11px; color:#666;">{date}</div></div>'
+                f'<div style="font-size:11px; color:{ic}; font-weight:600;">{impact.upper()}</div>'
+                f'</div>'
+            )
+        st.markdown(cat_rows, unsafe_allow_html=True)
 
     # Recommendation
     if result.get("recommendation"):
