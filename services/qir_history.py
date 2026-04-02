@@ -2,8 +2,6 @@
 import json
 import os
 from dataclasses import dataclass, asdict
-from datetime import datetime
-from typing import Optional
 
 _HISTORY_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "qir_run_history.json")
 _MAX_RUNS = 30  # keep last 30 runs

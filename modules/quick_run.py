@@ -1210,7 +1210,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             _eng_h = st.session_state.get("_macro_synopsis_engine", "")
             _append_run(QIRRunRecord(
                 run_id=str(_uuid.uuid4())[:8],
-                timestamp=__import__("datetime").datetime.now().isoformat(),
+                timestamp=_dt_qir.datetime.now().isoformat(),
                 pattern=st.session_state.get("_qir_last_pattern", ""),
                 conviction=_syn_h.get("conviction", ""),
                 tactical_score=int(_tac_h.get("tactical_score", 0)),
