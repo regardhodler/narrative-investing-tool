@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-02T14:53:15",
+  "generated_at": "2026-04-03T14:42:23",
   "regime": {
     "label": "Neutral — Leaning Risk-Off",
-    "score": -0.1,
+    "score": -0.06,
     "quadrant": "Stagflation",
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- VIX (Equity Volatility): z=-0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Credit Spreads (HY vs Treasuries): z=-0.79 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.64 ()\n- Market Breadth (RSP/SPY): z=+0.64 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 12/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Credit Spreads (HY vs Treasuries): z=-0.79 ()\n- Market Breadth (RSP/SPY): z=+0.65 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.63 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- VIX (Equity Volatility): z=-0.58 ()\n- Fear & Greed Index: 9/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 49,
-    "label": "Caution / Reduce",
-    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
+    "score": 56,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
@@ -23,7 +23,7 @@
     "top_prob": 0.665,
     "source": "yfinance"
   },
-  "current_events_digest": "In the current neutral, risk-off macro regime with a stagflationary bias, recent events confirm the dominant narrative of supply chain disruptions and rising geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, alongside rising Japanese bond yields and concerns over Taiwan's chip empire, highlight the increasing risks to global trade and economic stability. Meanwhile, the Polymarket prediction markets suggest a low probability of a Fed rate cut to 0% or lower, but a higher likelihood of inflation exceeding 5% in 2026, underscoring the stagflationary pressures, and the 58% probability of Israel conducting military action in Greater Beirut on April 2, 2026, flags a significant geopolitical risk.",
+  "current_events_digest": "In the current neutral-leaning risk-off macro regime, characterized by stagflation, recent events confirm the dominant narrative of supply chain disruptions and rising costs. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical industries such as semiconductor manufacturing, which relies heavily on helium for cooling and lithography. This development, coupled with rising bond yields in Japan and the US, suggests increasing pressure on global markets, potentially exacerbating the stagflationary environment. Meanwhile, Polymarket prediction markets indicate a low probability of the Fed's lower bound reaching 0% or lower before 2027, but a significant chance of inflation reaching over 5% in 2026, underscoring the complex and uncertain outlook for monetary policy and inflation.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
