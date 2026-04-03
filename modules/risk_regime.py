@@ -679,11 +679,15 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     top_sigs = macro.get("top_signals", [])[:8]
     sig_lines = [f"- {s['name']}: z={s['score']:+.2f} ({s.get('label', '')})" for s in top_sigs]
     # Append Fear & Greed as a supplemental signal in the summary
+    _fg_score = None
+    _fg_label = None
     try:
         from services.free_data import fetch_fear_greed
         _fg = fetch_fear_greed()
         if _fg:
-            sig_lines.append(f"- Fear & Greed Index: {_fg['score']}/100 — {_fg['label']} (contrarian)")
+            _fg_score = _fg.get("score")
+            _fg_label = _fg.get("label")
+            sig_lines.append(f"- Fear & Greed Index: {_fg_score}/100 — {_fg_label} (contrarian)")
     except Exception:
         pass
     signal_summary = "\n".join(sig_lines)
@@ -698,6 +702,22 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "signal_summary": signal_summary,
         "quadrant": macro["quadrant"],
     }
+
+    # Build structured raw signal dict so downstream prompts can ground to numbers
+    _all_top_sigs = macro.get("top_signals", [])
+    _raw_signals: dict = {
+        s["name"].lower().replace(" ", "_").replace("/", "_").replace("&", "and"): round(float(s["score"]), 3)
+        for s in _all_top_sigs if s.get("score") is not None
+    }
+    _raw_signals["macro_score_norm"] = round(norm_score, 3)
+    _raw_signals["macro_regime"]     = _new_regime
+    _raw_signals["quadrant"]         = macro.get("quadrant", "")
+    if _fg_score is not None:
+        _raw_signals["fear_greed"]    = _fg_score
+        _raw_signals["fear_greed_label"] = _fg_label or ""
+    # Tactical score if already computed (may be None at this point; written later)
+    if _tac_result:
+        _raw_signals["tactical_score"] = _tac_result.get("tactical_score")
 
     # Telegram alert on regime flip (side-effect only, no session state)
     if _prev_regime and _prev_regime != _new_regime:
@@ -717,7 +737,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         use_claude=use_claude, model=model,
     )
     _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
-    return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq
+    return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq, _raw_signals
 
 
 def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, regime_ctx: dict | None = None) -> dict | None:
@@ -738,11 +758,19 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, 
         _fetch_fn = get_sector_momentum.__wrapped__ if hasattr(get_sector_momentum, "__wrapped__") else get_sector_momentum
         sector_data = _fetch_fn()
         if not sector_data:
-            return None
-        # Prefer explicitly passed regime_ctx, fall back to session_state (main-thread calls only)
-        _ctx = regime_ctx or st.session_state.get("_regime_context") or {}
+            return {"_sector_regime_error": "sector_momentum returned empty — yfinance may be rate-limited"}
+        # Prefer explicitly passed regime_ctx; fall back to session_state ONLY on main thread.
+        # Never silently read session_state from a background thread — it's not thread-safe.
+        if regime_ctx is not None:
+            _ctx = regime_ctx
+        else:
+            import threading
+            if threading.current_thread() is threading.main_thread():
+                _ctx = st.session_state.get("_regime_context") or {}
+            else:
+                return {"_sector_regime_error": "regime_ctx must be passed explicitly when calling from a background thread (session_state is not thread-safe)"}
         if not _ctx.get("quadrant"):
-            return None
+            return {"_sector_regime_error": f"no quadrant in regime_ctx (keys: {list(_ctx.keys())})"}
         digest = summarize_sector_regime(
             sector_data=sector_data,
             regime_context=_ctx,
@@ -750,7 +778,7 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, 
             model=model,
         )
         if not digest or digest.startswith("Error"):
-            return None
+            return {"_sector_regime_error": f"summarize_sector_regime failed: {digest[:120] if digest else 'empty'}"}
         _tier = (
             "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6")
             else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
@@ -760,8 +788,8 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, 
             "_sector_regime_digest_ts":     _dt.datetime.now(),
             "_sector_regime_digest_engine": _tier,
         }
-    except Exception:
-        return None
+    except Exception as _e:
+        return {"_sector_regime_error": f"{type(_e).__name__}: {_e}"}
 
 
 # ─────────────────────────────────────────────

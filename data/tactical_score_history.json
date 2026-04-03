@@ -1874,5 +1874,17 @@
     "label": "Caution / Reduce",
     "logged_at": "2026-04-02T04:41:29.569707",
     "backfilled": true
+  },
+  {
+    "date": "2026-04-02",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-03T03:33:56.379781"
+  },
+  {
+    "date": "2026-04-03",
+    "score": 56,
+    "label": "Neutral / Hold",
+    "logged_at": "2026-04-03T22:45:01.590115"
   }
 ]

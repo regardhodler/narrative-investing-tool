@@ -11,6 +11,131 @@ from utils.theme import COLORS, apply_dark_layout, FONT_FAMILY
 from services.market_data import fetch_options_chain_snapshot_safe
 
 
+def _render_dealer_gex_panel(ticker: str) -> None:
+    """Render the GEX Dealer Positioning panel for a given ticker."""
+    import plotly.graph_objects as go
+    from services.market_data import fetch_gex_profile
+    from utils.theme import apply_dark_layout, COLORS
+    import streamlit as st
+    import numpy as np
+
+    st.markdown("---")
+    st.markdown("### 📐 GEX — Dealer Gamma Positioning")
+
+    with st.spinner("Computing gamma exposure..."):
+        gex = fetch_gex_profile(ticker)
+
+    if not gex:
+        st.warning("GEX data unavailable — options chain may be empty or yfinance rate-limited.")
+        return
+
+    spot = gex["spot"]
+    gamma_flip = gex["gamma_flip"]
+    call_wall = gex["call_wall"]
+    put_wall = gex["put_wall"]
+    total_gex = gex["total_gex"]
+    zone = gex["zone"]
+    zone_detail = gex["zone_detail"]
+    dealer_delta = gex["dealer_net_delta"]
+
+    # Zone badge
+    zone_color = COLORS["green"] if "Positive" in zone else COLORS["red"]
+    st.markdown(
+        f'<div style="background:{zone_color}22;border:1px solid {zone_color};border-radius:6px;'
+        f'padding:10px 16px;margin-bottom:12px">'
+        f'<span style="color:{zone_color};font-weight:700;font-size:15px">{zone}</span><br>'
+        f'<span style="color:#8B9DC3;font-size:12px">{zone_detail}</span>'
+        f'</div>',
+        unsafe_allow_html=True
+    )
+
+    # Key levels metrics
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Spot", f"${spot:,.2f}")
+    c2.metric("Gamma Flip", f"${gamma_flip:,.2f}", f"{gamma_flip - spot:+.2f}")
+    c3.metric("Call Wall", f"${call_wall:,.2f}")
+    c4.metric("Put Wall", f"${put_wall:,.2f}")
+    c5.metric("Total GEX", f"${total_gex:+.1f}M")
+
+    # Dealer net delta
+    delta_color = COLORS["green"] if dealer_delta >= 0 else COLORS["red"]
+    delta_label = "Net Long Delta (sell strength)" if dealer_delta >= 0 else "Net Short Delta (buy weakness)"
+    st.markdown(
+        f'<div style="font-size:12px;color:#8B9DC3;margin:6px 0 12px">'
+        f'Dealer Net Delta: <span style="color:{delta_color};font-weight:600">'
+        f'{dealer_delta:+.3f}</span> — {delta_label}</div>',
+        unsafe_allow_html=True
+    )
+
+    # GEX ladder bar chart
+    strikes = gex["strikes"]
+    net_gex_arr = gex["net_gex"]
+    call_gex_arr = gex["call_gex"]
+    put_gex_arr = gex["put_gex"]
+
+    colors = [COLORS["green"] if v >= 0 else COLORS["red"] for v in net_gex_arr]
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=strikes, y=call_gex_arr,
+        name="Call GEX (+)", marker_color=COLORS["green"], opacity=0.6,
+    ))
+    fig.add_trace(go.Bar(
+        x=strikes, y=put_gex_arr,
+        name="Put GEX (−)", marker_color=COLORS["red"], opacity=0.6,
+    ))
+    fig.add_trace(go.Scatter(
+        x=strikes, y=net_gex_arr,
+        name="Net GEX", line=dict(color=COLORS.get("orange","#FF8811"), width=2),
+        mode="lines+markers", marker_size=4,
+    ))
+
+    # Key level verticals
+    for level, label, color in [
+        (spot, f"Spot ${spot:.0f}", "#FFFFFF"),
+        (gamma_flip, f"γ-Flip ${gamma_flip:.0f}", "#FFD700"),
+        (call_wall, f"Call Wall ${call_wall:.0f}", COLORS["green"]),
+        (put_wall, f"Put Wall ${put_wall:.0f}", COLORS["red"]),
+    ]:
+        fig.add_vline(x=level, line_dash="dash", line_color=color, line_width=1.5,
+                      annotation_text=label, annotation_font_color=color,
+                      annotation_font_size=10)
+
+    fig = apply_dark_layout(fig)
+    fig.update_layout(
+        title=f"{ticker} GEX Ladder — Dealer Gamma by Strike",
+        xaxis_title="Strike",
+        yaxis_title="GEX (proxy $)",
+        barmode="overlay",
+        height=380,
+        legend=dict(orientation="h", y=1.05),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Explanation
+    st.markdown(
+        '<p style="font-size:11px;color:#8B9DC3">'
+        '🟢 Call GEX: positive → dealers long gamma here (mean-reverting). '
+        '🔴 Put GEX: negative → dealers short gamma here (trending). '
+        'Yellow dashed line = Gamma Flip — the strike where market character changes.'
+        '</p>',
+        unsafe_allow_html=True
+    )
+
+    # Write to session_state for downstream use (signal_block, valuation)
+    st.session_state["_gex_profile"] = {
+        "ticker":           ticker,
+        "zone":             zone,
+        "gamma_flip":       gamma_flip,
+        "call_wall":        call_wall,
+        "put_wall":         put_wall,
+        "total_gex":        total_gex,
+        "dealer_net_delta": dealer_delta,
+        "spot":             spot,
+        "asof":             gex["asof"],
+    }
+
+
 def render():
     st.header("OPTIONS ACTIVITY")
 
@@ -107,6 +232,10 @@ def render():
 
     # --- Gamma Exposure ---
     _render_gamma_exposure(ticker)
+
+    # --- GEX Dealer Positioning ---
+    if ticker:
+        _render_dealer_gex_panel(ticker)
 
     # --- IV smile ---
     _render_iv_smile(df, ticker)
@@ -580,6 +709,9 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
     """4-signal Options Flow Sentiment score (0-100) for SPY — hours-to-days timeframe.
 
     Signals: P/C Ratio, Gamma Zone, IV Skew, Unusual Activity Bias.
+    P/C and IV Skew are z-score normalized via EWMA rolling history (SQLite-backed).
+    Signal weights are VIX-regime-adaptive. Falls back to static scoring when history
+    is insufficient (< 5 samples).
     Returns same structure as _tactical_context for consistent downstream consumption.
     """
     strikes    = spy_chain.get("strikes", [])
@@ -588,6 +720,28 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
     spot_price = spy_chain.get("price", 0)
 
     import pandas as _pd
+
+    # ── VIX regime & adaptive weights ────────────────────────────────────────
+    try:
+        from utils.options_history import append_reading, zscore, get_vix_level, get_vix_regime_weights
+        _hist_ok = True
+    except Exception:
+        _hist_ok = False
+
+    vix = 20.0
+    vix_regime = "Normal (15-25)"
+    weights_dict = {"pc": 3.0, "gamma": 1.5, "skew": 2.0, "unusual": 1.5}
+    if _hist_ok:
+        try:
+            vix = get_vix_level()
+            weights_dict = get_vix_regime_weights(vix)
+            if vix > 50:       vix_regime = "Crisis (>50)"
+            elif vix > 35:     vix_regime = "High (>35)"
+            elif vix > 25:     vix_regime = "Elevated (25-35)"
+            elif vix > 15:     vix_regime = "Normal (15-25)"
+            else:              vix_regime = "Low (<15)"
+        except Exception:
+            pass
 
     # Pre-fetched arrays from spy_chain (populated by run_quick_options_flow)
     _s_call_vol = spy_chain.get("call_vol", [])
@@ -620,9 +774,25 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
             except Exception:
                 pass
 
-    pc_ratio   = (total_put_vol / total_call_vol) if total_call_vol > 0 else 1.0
-    sig1_score = _clamp_of((0.9 - pc_ratio) / 0.3)
+    pc_ratio = (total_put_vol / total_call_vol) if total_call_vol > 0 else 1.0
+
+    z_pc = 0.0
+    n_pc = 0
+    if _hist_ok:
+        try:
+            append_reading("pc_ratio", pc_ratio)
+            z_pc, n_pc = zscore(pc_ratio, "pc_ratio")
+        except Exception:
+            pass
+
+    if n_pc >= 5:
+        sig1_score = _clamp_of(-z_pc / 2.0)  # high P/C = bearish = positive z → negate for bullish signal
+    else:
+        sig1_score = _clamp_of((0.9 - pc_ratio) / 0.3)  # static fallback
+
     pc_display = f"{pc_ratio:.2f} ({'bullish' if pc_ratio < 0.8 else ('bearish' if pc_ratio > 1.1 else 'neutral')})"
+    if n_pc >= 5:
+        pc_display += f" [z={z_pc:+.1f}, n={n_pc}]"
 
     # ── Signal 2: Gamma Zone (weight 1.5) ─────────────────────────────────────
     sig2_score    = 0.0
@@ -639,9 +809,10 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         if gflip and spot_price:
             gamma_display += f" · flip ${gflip:.0f}"
 
-    # ── Signal 3: IV Skew (weight 2.0) ────────────────────────────────────────
+    # ── Signal 3: IV Skew (weight 2.0 / VIX-adaptive) ────────────────────────
     sig3_score   = 0.0
     skew_display = "N/A"
+    _n_skew      = 0
     if _s_call_iv and _s_put_iv and spot_price:
         try:
             import numpy as _np3
@@ -654,8 +825,20 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
             _call_iv_val = _call_iv_arr[_otm_call_idx]
             if _call_iv_val > 0 and _put_iv_val > 0:
                 _skew        = _put_iv_val / _call_iv_val
-                sig3_score   = _clamp_of((1.1 - _skew) / 0.2)
                 skew_display = f"{_skew:.2f} ({'flat' if _skew < 1.05 else ('steep' if _skew > 1.3 else 'moderate')})"
+                if _hist_ok:
+                    try:
+                        append_reading("iv_skew", _skew)
+                        _z_skew, _n_skew = zscore(_skew, "iv_skew")
+                        if _n_skew >= 5:
+                            sig3_score = _clamp_of(-_z_skew / 2.0)
+                            skew_display += f" [z={_z_skew:+.1f}, n={_n_skew}]"
+                        else:
+                            sig3_score = _clamp_of((1.1 - _skew) / 0.2)
+                    except Exception:
+                        sig3_score = _clamp_of((1.1 - _skew) / 0.2)
+                else:
+                    sig3_score = _clamp_of((1.1 - _skew) / 0.2)
         except Exception:
             pass
     if skew_display == "N/A":
@@ -674,8 +857,20 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
                     _civ = float(_cr["impliedVolatility"].iloc[0])
                     if _civ > 0:
                         _skew = _piv / _civ
-                        sig3_score   = _clamp_of((1.1 - _skew) / 0.2)
                         skew_display = f"{_skew:.2f} ({'flat' if _skew < 1.05 else ('steep' if _skew > 1.3 else 'moderate')})"
+                        if _hist_ok:
+                            try:
+                                append_reading("iv_skew", _skew)
+                                _z_skew, _n_skew = zscore(_skew, "iv_skew")
+                                if _n_skew >= 5:
+                                    sig3_score = _clamp_of(-_z_skew / 2.0)
+                                    skew_display += f" [z={_z_skew:+.1f}, n={_n_skew}]"
+                                else:
+                                    sig3_score = _clamp_of((1.1 - _skew) / 0.2)
+                            except Exception:
+                                sig3_score = _clamp_of((1.1 - _skew) / 0.2)
+                        else:
+                            sig3_score = _clamp_of((1.1 - _skew) / 0.2)
         except Exception:
             pass
 
@@ -724,7 +919,7 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
 
     # ── Aggregate ─────────────────────────────────────────────────────────────
     scores  = [sig1_score, sig2_score, sig3_score, sig4_score]
-    weights = [3.0, 1.5, 2.0, 1.5]
+    weights = [weights_dict["pc"], weights_dict["gamma"], weights_dict["skew"], weights_dict["unusual"]]
     agg     = float(np.average(scores, weights=weights))
     options_score = int(round((agg + 1.0) * 50))
     options_score = max(0, min(100, options_score))
@@ -756,6 +951,11 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         "signals":       signal_rows,
         "pc_ratio":      round(pc_ratio, 3),
         "raw_score":     round(agg, 3),
+        "vix_level":     round(vix, 1),
+        "vix_regime":    vix_regime,
+        "n_pc_hist":     n_pc,
+        "n_skew_hist":   _n_skew,
+        "scoring_mode":  "z-score adaptive" if (n_pc >= 5) else "static (warming up)",
     }
 
 

@@ -1,1 +1,106 @@
-[]
+[
+  {
+    "run_id": "4998f54a",
+    "timestamp": "2026-04-03T11:31:27.898448",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 48,
+    "options_score": 17.0,
+    "regime_label": "Neutral \u2014 Leaning Risk-Off",
+    "quadrant": "Stagflation",
+    "n_ok": 10,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "f76ab44b",
+    "timestamp": "2026-04-03T11:35:19.591037",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 54,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 11,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "7a2077a2",
+    "timestamp": "2026-04-03T11:42:41.657840",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 54,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 11,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "1684582e",
+    "timestamp": "2026-04-03T11:47:09.276869",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 54,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 11,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "0fc7d11f",
+    "timestamp": "2026-04-03T11:51:12.000035",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 56,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 12,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "dd0743fc",
+    "timestamp": "2026-04-03T14:53:54.024700",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 54,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 12,
+    "n_total": 13,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "aefab626",
+    "timestamp": "2026-04-03T16:37:13.003275",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 56,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "c5e15819",
+    "timestamp": "2026-04-03T16:47:26.466840",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 56,
+    "options_score": 17.0,
+    "regime_label": "True Neutral",
+    "quadrant": "Stagflation",
+    "n_ok": 13,
+    "n_total": 15,
+    "engine": "\ud83e\udde0 Regard Mode"
+  }
+]

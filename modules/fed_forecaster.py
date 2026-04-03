@@ -680,7 +680,7 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
     """Section 4: grouped 18-asset near-term impact matrix."""
     from services.fed_forecaster import (
-        build_fed_context, generate_matrix_forecast, generate_expanded_forecast,
+        build_fed_context, generate_expanded_forecast,
         SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
     )
     import json as _json
@@ -719,7 +719,6 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
             st.caption(f"*{_hint}*")
         st.caption("💡 🧠 Grok 4.1 sufficient here — probability weighting is math-heavy; LLM formats results")
         if _selected_tier != _prev_tier:
-            generate_matrix_forecast.clear()
             generate_expanded_forecast.clear()
             st.session_state["_fed_tier"] = _selected_tier
             st.rerun()
@@ -733,7 +732,6 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
     _forecast_key = f"_fed_forecast_run_{_model_tier}"
     _gen_col, _refresh_col = st.columns([5, 1])
     if _refresh_col.button("🔄 Refresh", key="refresh_forecast", help="Re-fetch all forecast data"):
-        generate_matrix_forecast.clear()
         generate_expanded_forecast.clear()
         st.session_state.pop(_forecast_key, None)
         st.rerun()
@@ -753,10 +751,11 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
         return
 
     with st.spinner("Generating AI forecast…"):
-        expanded = generate_matrix_forecast(context_json, scenarios_json, model_tier=_model_tier)
         full_expanded = generate_expanded_forecast(context_json, scenarios_json, model_tier=_model_tier)
 
-    status = expanded.get("_call_status", {})
+    expanded = full_expanded  # expanded_forecast is a superset of matrix_forecast
+
+    status = full_expanded.get("_call_status", {})
     status_parts = []
     for call_name, msg in status.items():
         if msg == "ok":
@@ -764,11 +763,7 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
         else:
             status_parts.append(f"✗ {call_name}: {msg}")
     _engine_badge_map = {"groq": "⚡ Freeloader Mode", "grok": "🧠 Regard Mode", "sonnet": "👑 Highly Regarded Mode"}
-    _engine_badge = _engine_badge_map.get(expanded.get("_core_engine", "groq"), "⚡ Freeloader Mode")
-    _exp_status = full_expanded.get("_call_status", {})
-    _exp_core_msg = _exp_status.get("core", "ok")
-    if _exp_core_msg != "ok":
-        st.error(f"Expanded forecast error: {_exp_core_msg}")
+    _engine_badge = _engine_badge_map.get(full_expanded.get("_core_engine", "groq"), "⚡ Freeloader Mode")
     if status_parts:
         _gen_col.caption(f"{_engine_badge}  |  " + "  |  ".join(status_parts))
 
@@ -1247,17 +1242,14 @@ def _render_fed_long_term(expanded: dict, adj_probs: list, use_claude: bool = Fa
 
 
 def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: bool = False, engine: str = ""):
-    """Section: Black swan risk panel with severity ranking and directional impact."""
-    from services.fed_forecaster import (
-        BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS,
-    )
+    """Compact black swan summary — full analysis lives in Tail Risk Studio."""
+    from services.fed_forecaster import BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS
 
-    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
-    _section_header("Black Swan Risk Panel", badge=_badge)
+    _section_header("Black Swan Risk Summary")
 
     swans = expanded.get("black_swans", {})
     if not swans:
-        st.info("Black swan data unavailable.")
+        st.info("Black swan data unavailable — re-generate forecast or visit Tail Risk Studio.")
         st.markdown("---")
         _render_fed_causal_chain(
             expanded.get("causal_chains", {}), adj_probs,
@@ -1266,212 +1258,40 @@ def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: b
         )
         return
 
-    sorted_events = sorted(
-        BLACK_SWAN_EVENTS.items(),
-        key=lambda x: swans.get(x[0], {}).get("probability_pct", 0),
-        reverse=True,
-    )
-
     avg_prob = sum(swans.get(k, {}).get("probability_pct", 0) for k in BLACK_SWAN_EVENTS) / max(len(BLACK_SWAN_EVENTS), 1)
     if avg_prob > 8:
-        threat_color, threat_label = COLORS.get("red", "#ef4444"), "ELEVATED"
+        agg_color, agg_label = COLORS.get("red", "#ef4444"), "ELEVATED"
     elif avg_prob > 3:
-        threat_color, threat_label = "#f59e0b", "MODERATE"
+        agg_color, agg_label = "#f59e0b", "MODERATE"
     else:
-        threat_color, threat_label = COLORS.get("green", "#22c55e"), "LOW"
+        agg_color, agg_label = COLORS.get("green", "#22c55e"), "LOW"
+
+    # Compact row of event badges
+    badges_html = ""
+    for k, label in BLACK_SWAN_EVENTS.items():
+        prob = swans.get(k, {}).get("probability_pct", 0)
+        if prob > 10:
+            c = COLORS.get("red", "#ef4444")
+        elif prob > 3:
+            c = "#f59e0b"
+        else:
+            c = COLORS.get("green", "#22c55e")
+        badges_html += (
+            f'<span style="border:1px solid {c};border-radius:6px;padding:4px 10px;'
+            f'margin:3px;display:inline-block;font-size:12px;">'
+            f'<span style="color:{c};font-weight:700;">{prob:.1f}%</span>'
+            f' <span style="color:{COLORS.get("text_dim","#888")};font-size:11px;">{label}</span>'
+            f'</span>'
+        )
 
     st.markdown(
-        f'<div style="font-size:13px;margin-bottom:8px;">'
-        f'Aggregate tail risk: '
-        f'<span style="color:{threat_color};font-weight:700;">{threat_label}</span>'
-        f' (avg {avg_prob:.1f}% annual probability)</div>',
+        f'<div style="margin-bottom:8px;font-size:13px;">'
+        f'Aggregate tail risk: <span style="color:{agg_color};font-weight:700;">{agg_label}</span>'
+        f' &nbsp;·&nbsp; avg {avg_prob:.1f}% annual probability</div>'
+        f'<div style="margin-bottom:10px;">{badges_html}</div>',
         unsafe_allow_html=True,
     )
-    st.caption("AI-estimated probability and directional asset impact for extreme tail events")
-
-    cols = st.columns(2)
-    for i, (event_key, event_label) in enumerate(sorted_events):
-        event = swans.get(event_key, {})
-        prob = event.get("probability_pct", 0)
-        narrative = event.get("narrative", "")
-        impacts = event.get("asset_impacts", {})
-
-        if prob > 10:
-            prob_color = COLORS.get("red", "#ef4444")
-            severity_icon = "🔴"
-        elif prob > 3:
-            prob_color = "#f59e0b"
-            severity_icon = "🟡"
-        else:
-            prob_color = COLORS.get("green", "#22c55e")
-            severity_icon = "🟢"
-
-        pills_html = ""
-        for k, v in impacts.items():
-            v_str = str(v)
-            if any(neg in v_str.lower() for neg in ["-", "negative", "down", "drop", "fall", "decline"]):
-                pill_color = COLORS.get("red", "#ef4444")
-            elif any(pos in v_str.lower() for pos in ["+", "positive", "up", "rise", "gain", "rally"]):
-                pill_color = COLORS.get("green", "#22c55e")
-            else:
-                pill_color = COLORS.get("text_dim", "#888")
-            pills_html += (
-                f'<span style="background:{COLORS.get("surface", "#1e293b")};'
-                f'border:1px solid {pill_color};color:{pill_color};'
-                f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
-                f'{SVC_ASSET_LABELS.get(k, k)}: {v}</span>'
-            )
-
-        with cols[i % 2]:
-            st.markdown(
-                f'<div style="border:1px solid {COLORS.get("border", "#334155")};'
-                f'border-radius:8px;padding:14px;margin-bottom:10px;">'
-                f'<div style="font-weight:700;font-size:14px;margin-bottom:6px;">'
-                f'{severity_icon} {event_label}</div>'
-                f'<span style="background:{prob_color};color:white;padding:2px 10px;'
-                f'border-radius:10px;font-size:0.8em;font-weight:600;">'
-                f'{prob:.1f}% annual probability</span>'
-                f'<p style="margin:10px 0 8px 0;font-size:0.85em;'
-                f'color:{COLORS.get("text_dim", "#94a3b8")};">{narrative}</p>'
-                f'<div style="margin-top:6px;">{pills_html}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-    # ── Custom Black Swan Event Input ─────────────────────────────────────────
-    st.markdown("---")
-    st.markdown("**🔭 Add Custom Black Swan Event**")
-    st.caption("Type any tail-risk scenario to get AI probability + asset impact analysis")
-
-    _use_claude_bs, _bs_model = _ff_ai_tier(
-        key="black_swan_engine",
-        label="Black Swan Engine",
-        recommendation="👑 Highly Regarded recommended — tail risk scenarios benefit most from Sonnet's reasoning depth",
-    )
-    _sel_bs_tier = st.session_state.get("black_swan_engine", "⚡ Freeloader Mode")
-
-    _prev_fed_tier = st.session_state.get("_fed_plays_tier_prev", "")
-    from utils.ai_tier import TIER_OPTS as _TIER_OPTS_BS
-    if _prev_fed_tier and _prev_fed_tier in _TIER_OPTS_BS and _prev_fed_tier != _sel_bs_tier:
-        _sync_icon = _prev_fed_tier.split()[0]
-        if st.button(
-            f"Sync to Fed Forecaster ({_sync_icon})",
-            key="sync_bs_engine_btn",
-            help=f"Fed Forecaster is on {_prev_fed_tier} — click to match Black Swan engine",
-        ):
-            st.session_state["black_swan_engine"] = _prev_fed_tier
-            st.rerun()
-    elif _prev_fed_tier and _prev_fed_tier == _sel_bs_tier:
-        st.caption(f"✓ Synced with Fed Forecaster ({_sel_bs_tier.split()[0]})")
-
-    with st.form("custom_swan_form", clear_on_submit=True):
-        _custom_label = st.text_input(
-            "Describe the event",
-            placeholder="e.g. Reverse yen carry trade unwind, China credit crisis, US debt ceiling breach",
-        )
-        _submitted = st.form_submit_button("Analyze Event", type="primary")
-
-    if _submitted and _custom_label.strip():
-        _ctx_json = expanded.get("_context_json", "{}")
-        import json as _json
-        _base_ctx = {}
-        try:
-            _base_ctx = _json.loads(_ctx_json) if _ctx_json else {}
-        except Exception:
-            pass
-
-        _adj_probs = st.session_state.get("_rate_path_probs", [])
-        if _adj_probs:
-            _dp = max(_adj_probs, key=lambda r: r.get("prob", 0))
-            _base_ctx["dominant_rate_path"] = _dp.get("scenario", "")
-            _base_ctx["dominant_rate_prob_pct"] = round(_dp.get("prob", 0) * 100, 1)
-            _base_ctx["rate_path_scenarios"] = [
-                {"scenario": r.get("scenario"), "prob_pct": round(r.get("prob", 0) * 100, 1)}
-                for r in sorted(_adj_probs, key=lambda r: r.get("prob", 0), reverse=True)
-            ]
-
-        _cached_regime = st.session_state.get("_regime_context", {})
-        if _cached_regime.get("signal_summary"):
-            _base_ctx["regime_ai_context"] = _cached_regime["signal_summary"]
-
-        _enriched_ctx_json = _json.dumps(_base_ctx)
-
-        with st.spinner(f"Analyzing: {_custom_label}..."):
-            if _use_claude_bs:
-                from services.fed_forecaster import _call_claude_custom_event_forecast as _claude_swan_fn
-                _custom_result = _claude_swan_fn(_custom_label.strip(), _enriched_ctx_json, _bs_model)
-            else:
-                from services.fed_forecaster import _call_groq_custom_event_forecast as _groq_swan_fn
-                _custom_result = _groq_swan_fn(_custom_label.strip(), _enriched_ctx_json)
-        if _custom_result:
-            _custom_result["_engine_tier"] = _sel_bs_tier
-            _stored = st.session_state.get("_custom_swans", {})
-            _stored[_custom_label.strip()] = _custom_result
-            st.session_state["_custom_swans"] = _stored
-            st.session_state["_custom_swans_ts"] = __import__("datetime").datetime.now()
-            from services.play_log import append_play as _append_play
-            _append_play("Black Swan", _sel_bs_tier,
-                         {_custom_label.strip(): _custom_result},
-                         meta={"event": _custom_label.strip()})
-            st.rerun()
-        else:
-            st.error("Could not analyze event — check API status.")
-
-    _custom_swans = st.session_state.get("_custom_swans", {})
-    if _custom_swans:
-        st.markdown("#### Custom Events")
-        _ccols = st.columns(2)
-        for _ci, (_clabel, _cdata) in enumerate(_custom_swans.items()):
-            _cprob = _cdata.get("probability_pct", 0)
-            _cnarrative = _cdata.get("narrative", "")
-            _cimpacts = _cdata.get("asset_impacts", {})
-            if _cprob > 10:
-                _cprob_color, _csev_icon = COLORS.get("red", "#ef4444"), "🔴"
-            elif _cprob > 3:
-                _cprob_color, _csev_icon = "#f59e0b", "🟡"
-            else:
-                _cprob_color, _csev_icon = COLORS.get("green", "#22c55e"), "🟢"
-            _cpills_html = ""
-            for _ck, _cv in _cimpacts.items():
-                _cv_str = str(_cv).lower()
-                if "bearish" in _cv_str or "negative" in _cv_str or "down" in _cv_str or "drop" in _cv_str:
-                    _cpill_color = COLORS.get("red", "#ef4444")
-                elif "bullish" in _cv_str or "positive" in _cv_str or "up" in _cv_str or "rise" in _cv_str:
-                    _cpill_color = COLORS.get("green", "#22c55e")
-                else:
-                    _cpill_color = COLORS.get("text_dim", "#888")
-                _cpills_html += (
-                    f'<span style="background:{COLORS.get("surface", "#1e293b")};'
-                    f'border:1px solid {_cpill_color};color:{_cpill_color};'
-                    f'padding:2px 6px;border-radius:4px;font-size:0.75em;margin:2px;display:inline-block;">'
-                    f'{SVC_ASSET_LABELS.get(_ck, _ck)}: {_cv}</span>'
-                )
-            _cengine = _cdata.get("_engine_tier", "")
-            _cengine_badge = (
-                f'<span style="font-size:10px;background:#1a2040;color:#FF8811;'
-                f'padding:1px 6px;border-radius:3px;margin-left:4px;">{_cengine}</span>'
-                if _cengine else ""
-            )
-            with _ccols[_ci % 2]:
-                st.markdown(
-                    f'<div style="border:1px solid #4B5EAA;border-radius:8px;padding:14px;margin-bottom:10px;">'
-                    f'<div style="font-weight:700;font-size:14px;margin-bottom:6px;">'
-                    f'{_csev_icon} {_clabel}'
-                    f'<span style="font-size:10px;background:#2A3565;color:#8899CC;'
-                    f'padding:1px 6px;border-radius:3px;margin-left:6px;">CUSTOM</span>'
-                    f'{_cengine_badge}</div>'
-                    f'<span style="background:{_cprob_color};color:white;padding:2px 10px;'
-                    f'border-radius:10px;font-size:0.8em;font-weight:600;">'
-                    f'{_cprob:.1f}% annual probability</span>'
-                    f'<p style="margin:10px 0 8px 0;font-size:0.85em;'
-                    f'color:{COLORS.get("text_dim", "#94a3b8")};">{_cnarrative}</p>'
-                    f'<div style="margin-top:6px;">{_cpills_html}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-        if st.button("Clear Custom Events", key="clear_custom_swans"):
-            st.session_state["_custom_swans"] = {}
-            st.rerun()
+    st.caption("Full scenario analysis, custom events & impact heatmap → **Tail Risk Studio** in sidebar")
 
     st.markdown("---")
     _render_fed_causal_chain(

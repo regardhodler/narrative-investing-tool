@@ -657,3 +657,79 @@ def _ninety_days_ago() -> str:
     from datetime import date, timedelta
 
     return (date.today() - timedelta(days=90)).isoformat()
+
+
+def extract_debt_schedule(filing_text: str) -> list[dict]:
+    """Parse a 10-K filing text to extract the debt maturity schedule.
+
+    Looks for the contractual obligations table or long-term debt footnote.
+    Returns a list of {year: str, amount: str} dicts, sorted by year.
+    e.g. [{"year": "2025", "amount": "$1.2B"}, {"year": "2026", "amount": "$800M"}]
+    """
+    import re
+
+    lines = filing_text.split("\n")
+    results = []
+    
+    # Pattern: lines like "2025 ... $1,200" or "2026 ... 800,000" near "maturities" or "obligations"
+    year_pattern = re.compile(
+        r'\b(202[5-9]|203[0-9])\b.*?\$([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)?',
+        re.IGNORECASE
+    )
+    # Also capture "Thereafter" lines
+    thereafter_pattern = re.compile(
+        r'(thereafter|beyond 20[3-9]\d).*?\$([\d,]+(?:\.\d+)?)\s*(million|billion|M|B)?',
+        re.IGNORECASE
+    )
+
+    seen_years: set = set()
+    # Find relevant section
+    in_section = False
+    for line in lines:
+        lower = line.lower()
+        if any(k in lower for k in ("contractual obligation", "debt maturity", "long-term debt", "future minimum", "maturities of")):
+            in_section = True
+        if in_section:
+            m = year_pattern.search(line)
+            if m:
+                year = m.group(1)
+                amount_raw = m.group(2).replace(",", "")
+                unit = (m.group(3) or "").lower()
+                try:
+                    amount = float(amount_raw)
+                    if unit in ("billion", "b"):
+                        display = f"${amount:.1f}B"
+                    elif unit in ("million", "m"):
+                        display = f"${amount:.0f}M"
+                    elif amount >= 1_000_000:
+                        display = f"${amount/1e9:.2f}B"
+                    elif amount >= 1_000:
+                        display = f"${amount/1e6:.0f}M"
+                    else:
+                        display = f"${amount:,.0f}"
+                    if year not in seen_years:
+                        results.append({"year": year, "amount": display})
+                        seen_years.add(year)
+                except ValueError:
+                    pass
+            tm = thereafter_pattern.search(line)
+            if tm:
+                amount_raw = tm.group(2).replace(",", "")
+                unit = (tm.group(3) or "").lower()
+                try:
+                    amount = float(amount_raw)
+                    if unit in ("billion", "b"):
+                        display = f"${amount:.1f}B"
+                    else:
+                        display = f"${amount/1e9:.2f}B" if amount >= 1e9 else f"${amount/1e6:.0f}M"
+                    if "Thereafter" not in seen_years:
+                        results.append({"year": "Thereafter", "amount": display})
+                        seen_years.add("Thereafter")
+                except ValueError:
+                    pass
+            # Stop after 50 lines past section start to avoid false positives
+            if len(results) >= 8 or (in_section and lower.strip() == "" and len(results) > 0):
+                if len(results) >= 3:
+                    break
+
+    return sorted(results, key=lambda x: (x["year"] != "Thereafter", x["year"]))

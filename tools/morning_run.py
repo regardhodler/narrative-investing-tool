@@ -107,9 +107,10 @@ def _run_regime():
         from modules.risk_regime import run_quick_regime
         _val = run_quick_regime(use_claude=False)
         if _val:
-            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq = _val
+            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq, _raw_sigs = _val
             _mock_st.session_state["_regime_context"]    = _regime_ctx
             _mock_st.session_state["_regime_context_ts"] = _dt.now()
+            _mock_st.session_state["_regime_raw_signals"] = _raw_sigs
             _mock_st.session_state["_rp_plays_result"]   = _plays
             _mock_st.session_state["_rp_plays_last_tier"] = _tier
             if _tac_data:

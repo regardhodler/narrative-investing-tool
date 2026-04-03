@@ -521,8 +521,22 @@ def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False,
     Returns dict with keys: rating, confidence, time_horizon, summary,
     conviction_drivers, bullish_factors, bearish_factors, signal_conflicts,
     scenarios, key_levels, catalysts, recommendation
+
+    Uses signal fingerprinting to return a cached verdict when underlying signals
+    haven't changed, avoiding redundant AI calls.
+    Groq (free tier) uses a lean classification prompt; Grok/Claude get the full prompt.
     """
     import re
+    from utils.signal_block import build_macro_block, build_ticker_block, get_ticker_fingerprint
+
+    # ── Fingerprint cache check ────────────────────────────────────────────────
+    try:
+        _fp = get_ticker_fingerprint(ticker)
+        _vcache = st.session_state.get("_valuation_cache") or {}
+        if _fp in _vcache:
+            return _vcache[_fp]
+    except Exception:
+        _fp = None
 
     from datetime import date as _date
     _today = _date.today().isoformat()
@@ -535,8 +549,26 @@ def generate_valuation(ticker: str, signals_text: str, use_claude: bool = False,
     _tac_block = (f"\nTACTICAL REGIME (days-to-weeks entry timing): {tactical_context}\n"
                   if tactical_context else "")
 
-    prompt = f"""You are an expert equity research analyst. Analysis date: {_today}. Based on the following data snapshot for {ticker}, provide a comprehensive, multi-dimensional valuation and recommendation. You have access to cross-module signals including insider trades, 13F institutional flow, options activity, macro regime, sector rotation, and analyst revisions — use ALL of them to inform your analysis.
+    # Ground-truth numeric blocks — injected first so AI sees raw numbers before narratives
+    try:
+        _macro_blk = build_macro_block()
+    except Exception:
+        _macro_blk = ""
+    try:
+        _ticker_blk = build_ticker_block(ticker)
+    except Exception:
+        _ticker_blk = ""
 
+    _grounding = ""
+    if _macro_blk:
+        _grounding += f"\n{_macro_blk}\n"
+    if _ticker_blk:
+        _grounding += f"\n{_ticker_blk}\n"
+
+    # Full prompt — used by Grok/Claude (reasoning models, full narration)
+    prompt = f"""You are an expert equity research analyst. Analysis date: {_today}. Based on the following data snapshot for {ticker}, provide a comprehensive, multi-dimensional valuation and recommendation. You have access to cross-module signals including insider trades, 13F institutional flow, options activity, macro regime, sector rotation, and analyst revisions — use ALL of them to inform your analysis.
+{_grounding}
+DETAILED SIGNALS (narrative context — raw numbers above take precedence):
 {signals_text}{_ce_block}{_tac_block}
 
 Think carefully before responding. Identify the 2-3 signals most responsible for your rating. Flag any contradictions between signals. Build three concrete scenarios.
@@ -570,6 +602,35 @@ Rules:
 - catalysts: include earnings, FOMC, sector events — use exact dates from the data where available
 - All price targets must be realistic dollar amounts based on the current price in the data"""
 
+    # Lean classification prompt — used by Groq free tier (LLaMA)
+    # ~half the tokens: drops verbose instructions, caps signal context at 1500 chars.
+    # NOTE: signals are truncated — if signal context is >1500 chars, later signals may be cut.
+    # The macro ground truth block (_grounding) is always included in full.
+    _signals_truncated = len(signals_text) > 1500
+    _groq_prompt = f"""Rate {ticker} as of {_today}. JSON only.
+{_grounding}
+SIGNALS{' (truncated — first 1500 chars)' if _signals_truncated else ''}: {signals_text[:1500]}{_ce_block}
+Return ONLY this JSON (no fences):
+{{
+  "rating": "Strong Buy|Buy|Hold|Sell|Strong Sell",
+  "confidence": 0-100,
+  "time_horizon": "short: <bearish|neutral|bullish> (1-4 wks), medium: <bearish|neutral|bullish> (1-3 mo), long: <bearish|neutral|bullish> (3-12 mo)",
+  "summary": "1-2 sentences max",
+  "conviction_drivers": ["signal1", "signal2", "signal3"],
+  "bullish_factors": ["factor1", "factor2", "factor3"],
+  "bearish_factors": ["factor1", "factor2"],
+  "signal_conflicts": [],
+  "scenarios": {{
+    "bull": {{"thesis": "1 sentence", "target": 0.00, "probability": 35}},
+    "base": {{"thesis": "1 sentence", "target": 0.00, "probability": 45}},
+    "bear": {{"thesis": "1 sentence", "target": 0.00, "probability": 20}}
+  }},
+  "key_levels": {{"support": 0.00, "resistance": 0.00, "stop_loss": 0.00, "target_1": 0.00, "target_2": 0.00}},
+  "catalysts": [{{"event": "earnings", "date": "TBD", "impact": "high", "direction": "neutral"}}],
+  "recommendation": "1-2 sentence action guidance"
+}}
+probabilities must sum to 100. Use realistic price targets."""
+
     def _parse_valuation_json(text: str) -> dict | None:
         if "```" in text:
             match = re.search(r"```(?:json)?\s*(.*?)```", text, re.DOTALL)
@@ -589,12 +650,24 @@ Rules:
         except json.JSONDecodeError:
             return None
 
+    def _cache_and_return(result: dict | None) -> dict | None:
+        """Write result to fingerprint cache before returning."""
+        if result and _fp:
+            _vc = st.session_state.get("_valuation_cache") or {}
+            _vc[_fp] = result
+            # Keep cache bounded — evict oldest entries beyond 20 tickers
+            if len(_vc) > 20:
+                oldest = next(iter(_vc))
+                del _vc[oldest]
+            st.session_state["_valuation_cache"] = _vc
+        return result
+
     _cl_model = model or "grok-4-1-fast-reasoning"
     _val_system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
     if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
         try:
-            return _parse_valuation_json(_call_xai(
-                [{"role": "user", "content": prompt}], _cl_model, 2000, 0.1, system=_val_system))
+            return _cache_and_return(_parse_valuation_json(_call_xai(
+                [{"role": "user", "content": prompt}], _cl_model, 2000, 0.1, system=_val_system)))
         except Exception as e:
             st.error(f"xAI API error: {e}")
             return None
@@ -609,7 +682,7 @@ Rules:
                 system=_val_system,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return _parse_valuation_json(message.content[0].text.strip())
+            return _cache_and_return(_parse_valuation_json(message.content[0].text.strip()))
         except Exception as e:
             st.error(f"Claude API error: {e}")
             return None
@@ -629,10 +702,10 @@ Rules:
             json={
                 "model": "llama-3.3-70b-versatile",
                 "messages": [
-                    {"role": "system", "content": "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."},
-                    {"role": "user", "content": prompt},
+                    {"role": "system", "content": _val_system},
+                    {"role": "user", "content": _groq_prompt},  # lean prompt for Groq
                 ],
-                "max_tokens": 2000,
+                "max_tokens": 1200,   # down from 2000 — lean prompt needs less
                 "temperature": 0.1,
             },
             timeout=45,
@@ -643,15 +716,27 @@ Rules:
         st.error(f"Groq API error: {e}")
         return None
 
-    return _parse_valuation_json(text)
+    return _cache_and_return(_parse_valuation_json(text))
 
 
 def suggest_regime_plays(regime: str, score: float, signal_summary: str, use_claude: bool = False, model: str = None) -> dict:
     """Suggest sectors, stocks, and bonds based on the current risk regime via Groq or Claude.
 
     Returns dict with keys: sectors, stocks, bonds, rationale
+    Uses signal fingerprinting — returns cached result if macro signals unchanged.
     """
     _empty = {"sectors": [], "stocks": [], "bonds": [], "rationale": ""}
+
+    # ── Fingerprint cache check ────────────────────────────────────────────────
+    try:
+        from utils.signal_block import get_signal_fingerprint as _get_fp, build_macro_block as _build_mb
+        _fp = _get_fp()
+        _rpc = st.session_state.get("_regime_plays_cache") or {}
+        if _fp in _rpc:
+            return _rpc[_fp]
+    except Exception:
+        _fp = None
+        _build_mb = None
 
     # Extract quadrant from signal_summary if present
     _quadrant = ""
@@ -671,9 +756,17 @@ def suggest_regime_plays(regime: str, score: float, signal_summary: str, use_cla
     from datetime import date as _date
     _today = _date.today().isoformat()
 
+    # Inject raw z-scores block alongside signal summary
+    try:
+        _raw_blk = _build_mb() if _build_mb else ""
+    except Exception:
+        _raw_blk = ""
+
     prompt = f"""You are a macro strategist. As of {_today}, the market risk regime is currently **{regime}** with an aggregate score of {score:+.2f} (scale: -1 risk-off to +1 risk-on).
 
-Key signal summary:
+{_raw_blk}
+
+Key signal summary (AI-generated — raw numbers above take precedence):
 {signal_summary}
 
 {_quadrant_guidance}
@@ -698,12 +791,20 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
         except json.JSONDecodeError:
             return _empty
 
+    def _parse_and_cache(text: str) -> dict:
+        result = _parse(text)
+        if _fp and result and result.get("sectors"):
+            _rpc2 = st.session_state.get("_regime_plays_cache") or {}
+            _rpc2[_fp] = result
+            st.session_state["_regime_plays_cache"] = _rpc2
+        return result
+
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation."
 
     _cl_model = model or "grok-4-1-fast-reasoning"
     if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
         try:
-            return _parse(_call_xai(
+            return _parse_and_cache(_call_xai(
                 [{"role": "user", "content": prompt}], _cl_model, 1200, 0.3, system=_system))
         except Exception as _e:
             st.error(f"xAI API error (Regime Plays): {_e}")
@@ -719,7 +820,7 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
                 system=_system,
                 messages=[{"role": "user", "content": prompt}],
             )
-            return _parse(message.content[0].text.strip())
+            return _parse_and_cache(message.content[0].text.strip())
         except Exception as _e:
             st.error(f"Claude API error (Regime Plays): {_e}")
             return _empty
@@ -747,7 +848,7 @@ Be selective with 3-star (strong buy) ratings — only give them to picks that a
             timeout=20,
         )
         resp.raise_for_status()
-        return _parse(resp.json()["choices"][0]["message"]["content"].strip())
+        return _parse_and_cache(resp.json()["choices"][0]["message"]["content"].strip())
     except Exception as _e:
         st.error(f"Groq API error (Regime Plays): {_e}")
         return _empty
@@ -775,9 +876,16 @@ def suggest_scenario_plays(
     }
     _hint = _quadrant_hints.get(quadrant, "")
 
+    try:
+        from utils.signal_block import build_macro_block as _build_mb
+        _raw_blk = _build_mb()
+    except Exception:
+        _raw_blk = ""
+    _raw_header = f"RAW NUMERIC GROUND TRUTH (take precedence over all narrative):\n{_raw_blk}\n\n" if _raw_blk else ""
+
     prompt = f"""You are a macro strategist. A specific market scenario is unfolding:
 
-Scenario: {scenario}
+{_raw_header}Scenario: {scenario}
 
 Current macro backdrop:
 - Regime: {regime}
@@ -951,6 +1059,7 @@ def summarize_sector_regime(
     Returns:
         A single prose paragraph (≤250 words) for injection into downstream prompts.
     """
+    import os as _os
     from services.sector_rotation import QUADRANT_ALIGNMENT
     from datetime import date as _date
 
@@ -993,39 +1102,32 @@ Write a single tactical paragraph (max 200 words) covering:
 Be direct. No headers. No bullet points. Use specific ETF tickers."""
 
     text = ""
-    if use_claude and model and model.startswith("grok-"):
+    _cl_model = model or "grok-4-1-fast-reasoning"
+    if use_claude and _is_xai_model(_cl_model) and _os.getenv("XAI_API_KEY"):
         try:
-            import os, requests as _req
-            resp = _req.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {os.environ.get('XAI_API_KEY','')}", "Content-Type": "application/json"},
-                json={"model": model, "messages": [{"role": "user", "content": prompt}], "max_tokens": 600, "temperature": 0.3},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            text = resp.json()["choices"][0]["message"]["content"].strip()
-        except Exception:
-            pass
+            text = _call_xai([{"role": "user", "content": prompt}], _cl_model, 600, 0.3)
+        except Exception as _e:
+            return f"Error generating sector regime digest: {_e}"
 
-    if not text and use_claude:
+    elif use_claude and _os.getenv("ANTHROPIC_API_KEY"):
         try:
-            import os, anthropic as _ant
-            client = _ant.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+            import anthropic as _ant
+            client = _ant.Anthropic(api_key=_os.getenv("ANTHROPIC_API_KEY", ""))
             msg = client.messages.create(
-                model=model or "claude-haiku-4-5",
+                model=_cl_model,
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}],
             )
             text = msg.content[0].text.strip()
-        except Exception:
-            pass
+        except Exception as _e:
+            return f"Error generating sector regime digest: {_e}"
 
     if not text:
         try:
-            import os, requests as _req
+            import requests as _req
             resp = _req.post(
                 "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {os.environ.get('GROQ_API_KEY','')}", "Content-Type": "application/json"},
+                headers={"Authorization": f"Bearer {_os.environ.get('GROQ_API_KEY','')}", "Content-Type": "application/json"},
                 json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "max_tokens": 600, "temperature": 0.3},
                 timeout=30,
             )
@@ -1186,13 +1288,13 @@ Stress Signal Data:
             timeout=30,
         )
         if not resp.ok:
-            # Auto-fallback to Claude if Groq is restricted/unavailable
+            # Auto-fallback to Claude (Haiku) if Groq is restricted/unavailable
             if resp.status_code == 400 and os.getenv("ANTHROPIC_API_KEY"):
                 try:
                     import anthropic as _ac
                     _client = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
                     _msg = _client.messages.create(
-                        model="grok-4-1-fast-reasoning",
+                        model="claude-haiku-4-5",
                         max_tokens=1000,
                         temperature=0.4,
                         messages=[{"role": "user", "content": prompt}],
@@ -1284,6 +1386,14 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
       key_points: list of 3-4 supporting bullet strings
       contradictions: list of contradiction strings (may be empty)
     """
+    try:
+        from utils.signal_block import build_macro_block as _build_mb
+        _raw_blk = _build_mb()
+    except Exception:
+        _raw_blk = ""
+
+    _raw_header = f"RAW NUMERIC GROUND TRUTH:\n{_raw_blk}\n\n" if _raw_blk else ""
+
     prompt = (
         "You are a senior macro strategist synthesizing multiple independent signal sources. "
         "Based on the signals below, assess overall macro conviction.\n\n"
@@ -1297,8 +1407,9 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
         "MIXED if signals conflict, UNCERTAIN if data is sparse\n"
         "- key_points: cite specific data from the signals (numbers, labels, names)\n"
         "- contradictions: list any signals that contradict the dominant conviction; empty list if none\n"
-        "- Be clinical and specific — no vague generalities\n\n"
-        f"SIGNALS:\n{signals_text[:4000]}"
+        "- Be clinical and specific — no vague generalities\n"
+        "- Raw numbers above take precedence over narrative summaries\n\n"
+        f"{_raw_header}SIGNALS (narrative context):\n{signals_text[:4000]}"
     )
 
     _cl_model = model or "grok-4-1-fast-reasoning"
@@ -1433,6 +1544,12 @@ def analyze_portfolio(
     Returns a dict with verdict, risk_score, narrative, per-position assessments,
     and priority_actions. Defaults to Sonnet (highest-stakes call).
     """
+    from utils.signal_block import build_macro_block as _build_mb
+    try:
+        _macro_blk = _build_mb()
+    except Exception:
+        _macro_blk = "(macro ground truth unavailable — run QIR first)"
+
     regime = upstream.get("regime", "Unknown")
     score = upstream.get("score", 0.0)
     quadrant = upstream.get("quadrant", "Unknown")
@@ -1503,6 +1620,43 @@ def analyze_portfolio(
     # Sizing scores block
     sizing_scores = upstream.get("sizing_scores") or {}
 
+    # ── Rolling correlation (live diversification check) ──────────────────────
+    _rc_block = ""
+    try:
+        from services.market_data import fetch_rolling_correlation
+        _pos_tickers = tuple(sorted(set(
+            p.get("ticker", "").upper() for p in positions if p.get("ticker")
+        )))
+        # Always include SPY as benchmark
+        _rc_tickers = tuple(sorted(set(_pos_tickers + ("SPY",))))
+        if len(_rc_tickers) >= 2:
+            _rc = fetch_rolling_correlation(_rc_tickers, short_window=20, long_window=60)
+            if _rc:
+                _rc_lines = [
+                    f"  Avg correlation: {_rc['avg_short']:.2f} (20d) vs {_rc['avg_long']:.2f} (60d) "
+                    f"| delta: {_rc['avg_delta']:+.2f}"
+                ]
+                if _rc.get("concentration_warning"):
+                    _rc_lines.append("  ⚠ CONCENTRATION WARNING: avg pairwise corr > 0.70 — positions moving together")
+                if _rc.get("stress_warning"):
+                    _rc_lines.append("  ⚠ STRESS WARNING: correlations rising (+0.15) — diversification collapsing")
+                # Top stressed pairs
+                _stressed = [p for p in _rc["pairs"] if p.get("stress_flag")]
+                for _sp in _stressed[:3]:
+                    _rc_lines.append(
+                        f"  {_sp['pair']}: corr {_sp['long_corr']:+.2f}→{_sp['short_corr']:+.2f} "
+                        f"(Δ{_sp['delta']:+.2f}) ← CORRELATION SPIKE"
+                    )
+                # All pairs summary
+                for _pp in _rc["pairs"][:6]:
+                    if not _pp.get("stress_flag"):
+                        _rc_lines.append(
+                            f"  {_pp['pair']}: {_pp['short_corr']:+.2f} (20d) vs {_pp['long_corr']:+.2f} (60d)"
+                        )
+                _rc_block = "\n\nROLLING CORRELATION (20d vs 60d baseline — stress detection):\n" + "\n".join(_rc_lines)
+    except Exception:
+        pass
+
     # Positions block (enriched with weight + sizing score when available)
     pos_lines = []
     for p in positions:
@@ -1513,7 +1667,7 @@ def analyze_portfolio(
         sz = sizing_scores.get(ticker.upper(), {})
         sz_str = ""
         if sz.get("score") is not None:
-            sz_str = f" [Wt:{sz['weight']}% Score:{sz['score']} RegimeFit:{sz.get('regime_fit')}]"
+            sz_str = f" [Wt:{sz.get('weight','?')}% Score:{sz.get('score','?')} RegimeFit:{sz.get('regime_fit')}]"
         pos_lines.append(f"  {direction} {ticker} @ ${entry:.2f}{sz_str} — {thesis}")
     positions_block = "\n".join(pos_lines) if pos_lines else "  No open positions"
 
@@ -1587,7 +1741,10 @@ def analyze_portfolio(
 
     prompt = f"""You are a portfolio risk manager. Analyze these open positions against current macro conditions.
 
-MACRO ENVIRONMENT:
+MACRO GROUND TRUTH (raw numbers — use these as authoritative):
+{_macro_blk}
+
+MACRO NARRATIVE CONTEXT (AI-generated summaries — raw numbers above take precedence):
 - Regime: {regime} (score {score:+.2f})
 - Quadrant: {quadrant}
 - Fed Rate: {fed_funds_rate}%
@@ -1599,7 +1756,7 @@ MACRO ENVIRONMENT:
 - Cross-Signal Discovery Plays: {discovery_plays_str}{_ms_block}{ce_block}{_tn_block}{_atg_block}{_pm_block}{_fd_block}{_sm_block}
 
 PORTFOLIO FACTOR EXPOSURE (weighted aggregate):
-{fe_block}{_pr_block}
+{fe_block}{_pr_block}{_rc_block}
 
 BLACK SWAN RISKS:
 {swan_block}
@@ -1607,7 +1764,7 @@ BLACK SWAN RISKS:
 OPEN POSITIONS (with portfolio weight, sizing score, regime fit where available):
 {positions_block}
 
-For each position assess regime alignment, rate path sensitivity, black swan exposure, and factor concentration.
+For each position assess regime alignment, rate path sensitivity, black swan exposure, and factor concentration. If rolling correlation shows stress spikes, flag the pairs and recommend de-risking the most correlated positions.
 
 Return ONLY valid JSON:
 {{
@@ -1784,7 +1941,10 @@ Return ONLY valid JSON:
             pass
         m = _re.search(r"\{.*\}", raw, _re.DOTALL)
         if m:
-            return _json.loads(m.group())
+            try:
+                return _json.loads(m.group())
+            except _json.JSONDecodeError:
+                return {"_error": f"JSON parse error: {raw[:150]}"}
         return {"_error": f"No JSON: {raw[:150]}"}
     except Exception as _e:
         return {"_error": str(_e)}
@@ -1905,7 +2065,10 @@ Return ONLY valid JSON:
             pass
         m = _re.search(r"\{.*\}", raw, _re.DOTALL)
         if m:
-            return _json.loads(m.group())
+            try:
+                return _json.loads(m.group())
+            except _json.JSONDecodeError:
+                return {"_error": f"JSON parse error: {raw[:200]}"}
         return {"_error": f"No JSON in response: {raw[:200]}"}
     except Exception as _e:
         return {"_error": str(_e)}
@@ -1963,9 +2126,142 @@ def fetch_news_sentiment(ticker: str, company_name: str) -> dict | None:
         raw = resp.json()["choices"][0]["message"]["content"].strip()
         import re as _re
         m = _re.search(r"\{.*\}", raw, _re.DOTALL)
-        return json.loads(m.group()) if m else None
+        if m:
+            try:
+                return json.loads(m.group())
+            except json.JSONDecodeError:
+                return None
+        return None
     except Exception:
         return None
+
+
+def analyze_credit_risk(
+    ticker: str,
+    credit_metrics: dict,
+    debt_schedule: list[dict] | None = None,
+    mda_snippet: str = "",
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict:
+    """AI credit risk assessment: coverage ratios, refinancing risk, debt structure.
+
+    Returns:
+        {risk_level: "low"|"medium"|"high"|"critical",
+         interest_coverage_assessment: str,
+         refinancing_risk: str,
+         leverage_assessment: str,
+         key_risks: [str, ...],
+         positive_factors: [str, ...],
+         recommendation: str}
+    """
+    import json as _json
+    import re as _re
+
+    _empty_credit = {
+        "risk_level": "unknown",
+        "interest_coverage_assessment": "insufficient data",
+        "refinancing_risk": "unknown",
+        "leverage_assessment": "unknown",
+        "key_risks": [],
+        "positive_factors": [],
+        "recommendation": "Insufficient financial data to assess credit risk.",
+    }
+
+    if not credit_metrics:
+        return _empty_credit
+
+    # Build metrics summary
+    m = credit_metrics
+    metrics_text = f"""
+Ticker: {ticker}
+Interest Coverage: {m.get('interest_coverage', 'N/A')}x (EBIT/Interest) {m.get('coverage_flag', '') or ''}
+Net Debt: ${m.get('net_debt_B', 'N/A')}B
+Total Debt: ${m.get('total_debt_B', 'N/A')}B
+Cash: ${m.get('cash_B', 'N/A')}B
+EBIT: ${m.get('ebit_B', 'N/A')}B
+EBITDA: ${m.get('ebitda_B', 'N/A')}B
+Debt/EBITDA: {m.get('debt_to_ebitda', 'N/A')}x
+Current Debt Ratio: {(m.get('current_debt_ratio') or 0)*100:.1f}% of debt matures near-term {m.get('maturity_flag', '') or ''}
+FCF Debt Coverage: {m.get('fcf_debt_coverage', 'N/A')}x
+""".strip()
+
+    schedule_text = ""
+    if debt_schedule:
+        lines = [f"  {d['year']}: {d['amount']}" for d in debt_schedule[:8]]
+        schedule_text = "\nDebt Maturity Schedule:\n" + "\n".join(lines)
+
+    mda_text = f"\nManagement Commentary (MD&A excerpt):\n{mda_snippet[:600]}" if mda_snippet else ""
+
+    prompt = f"""You are a credit analyst. Assess the credit/debt risk for {ticker}.
+
+{metrics_text}{schedule_text}{mda_text}
+
+Benchmarks:
+- Interest coverage <1.5x = distressed; 1.5-3x = stressed; 3-5x = adequate; >5x = strong
+- Debt/EBITDA <2x = low leverage; 2-4x = moderate; >4x = high; >6x = dangerous
+- Current debt ratio >40% = near-term refinancing risk
+
+Return ONLY valid JSON:
+{{
+  "risk_level": "low|medium|high|critical",
+  "interest_coverage_assessment": "1-2 sentences on coverage quality and trend",
+  "refinancing_risk": "1-2 sentences on near-term debt maturity pressure",
+  "leverage_assessment": "1-2 sentences on debt/EBITDA and capital structure",
+  "key_risks": ["risk1", "risk2", "risk3"],
+  "positive_factors": ["factor1", "factor2"],
+  "recommendation": "1-2 sentence credit-oriented action guidance"
+}}"""
+
+    try:
+        raw = ""
+        _cl_model = model or "grok-4-1-fast-reasoning"
+
+        if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai([{"role": "user", "content": prompt}], _cl_model, max_tokens=600, temperature=0.2)
+        elif use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            _os2 = os
+            client = _ant.Anthropic(api_key=_os2.getenv("ANTHROPIC_API_KEY", ""))
+            msg = client.messages.create(
+                model=model or "claude-sonnet-4-6",
+                max_tokens=600,
+                temperature=0.2,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw = msg.content[0].text.strip() if msg.content else ""
+        else:
+            groq_key = os.getenv("GROQ_API_KEY", "")
+            if not groq_key:
+                return _empty_credit
+            import requests as _req
+            resp = _req.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "max_tokens": 500, "temperature": 0.2},
+                timeout=30,
+            )
+            raw = resp.json()["choices"][0]["message"]["content"].strip()
+
+        if not raw:
+            return _empty_credit
+
+        # Strip markdown fences
+        raw = _re.sub(r"^```(?:json)?\s*", "", raw, flags=_re.MULTILINE)
+        raw = _re.sub(r"```\s*$", "", raw, flags=_re.MULTILINE).strip()
+        try:
+            return _json.loads(raw)
+        except _json.JSONDecodeError:
+            pass
+        mm = _re.search(r"\{.*\}", raw, _re.DOTALL)
+        if mm:
+            try:
+                return _json.loads(mm.group())
+            except _json.JSONDecodeError:
+                return _empty_credit
+        return _empty_credit
+    except Exception:
+        return _empty_credit
 
 
 def _empty_result() -> dict:
@@ -2292,3 +2588,156 @@ Return ONLY valid JSON:
         return json.loads(raw)
     except Exception as e:
         return {"summary": f"Interpretation error: {e}", "alert_level": "", "action_items": []}
+
+
+def generate_adversarial_debate(
+    signals_text: str,
+    use_claude: bool = False,
+    model: str | None = None,
+) -> dict:
+    """Run a 3-agent adversarial debate on the current macro signals.
+
+    Agents:
+      🐻 Sir Doomburger — bear case maximalist
+      🐂 Sir Fukyerputs — bull case maximalist
+      ⚖️  Judge Judy — neutral synthesis + asymmetric risk verdict
+
+    Returns dict with keys:
+      bear_argument: str (Sir Doomburger's full argument, 3-5 sentences)
+      bull_argument: str (Sir Fukyerputs's full argument, 3-5 sentences)
+      bear_strongest: str (Judge Judy's pick: strongest bear point)
+      bull_strongest: str (Judge Judy's pick: strongest bull point)
+      verdict: "BULL WINS" | "BEAR WINS" | "CONTESTED" (Judge Judy's ruling)
+      asymmetry: str (which side has better risk/reward asymmetry and why)
+      key_disagreement: str (the single most important point of contention)
+      confidence: int (1-10, Judge Judy's confidence in verdict, low = truly contested)
+    """
+    # ── Raw macro ground truth — prevents hallucination of numbers ────────────
+    try:
+        from utils.signal_block import build_macro_block as _build_mb
+        _raw_blk = _build_mb()
+    except Exception:
+        _raw_blk = ""
+    _raw_header = f"RAW NUMERIC GROUND TRUTH (cite these numbers — do not invent others):\n{_raw_blk}\n\n" if _raw_blk else ""
+
+    # ── Judge Judy's court record — informs her of past accuracy ─────────────
+    try:
+        from utils.debate_record import get_record_summary as _get_record
+        _court_record = _get_record()
+    except Exception:
+        _court_record = ""
+
+    # ── Sir Doomburger (Bear) ──────────────────────────────────────────────────
+    bear_prompt = (
+        "You are Sir Doomburger, a legendary permabear macro analyst. "
+        "Your job is to make the strongest possible BEARISH case using ONLY the data provided. "
+        "You are not allowed to be balanced — you must argue the bear case with maximum conviction. "
+        "Cite specific numbers and signal names from the data. "
+        "Be sharp, clinical, and ruthless. 3-5 sentences max.\n\n"
+        f"{_raw_header}MARKET DATA (narrative context):\n{signals_text[:2500]}\n\n"
+        "Make your bear case now:"
+    )
+
+    # ── Sir Fukyerputs (Bull) ──────────────────────────────────────────────────
+    bull_prompt = (
+        "You are Sir Fukyerputs, a legendary permabull macro analyst. "
+        "Your job is to make the strongest possible BULLISH case using ONLY the data provided. "
+        "You are not allowed to be balanced — you must argue the bull case with maximum conviction. "
+        "Dismiss bear concerns with specific data points. "
+        "Be sharp, aggressive, and cite numbers. 3-5 sentences max.\n\n"
+        f"{_raw_header}MARKET DATA (narrative context):\n{signals_text[:2500]}\n\n"
+        "Make your bull case now:"
+    )
+
+    bear_arg = ""
+    bull_arg = ""
+
+    # Use same LLM routing as generate_macro_synopsis — try xAI, Claude, Groq in that order
+    _cl_model = model or "grok-4-1-fast-reasoning"
+
+    def _call_llm(prompt: str, max_tokens: int = 400) -> str:
+        if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
+            try:
+                return _call_xai([{"role": "user", "content": prompt}], _cl_model, max_tokens, 0.5)
+            except Exception:
+                pass
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            try:
+                import anthropic as _ant
+                client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+                msg = client.messages.create(
+                    model=_cl_model, max_tokens=max_tokens, temperature=0.5,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return msg.content[0].text.strip()
+            except Exception:
+                pass
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            return ""
+        try:
+            resp = requests.post(
+                GROQ_API_URL,
+                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": 0.5,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            return resp.json()["choices"][0]["message"]["content"].strip()
+        except Exception:
+            return ""
+
+    bear_arg = _call_llm(bear_prompt, 400)
+    bull_arg = _call_llm(bull_prompt, 400)
+
+    # ── Judge Judy ────────────────────────────────────────────────────────────
+    _record_line = f"YOUR COURT RECORD: {_court_record}\n" if _court_record else ""
+    mod_prompt = (
+        "You are Judge Judy, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
+        "You have heard the bear case from Sir Doomburger and the bull case from Sir Fukyerputs. "
+        "Your job is to deliver a structured verdict. Be blunt, be decisive, take no prisoners. "
+        "Your confidence score should reflect how one-sided the evidence is — high = decisive, low = genuinely contested.\n\n"
+        f"{_record_line}"
+        f"{_raw_header}SIR DOOMBURGER (BEAR CASE):\n{bear_arg}\n\n"
+        f"SIR FUKYERPUTS (BULL CASE):\n{bull_arg}\n\n"
+        "Return ONLY valid JSON (no markdown fences):\n"
+        '{"bear_strongest": "<single strongest bear point>", '
+        '"bull_strongest": "<single strongest bull point>", '
+        '"verdict": "BULL WINS|BEAR WINS|CONTESTED", '
+        '"asymmetry": "<which side has better risk/reward and why — 1-2 sentences>", '
+        '"key_disagreement": "<the single most important factual disagreement between the two agents>", '
+        '"confidence": <1-10 integer>}'
+    )
+
+    mod_raw = _call_llm(mod_prompt, 500)
+
+    import json as _json, re as _re
+    try:
+        mod_raw = _re.sub(r"^```(?:json)?\s*", "", mod_raw, flags=_re.MULTILINE)
+        mod_raw = _re.sub(r"\s*```$", "", mod_raw, flags=_re.MULTILINE).strip()
+        mod_result = _json.loads(mod_raw)
+    except Exception:
+        mod_result = {
+            "bear_strongest": "Parse error",
+            "bull_strongest": "Parse error",
+            "verdict": "CONTESTED",
+            "asymmetry": "Judge Judy unavailable",
+            "key_disagreement": "",
+            "confidence": 5,
+        }
+
+    return {
+        "bear_argument": bear_arg,
+        "bull_argument": bull_arg,
+        "bear_strongest": mod_result.get("bear_strongest", ""),
+        "bull_strongest": mod_result.get("bull_strongest", ""),
+        "verdict": mod_result.get("verdict", "CONTESTED"),
+        "asymmetry": mod_result.get("asymmetry", ""),
+        "key_disagreement": mod_result.get("key_disagreement", ""),
+        "confidence": int(mod_result.get("confidence", 5)),
+    }

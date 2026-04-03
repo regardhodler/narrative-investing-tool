@@ -11541,5 +11541,1005 @@
       "n_positions": 14,
       "verdict": "DEFENSIVE"
     }
+  },
+  {
+    "id": "20260402_213458_23",
+    "timestamp": "2026-04-02T21:34:58.234107",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_213709_77",
+    "timestamp": "2026-04-02T21:37:09.771810",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_213711_56",
+    "timestamp": "2026-04-02T21:37:11.566728",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_213717_44",
+    "timestamp": "2026-04-02T21:37:17.449799",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_213719_29",
+    "timestamp": "2026-04-02T21:37:19.296017",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_214910_47",
+    "timestamp": "2026-04-02T21:49:10.474148",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_214912_32",
+    "timestamp": "2026-04-02T21:49:12.323952",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_214950_81",
+    "timestamp": "2026-04-02T21:49:50.815560",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_214952_63",
+    "timestamp": "2026-04-02T21:49:52.635050",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_220249_02",
+    "timestamp": "2026-04-02T22:02:49.028457",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260402_220253_53",
+    "timestamp": "2026-04-02T22:02:53.538381",
+    "feature": "Fed Forecaster",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260403_120638_64",
+    "timestamp": "2026-04-03T12:06:38.644733",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 5,
+      "narrative": "Portfolio aligned with stagflation via commodities and defensives, benefiting from oil surge and inflation hedges. Correlation spikes in UNH.TO pairs signal rising stress; imminent NFP/CPI add event risk. Low beta but high PHYS/PSLV corr limits diversification.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits USDJPY>160 and BOJ risks in neutral regime.",
+          "risk_factors": [
+            "Geopolitical tensions",
+            "Carry trade reversal"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage play aligns with commodity trend +1.0 in stagflation.",
+          "risk_factors": [
+            "Supply disruptions",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage benefits from inflation +0.36x exposure and stagflation.",
+          "risk_factors": [
+            "High corr to PHYS.TO (0.83)",
+            "Industrial demand"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis neutral in hold rate path; corr spike with UNH.TO flags stress.",
+          "risk_factors": [
+            "Correlation spike \u0394+0.42",
+            "Regime fit 45"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive but multiple corr spikes (SPY \u0394+0.49, FMKT \u0394+0.42, ZUT \u0394+0.32) indicate stress.",
+          "risk_factors": [
+            "Correlation spikes",
+            "Market beta rise"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold inflation/debt hedge strong in stagflation; largest position at 20.9%.",
+          "risk_factors": [
+            "High corr to PSLV.TO (0.83)",
+            "Opportunity cost in risk-on"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Oil value play fits Iran tensions, WTI>$112, negative corrs to metals provide diversification.",
+          "risk_factors": [
+            "Geopolitical escalation",
+            "Negative corr divergence"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities fit extreme fear (9/100) and stagflation quadrant.",
+          "risk_factors": [
+            "Corr spike with UNH.TO \u0394+0.32",
+            "Rate sensitivity"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Trim FMKT and UNH.TO to reduce corr stress",
+        "Hold commodities amid oil surge",
+        "Monitor NFP today and CPI tomorrow"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260403_121609_72",
+    "timestamp": "2026-04-03T12:16:09.725040",
+    "feature": "Tail Risk Studio",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "deflation": {
+        "probability_pct": 4.2,
+        "narrative": "A deflationary black swan in the current stagflation regime emerges from an abrupt demand collapse\u2014exacerbated by extreme fear (Fear & Greed at 9) and weakening equity trends\u2014overwhelming persistent commodity pressures, igniting a debt-deflation spiral. Central banks pivot aggressively to rate cuts (beyond the low 12% baseline cut probability), surging long bond prices but eviscerating corporate earnings amid falling prices and rising real debt burdens. Equities crater across the board, commodities like oil plunge, while USD and Treasuries rally as premier safe havens.",
+        "asset_impacts": {
+          "spy": "strongly bearish",
+          "qqq": "strongly bearish",
+          "iwm": "strongly bearish",
+          "bonds_long": "strongly bullish",
+          "bonds_short": "strongly bearish",
+          "gold": "bearish",
+          "oil": "strongly bearish",
+          "usd": "bullish"
+        },
+        "_engine_tier": "\ud83e\udde0 Regard Mode"
+      }
+    },
+    "meta": {
+      "event": "deflation"
+    }
+  },
+  {
+    "id": "20260403_132759_49",
+    "timestamp": "2026-04-03T13:27:59.494017",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 3
+        },
+        {
+          "name": "Financials",
+          "conviction": 2
+        },
+        {
+          "name": "Utilities",
+          "conviction": 2
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "Strong commodity trends (z=+1.00) and Middle East tensions pushing oil >$112 support energy leaders in stagflation.",
+          "conviction": 3
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Copper momentum in commodity supercycle aligns with materials outperformance in neutral stagflation regime.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Positive term premium (z=+1.00) and Fed hold (68% prob) favor financials amid stable rates.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Corporate CAPEX signals (z=+0.60) bolster industrials despite weak global manufacturing.",
+          "conviction": 2
+        },
+        {
+          "ticker": "PG",
+          "reason": "Defensive staples provide resilience in stagflation with weak consumer sentiment.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CVX",
+          "reason": "Commodity supercycle and oil price surge reinforce major energy positioning.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TIP",
+          "reason": "TIPS hedge stagflation inflation amid rising commodity trends and term premium.",
+          "conviction": 3
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term treasuries offer safety in extreme fear (9/100) and neutral tactical regime.",
+          "conviction": 2
+        },
+        {
+          "ticker": "TBT",
+          "reason": "Rising term premium supports short long-duration bonds.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "In True Neutral stagflation (score +0.00), extreme fear (9/100) signals contrarian buy into strong commodity (z=+1.00) and term premium (z=+1.00) drivers favoring energy/materials outperformance. Fed hold (68.5%) stabilizes rates for financials while weak equity trends and sentiment warrant defensives and inflation hedges like TIPS. Sector momentum confirms XLE/XLB leadership amid supply shocks."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Neutral"
+    }
+  },
+  {
+    "id": "20260403_133059_43",
+    "timestamp": "2026-04-03T13:30:59.435033",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 3
+        },
+        {
+          "name": "Financials",
+          "conviction": 2
+        },
+        {
+          "name": "Utilities",
+          "conviction": 2
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "Strong commodity trends (z=+1.00) and Middle East tensions pushing oil >$112 support energy leaders in stagflation.",
+          "conviction": 3
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Copper momentum in commodity supercycle aligns with materials outperformance in neutral stagflation regime.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Positive term premium (z=+1.00) and Fed hold (68% prob) favor financials amid stable rates.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Corporate CAPEX signals (z=+0.60) bolster industrials despite weak global manufacturing.",
+          "conviction": 2
+        },
+        {
+          "ticker": "PG",
+          "reason": "Defensive staples provide resilience in stagflation with weak consumer sentiment.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CVX",
+          "reason": "Commodity supercycle and oil price surge reinforce major energy positioning.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TIP",
+          "reason": "TIPS hedge stagflation inflation amid rising commodity trends and term premium.",
+          "conviction": 3
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term treasuries offer safety in extreme fear (9/100) and neutral tactical regime.",
+          "conviction": 2
+        },
+        {
+          "ticker": "TBT",
+          "reason": "Rising term premium supports short long-duration bonds.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "In True Neutral stagflation (score +0.00), extreme fear (9/100) signals contrarian buy into strong commodity (z=+1.00) and term premium (z=+1.00) drivers favoring energy/materials outperformance. Fed hold (68.5%) stabilizes rates for financials while weak equity trends and sentiment warrant defensives and inflation hedges like TIPS. Sector momentum confirms XLE/XLB leadership amid supply shocks."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Neutral"
+    }
+  },
+  {
+    "id": "20260403_135205_78",
+    "timestamp": "2026-04-03T13:52:05.783814",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260403_135230_85",
+    "timestamp": "2026-04-03T13:52:30.856817",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260403_135233_86",
+    "timestamp": "2026-04-03T13:52:33.865391",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6795445598139471,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.12496376182759848,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0013044752835918564,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.19418720307486262,
+          "implied_rate": 3.6449966430664062,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 68.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260403_135250_90",
+    "timestamp": "2026-04-03T13:52:50.904851",
+    "feature": "Rate-Path Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Consumer Staples",
+          "conviction": 2
+        },
+        {
+          "name": "Materials",
+          "conviction": 2
+        },
+        {
+          "name": "Utilities",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "ExxonMobil benefits from sustained energy demand and pricing power in stagflationary environment with weak growth.",
+          "conviction": 3
+        },
+        {
+          "ticker": "MCD",
+          "reason": "McDonald's offers defensive stability as a consumer staple with pricing flexibility amid rising inflation.",
+          "conviction": 2
+        },
+        {
+          "ticker": "PG",
+          "reason": "Procter & Gamble provides essential goods with strong brand moats resilient to economic slowdowns.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CVX",
+          "reason": "Chevron gains from higher oil prices supporting real asset returns in stagflation.",
+          "conviction": 2
+        },
+        {
+          "ticker": "NEM",
+          "reason": "Newmont Corporation as a gold miner hedges inflation risks effectively.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TIP",
+          "reason": "iShares TIPS Bond ETF protects against rising inflation while providing real yield in a hold-rate environment.",
+          "conviction": 3
+        },
+        {
+          "ticker": "SCHP",
+          "reason": "Schwab U.S. TIPS ETF offers similar inflation protection with low duration risk.",
+          "conviction": 2
+        },
+        {
+          "ticker": "UUP",
+          "reason": "Invesco DB US Dollar Index Bullish Fund strengthens as safe haven in risk-off stagflation.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "In the stagflation quadrant with a true neutral regime and Fed likely holding rates (68% probability), policy is trapped, favoring real assets that hedge inflation without growth sensitivity. Extreme fear (Fear & Greed 9/100) amid imminent NFP and upcoming CPI enhances defensives like energy, staples, and TIPS. Avoid growth tech and high-yield bonds vulnerable to weak growth and potential rate hikes."
+    },
+    "meta": {
+      "regime": "True Neutral"
+    }
   }
 ]

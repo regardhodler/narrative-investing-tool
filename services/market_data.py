@@ -643,3 +643,470 @@ def fetch_options_chain_snapshot_safe(ticker: str = "SPY", max_expiries: int = 3
         return fetch_options_chain_snapshot(ticker, max_expiries)
     except _OptionsFetchError:
         return None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_gex_profile(ticker: str = "SPY", max_expiries: int = 3) -> dict | None:
+    """Compute Gamma Exposure (GEX) profile and dealer positioning for a ticker.
+
+    GEX Model: Assumes dealers are short options sold to market participants.
+      - Call OI: dealers short calls → long gamma → positive GEX
+      - Put OI:  dealers short puts → short gamma → negative GEX
+    
+    GEX notional per strike = OI × IV × spot × contract_multiplier × gaussian_weight
+    (True Black-Scholes gamma requires T, rate — we use IV × gaussian as proxy)
+
+    Returns dict with:
+      strikes, call_gex, put_gex, net_gex (arrays)
+      total_gex (float, $ millions) 
+      gamma_flip (float, strike where cumulative net_gex crosses zero)
+      call_wall (float, strike with max call OI)
+      put_wall (float, strike with max put OI)
+      dealer_net_delta (float, rough directional bias -1 to +1)
+      zone ("Positive Gamma Zone" or "Negative Gamma Zone")
+      zone_detail (one-line description of what the zone means)
+      spot (float)
+      asof (str)
+    """
+    import numpy as np
+    import pandas as pd
+
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        exps = ticker_obj.options
+        if not exps:
+            return None
+
+        price_info = ticker_obj.fast_info
+        spot = getattr(price_info, "last_price", None) or getattr(price_info, "previous_close", None)
+        if not spot or spot <= 0:
+            return None
+
+        exps_to_use = list(exps[:max_expiries])
+
+        call_oi_map: dict[float, float] = {}
+        put_oi_map: dict[float, float] = {}
+        call_iv_map: dict[float, float] = {}
+        put_iv_map: dict[float, float] = {}
+
+        for exp in exps_to_use:
+            try:
+                chain = ticker_obj.option_chain(exp)
+                calls = chain.calls[["strike", "openInterest", "impliedVolatility"]].dropna()
+                puts  = chain.puts[["strike", "openInterest", "impliedVolatility"]].dropna()
+                for _, row in calls.iterrows():
+                    k = float(row["strike"])
+                    call_oi_map[k] = call_oi_map.get(k, 0) + float(row["openInterest"] or 0)
+                    call_iv_map[k] = max(call_iv_map.get(k, 0), float(row["impliedVolatility"] or 0))
+                for _, row in puts.iterrows():
+                    k = float(row["strike"])
+                    put_oi_map[k] = put_oi_map.get(k, 0) + float(row["openInterest"] or 0)
+                    put_iv_map[k] = max(put_iv_map.get(k, 0), float(row["impliedVolatility"] or 0))
+            except Exception:
+                continue
+
+        all_strikes = sorted(set(call_oi_map) | set(put_oi_map))
+        if not all_strikes:
+            return None
+
+        # Filter to ±20% of spot to avoid noise
+        all_strikes = [k for k in all_strikes if abs(k - spot) / spot <= 0.20]
+        if not all_strikes:
+            return None
+
+        strikes = np.array(all_strikes)
+        call_gex = np.zeros(len(strikes))
+        put_gex  = np.zeros(len(strikes))
+
+        for i, k in enumerate(all_strikes):
+            distance = abs(k - spot) / spot
+            # Gaussian weight — peaks at ATM, decays with distance
+            weight = float(np.exp(-((distance / 0.08) ** 2)))
+            c_oi = call_oi_map.get(k, 0)
+            p_oi = put_oi_map.get(k, 0)
+            c_iv = call_iv_map.get(k, 0.3)
+            p_iv = put_iv_map.get(k, 0.3)
+            # GEX notional: OI × IV × spot × 100 (contract multiplier)
+            call_gex[i] = +c_oi * c_iv * spot * 100 * weight
+            put_gex[i]  = -p_oi * p_iv * spot * 100 * weight
+
+        net_gex = call_gex + put_gex
+
+        # Gamma flip: cumsum crosses zero
+        cum = np.cumsum(net_gex)
+        gamma_flip = float(spot)  # default to spot if no flip found
+        for i in range(1, len(cum)):
+            if cum[i - 1] * cum[i] <= 0:  # sign change
+                gamma_flip = float(strikes[i])
+                break
+
+        # Walls: strike with highest absolute OI
+        call_wall_idx = np.argmax([call_oi_map.get(k, 0) for k in all_strikes])
+        put_wall_idx  = np.argmax([put_oi_map.get(k, 0) for k in all_strikes])
+        call_wall = float(strikes[call_wall_idx])
+        put_wall  = float(strikes[put_wall_idx])
+
+        # Dealer net delta: rough directional proxy
+        # Positive = dealers net long delta (tend to sell into strength)
+        # Negative = dealers net short delta (tend to buy into weakness)
+        total_call_oi = sum(call_oi_map.get(k, 0) for k in all_strikes)
+        total_put_oi  = sum(put_oi_map.get(k, 0) for k in all_strikes)
+        dealer_net_delta = 0.0
+        if total_call_oi + total_put_oi > 0:
+            dealer_net_delta = round((total_call_oi - total_put_oi) / (total_call_oi + total_put_oi), 3)
+
+        total_gex = float(np.sum(net_gex)) / 1e6  # in $millions
+
+        # Zone classification
+        spot_idx = int(np.argmin(np.abs(strikes - spot)))
+        spot_gex = float(net_gex[spot_idx])
+        if spot_gex >= 0:
+            zone = "Positive Gamma Zone"
+            zone_detail = "Dealers are net long gamma — they sell into rallies and buy dips, suppressing volatility."
+        else:
+            zone = "Negative Gamma Zone"
+            zone_detail = "Dealers are net short gamma — they chase moves directionally, amplifying volatility."
+
+        import datetime as _dt
+        return {
+            "ticker":           ticker,
+            "spot":             round(spot, 2),
+            "strikes":          strikes.tolist(),
+            "call_gex":         call_gex.tolist(),
+            "put_gex":          put_gex.tolist(),
+            "net_gex":          net_gex.tolist(),
+            "total_gex":        round(total_gex, 1),
+            "gamma_flip":       round(gamma_flip, 2),
+            "call_wall":        round(call_wall, 2),
+            "put_wall":         round(put_wall, 2),
+            "dealer_net_delta": dealer_net_delta,
+            "zone":             zone,
+            "zone_detail":      zone_detail,
+            "asof":             _dt.datetime.now().strftime("%H:%M:%S"),
+        }
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600)
+def fetch_rolling_correlation(tickers: tuple[str, ...], short_window: int = 20, long_window: int = 60) -> dict | None:
+    """Compute rolling pairwise correlations at two windows to detect stress-driven spikes.
+
+    Args:
+        tickers: tuple of ticker symbols (hashable for cache). Include benchmark (e.g. "SPY").
+        short_window: recent window in trading days (default 20 = ~1 month)
+        long_window:  baseline window in trading days (default 60 = ~3 months)
+
+    Returns dict with:
+        pairs: list of {pair, short_corr, long_corr, delta, stress_flag}
+            - delta = short_corr - long_corr  (positive = correlations rising = less diversification)
+            - stress_flag = True when delta > +0.25 (correlations spiking toward 1 in a selloff)
+        avg_short: portfolio average pairwise correlation over short window
+        avg_long:  portfolio average pairwise correlation over long window
+        avg_delta: avg_short - avg_long
+        concentration_warning: True if avg_short > 0.70 (positions moving together)
+        stress_warning: True if avg_delta > 0.15 (correlations rising — diversification collapsing)
+        as_of: ISO date string
+    """
+    import datetime as _dt
+    if not tickers or len(tickers) < 2:
+        return None
+    needed_days = long_window + 10
+    try:
+        raw = yf.download(
+            list(tickers), period=f"{needed_days * 2}d", interval="1d",
+            progress=False, auto_adjust=True, threads=True
+        )
+        if raw is None or raw.empty:
+            return None
+        closes = raw["Close"] if isinstance(raw.columns, pd.MultiIndex) else raw
+        closes = closes.dropna(how="all")
+        if len(closes) < long_window + 5:
+            return None
+        returns = closes.pct_change().dropna(how="all")
+        cols = [c for c in returns.columns if str(c).upper() in [t.upper() for t in tickers]]
+        returns = returns[cols]
+        returns.columns = [str(c).upper() for c in returns.columns]
+
+        recent = returns.iloc[-short_window:]
+        baseline = returns.iloc[-long_window:]
+
+        short_corr = recent.corr()
+        long_corr = baseline.corr()
+
+        pairs = []
+        tickers_clean = list(returns.columns)
+        for i in range(len(tickers_clean)):
+            for j in range(i + 1, len(tickers_clean)):
+                a, b = tickers_clean[i], tickers_clean[j]
+                sc = float(short_corr.loc[a, b]) if a in short_corr.index and b in short_corr.columns else None
+                lc = float(long_corr.loc[a, b]) if a in long_corr.index and b in long_corr.columns else None
+                if sc is None or lc is None:
+                    continue
+                delta = sc - lc
+                pairs.append({
+                    "pair": f"{a}/{b}",
+                    "short_corr": round(sc, 3),
+                    "long_corr": round(lc, 3),
+                    "delta": round(delta, 3),
+                    "stress_flag": delta > 0.25,
+                })
+
+        if not pairs:
+            return None
+
+        avg_short = sum(p["short_corr"] for p in pairs) / len(pairs)
+        avg_long  = sum(p["long_corr"]  for p in pairs) / len(pairs)
+        avg_delta = avg_short - avg_long
+
+        return {
+            "pairs": sorted(pairs, key=lambda x: abs(x["delta"]), reverse=True),
+            "avg_short": round(avg_short, 3),
+            "avg_long":  round(avg_long,  3),
+            "avg_delta": round(avg_delta, 3),
+            "concentration_warning": avg_short > 0.70,
+            "stress_warning":        avg_delta > 0.15,
+            "short_window": short_window,
+            "long_window":  long_window,
+            "as_of": _dt.date.today().isoformat(),
+        }
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=14400)
+def fetch_ticker_fundamentals(ticker: str) -> dict:
+    """Fetch raw fundamental and positioning metrics for a ticker.
+
+    Returns a flat dict of numeric fields — all from yfinance .info and
+    .recommendations. Safe to call in any module; cached 4 hours.
+
+    Fields returned (all None if unavailable):
+      Valuation multiples:
+        pe_trailing, pe_forward, peg, ps_ratio, pb_ratio, ev_ebitda
+      Returns & quality:
+        roe, roa, profit_margin, revenue_growth_yoy, earnings_growth_yoy
+      Balance sheet:
+        debt_to_equity, current_ratio, quick_ratio, total_cash_per_share
+      Cash flow:
+        fcf_yield (FCF / market_cap), operating_cashflow, levered_fcf
+      Dividends:
+        div_yield, payout_ratio
+      Short interest:
+        short_pct_float, short_ratio (days to cover)
+      Analyst consensus:
+        analyst_score (1=strong buy, 5=strong sell), analyst_count,
+        target_mean, target_median, target_high, target_low,
+        revision_score (net upgrades - downgrades last 30d, from .recommendations)
+    """
+    result: dict = {}
+    try:
+        info = yf.Ticker(ticker).info or {}
+    except Exception:
+        return result
+
+    def _safe(key: str, transform=None):
+        v = info.get(key)
+        if v is None or (isinstance(v, float) and (v != v)):  # NaN check
+            return None
+        try:
+            return transform(v) if transform else v
+        except Exception:
+            return None
+
+    # ── Valuation multiples ────────────────────────────────────────────────────
+    result["pe_trailing"]  = _safe("trailingPE",    float)
+    result["pe_forward"]   = _safe("forwardPE",     float)
+    result["peg"]          = _safe("pegRatio",      float)
+    result["ps_ratio"]     = _safe("priceToSalesTrailing12Months", float)
+    result["pb_ratio"]     = _safe("priceToBook",   float)
+    result["ev_ebitda"]    = _safe("enterpriseToEbitda", float)
+
+    # ── Returns & quality ─────────────────────────────────────────────────────
+    result["roe"]               = _safe("returnOnEquity",   float)
+    result["roa"]               = _safe("returnOnAssets",   float)
+    result["profit_margin"]     = _safe("profitMargins",    float)
+    result["revenue_growth_yoy"]  = _safe("revenueGrowth",   float)
+    result["earnings_growth_yoy"] = _safe("earningsGrowth",  float)
+
+    # ── Balance sheet ─────────────────────────────────────────────────────────
+    result["debt_to_equity"]     = _safe("debtToEquity",    float)
+    result["current_ratio"]      = _safe("currentRatio",    float)
+    result["quick_ratio"]        = _safe("quickRatio",      float)
+    result["total_cash_per_share"] = _safe("totalCashPerShare", float)
+
+    # ── Cash flow ─────────────────────────────────────────────────────────────
+    result["operating_cashflow"] = _safe("operatingCashflow", float)
+    result["levered_fcf"]        = _safe("freeCashflow",     float)
+    mktcap = _safe("marketCap", float)
+    fcf    = result.get("levered_fcf")
+    result["fcf_yield"] = (fcf / mktcap) if (fcf and mktcap and mktcap > 0) else None
+
+    # ── Dividends ─────────────────────────────────────────────────────────────
+    result["div_yield"]    = _safe("dividendYield",  float)
+    result["payout_ratio"] = _safe("payoutRatio",    float)
+
+    # ── Short interest ────────────────────────────────────────────────────────
+    result["short_pct_float"] = _safe("shortPercentOfFloat", float)
+    result["short_ratio"]     = _safe("shortRatio",          float)
+
+    # ── Analyst consensus ─────────────────────────────────────────────────────
+    result["analyst_score"]  = _safe("recommendationMean",       float)  # 1=strong buy, 5=strong sell
+    result["analyst_count"]  = _safe("numberOfAnalystOpinions",  int)
+    result["target_mean"]    = _safe("targetMeanPrice",          float)
+    result["target_median"]  = _safe("targetMedianPrice",        float)
+    result["target_high"]    = _safe("targetHighPrice",          float)
+    result["target_low"]     = _safe("targetLowPrice",           float)
+
+    # ── Analyst revisions (net upgrades - downgrades, last ~30d) ─────────────
+    try:
+        rec_df = yf.Ticker(ticker).recommendations
+        if rec_df is not None and not rec_df.empty:
+            cutoff = pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=30)
+            rec_df.index = pd.to_datetime(rec_df.index, utc=True)
+            recent = rec_df[rec_df.index >= cutoff]
+            if not recent.empty:
+                _upgrades   = recent["To Grade"].str.lower().str.contains("buy|outperform|overweight").sum()
+                _downgrades = recent["To Grade"].str.lower().str.contains("sell|underperform|underweight").sum()
+                result["revision_score"] = int(_upgrades) - int(_downgrades)
+            else:
+                result["revision_score"] = None
+        else:
+            result["revision_score"] = None
+    except Exception:
+        result["revision_score"] = None
+
+    return result
+
+
+@st.cache_data(ttl=14400, show_spinner=False)
+def fetch_credit_metrics(ticker: str) -> dict | None:
+    """Fetch fixed income & credit risk metrics for a ticker.
+
+    Uses yfinance financial statements (income statement + balance sheet) to compute:
+    - Interest coverage ratio (EBIT / Interest Expense) — key solvency signal
+    - Net debt = total_debt - cash
+    - Debt-to-EBITDA (leverage ratio)
+    - Current debt / total debt ratio (near-term refinancing pressure)
+    - FCF debt coverage (levered FCF / total debt)
+    - Debt maturity risk flag
+
+    Returns dict or None on failure.
+    """
+    try:
+        tk = yf.Ticker(ticker)
+        info = tk.info or {}
+
+        # ── Balance sheet ──────────────────────────────────────────────────────
+        bs = tk.balance_sheet
+        total_debt = None
+        current_debt = None
+        cash = None
+        total_assets = None
+
+        if bs is not None and not bs.empty:
+            def _get_bs(keys):
+                for k in keys:
+                    for col in bs.columns:
+                        if k in bs.index:
+                            val = bs.loc[k, col]
+                            if val is not None and str(val) not in ("nan", "None"):
+                                try:
+                                    return float(val)
+                                except Exception:
+                                    pass
+                return None
+
+            total_debt   = _get_bs(["Total Debt", "Long Term Debt And Capital Lease Obligation"])
+            current_debt = _get_bs(["Current Debt", "Current Debt And Capital Lease Obligation", "Current Portion Of Long Term Debt"])
+            cash         = _get_bs(["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments"])
+            total_assets = _get_bs(["Total Assets"])
+
+        # ── Income statement ───────────────────────────────────────────────────
+        inc = tk.income_stmt
+        ebit = None
+        ebitda = None
+        interest_expense = None
+
+        if inc is not None and not inc.empty:
+            def _get_inc(keys):
+                for k in keys:
+                    for col in inc.columns:
+                        if k in inc.index:
+                            val = inc.loc[k, col]
+                            if val is not None and str(val) not in ("nan", "None"):
+                                try:
+                                    return float(val)
+                                except Exception:
+                                    pass
+                return None
+
+            ebit             = _get_inc(["EBIT", "Operating Income"])
+            ebitda           = _get_inc(["EBITDA"])
+            interest_expense = _get_inc(["Interest Expense", "Interest Expense Non Operating"])
+            if interest_expense and interest_expense < 0:
+                interest_expense = abs(interest_expense)  # normalize sign
+
+        # ── Derived metrics ────────────────────────────────────────────────────
+        interest_coverage = None
+        if ebit and interest_expense and interest_expense > 0:
+            interest_coverage = round(ebit / interest_expense, 2)
+
+        net_debt = None
+        if total_debt is not None and cash is not None:
+            net_debt = total_debt - cash
+
+        debt_to_ebitda = None
+        if total_debt and ebitda and ebitda > 0:
+            debt_to_ebitda = round(total_debt / ebitda, 2)
+
+        current_debt_ratio = None
+        if current_debt and total_debt and total_debt > 0:
+            current_debt_ratio = round(current_debt / total_debt, 3)
+
+        # FCF from yfinance info
+        levered_fcf = info.get("freeCashflow")
+        fcf_debt_coverage = None
+        if levered_fcf and total_debt and total_debt > 0:
+            fcf_debt_coverage = round(levered_fcf / total_debt, 3)
+
+        # ── Risk classification ────────────────────────────────────────────────
+        coverage_flag = None
+        if interest_coverage is not None:
+            if interest_coverage < 1.5:
+                coverage_flag = "CRITICAL — coverage below 1.5x, default risk elevated"
+            elif interest_coverage < 3.0:
+                coverage_flag = "WARNING — coverage below 3.0x, limited cushion"
+            elif interest_coverage >= 5.0:
+                coverage_flag = "STRONG — coverage above 5x"
+
+        maturity_flag = None
+        if current_debt_ratio is not None:
+            if current_debt_ratio > 0.40:
+                maturity_flag = "HIGH REFINANCING RISK — >40% of debt matures within 12 months"
+            elif current_debt_ratio > 0.20:
+                maturity_flag = "ELEVATED REFINANCING RISK — >20% of debt matures near-term"
+
+        result = {
+            "ticker": ticker.upper(),
+            "total_debt_B": round(total_debt / 1e9, 2) if total_debt else None,
+            "current_debt_B": round(current_debt / 1e9, 2) if current_debt else None,
+            "cash_B": round(cash / 1e9, 2) if cash else None,
+            "net_debt_B": round(net_debt / 1e9, 2) if net_debt else None,
+            "ebit_B": round(ebit / 1e9, 2) if ebit else None,
+            "ebitda_B": round(ebitda / 1e9, 2) if ebitda else None,
+            "interest_expense_B": round(interest_expense / 1e9, 2) if interest_expense else None,
+            "interest_coverage": interest_coverage,
+            "debt_to_ebitda": debt_to_ebitda,
+            "current_debt_ratio": current_debt_ratio,
+            "fcf_debt_coverage": fcf_debt_coverage,
+            "coverage_flag": coverage_flag,
+            "maturity_flag": maturity_flag,
+        }
+        # Remove None-only result
+        if all(v is None for k, v in result.items() if k != "ticker"):
+            return None
+        return result
+    except Exception:
+        return None
+

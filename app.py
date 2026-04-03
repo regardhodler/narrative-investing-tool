@@ -58,7 +58,7 @@ with st.sidebar:
         "Module",
         [
             "⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events",
-            "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
+            "Tail Risk Studio", "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
             "Short Squeeze Radar", "Backtesting", "My Regarded Portfolio",
             "Signal Audit", "Forecast Tracker", "Export Hub", "Alerts",
         ],
@@ -139,6 +139,8 @@ elif top_level == "Fed Forecaster":
     from modules.fed_forecaster import render; render()
 elif top_level == "Current Events":
     from modules.current_events import render; render()
+elif top_level == "Tail Risk Studio":
+    from modules.tail_risk_studio import render; render()
 elif top_level == "Technical Analysis":
     _ew_tab, _wy_tab = st.tabs(["📈 Elliott Wave", "🔬 Wyckoff"])
     with _ew_tab:

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Fed Policy Forecasting Machine — data layer.
 
 Functions:
@@ -25,6 +25,32 @@ import streamlit as st
 import yfinance as yf
 
 from services.market_data import fetch_fred_series_safe
+
+
+def _groq_post_with_retry(
+    headers: dict,
+    payload: dict,
+    timeout: int = 60,
+    max_retries: int = 4,
+) -> requests.Response:
+    """POST to GROQ_API_URL with exponential backoff on 429 / 5xx.
+
+    Waits 2, 4, 8, 16 seconds between retries (doubles each time).
+    Raises on final failure so callers can catch and log cleanly.
+    """
+    import time
+    delay = 2
+    for attempt in range(max_retries):
+        resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=timeout)
+        if resp.status_code == 429 or resp.status_code >= 500:
+            if attempt < max_retries - 1:
+                time.sleep(delay)
+                delay *= 2
+                continue
+        resp.raise_for_status()
+        return resp
+    resp.raise_for_status()  # final raise if all retries exhausted
+    return resp
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -760,6 +786,7 @@ def build_fed_context(macro: dict, fred_data: dict) -> dict:
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL   = "llama-3.3-70b-versatile"
+XAI_API_URL  = "https://api.x.ai/v1/chat/completions"
 
 
 def _groq_headers() -> dict:
@@ -773,7 +800,7 @@ def _groq_headers() -> dict:
 
 
 def _strip_fences(text: str) -> str:
-    """Extract JSON from Groq response, handling fences and preamble text."""
+    """Extract JSON from LLM response, handling fences and preamble text."""
     text = text.strip()
     # Strip markdown code fences
     if text.startswith("```"):
@@ -787,7 +814,6 @@ def _strip_fences(text: str) -> str:
     for char in ("{", "["):
         idx = text.find(char)
         if idx > 0:
-            # Try parsing from that position
             candidate = text[idx:]
             try:
                 json.loads(candidate)
@@ -795,6 +821,51 @@ def _strip_fences(text: str) -> str:
             except json.JSONDecodeError:
                 pass
     return text
+
+
+def _safe_json_parse(raw: str) -> dict | None:
+    """Parse LLM JSON output with multiple fallback strategies.
+
+    Handles: markdown fences, preamble text, unescaped special chars in strings,
+    truncated output. Returns None only if all strategies fail.
+    """
+    import re as _re
+
+    if not raw or not raw.strip():
+        return None
+
+    # Strategy 1: strip fences and parse directly
+    cleaned = _strip_fences(raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: extract outermost {...} block and try again
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(cleaned[start : end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 3: use regex to find all key-value pairs for simple flat schemas
+    # Useful when the narrative string has unescaped quotes
+    prob_match = _re.search(r'"probability_pct"\s*:\s*([\d.]+)', raw)
+    narr_match = _re.search(r'"narrative"\s*:\s*"(.*?)"(?=\s*,\s*"|\s*})', raw, _re.DOTALL)
+    impacts_match = _re.search(r'"asset_impacts"\s*:\s*(\{[^}]+\})', raw, _re.DOTALL)
+
+    if prob_match and impacts_match:
+        try:
+            prob = float(prob_match.group(1))
+            narrative = narr_match.group(1).strip() if narr_match else "See macro context."
+            impacts = json.loads(impacts_match.group(1))
+            return {"probability_pct": prob, "narrative": narrative, "asset_impacts": impacts}
+        except Exception:
+            pass
+
+    return None
 
 
 def _neutral_tone_fallback() -> dict:
@@ -854,17 +925,16 @@ Rules:
 - adjustment_confidence is how confident you are in the adjustment (0=none, 1=certain)"""
 
     try:
-        resp = requests.post(
-            GROQ_API_URL,
+        resp = _groq_post_with_retry(
             headers=_groq_headers(),
-            json={
+            payload={
                 "model": GROQ_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 600,
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             },
-            timeout=20,
+            timeout=30,
         )
         resp.raise_for_status()
         text = _strip_fences(resp.json()["choices"][0]["message"]["content"])
@@ -947,17 +1017,16 @@ Rules:
 - p25 < p50 < p75 for each month
 - Use scenario keys: hold, cut_25, cut_50, hike_25"""
 
-        resp = requests.post(
-            GROQ_API_URL,
+        resp = _groq_post_with_retry(
             headers=_groq_headers(),
-            json={
+            payload={
                 "model": GROQ_MODEL,
                 "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 4096,
                 "temperature": 0.3,
                 "response_format": {"type": "json_object"},
             },
-            timeout=45,
+            timeout=60,
         )
         resp.raise_for_status()
         text = _strip_fences(resp.json()["choices"][0]["message"]["content"])
@@ -1040,7 +1109,7 @@ def _call_groq_core_forecast(context_json: str, scenarios_json: str) -> dict:
         "max_tokens": 8192,
         "temperature": 0.3,
     }
-    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp = _groq_post_with_retry(headers=headers, payload=payload, timeout=60)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"]
     data = json.loads(_strip_fences(raw))
@@ -1117,16 +1186,8 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: st
     )
 
     if _is_grok:
-        import requests as _req
-        resp = _req.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                  "max_tokens": 8192},
-            timeout=60,
-        )
-        resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        from services.claude_client import _call_xai as _xai
+        raw = _xai([{"role": "user", "content": prompt}], model, max_tokens=8192, temperature=0.3)
     else:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
@@ -1194,7 +1255,7 @@ def _call_groq_commodities_intl_forecast(context_json: str, scenarios_json: str)
         "max_tokens": 8192,
         "temperature": 0.3,
     }
-    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp = _groq_post_with_retry(headers=headers, payload=payload, timeout=60)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"]
     data = json.loads(_strip_fences(raw))
@@ -1272,16 +1333,8 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
     )
 
     if _is_grok:
-        import requests as _req
-        resp = _req.post(
-            "https://api.x.ai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                  "max_tokens": 4096},
-            timeout=60,
-        )
-        resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        from services.claude_client import _call_xai as _xai
+        raw = _xai([{"role": "user", "content": prompt}], model, max_tokens=4096, temperature=0.3)
     else:
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
@@ -1352,20 +1405,66 @@ def _call_groq_black_swan_forecast(context_json: str) -> dict:
         "max_tokens": 2048,
         "temperature": 0.3,
     }
-    resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
+    resp = _groq_post_with_retry(headers=headers, payload=payload, timeout=60)
     resp.raise_for_status()
     raw = resp.json()["choices"][0]["message"]["content"]
-    return json.loads(_strip_fences(raw))
+    result = _safe_json_parse(raw)
+    if result is None:
+        raise ValueError(f"Could not parse black swan JSON response: {raw[:200]}")
+    return result
 
 
-def _call_groq_custom_event_forecast(event_label: str, context_json: str) -> dict | None:
+def _call_claude_black_swan_forecast(context_json: str, model: str = "grok-4-1-fast-reasoning") -> dict:
+    """xAI/Claude version of black swan forecast. Same return schema as Groq version."""
+    from services.claude_client import _call_xai as _xai
+
+    _is_grok = model and model.startswith("grok-")
+
+    events_desc = "\n".join(f"- {k}: {v}" for k, v in BLACK_SWAN_EVENTS.items())
+    prompt = (
+        "You are a macro risk analyst. Return ONLY valid JSON (no commentary).\n\n"
+        f"Macro context:\n{context_json}\n\n"
+        "For each of these tail-risk events, estimate:\n"
+        "1. probability_pct: estimated annual probability (float 0-100)\n"
+        "2. asset_impacts: dict mapping each of "
+        "[spy, qqq, iwm, bonds_long, bonds_short, gold, oil, usd] to one of: "
+        '"strongly bullish", "bullish", "neutral", "bearish", "strongly bearish"\n'
+        "3. narrative: 1-2 sentences on transmission mechanism\n\n"
+        f"Events:\n{events_desc}\n\n"
+        "Return JSON with exactly these top-level keys: "
+        "war_escalation, hormuz_closure, nuclear_event, hyperinflation"
+    )
+
+    if _is_grok:
+        # Use shared _call_xai — handles reasoning timeout (120s) and skips temperature
+        raw = _xai([{"role": "user", "content": prompt}], model, max_tokens=2048, temperature=0.3)
+    else:
+        import anthropic as _ant
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
+        client = _ant.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model, max_tokens=2048, temperature=0.3,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+
+    result = _safe_json_parse(raw)
+    if result is None:
+        raise ValueError(f"Could not parse black swan JSON response: {raw[:200]}")
+    return result
+
+
+def _call_groq_custom_event_forecast(event_label: str, context_json: str) -> dict:
     """Forecast probability and asset impacts for a single user-defined black swan event.
 
     Returns dict with: probability_pct, narrative, asset_impacts (same schema as built-in events).
+    Raises on API failure or unparseable response.
     """
     api_key = os.getenv("GROQ_API_KEY", "")
     if not api_key:
-        return None
+        raise RuntimeError("GROQ_API_KEY not set")
 
     prompt = (
         "You are a macro tail-risk analyst. Return ONLY valid json (no commentary).\n\n"
@@ -1388,28 +1487,25 @@ def _call_groq_custom_event_forecast(event_label: str, context_json: str) -> dic
             {"role": "system", "content": "You are a macro tail-risk analyst. Return only valid json."},
             {"role": "user", "content": prompt},
         ],
-        "max_tokens": 512,
+        "max_tokens": 1024,
         "temperature": 0.3,
     }
-    try:
-        resp = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=30)
-        resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"]
-        return json.loads(_strip_fences(raw))
-    except Exception:
-        return None
+    resp = _groq_post_with_retry(headers=headers, payload=payload, timeout=60)
+    resp.raise_for_status()
+    raw = resp.json()["choices"][0]["message"]["content"]
+    result = _safe_json_parse(raw)
+    if result is None:
+        raise ValueError(f"Could not parse custom event JSON: {raw[:300]}")
+    return result
 
 
-def _call_claude_custom_event_forecast(event_label: str, context_json: str, model: str) -> dict | None:
-    """xAI/Claude version of custom black swan forecast. Same return schema as Groq version."""
+def _call_claude_custom_event_forecast(event_label: str, context_json: str, model: str) -> dict:
+    """xAI/Claude version of custom black swan forecast. Same return schema as Groq version.
+    Raises on API failure or unparseable response.
+    """
+    from services.claude_client import _call_xai as _xai
+
     _is_grok = model and model.startswith("grok-")
-    if _is_grok:
-        api_key = os.getenv("XAI_API_KEY", "")
-    else:
-        import anthropic
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        return None
     prompt = (
         "You are a macro tail-risk analyst. Return ONLY valid JSON (no commentary).\n\n"
         f"Macro context:\n{context_json}\n\n"
@@ -1422,34 +1518,26 @@ def _call_claude_custom_event_forecast(event_label: str, context_json: str, mode
         "3. narrative: 2-3 sentences on transmission mechanism and how it impacts markets\n\n"
         'Return JSON with exactly these keys: "probability_pct", "narrative", "asset_impacts"'
     )
-    try:
-        if _is_grok:
-            import requests as _req
-            resp = _req.post(
-                "https://api.x.ai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": [{"role": "user", "content": prompt}],
-                      "max_tokens": 600},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            raw = resp.json()["choices"][0]["message"]["content"].strip()
-        else:
-            client = anthropic.Anthropic(api_key=api_key)
-            msg = client.messages.create(
-                model=model,
-                max_tokens=600,
-                temperature=0.2,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            raw = msg.content[0].text.strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return json.loads(raw.strip())
-    except Exception:
-        return None
+    if _is_grok:
+        # Use shared _call_xai — handles reasoning timeout (120s) and skips temperature
+        raw = _xai([{"role": "user", "content": prompt}], model, max_tokens=1024, temperature=0.3)
+    else:
+        import anthropic
+        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
+        client = anthropic.Anthropic(api_key=api_key)
+        msg = client.messages.create(
+            model=model,
+            max_tokens=1024,
+            temperature=0.2,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = msg.content[0].text.strip()
+    result = _safe_json_parse(raw)
+    if result is None:
+        raise ValueError(f"Could not parse custom event JSON: {raw[:300]}")
+    return result
 
 
 @st.cache_data(ttl=14400)
@@ -1467,8 +1555,9 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _CLAUDE_MODEL_MAP = {
-    "haiku": "grok-4-1-fast-reasoning",
-    "sonnet": "claude-sonnet-4-6",
+    "grok":   "grok-4-1-fast-reasoning",   # 🧠 Regard Mode → xAI Grok 4.1
+    "haiku":  "grok-4-1-fast-reasoning",   # legacy alias
+    "sonnet": "claude-sonnet-4-6",         # 👑 Highly Regarded Mode → Anthropic Sonnet
 }
 
 
@@ -1512,11 +1601,9 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
     except Exception as exc:
         result["_call_status"]["core"] = f"error: {exc}"
 
+    # Call 2: Commodities + International — always Groq (not worth Grok quota for % estimates)
     try:
-        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
-            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
-        else:
-            comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = comm.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(
@@ -1529,9 +1616,6 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"
 
     return result
-
-
-@st.cache_data(ttl=14400)
 def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Orchestrate 3 calls and merge into unified expanded forecast dict.
 
@@ -1582,12 +1666,9 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tie
     except Exception as exc:
         result["_call_status"]["core"] = f"error: {exc}"
 
-    # Call 2: Commodities + International
+    # Call 2: Commodities + International — always Groq (low-value % estimates, not worth burning Grok quota)
     try:
-        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
-            comm = _call_claude_commodities_intl_forecast(context_json, scenarios_json, model=_claude_model)
-        else:
-            comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
+        comm = _call_groq_commodities_intl_forecast(context_json, scenarios_json)
         for scenario in SCENARIO_KEYS:
             sc = comm.get(scenario, {})
             result["near_term"].setdefault(scenario, {}).update(
@@ -1599,9 +1680,12 @@ def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tie
     except Exception as exc:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"
 
-    # Call 3: Black Swans
+    # Call 3: Black Swans — route to xAI/Claude when model_tier is set
     try:
-        result["black_swans"] = _call_groq_black_swan_forecast(context_json)
+        if _claude_model and (os.getenv("XAI_API_KEY") if (_claude_model and _claude_model.startswith("grok-")) else os.getenv("ANTHROPIC_API_KEY")):
+            result["black_swans"] = _call_claude_black_swan_forecast(context_json, model=_claude_model)
+        else:
+            result["black_swans"] = _call_groq_black_swan_forecast(context_json)
     except Exception as exc:
         result["_call_status"]["black_swans"] = f"error: {exc}"
 

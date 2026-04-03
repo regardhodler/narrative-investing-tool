@@ -1,28 +1,64 @@
 import json
 import re
+import time
 
 import pandas as pd
 import requests
 import streamlit as st
 
+# Alternative endpoint — SEC EDGAR Form 144 / 4 doesn't cover Congress, but
+# Quiver Quant also exposes a lightweight JSON API that avoids HTML scraping.
+_QUIVER_API = "https://api.quiverquant.com/beta/live/congresstrading/{ticker}"
+
 
 @st.cache_data(ttl=3600)
 def get_congress_trades(ticker: str) -> tuple[pd.DataFrame, str]:
-    """Scrape Quiver Quant for congress trading activity on a given ticker.
+    """Fetch congress trading activity for a ticker.
 
-    Extracts embedded Plotly trace data which contains all historical
-    congress trades with politician names, dates, types, sizes, and prices.
+    Strategy:
+      1. Try Quiver Quant JSON API (lightweight, less likely to be blocked).
+      2. Fall back to HTML scrape of the Plotly page.
+      3. On 403 / Cloudflare, return empty + clear error so the UI can explain.
 
     Returns (DataFrame, error_message). DataFrame cols: politician, date, type, size, price
     """
     ticker_upper = ticker.strip().upper()
+
+    # ── Attempt 1: Quiver Quant lightweight JSON API ──────────────────────────
+    try:
+        resp = requests.get(
+            _QUIVER_API.format(ticker=ticker_upper),
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and data:
+                trades = []
+                for row in data:
+                    trades.append({
+                        "politician": row.get("Representative", row.get("politician", "")),
+                        "date": str(row.get("Date", row.get("date", ""))).split("T")[0],
+                        "type": row.get("Transaction", row.get("type", "")),
+                        "size": row.get("Range", row.get("size", "")),
+                        "price": row.get("Price", row.get("price", "")),
+                    })
+                df = pd.DataFrame(trades)
+                df = df[df["politician"] != ""].copy()
+                if not df.empty:
+                    df = df.sort_values("date", ascending=False).reset_index(drop=True)
+                    return df, ""
+    except Exception:
+        pass  # Fall through to HTML scrape
+
+    # ── Attempt 2: HTML scrape of Plotly page ────────────────────────────────
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.5",
     }
-
     try:
+        time.sleep(0.5)  # brief polite delay
         resp = requests.get(
             f"https://www.quiverquant.com/congresstrading/stock/{ticker_upper}",
             headers=headers,

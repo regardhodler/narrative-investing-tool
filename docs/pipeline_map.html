@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Narrative Investing Tool — Pipeline Map</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0E1117;
+    --surface: #1A1F2E;
+    --surface2: #242938;
+    --orange: #FF8811;
+    --teal: #00D4AA;
+    --red: #FF4B4B;
+    --yellow: #FFD700;
+    --blue: #4A90D9;
+    --purple: #9B59B6;
+    --green: #27AE60;
+    --gray: #8B9DC3;
+    --text: #E8EAF0;
+    --text-dim: #8B9DC3;
+    --border: #2D3550;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--orange);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 20px; color: var(--orange); letter-spacing: 0.05em; font-weight: 700; }
+  header p { color: var(--text-dim); font-size: 12px; margin-top: 3px; }
+  .badge { background: var(--orange); color: #000; padding: 2px 10px; border-radius: 3px; font-weight: 700; font-size: 11px; }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; height: calc(100vh - 60px); }
+
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 16px 12px;
+    overflow-y: auto;
+  }
+  .sidebar h3 { font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .nav-item {
+    padding: 7px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 2px;
+    color: var(--text-dim);
+    font-size: 12px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: var(--surface2); color: var(--orange); font-weight: 600; }
+  .nav-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+  .main { overflow-y: auto; padding: 24px 28px; }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .layer-header {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .layer-header span { color: var(--text); font-size: 15px; font-weight: 700; text-transform: none; letter-spacing: 0; }
+
+  /* Card grid */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin-bottom: 24px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .card-title {
+    font-weight: 700;
+    font-size: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .icon { font-size: 14px; }
+  .pill {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 2px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .pill-orange { background: var(--orange); color: #000; }
+  .pill-teal { background: var(--teal); color: #000; }
+  .pill-blue { background: var(--blue); color: #fff; }
+  .pill-red { background: var(--red); color: #fff; }
+  .pill-purple { background: var(--purple); color: #fff; }
+  .pill-yellow { background: var(--yellow); color: #000; }
+  .pill-gray { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+
+  .card-row { margin-bottom: 5px; font-size: 11.5px; color: var(--text-dim); display: flex; gap: 6px; }
+  .card-row strong { color: var(--text); min-width: 70px; flex-shrink: 0; }
+  .tag-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+  .tag {
+    background: var(--surface2);
+    color: var(--gray);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 1px 5px;
+    font-size: 10px;
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+  }
+
+  /* Flow diagram area */
+  .flow-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+
+  .mermaid { background: transparent !important; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  th { background: var(--surface2); color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--text-dim); vertical-align: top; }
+  td:first-child { color: var(--text); font-family: 'Cascadia Code', monospace; font-size: 11px; }
+  tr:hover td { background: var(--surface); }
+
+  code { background: var(--surface2); color: var(--teal); padding: 1px 5px; border-radius: 2px; font-family: 'Cascadia Code', monospace; font-size: 10.5px; }
+
+  .flow-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .flow-row .arrow { color: var(--orange); font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+  .flow-row .step { font-size: 11.5px; color: var(--text-dim); }
+  .flow-row .step strong { color: var(--text); }
+
+  .env-table { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; }
+  .env-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 11.5px;
+  }
+  .env-key { color: var(--yellow); font-family: monospace; font-size: 11px; min-width: 180px; flex-shrink: 0; }
+  .env-val { color: var(--text-dim); }
+
+  .signal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; margin-bottom: 16px; }
+  .signal-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 6px 10px; font-size: 11px; }
+  .signal-item span { color: var(--text-dim); display: block; font-size: 10px; margin-top: 2px; }
+
+  .ai-block { background: var(--surface2); border-left: 3px solid var(--orange); border-radius: 0 4px 4px 0; padding: 10px 14px; margin-bottom: 10px; }
+  .ai-block .fn { color: var(--orange); font-family: monospace; font-size: 11.5px; font-weight: 700; margin-bottom: 4px; }
+  .ai-block .provider { color: var(--teal); font-size: 10.5px; margin-bottom: 3px; }
+  .ai-block .purpose { color: var(--text-dim); font-size: 11px; }
+
+  .session-key { font-family: monospace; font-size: 10.5px; color: var(--blue); background: var(--surface2); padding: 2px 6px; border-radius: 2px; display: inline-block; margin: 2px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚡ NARRATIVE INVESTING TOOL — PIPELINE MAP</h1>
+    <p>Complete data flow, AI calls, service dependencies, session state keys, and environment variables</p>
+  </div>
+  <span class="badge">v1.0 · Apr 2026</span>
+</header>
+
+<div class="layout">
+  <!-- SIDEBAR NAV -->
+  <nav class="sidebar">
+    <h3>Layers</h3>
+    <div class="nav-item active" onclick="show('overview')"><span class="nav-dot" style="background:#FF8811"></span>Overview</div>
+    <div class="nav-item" onclick="show('data')"><span class="nav-dot" style="background:#4A90D9"></span>Data Sources</div>
+    <div class="nav-item" onclick="show('services')"><span class="nav-dot" style="background:#00D4AA"></span>Service Layer</div>
+    <div class="nav-item" onclick="show('modules')"><span class="nav-dot" style="background:#9B59B6"></span>Modules (UI)</div>
+    <div class="nav-item" onclick="show('ai')"><span class="nav-dot" style="background:#FFD700"></span>AI Calls</div>
+    <div class="nav-item" onclick="show('signals')"><span class="nav-dot" style="background:#FF8811"></span>26 Regime Signals</div>
+    <div class="nav-item" onclick="show('session')"><span class="nav-dot" style="background:#27AE60"></span>Session State</div>
+    <div class="nav-item" onclick="show('env')"><span class="nav-dot" style="background:#E74C3C"></span>Env Variables</div>
+    <div class="nav-item" onclick="show('caching')"><span class="nav-dot" style="background:#8B9DC3"></span>Caching & TTL</div>
+    <div class="nav-item" onclick="show('tools')"><span class="nav-dot" style="background:#E67E22"></span>Background Jobs</div>
+    <div class="nav-item" onclick="show('persistence')"><span class="nav-dot" style="background:#16A085"></span>Persistence</div>
+    <div class="nav-item" onclick="show('flow')"><span class="nav-dot" style="background:#FF8811"></span>Full Flow Diagram</div>
+  </nav>
+
+  <main class="main">
+
+    <!-- ═══════════════════════════════════════════════ OVERVIEW -->
+    <div id="overview" class="section active">
+      <div class="layer-header">Architecture <span>Overview</span></div>
+
+      <div class="flow-box">
+        <div class="mermaid">
+graph LR
+  subgraph EXTERNAL["🌐 External Data"]
+    YF["yfinance\nOHLCV + Options"]
+    FRED["FRED API\n26 macro series"]
+    SEC["SEC EDGAR\nFilings + Form 4"]
+    QQ["Quiver Quant\nCongress trades"]
+    GT["Google Trends\npytrends"]
+    CM["CME FedWatch\nRate probs"]
+    ALT["alternative.me\nFear & Greed"]
+    TG["Telegram Bot\nField notes"]
+    GH["GitHub Gist\nSignal persistence"]
+    XAI["xAI / Grok 4.1\nReasoning"]
+    ANTH["Anthropic\nClaude Sonnet"]
+    GROQ["Groq\nllama-3.3-70b"]
+  end
+
+  subgraph SERVICES["⚙ Services"]
+    MD["market_data.py"]
+    SC["sec_client.py"]
+    CC["claude_client.py"]
+    CON["congress_client.py"]
+    TR["trends_client.py"]
+    SR["sector_rotation.py"]
+    FD["free_data.py"]
+    SIG["signals_cache.py"]
+    TGC["telegram_client.py"]
+    NS["news_feed.py"]
+    SCO["scoring.py"]
+  end
+
+  subgraph UTILS["🔧 Utils"]
+    SB["signal_block.py\n(prompt grounding)"]
+    SS["session.py"]
+    TH["theme.py"]
+    AI["ai_tier.py"]
+  end
+
+  subgraph MODULES["📊 Modules"]
+    M0["0 Risk Regime"]
+    M1["1 Discovery"]
+    M2["2 Pulse"]
+    M3["3 EDGAR"]
+    M4["4 Institutional"]
+    M5["5 Insider/Congress"]
+    M6["6 Options"]
+    M7["7 Valuation"]
+    QIR["Quick Intel Run"]
+  end
+
+  YF --> MD
+  FRED --> MD
+  YF --> SC
+  SEC --> SC
+  QQ --> CON
+  GT --> TR
+  ALT --> FD
+  CM --> MD
+  XAI --> CC
+  ANTH --> CC
+  GROQ --> CC
+  TG --> TGC
+
+  MD --> M0
+  MD --> M1
+  MD --> M2
+  MD --> M6
+  SC --> M3
+  SC --> M5
+  CON --> M5
+  TR --> M1
+  SR --> QIR
+  FD --> M0
+  SIG --> QIR
+  TGC --> NS
+  CC --> M3
+  CC --> M7
+  CC --> QIR
+
+  SB --> CC
+  SS --> MODULES
+  GH --> SIG
+        </div>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title"><span class="icon">⭐</span>Architecture at a Glance</div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>6 external data sources</strong> — yfinance, FRED, SEC EDGAR, Quiver Quant, Google Trends, CME FedWatch</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>3 LLM providers</strong> — Anthropic (Claude Sonnet 4.6), xAI (Grok 4.1), Groq (llama-3.3-70b)</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>26 regime signals</strong> — normalized to z-scores → macro score 0–100</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>11 service modules</strong> — all stateless, cached, rate-limited</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>9 UI modules</strong> — each exposes a <code>render()</code> function</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>Signal fingerprinting</strong> — MD5 hash prevents redundant AI calls</div></div>
+          <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>GitHub Gist</strong> — cross-deploy persistence for regime history + signals</div></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="icon">🔑</span>Entry Points</div>
+          <div class="card-row"><strong>app.py</strong> <span>Streamlit app, sidebar routing, auth gate</span></div>
+          <div class="card-row"><strong>morning_run.py</strong> <span>Headless cron runner (GitHub Actions)</span></div>
+          <div class="card-row"><strong>alert_worker.py</strong> <span>Background polling loop</span></div>
+          <br/>
+          <div class="card-title" style="margin-top:4px"><span class="icon">🔐</span>Auth</div>
+          <div class="card-row"><strong>APP_PASSWORD</strong> <span>env var — gates access to entire app on first load</span></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="icon">🧠</span>AI Tier System</div>
+          <div class="card-row"><strong>⚡ Freeloader</strong> <span>Groq llama-3.3-70b (free, lean prompt, 1500 char cap)</span></div>
+          <div class="card-row"><strong>🧠 Regard</strong> <span>Grok 4.1-fast-reasoning (xAI, full prompt)</span></div>
+          <div class="card-row"><strong>👑 Highly Regarded</strong> <span>Claude Sonnet 4.6 (Anthropic, full prompt + reasoning)</span></div>
+          <br/>
+          <div class="card-row"><span>Tier is selected per-module via <code>render_ai_tier_selector()</code> in <code>utils/ai_tier.py</code>. Results cached by tier + fingerprint.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ DATA SOURCES -->
+    <div id="data" class="section">
+      <div class="layer-header">Layer 1 <span>External Data Sources</span></div>
+      <table>
+        <thead><tr><th>Source</th><th>Library / Endpoint</th><th>Used By</th><th>Data</th><th>Rate Limit</th></tr></thead>
+        <tbody>
+          <tr><td>yfinance</td><td><code>yf.Ticker()</code>, <code>yf.download()</code></td><td>market_data, sec_client, scoring, sector_rotation</td><td>OHLCV, options chains, .info fundamentals, earnings date</td><td>~2000 req/hr (soft)</td></tr>
+          <tr><td>FRED API</td><td><code>api.stlouisfed.org/fred/series/observations</code></td><td>market_data, fed_forecaster, risk_regime</td><td>Yield curve, VIX, credit spreads, jobless claims, LEI, ISM, PCE, M2</td><td>120 req/min</td></tr>
+          <tr><td>SEC EDGAR</td><td><code>sec.gov/cgi-bin/browse-edgar</code>, <code>efts.sec.gov/LATEST/search-index</code></td><td>sec_client → edgar_scanner, insider_congress, valuation</td><td>10-K/10-Q/8-K filings, Form 4 insider trades, CIK mapping, full filing text</td><td>10 req/sec (enforced)</td></tr>
+          <tr><td>Quiver Quant</td><td><code>quiverquant.com/congresstrading/stock/TICKER</code></td><td>congress_client → insider_congress</td><td>Congressional buy/sell trades, politician names, trade sizes</td><td>Cloud IP may be blocked (403)</td></tr>
+          <tr><td>Google Trends</td><td>pytrends library</td><td>trends_client → narrative_discovery</td><td>Trending US searches, interest-over-time by keyword</td><td>Adaptive backoff</td></tr>
+          <tr><td>Yahoo Finance Trending</td><td><code>finance.yahoo.com/v1/finance/trending/US</code></td><td>trends_client → narrative_discovery</td><td>Top 10 trending tickers + % change</td><td>~2 req/min (soft)</td></tr>
+          <tr><td>CME FedWatch</td><td>CME derivatives API</td><td>fed_forecaster</td><td>Rate change probabilities for next 4 FOMC meetings</td><td>Moderate</td></tr>
+          <tr><td>alternative.me</td><td><code>alternative.me/fng/</code></td><td>free_data → risk_regime</td><td>Fear & Greed Index (0–100)</td><td>Low</td></tr>
+          <tr><td>AAII.com</td><td>Web scrape</td><td>free_data</td><td>Weekly bulls/bears/neutrals survey</td><td>~1 req/day</td></tr>
+          <tr><td>xAI / Grok 4.1</td><td><code>api.x.ai/v1/chat/completions</code></td><td>claude_client (all AI calls at 🧠 tier)</td><td>LLM reasoning — narrative classification, valuation, regime plays, MD&A tone</td><td>Per key quota</td></tr>
+          <tr><td>Anthropic Claude</td><td><code>api.anthropic.com/v1/messages</code></td><td>claude_client (all AI calls at 👑 tier)</td><td>LLM reasoning — same as xAI</td><td>Per key quota</td></tr>
+          <tr><td>Groq LLM</td><td><code>api.groq.com/openai/v1/chat/completions</code></td><td>claude_client (all AI calls at ⚡ tier)</td><td>llama-3.3-70b — lean prompts only</td><td>Free tier (token/min limit)</td></tr>
+          <tr><td>Telegram Bot</td><td><code>api.telegram.org/bot{TOKEN}/</code></td><td>telegram_client → news_feed, alerts_service</td><td>User field notes (poll), outbound alerts</td><td>30 msg/sec</td></tr>
+          <tr><td>GitHub Gist</td><td><code>api.github.com/gists/{id}</code></td><td>signals_cache, risk_regime, news_feed</td><td>Regime history (730d), signals JSON, news inbox persistence</td><td>5000 req/hr</td></tr>
+          <tr><td>RSS Feeds</td><td>Reuters, MarketWatch, CNBC, Barron's, FT</td><td>news_feed → quick_run</td><td>Financial headlines (last 30m window)</td><td>Low</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ SERVICES -->
+    <div id="services" class="section">
+      <div class="layer-header">Layer 2 <span>Service Layer</span></div>
+
+      <div class="card-grid">
+
+        <div class="card">
+          <div class="card-title"><span class="icon">📈</span>market_data.py <span class="pill pill-teal">Core</span></div>
+          <div class="card-row"><strong>Purpose</strong><span>Centralized OHLCV + macro fetch with caching</span></div>
+          <div class="card-row"><strong>Calls</strong><span>yfinance, FRED API, ib_insync (optional)</span></div>
+          <div class="tag-list">
+            <span class="tag">get_yf_info_safe(ticker)</span>
+            <span class="tag">fetch_earnings_date(ticker)</span>
+            <span class="tag">fetch_batch_safe(tickers, period, interval)</span>
+            <span class="tag">fetch_fred_series_safe(series_id)</span>
+            <span class="tag">fetch_options_chain_snapshot_safe(ticker)</span>
+            <span class="tag">warm_fred_cache()</span>
+            <span class="tag">get_close_series_safe(ticker, period)</span>
+            <span class="tag">get_batch_momentum(tickers, lookback_days)</span>
+            <span class="tag">fetch_ticker_fundamentals(ticker)</span>
+            <span class="tag">fetch_rolling_correlation(tickers, short, long)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">📋</span>sec_client.py <span class="pill pill-blue">EDGAR</span></div>
+          <div class="card-row"><strong>Purpose</strong><span>SEC EDGAR filings + insider trades + CIK mapping</span></div>
+          <div class="card-row"><strong>Rate limit</strong><span>Thread-safe lock @ 10 req/sec</span></div>
+          <div class="tag-list">
+            <span class="tag">get_cik_ticker_map()</span>
+            <span class="tag">search_filings(keyword)</span>
+            <span class="tag">get_filings_by_ticker(ticker)</span>
+            <span class="tag">get_company_info(ticker)</span>
+            <span class="tag">get_insider_trades(ticker, days_back)</span>
+            <span class="tag">get_latest_annual_filing(ticker)</span>
+            <span class="tag">fetch_filing_text(url, max_chars=100k)</span>
+            <span class="tag">extract_mda_text(full_text)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🤖</span>claude_client.py <span class="pill pill-yellow">AI Router</span></div>
+          <div class="card-row"><strong>Purpose</strong><span>LLM routing + prompt construction for all AI calls</span></div>
+          <div class="card-row"><strong>Providers</strong><span>Claude Sonnet 4.6 · Grok 4.1 · Groq llama-3.3-70b</span></div>
+          <div class="tag-list">
+            <span class="tag">classify_narrative(topic)</span>
+            <span class="tag">describe_company(ticker)</span>
+            <span class="tag">group_tickers_by_narrative(tickers)</span>
+            <span class="tag">summarize_filing(text, form_type)</span>
+            <span class="tag">analyze_mda_sentiment(mda_text)</span>
+            <span class="tag">generate_valuation(ticker, signals)</span>
+            <span class="tag">suggest_regime_plays(regime, score)</span>
+            <span class="tag">analyze_portfolio(positions, upstream)</span>
+            <span class="tag">summarize_sector_regime(sector_data, ctx)</span>
+            <span class="tag">generate_macro_synopsis(signals)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🏛</span>congress_client.py <span class="pill pill-purple">Smart Money</span></div>
+          <div class="card-row"><strong>Purpose</strong><span>Congressional trading via Quiver Quant scrape</span></div>
+          <div class="card-row"><strong>Note</strong><span>Cloud IP may be blocked (403). Returns empty + error msg.</span></div>
+          <div class="tag-list">
+            <span class="tag">get_congress_trades(ticker) → (DataFrame, str)</span>
+          </div>
+          <div class="card-row" style="margin-top:6px"><strong>Cols</strong><span>politician, date, type, size ($range), price</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">📡</span>trends_client.py</div>
+          <div class="card-row"><strong>Purpose</strong><span>Google Trends + Yahoo Finance trending tickers</span></div>
+          <div class="tag-list">
+            <span class="tag">get_yahoo_trending_tickers() — TTL 15m</span>
+            <span class="tag">get_trending_searches() — TTL 15m</span>
+            <span class="tag">get_interest_over_time(query, timeframe)</span>
+            <span class="tag">get_interest_over_time_multi(queries)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🔄</span>sector_rotation.py</div>
+          <div class="card-row"><strong>ETFs</strong><span>XLK XLV XLE XLF XLI XLC XLP XLY XLU XLB XLRE</span></div>
+          <div class="tag-list">
+            <span class="tag">get_sector_momentum() — TTL 1h</span>
+            <span class="tag">get_quadrant_bias_sectors(quadrant)</span>
+          </div>
+          <div class="card-row" style="margin-top:6px"><strong>Returns</strong><span>Rank by 4W/12W/26W momentum per ETF</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">💾</span>signals_cache.py <span class="pill pill-orange">Persistence</span></div>
+          <div class="card-row"><strong>Purpose</strong><span>Persist 100+ session_state keys to GitHub Gist + local JSON</span></div>
+          <div class="tag-list">
+            <span class="tag">load_signals() — on page load</span>
+            <span class="tag">save_signals() — on every rerun</span>
+          </div>
+          <div class="card-row" style="margin-top:6px"><strong>Backend</strong><span>GitHub Gist PATCH · <code>data/signals_cache.json</code></span></div>
+          <div class="card-row"><strong>Keys</strong><span>100+ keys: regime, fed, discovery, ticker signals, news, filings, price</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">📣</span>telegram_client.py</div>
+          <div class="card-row"><strong>Purpose</strong><span>Bidirectional Telegram Bot — alerts out, field notes in</span></div>
+          <div class="tag-list">
+            <span class="tag">is_configured()</span>
+            <span class="tag">send_alert(message, parse_mode)</span>
+            <span class="tag">send_document(filename, content)</span>
+            <span class="tag">get_updates(since_message_id)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🔢</span>scoring.py</div>
+          <div class="card-row"><strong>Purpose</strong><span>Quantitative 0–100 composite ticker score</span></div>
+          <div class="tag-list">
+            <span class="tag">score_ticker(ticker)</span>
+            <span class="tag">_fetch_technicals(ticker)</span>
+            <span class="tag">_fetch_fundamentals(ticker)</span>
+            <span class="tag">_fetch_insider_activity(ticker)</span>
+            <span class="tag">_fetch_options_sentiment(ticker)</span>
+            <span class="tag">_fetch_short_interest(ticker)</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">📰</span>news_feed.py</div>
+          <div class="card-row"><strong>Purpose</strong><span>RSS aggregation + user field notes inbox</span></div>
+          <div class="tag-list">
+            <span class="tag">fetch_financial_headlines() — TTL 30m</span>
+            <span class="tag">load_news_inbox()</span>
+            <span class="tag">save_to_inbox(item)</span>
+            <span class="tag">sync_telegram_to_inbox()</span>
+            <span class="tag">fetch_gist_intel()</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🌡</span>free_data.py</div>
+          <div class="card-row"><strong>Purpose</strong><span>Free macro indicators (no API key needed)</span></div>
+          <div class="tag-list">
+            <span class="tag">fetch_fear_greed() — primary: alternative.me, fallback: synthetic VIX</span>
+            <span class="tag">fetch_aaii_sentiment() — TTL 24h</span>
+            <span class="tag">fetch_fedspeech_rss(max_items) — FOMC RSS</span>
+            <span class="tag">fetch_vix_term_structure(num_weeks)</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ MODULES -->
+    <div id="modules" class="section">
+      <div class="layer-header">Layer 3 <span>Modules (UI)</span></div>
+
+      <table>
+        <thead><tr><th>#</th><th>Module</th><th>File</th><th>Data Pipeline</th><th>UI Elements</th><th>Writes to Session</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>0</td><td><strong>Risk Regime</strong></td><td>risk_regime.py</td>
+            <td>26 signals via market_data + free_data → z-scores → macro score → Dalio quadrant → regime history (Gist)</td>
+            <td>Regime badge, macro score gauge, 2×2 quadrant grid, CAPE, cycle chart, 26-signal table, daily sparkline</td>
+            <td><span class="session-key">_regime_context</span><span class="session-key">_regime_raw_signals</span><span class="session-key">_regime_history</span><span class="session-key">_tactical_context</span></td>
+          </tr>
+          <tr>
+            <td>-</td><td><strong>Fed Forecaster</strong></td><td>fed_forecaster.py</td>
+            <td>FRED (fed funds rate) + CME FedWatch (rate probs) → AI rate-path narrative</td>
+            <td>Rate path probabilities, FOMC/CPI/NFP countdown, AI commentary</td>
+            <td><span class="session-key">_fed_funds_rate</span><span class="session-key">_dominant_rate_path</span><span class="session-key">_rate_path_probs</span></td>
+          </tr>
+          <tr>
+            <td>1</td><td><strong>Narrative Discovery</strong></td><td>narrative_discovery.py</td>
+            <td>Google Trends + Yahoo trending → AI classifies market relevance → clusters tickers by theme</td>
+            <td>Trending searches + sparklines, tickers grouped by narrative, AI thesis per group</td>
+            <td><span class="session-key">_trending_narratives</span><span class="session-key">active_ticker</span></td>
+          </tr>
+          <tr>
+            <td>2</td><td><strong>Narrative Pulse</strong></td><td>narrative_pulse.py</td>
+            <td>yfinance OHLCV (1m–2yr, 1h–monthly) → SMA20/50/200, RSI(14), volume ratio</td>
+            <td>Candlestick + MAs chart, volume bars, RSI indicator</td>
+            <td><span class="session-key">_price_momentum</span></td>
+          </tr>
+          <tr>
+            <td>3</td><td><strong>EDGAR Scanner</strong></td><td>edgar_scanner.py</td>
+            <td>sec_client (10-K/10-Q/8-K) → claude_client (filing summary + MD&A tone)</td>
+            <td>Filing table, AI summary card, MD&A tone badge + score bar, bullish/bearish phrase columns</td>
+            <td><span class="session-key">_filing_digest</span><span class="session-key">_mda_sentiment</span></td>
+          </tr>
+          <tr>
+            <td>4</td><td><strong>Institutional</strong></td><td>institutional.py</td>
+            <td>yfinance major_holders + institutional_holders → ownership breakdown + portfolio intel via AI</td>
+            <td>4 metric cards, ownership donut, institutional flow chart, holdings treemap, top holders table</td>
+            <td><span class="session-key">_institutional_bias</span></td>
+          </tr>
+          <tr>
+            <td>5</td><td><strong>Insider / Congress</strong></td><td>insider_congress.py</td>
+            <td>sec_client Form 4 + congress_client Quiver Quant → buy/sell ratio analysis</td>
+            <td>Buy/sell stacked bar, sentiment badge, insider trades table, congress trades table</td>
+            <td><span class="session-key">_insider_net_flow</span><span class="session-key">_congress_bias</span></td>
+          </tr>
+          <tr>
+            <td>6</td><td><strong>Options Activity</strong></td><td>options_activity.py</td>
+            <td>yfinance options chain → P/C ratio, call/put OI, unusual activity detection</td>
+            <td>5 metric cards, sentiment badge, unusual flow chart, log signal button</td>
+            <td><span class="session-key">_options_sentiment</span></td>
+          </tr>
+          <tr>
+            <td>7</td><td><strong>Valuation</strong></td><td>valuation.py</td>
+            <td>Aggregates all session signals → AI DCF + comps + recommendation. Signal fingerprint prevents redundant calls.</td>
+            <td>Ticker info bar, AI engine selector, DCF target + discount banner, AI thesis, signal coverage gauge</td>
+            <td>(reads all signals, writes verdict to cache)</td>
+          </tr>
+          <tr>
+            <td>⚡</td><td><strong>Quick Intel Run (QIR)</strong></td><td>quick_run.py</td>
+            <td>ThreadPoolExecutor: regime + fed + tactical → events digest → regime plays → rate-path plays → sector rotation digest</td>
+            <td>3-step confirm, progress spinner, regime card, plays card, events card, Telegram export</td>
+            <td>All regime + plays + events keys</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ AI CALLS -->
+    <div id="ai" class="section">
+      <div class="layer-header">AI Layer <span>All LLM Calls</span></div>
+
+      <div class="legend">
+        <div class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span>Groq ⚡ (llama-3.3-70b, free, lean prompt)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--teal)"></span>Grok 🧠 (xAI grok-4-1-fast-reasoning)</div>
+        <div class="legend-item"><span class="legend-dot" style="background:var(--yellow)"></span>Claude 👑 (Anthropic claude-sonnet-4-6)</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">classify_narrative(topic) → {market_relevant, sector, thesis, suggested_tickers}</div>
+        <div class="provider">⚡ Groq llama-3.3-70b · cached 1h · called from: narrative_discovery.py</div>
+        <div class="purpose">Filters Google Trends topics for market relevance. Assigns sector + thesis + suggested tickers.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">describe_company(ticker) → {company_name, sector, thesis, investment_angle}</div>
+        <div class="provider">🧠/👑 Grok or Claude (tier-dependent) · cached 24h · called from: narrative_discovery.py, valuation.py</div>
+        <div class="purpose">Generates 3–5 sentence company thesis with investment angle.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">group_tickers_by_narrative(tickers) → {theme_name: [tickers]}</div>
+        <div class="provider">🧠/👑 Grok or Claude · cached 1h · called from: narrative_discovery.py</div>
+        <div class="purpose">Clusters ticker list by dominant narrative theme (e.g. "AI Infrastructure", "China Re-opening").</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">summarize_filing(text, form_type, company) → str</div>
+        <div class="provider">🧠/👑 Grok or Claude · cached per accession number · called from: edgar_scanner.py</div>
+        <div class="purpose">Extracts key catalysts, earnings, guidance, risks from 10-K/10-Q/8-K filing text.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">analyze_mda_sentiment(mda_text, company) → {tone, tone_score, forward_outlook, bullish_phrases, bearish_phrases}</div>
+        <div class="provider">🧠/👑 Grok or Claude · called from: edgar_scanner.py</div>
+        <div class="purpose">Scores management tone from MD&A section. Levels: confident / cautious / defensive / neutral.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">generate_valuation(ticker, signals_dict) → {target_price, discount_pct, recommendation, thesis, dcf_assumptions}</div>
+        <div class="provider">⚡/🧠/👑 All tiers · fingerprint-cached per ticker+signals hash · called from: valuation.py</div>
+        <div class="purpose">AI DCF + comparables valuation. Groq gets lean 1500-char prompt. Claude/Grok get full macro block + all signals.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">suggest_regime_plays(macro_regime, norm_score, signal_summary) → {buy_plays, short_plays, entry_rules, stops}</div>
+        <div class="provider">⚡/🧠/👑 All tiers · fingerprint-cached per signal hash · called from: risk_regime.py, quick_run.py</div>
+        <div class="purpose">Given Dalio quadrant + macro score, suggests tactical buy/short instruments with entry rules and stops.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">analyze_portfolio(positions, upstream) → {verdict, risk_score, narrative, per-position actions, priority_actions}</div>
+        <div class="provider">🧠/👑 Grok or Claude · called from: institutional.py portfolio intel</div>
+        <div class="purpose">Full portfolio assessment. Now receives rolling correlation block (20d vs 60d pairwise corr) + calendar injection. Flags correlated pairs, regime misalignment, black swan exposure.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">summarize_sector_regime(sector_data, regime_context) → str (digest)</div>
+        <div class="provider">🧠/👑 Grok or Claude · called from: quick_run.py (background thread)</div>
+        <div class="purpose">Given 11-sector SPDR momentum + regime quadrant, produces plain-prose tactical sector digest.</div>
+      </div>
+
+      <div class="ai-block">
+        <div class="fn">generate_macro_synopsis(signals) → {conviction, summary, key_points, contradictions}</div>
+        <div class="provider">🧠/👑 Grok or Claude · called from: risk_regime.py</div>
+        <div class="purpose">Cross-signal coherence summary. Notes when indicators contradict each other.</div>
+      </div>
+
+      <div style="margin-top:16px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:14px 16px;">
+        <div class="layer-header" style="margin-bottom:10px">Prompt Grounding Architecture <span>signal_block.py</span></div>
+        <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>build_macro_block()</strong> — injected at TOP of every AI prompt. Contains: regime quadrant, macro score, 26 z-scores, Fed rate, tactical score, rate path, upcoming FOMC/CPI/NFP dates with urgency flags.</div></div>
+        <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>build_ticker_block(ticker)</strong> — injected into ticker-specific prompts (valuation, filing). Contains: price, RSI, options P/C, insider bias, institutional %, earnings date with urgency flag.</div></div>
+        <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>get_signal_fingerprint()</strong> — MD5 hash of macro z-scores (1dp). Busts cache when macro regime changes significantly.</div></div>
+        <div class="flow-row"><span class="arrow">▸</span><div class="step"><strong>get_ticker_fingerprint(ticker)</strong> — MD5 hash of ticker signals + macro fingerprint. Cache key for <code>_valuation_cache</code>.</div></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ 26 SIGNALS -->
+    <div id="signals" class="section">
+      <div class="layer-header">Regime Engine <span>26 Cross-Asset Signals</span></div>
+      <p style="color:var(--text-dim);margin-bottom:14px;font-size:12px">All signals normalized to z-scores (0.5±σ). Aggregated into macro score 0–100. Maps to Dalio quadrant via growth + inflation axes.</p>
+
+      <div class="signal-grid">
+        <div class="signal-item"><strong>SPY (Equity)</strong><span>S&P 500 ETF — 5d return momentum</span></div>
+        <div class="signal-item"><strong>QQQ (Tech)</strong><span>Nasdaq 100 ETF — risk-on proxy</span></div>
+        <div class="signal-item"><strong>DIA (DJIA)</strong><span>Dow Jones — cyclical breadth</span></div>
+        <div class="signal-item"><strong>VIX (Eq Volatility)</strong><span>CBOE VIX — fear index (inverse)</span></div>
+        <div class="signal-item"><strong>VIX 3M</strong><span>VXV/VXMT — term structure slope</span></div>
+        <div class="signal-item"><strong>TLT (Long Treasury)</strong><span>20Y+ bond ETF — rate sensitivity</span></div>
+        <div class="signal-item"><strong>HYG/LQD Spread</strong><span>High yield vs investment grade — credit risk</span></div>
+        <div class="signal-item"><strong>USO (Oil)</strong><span>Crude oil futures ETF — inflation proxy</span></div>
+        <div class="signal-item"><strong>CPER (Copper)</strong><span>Copper ETF — global growth proxy</span></div>
+        <div class="signal-item"><strong>UUP (USD)</strong><span>US Dollar Index ETF — safe haven / EM risk</span></div>
+        <div class="signal-item"><strong>Yield Curve (10Y-2Y)</strong><span>FRED T10Y2Y — recession indicator</span></div>
+        <div class="signal-item"><strong>FRED VIX</strong><span>CBOE VIX via FRED (VIXCLS)</span></div>
+        <div class="signal-item"><strong>HY OAS (Credit Spread)</strong><span>FRED BAMLH0A0HYM2 — high yield OAS</span></div>
+        <div class="signal-item"><strong>Jobless Claims</strong><span>FRED ICSA — weekly initial claims (inverse)</span></div>
+        <div class="signal-item"><strong>LEI</strong><span>FRED USSLIND — leading economic index</span></div>
+        <div class="signal-item"><strong>ISM Manufacturing</strong><span>FRED NAPM — >50 = expansion</span></div>
+        <div class="signal-item"><strong>PCE (Inflation)</strong><span>FRED PCEPI — personal consumption deflator</span></div>
+        <div class="signal-item"><strong>M2 Money Supply</strong><span>FRED M2SL — liquidity proxy</span></div>
+        <div class="signal-item"><strong>FCI (Financial Conditions)</strong><span>FRED NFCI — tightening/loosening indicator</span></div>
+        <div class="signal-item"><strong>Copper/Gold Ratio</strong><span>Growth vs safe haven demand</span></div>
+        <div class="signal-item"><strong>SPY Gamma (Options)</strong><span>Dealer net gamma positioning</span></div>
+        <div class="signal-item"><strong>Fear & Greed</strong><span>alternative.me 0–100 index (synthetic fallback)</span></div>
+        <div class="signal-item"><strong>SPY P/C Ratio</strong><span>Put/call ratio on SPX/SPY options</span></div>
+        <div class="signal-item"><strong>AAII Sentiment</strong><span>Bulls − Bears spread from weekly survey</span></div>
+        <div class="signal-item"><strong>TLT Momentum</strong><span>Bond trend (risk-off demand)</span></div>
+        <div class="signal-item"><strong>GLD Momentum</strong><span>Gold ETF — flight to safety indicator</span></div>
+      </div>
+
+      <div style="margin-top:16px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px 16px;">
+        <strong style="color:var(--orange)">Dalio Quadrant Mapping</strong>
+        <table style="margin-top:10px">
+          <thead><tr><th>Quadrant</th><th>Growth</th><th>Inflation</th><th>Regime</th><th>Favored Assets</th></tr></thead>
+          <tbody>
+            <tr><td>Goldilocks</td><td>↑ Rising</td><td>↓ Falling</td><td>Risk-On</td><td>Equities (growth), Tech (QQQ), EM</td></tr>
+            <tr><td>Reflation</td><td>↑ Rising</td><td>↑ Rising</td><td>Risk-On (commodity)</td><td>Commodities, Cyclicals, Energy, Materials</td></tr>
+            <tr><td>Stagflation</td><td>↓ Falling</td><td>↑ Rising</td><td>Risk-Off</td><td>Defensive, Energy, TIPS, Short equities</td></tr>
+            <tr><td>Deflation</td><td>↓ Falling</td><td>↓ Falling</td><td>Risk-Off</td><td>Long-duration bonds, Utilities, Gold, Cash</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ SESSION STATE -->
+    <div id="session" class="section">
+      <div class="layer-header">Runtime <span>Session State Keys</span></div>
+
+      <table>
+        <thead><tr><th>Key</th><th>Written By</th><th>Read By</th><th>Type / Contents</th></tr></thead>
+        <tbody>
+          <tr><td>_regime_context</td><td>risk_regime.py, quick_run.py</td><td>valuation.py, quick_run.py, signal_block.py</td><td>dict — regime, quadrant, score, growth_signal, inflation_signal</td></tr>
+          <tr><td>_regime_raw_signals</td><td>risk_regime.py</td><td>signal_block.py, morning_run.py</td><td>dict — 26 z-scores keyed by signal name</td></tr>
+          <tr><td>_regime_history</td><td>risk_regime.py</td><td>risk_regime.py (sparkline)</td><td>list — daily snapshots (730d max)</td></tr>
+          <tr><td>_tactical_context</td><td>risk_regime.py, quick_run.py</td><td>signal_block.py, valuation.py</td><td>dict — tactical_score (0-100), label, action_bias</td></tr>
+          <tr><td>_fed_funds_rate</td><td>fed_forecaster.py</td><td>signal_block.py</td><td>float — current Fed Funds Rate %</td></tr>
+          <tr><td>_dominant_rate_path</td><td>fed_forecaster.py</td><td>signal_block.py, valuation.py</td><td>str — "Hold" / "Hike" / "Cut" / "Mixed"</td></tr>
+          <tr><td>_rate_path_probs</td><td>fed_forecaster.py</td><td>signal_block.py</td><td>dict — CME FedWatch probabilities by bps change</td></tr>
+          <tr><td>_macro_synopsis</td><td>risk_regime.py</td><td>analyze_portfolio prompt</td><td>dict — conviction, summary, key_points, contradictions</td></tr>
+          <tr><td>active_ticker</td><td>narrative_discovery.py, utils/session.py</td><td>All modules that need a ticker</td><td>str — e.g. "AAPL"</td></tr>
+          <tr><td>active_narrative</td><td>narrative_discovery.py, utils/session.py</td><td>App sidebar, modules</td><td>str — e.g. "AI Infrastructure"</td></tr>
+          <tr><td>_price_momentum</td><td>narrative_pulse.py</td><td>valuation.py, signal_block.py</td><td>dict — rsi, rsi_label, ma_trend, vol_ratio, price</td></tr>
+          <tr><td>_options_sentiment</td><td>options_activity.py</td><td>valuation.py, signal_block.py</td><td>dict — sentiment, pc_ratio, call_vol, put_vol</td></tr>
+          <tr><td>_insider_net_flow</td><td>insider_congress.py</td><td>valuation.py, signal_block.py</td><td>dict — bias, buy_pct, buy_value, sell_value, n_trades</td></tr>
+          <tr><td>_institutional_bias</td><td>institutional.py</td><td>valuation.py, signal_block.py</td><td>dict — bias, institutional_pct, insider_pct</td></tr>
+          <tr><td>_congress_bias</td><td>insider_congress.py</td><td>valuation.py</td><td>dict — bias, buy_pct, sell_pct, n_politicians</td></tr>
+          <tr><td>_filing_digest</td><td>edgar_scanner.py</td><td>valuation.py</td><td>dict — form_type, summary, date, company</td></tr>
+          <tr><td>_mda_sentiment</td><td>edgar_scanner.py</td><td>valuation.py, signal_block.py</td><td>dict — tone, tone_score, forward_outlook, bullish_phrases, bearish_phrases</td></tr>
+          <tr><td>_trending_narratives</td><td>narrative_discovery.py</td><td>quick_run.py</td><td>dict — {topic: {sector, thesis, tickers}}</td></tr>
+          <tr><td>_current_events_digest</td><td>quick_run.py</td><td>analyze_portfolio, suggest_regime_plays</td><td>str — 3–4 sentence market digest</td></tr>
+          <tr><td>_plays_result</td><td>quick_run.py, risk_regime.py</td><td>valuation.py, quick_run.py UI</td><td>dict — buy_plays, short_plays, entry_rules, stops</td></tr>
+          <tr><td>_fed_plays_result</td><td>quick_run.py</td><td>quick_run.py UI</td><td>dict — rate-path based trade suggestions</td></tr>
+          <tr><td>_sector_regime_digest</td><td>quick_run.py</td><td>quick_run.py UI</td><td>str — plain-prose sector rotation digest</td></tr>
+          <tr><td>ib_connection</td><td>ibkr_client.py</td><td>market_data.py (options fallback)</td><td>ib_insync.IB object — live IBKR paper account</td></tr>
+          <tr><td>_signals_cache_loaded</td><td>signals_cache.py</td><td>app.py</td><td>bool — prevent redundant load</td></tr>
+          <tr><td>_fred_cache_warmed</td><td>market_data.py</td><td>app.py</td><td>bool — prevent redundant FRED warm</td></tr>
+          <tr><td>_valuation_cache</td><td>claude_client.py</td><td>claude_client.py</td><td>dict — fingerprint → verdict (max 20 entries, FIFO)</td></tr>
+          <tr><td>_regime_plays_cache</td><td>claude_client.py</td><td>claude_client.py</td><td>dict — signal fingerprint → plays result (max 20 entries)</td></tr>
+          <tr><td>_regime_context</td><td>run_quick_sector_regime()</td><td>sector regime digest thread</td><td>Passed directly (not thread-safe via session_state)</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ ENV VARS -->
+    <div id="env" class="section">
+      <div class="layer-header">Config <span>Environment Variables</span></div>
+
+      <div class="env-table">
+        <div class="env-item"><span class="env-key">ANTHROPIC_API_KEY</span><span class="env-val">Claude Sonnet 4.6 API · claude_client.py</span></div>
+        <div class="env-item"><span class="env-key">XAI_API_KEY</span><span class="env-val">Grok 4.1 API · claude_client.py, current_events.py</span></div>
+        <div class="env-item"><span class="env-key">GROQ_API_KEY</span><span class="env-val">Groq llama-3.3-70b · claude_client.py (⚡ free tier)</span></div>
+        <div class="env-item"><span class="env-key">FRED_API_KEY</span><span class="env-val">FRED economic data API · market_data.py</span></div>
+        <div class="env-item"><span class="env-key">TELEGRAM_BOT_TOKEN</span><span class="env-val">Telegram Bot API · telegram_client.py, alerts_service.py</span></div>
+        <div class="env-item"><span class="env-key">TELEGRAM_CHAT_ID</span><span class="env-val">Your Telegram chat ID · telegram_client.py</span></div>
+        <div class="env-item"><span class="env-key">REGIME_GIST_ID</span><span class="env-val">GitHub Gist ID for regime history (730d) · risk_regime.py</span></div>
+        <div class="env-item"><span class="env-key">SIGNALS_GIST_ID</span><span class="env-val">GitHub Gist ID for 100+ signal cache · signals_cache.py</span></div>
+        <div class="env-item"><span class="env-key">INBOX_GIST_ID</span><span class="env-val">GitHub Gist ID for news inbox · news_feed.py</span></div>
+        <div class="env-item"><span class="env-key">GIST_TOKEN / GITHUB_GIST_TOKEN</span><span class="env-val">GitHub PAT for Gist PATCH · all Gist services</span></div>
+        <div class="env-item"><span class="env-key">APP_PASSWORD</span><span class="env-val">App-level password gate · app.py on page load</span></div>
+        <div class="env-item"><span class="env-key">NEWSAPI_KEY</span><span class="env-val">NewsAPI headlines (optional) · news_feed.py</span></div>
+      </div>
+
+      <div style="margin-top:20px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:14px 16px;">
+        <strong style="color:var(--orange);font-size:12px">IBKR (Optional — local only)</strong><br/><br/>
+        <div class="env-item" style="border:none;padding:0;background:none"><span class="env-key">IBKR TWS port 7497</span><span class="env-val">Paper trading. Must run TWS/Gateway locally. ibkr_client.connect_ibkr()</span></div>
+        <div class="env-item" style="border:none;padding:0;background:none;margin-top:6px"><span class="env-key">IBKR TWS port 7496</span><span class="env-val">Live trading. Not recommended without understanding risk.</span></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ CACHING -->
+    <div id="caching" class="section">
+      <div class="layer-header">Performance <span>Caching Strategy &amp; TTLs</span></div>
+
+      <table>
+        <thead><tr><th>Function / Data</th><th>TTL</th><th>Cache Type</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Options chain (yfinance)</td><td>5 min</td><td>@st.cache_data</td><td>Fast-moving — P/C ratio needs fresh data</td></tr>
+          <tr><td>Macro score / regime signals</td><td>5 min</td><td>@st.cache_data</td><td>Re-fetches 26 signals; expensive but critical</td></tr>
+          <tr><td>SPY gamma / options positioning</td><td>5 min</td><td>@st.cache_data</td><td>Intraday relevant</td></tr>
+          <tr><td>RSS news headlines</td><td>30 min</td><td>@st.cache_data</td><td>news_feed.py feeds</td></tr>
+          <tr><td>Google Trends / Yahoo trending</td><td>15 min</td><td>@st.cache_data</td><td>trends_client.py</td></tr>
+          <tr><td>yfinance .info (fundamentals)</td><td>1 hr</td><td>@st.cache_data</td><td>P/E, sector, name, shares</td></tr>
+          <tr><td>OHLCV batch fetch</td><td>1 hr</td><td>@st.cache_data</td><td>fetch_batch_safe()</td></tr>
+          <tr><td>Sector momentum (SPDR ETFs)</td><td>1 hr</td><td>@st.cache_data</td><td>sector_rotation.py</td></tr>
+          <tr><td>Fear & Greed index</td><td>1 hr</td><td>@st.cache_data</td><td>free_data.py primary + synthetic fallback</td></tr>
+          <tr><td>SEC filings list</td><td>1 hr</td><td>@st.cache_data</td><td>sec_client.get_filings_by_ticker()</td></tr>
+          <tr><td>Insider trades (Form 4)</td><td>1 hr</td><td>@st.cache_data</td><td>sec_client.get_insider_trades()</td></tr>
+          <tr><td>Congress trades (Quiver Quant)</td><td>1 hr</td><td>@st.cache_data</td><td>congress_client.get_congress_trades()</td></tr>
+          <tr><td>Scoring (composite 0–100)</td><td>1 hr</td><td>@st.cache_data</td><td>scoring.py all sub-scores</td></tr>
+          <tr><td>Rolling correlation</td><td>1 hr</td><td>@st.cache_data</td><td>fetch_rolling_correlation() — 20d vs 60d pairwise</td></tr>
+          <tr><td>FRED series</td><td>24 hr</td><td>@st.cache_data</td><td>Daily-release data only. Auto-backfill if empty.</td></tr>
+          <tr><td>yfinance earnings date</td><td>24 hr</td><td>@st.cache_data</td><td>fetch_earnings_date(ticker)</td></tr>
+          <tr><td>CIK ticker map (SEC)</td><td>24 hr</td><td>@st.cache_data</td><td>~10k companies</td></tr>
+          <tr><td>Company description AI</td><td>24 hr</td><td>@st.cache_data</td><td>describe_company() — slow + expensive</td></tr>
+          <tr><td>AAII sentiment</td><td>24 hr</td><td>@st.cache_data</td><td>Weekly release — daily TTL is fine</td></tr>
+          <tr><td>Ticker fundamentals</td><td>4 hr</td><td>@st.cache_data</td><td>fetch_ticker_fundamentals() — full balance sheet</td></tr>
+          <tr><td>AI valuation verdict</td><td>Session</td><td>st.session_state _valuation_cache</td><td>Keyed by ticker fingerprint (MD5). Max 20 entries FIFO.</td></tr>
+          <tr><td>Regime plays verdict</td><td>Session</td><td>st.session_state _regime_plays_cache</td><td>Keyed by signal fingerprint. Max 20 entries FIFO.</td></tr>
+          <tr><td>Filing summaries</td><td>Session</td><td>Accession-number keyed cache</td><td>One-per-filing, never expires during session</td></tr>
+          <tr><td>Signals JSON</td><td>Persistent</td><td>GitHub Gist + data/signals_cache.json</td><td>Survives redeploys. Loaded on page load via signals_cache.py</td></tr>
+          <tr><td>Regime history</td><td>730 days</td><td>GitHub Gist REGIME_GIST_ID</td><td>Daily snapshots — oldest trimmed at 730</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ BACKGROUND JOBS -->
+    <div id="tools" class="section">
+      <div class="layer-header">Automation <span>Background Jobs</span></div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title"><span class="icon">🌅</span>tools/morning_run.py <span class="pill pill-orange">Cron</span></div>
+          <div class="card-row"><strong>Trigger</strong><span>GitHub Actions cron / manual <code>python tools/morning_run.py</code></span></div>
+          <div class="card-row"><strong>Pipeline</strong><span></span></div>
+          <div class="flow-row"><span class="arrow">1</span><div class="step">Mock Streamlit session_state (no UI)</div></div>
+          <div class="flow-row"><span class="arrow">2</span><div class="step">Call <code>run_quick_regime()</code> → unpack 9 values</div></div>
+          <div class="flow-row"><span class="arrow">3</span><div class="step">Call <code>run_quick_digest()</code> (no AI)</div></div>
+          <div class="flow-row"><span class="arrow">4</span><div class="step">Compute tactical score</div></div>
+          <div class="flow-row"><span class="arrow">5</span><div class="step">Persist all signals → <code>data/signals_cache.json</code> + GitHub Gist</div></div>
+          <div class="flow-row"><span class="arrow">6</span><div class="step">Optional: POST summary to Telegram</div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">🔔</span>tools/alert_worker.py <span class="pill pill-red">Polling</span></div>
+          <div class="card-row"><strong>Trigger</strong><span>Background polling loop (N minutes)</span></div>
+          <div class="card-row"><strong>Checks</strong><span></span></div>
+          <div class="flow-row"><span class="arrow">1</span><div class="step"><strong>Regime flip</strong> — compare current vs last saved regime</div></div>
+          <div class="flow-row"><span class="arrow">2</span><div class="step"><strong>Insider cluster</strong> — 3+ buys in 30d on watchlist ticker</div></div>
+          <div class="flow-row"><span class="arrow">3</span><div class="step"><strong>Options P/C extreme</strong> — &gt;1.5 (bearish) or &lt;0.7 (bullish)</div></div>
+          <div class="flow-row"><span class="arrow">4</span><div class="step"><strong>Stress spike</strong> — VIX &gt; 35 or HY spread &gt; 500bps</div></div>
+          <div class="card-row" style="margin-top:6px"><strong>Delivery</strong><span>Telegram Bot send_alert() — 1hr cooldown per trigger type</span></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">⚡</span>Quick Intel Run (QIR) <span class="pill pill-purple">On-demand</span></div>
+          <div class="card-row"><strong>Trigger</strong><span>User button in app (quick_run.py)</span></div>
+          <div class="card-row"><strong>Rounds</strong><span></span></div>
+          <div class="flow-row"><span class="arrow">R1</span><div class="step"><strong>Macro (parallel)</strong> — Regime + Fed rate path + Tactical score</div></div>
+          <div class="flow-row"><span class="arrow">R2</span><div class="step"><strong>Events</strong> — RSS headlines + Telegram field notes → AI digest</div></div>
+          <div class="flow-row"><span class="arrow">R3</span><div class="step"><strong>Regime Plays</strong> — AI buy/short suggestions for current quadrant</div></div>
+          <div class="flow-row"><span class="arrow">R4</span><div class="step"><strong>Rate-Path Plays</strong> — duration/credit trades per Fed path</div></div>
+          <div class="flow-row"><span class="arrow">R5</span><div class="step"><strong>Sector Rotation</strong> — 11-sector momentum × regime digest (AI)</div></div>
+          <div class="card-row" style="margin-top:6px"><strong>Threading</strong><span>ThreadPoolExecutor(max_workers=5) — R1 parallel, R2–R5 sequential</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ PERSISTENCE -->
+    <div id="persistence" class="section">
+      <div class="layer-header">Storage <span>Data Persistence</span></div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-title"><span class="icon">📁</span>Local Files (data/)</div>
+          <table style="margin-top:8px">
+            <thead><tr><th>File</th><th>Contents</th><th>Max Size</th></tr></thead>
+            <tbody>
+              <tr><td>data/signals_cache.json</td><td>100+ session state keys (all signals)</td><td>~100KB</td></tr>
+              <tr><td>data/regime_history.json</td><td>Daily regime snapshots</td><td>730 entries</td></tr>
+              <tr><td>data/news_inbox.json</td><td>User field notes + Telegram messages</td><td>Unbounded</td></tr>
+              <tr><td>data/play_log.json</td><td>Trade predictions + accuracy log</td><td>Unbounded</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-title"><span class="icon">☁</span>GitHub Gist (Remote)</div>
+          <table style="margin-top:8px">
+            <thead><tr><th>Gist ID Env Var</th><th>Contents</th><th>Updated</th></tr></thead>
+            <tbody>
+              <tr><td>REGIME_GIST_ID</td><td>730-day regime history JSON</td><td>Every regime run</td></tr>
+              <tr><td>SIGNALS_GIST_ID</td><td>All session_state signals</td><td>Every Streamlit rerun</td></tr>
+              <tr><td>INBOX_GIST_ID</td><td>News inbox field notes</td><td>On sync</td></tr>
+            </tbody>
+          </table>
+          <div class="card-row" style="margin-top:8px"><strong>Auth</strong><span>GIST_TOKEN (GitHub PAT with gist scope)</span></div>
+          <div class="card-row"><strong>API</strong><span>PATCH <code>api.github.com/gists/{id}</code></span></div>
+          <div class="card-row"><strong>Purpose</strong><span>Survives Streamlit Cloud redeploys. Acts as lightweight DB.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════ FULL FLOW -->
+    <div id="flow" class="section">
+      <div class="layer-header">End-to-End <span>Full Data Flow Diagram</span></div>
+
+      <div class="flow-box" style="overflow-x:auto">
+        <div class="mermaid">
+flowchart TD
+  subgraph EXT["External Sources"]
+    YF[("yfinance\nOHLCV · Options\nFundamentals")]
+    FRED[("FRED API\nYield Curve · VIX · ISM\nPCE · Jobless · LEI")]
+    EDGAR[("SEC EDGAR\nForm 4 · 10-K\n10-Q · 8-K")]
+    QQ[("Quiver Quant\nCongress Trades")]
+    GT[("Google Trends\n+ Yahoo Trending")]
+    CME[("CME FedWatch\nRate Probs")]
+    ALTM[("alternative.me\nFear & Greed")]
+    LLM[("LLMs\nClaude · Grok · Groq")]
+    TG_SRC[("Telegram\nField Notes in")]
+    GH_GIST[("GitHub Gist\n3 Gists")]
+  end
+
+  subgraph SVCLAY["Service Layer"]
+    MD["market_data.py\n26 z-score signals\nrolling correlation"]
+    SEC["sec_client.py\nFilings · Form 4\nCIK mapping"]
+    CC["claude_client.py\nAll AI prompt routing\nFingerprint cache"]
+    SB["signal_block.py\nbuild_macro_block()\nbuild_ticker_block()"]
+    CONC["congress_client.py"]
+    TR["trends_client.py"]
+    FD["free_data.py\nFear&Greed · AAII"]
+    SR["sector_rotation.py\n11 SPDR ETFs"]
+    NS["news_feed.py\nRSS headlines"]
+    SIG["signals_cache.py\nGist ↔ session_state"]
+  end
+
+  subgraph REGENG["Regime Engine (risk_regime.py)"]
+    FETCH["Fetch 26 signals\nvia market_data + free_data"]
+    ZSCORE["Normalize → z-scores\n(0.5±σ range)"]
+    SCORE["Compute macro score 0-100\nGrowth axis + Inflation axis"]
+    QUAD["Map → Dalio Quadrant\nGoldilocks/Reflation\nStagflation/Deflation"]
+    PERSIST["Persist snapshot\nGist + local JSON"]
+    WRITE_SS["Write session_state\n_regime_context\n_regime_raw_signals"]
+  end
+
+  subgraph MODULES["UI Modules"]
+    M0["0 Risk Regime\n26 signals · history"]
+    M1["1 Discovery\nTrends → ticker clusters"]
+    M2["2 Pulse\nOHLCV · RSI · MAs"]
+    M3["3 EDGAR\nFilings · MD&A tone"]
+    M4["4 Institutional\n13F · ownership"]
+    M5["5 Insider/Congress\nForm 4 · Quiver Quant"]
+    M6["6 Options\nP/C ratio · OI"]
+    M7["7 Valuation\nDCF · comps · AI"]
+    QIR["⚡ Quick Intel Run\n5-round parallel pipeline"]
+  end
+
+  subgraph AIOUT["AI Output Signals"]
+    PLAYS["Regime Plays\nbuy · short · stops"]
+    VAL["Valuation Verdict\ntarget · recommend"]
+    PORT["Portfolio Intel\nrisk score · actions"]
+    DIGEST["Events Digest\n3-4 sentence summary"]
+    SECT["Sector Digest\nrotation prose"]
+  end
+
+  subgraph PERSIST["Persistence"]
+    SS["st.session_state\n(30+ keys)"]
+    LOCAL["data/*.json\n(local files)"]
+    GIST["GitHub Gist\n(cross-deploy)"]
+    TG_OUT["Telegram Alerts\n(outbound)"]
+  end
+
+  YF --> MD
+  FRED --> MD
+  CME --> MD
+  ALTM --> FD
+  EDGAR --> SEC
+  QQ --> CONC
+  GT --> TR
+  GH_GIST --> SIG
+
+  MD --> FETCH
+  FD --> FETCH
+  FETCH --> ZSCORE --> SCORE --> QUAD --> PERSIST --> WRITE_SS
+  WRITE_SS --> SS
+
+  SB --> CC
+  SS --> SB
+
+  MD --> M2
+  MD --> M4
+  MD --> M6
+  SEC --> M3
+  SEC --> M5
+  CONC --> M5
+  TR --> M1
+  SR --> QIR
+  FD --> M0
+  NS --> QIR
+  TG_SRC --> NS
+
+  CC --> M3
+  CC --> M7
+  CC --> QIR
+  CC --> M4
+
+  LLM --> CC
+
+  M0 --> WRITE_SS
+  M2 --> SS
+  M3 --> SS
+  M4 --> SS
+  M5 --> SS
+  M6 --> SS
+
+  SS --> M7
+  SS --> QIR
+
+  QIR --> PLAYS
+  M7 --> VAL
+  M4 --> PORT
+  QIR --> DIGEST
+  QIR --> SECT
+
+  SIG --> SS
+  SS --> LOCAL
+  SS --> GIST
+  PLAYS --> TG_OUT
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#1A1F2E',
+      primaryColor: '#FF8811',
+      primaryTextColor: '#E8EAF0',
+      primaryBorderColor: '#FF8811',
+      lineColor: '#4A90D9',
+      secondaryColor: '#242938',
+      tertiaryColor: '#2D3550',
+      edgeLabelBackground: '#1A1F2E',
+      fontSize: '12px'
+    }
+  });
+
+  function show(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.currentTarget.classList.add('active');
+  }
+</script>
+</body>
+</html>

@@ -136,14 +136,30 @@ _PATTERNS = {
     },
     "GENUINE_UNCERTAINTY": {
         "label": "GENUINE UNCERTAINTY",
-        "color": "#475569",
-        "interpretation": "No edge — signals are conflicting with no clear majority direction. Hold existing positions. No new entries until at least 2 of 3 layers align.",
-        "buy_tier": "HOLD — NO NEW LONGS",
-        "short_tier": "HOLD — NO NEW SHORTS",
-        "instruments_buy": [],
-        "instruments_short": [],
-        "entry_buy": "Hold existing longs. No new entries — wait for regime, tactical, or options flow to confirm a direction.",
-        "entry_short": "Hold existing shorts. No new entries — no directional edge in either direction.",
+        "color": "#7c3aed",
+        "interpretation": "Signals are conflicting — but uncertainty is quantified, not an excuse for inaction. A probabilistic lean is forced below. Size down to 25–40% of normal. Act small, act smart.",
+        "buy_tier": "LEAN SETUP — SIZE DOWN",
+        "short_tier": "LEAN SETUP — SIZE DOWN",
+        "instruments_buy": [
+            ("SPY (25% size)", "Broad exposure at reduced size — captures upside if lean is correct"),
+            ("Cash-secured puts (OTM)", "Collect premium in uncertain tape — defined max loss"),
+        ],
+        "instruments_short": [
+            ("Collars on longs", "Buy OTM puts against existing longs — hedge without exiting"),
+            ("VXX / UVXY (small)", "Vol insurance if uncertainty resolves bearishly — defined risk"),
+        ],
+        "entry_buy": (
+            "Size to 25–40% of normal — uncertainty demands margin of safety\n"
+            "Enter only if lean probability ≥55% from the Uncertainty Panel below\n"
+            "Stop: -3% hard stop — no exceptions in uncertain tape\n"
+            "Wait for one more layer to confirm before adding size"
+        ),
+        "entry_short": (
+            "Size to 25–40% of normal — hedges only, not directional short\n"
+            "Prefer collars or puts against existing positions over outright shorts\n"
+            "Stop: close above prior swing high\n"
+            "Remove hedge if lean probability flips or regime resolves bullish"
+        ),
     },
 }
 
@@ -180,6 +196,266 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     else:                              pattern = "GENUINE_UNCERTAINTY"
 
     return {"pattern": pattern, **_PATTERNS[pattern]}
+
+
+def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
+    """Decompose the GENUINE_UNCERTAINTY state into a 5-domain uncertainty profile.
+
+    Derives all data from already-populated session_state + the three core signal
+    dicts. No API calls. Returns a profile dict consumed by _render_genuine_uncertainty_panel.
+    """
+    rc      = rc      or {}
+    tac     = tac     or {}
+    of_ctx  = of_ctx  or {}
+
+    # ── Raw scores (0-100 normalised) ────────────────────────────────────────
+    regime_score_raw = rc.get("score", 0.0)           # z-score, roughly -1..+1
+    regime_score_100 = min(100, max(0, int((regime_score_raw + 1) / 2 * 100)))
+    tac_score        = tac.get("tactical_score", 50)
+    of_score         = of_ctx.get("options_score", 50)
+
+    # ── Macro domain ─────────────────────────────────────────────────────────
+    quadrant   = rc.get("quadrant", "")
+    regime_lbl = rc.get("regime", "")
+    doom       = st.session_state.get("_doom_briefing", "") or ""
+    fear_greed = st.session_state.get("_fear_greed") or {}
+    fg_score   = fear_greed.get("score", 50) if isinstance(fear_greed, dict) else 50
+
+    macro_score = int(regime_score_100 * 0.5 + fg_score * 0.5)
+    macro_flag  = (
+        "CONFLICTED" if 38 <= macro_score <= 62 else
+        "MILD BULL"  if macro_score > 62 else
+        "MILD BEAR"
+    )
+    macro_detail = f"{regime_lbl or 'Regime unclear'} | Quadrant: {quadrant or '—'} | F&G: {fg_score}"
+
+    # ── Technical domain ──────────────────────────────────────────────────────
+    tech_score  = tac_score
+    tech_flag   = (
+        "NEUTRAL"    if 38 <= tech_score <= 62 else
+        "MILD BULL"  if tech_score > 62 else
+        "MILD BEAR"
+    )
+    tech_detail = f"Tactical {tech_score}/100 — {tac.get('label', '')}"
+
+    # ── Options Flow domain ───────────────────────────────────────────────────
+    opts_score  = of_score
+    ua_sent     = st.session_state.get("_unusual_activity_sentiment") or {}
+    ua_call_pct = ua_sent.get("call_pct", 50) if isinstance(ua_sent, dict) else 50
+    opts_score  = int(opts_score * 0.6 + ua_call_pct * 0.4)
+    opts_flag   = (
+        "NEUTRAL"    if 38 <= opts_score <= 62 else
+        "CALL-SKEW"  if opts_score > 62 else
+        "PUT-SKEW"
+    )
+    opts_detail = f"Flow score {of_ctx.get('options_score', 50)}/100 | Unusual call%: {ua_call_pct:.0f}%"
+
+    # ── Sentiment domain ──────────────────────────────────────────────────────
+    aaii   = st.session_state.get("_aaii_sentiment") or {}
+    bull_s = aaii.get("bull_pct", 50) if isinstance(aaii, dict) else 50
+    sent_score = int(bull_s * 0.5 + fg_score * 0.5)
+    sent_flag  = (
+        "NEUTRAL"    if 38 <= sent_score <= 62 else
+        "MILD BULL"  if sent_score > 62 else
+        "MILD BEAR"
+    )
+    sent_detail = f"AAII bull: {bull_s:.0f}% | Fear&Greed: {fg_score}"
+
+    # ── Event Risk domain ─────────────────────────────────────────────────────
+    event_risk_score = 50
+    event_unknowns   = []
+    try:
+        from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
+        for fn, lbl in [(get_next_fomc, "FOMC"), (get_next_cpi, "CPI"), (get_next_nfp, "NFP")]:
+            try:
+                ev = fn()
+                d  = ev.get("days_away", 99)
+                if d <= 1:
+                    event_risk_score = max(0, event_risk_score - 30)
+                    event_unknowns.append(f"{lbl} {'today' if d == 0 else 'tomorrow'} — outcome unknown")
+                elif d <= 5:
+                    event_risk_score = max(0, event_risk_score - 15)
+                    event_unknowns.append(f"{lbl} in {d}d — market may pre-position")
+                elif d <= 14:
+                    event_risk_score = max(5, event_risk_score - 5)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    event_flag = (
+        "HIGH RISK"  if event_risk_score < 30 else
+        "ELEVATED"   if event_risk_score < 50 else
+        "MODERATE"
+    )
+    event_detail = f"Event uncertainty score: {event_risk_score}/100"
+
+    # ── Force a directional lean ──────────────────────────────────────────────
+    # Average all 5 domain scores; anything above 50 = bullish lean
+    domain_avg = (macro_score + tech_score + opts_score + sent_score + event_risk_score) / 5
+    lean       = "BULLISH" if domain_avg >= 50 else "BEARISH"
+    # Map domain_avg distance from 50 to a lean probability (50–75%)
+    lean_pct   = int(50 + abs(domain_avg - 50) * 0.5)
+    lean_pct   = min(75, max(51, lean_pct))  # never claim > 75% in genuine uncertainty
+
+    # ── Overall uncertainty score (how uncertain, NOT how bullish) ────────────
+    # Distance of each domain from 50 → lower distance = more uncertain
+    distances      = [abs(s - 50) for s in [macro_score, tech_score, opts_score, sent_score, event_risk_score]]
+    avg_distance   = sum(distances) / len(distances)
+    uncertainty_sc = int(100 - avg_distance * 2)  # 100 = totally uncertain, 0 = crystal clear
+    uncertainty_sc = min(100, max(0, uncertainty_sc))
+
+    # ── Position size ─────────────────────────────────────────────────────────
+    if uncertainty_sc >= 80:
+        size_mult, size_label = 0.20, "20% SIZE"
+    elif uncertainty_sc >= 65:
+        size_mult, size_label = 0.30, "30% SIZE"
+    elif uncertainty_sc >= 50:
+        size_mult, size_label = 0.40, "40% SIZE"
+    else:
+        size_mult, size_label = 0.50, "50% SIZE"
+
+    # ── Known unknowns ────────────────────────────────────────────────────────
+    known_unknowns = list(event_unknowns)
+    if macro_flag == "CONFLICTED":
+        known_unknowns.append(f"Regime direction unresolved ({regime_lbl or 'no clear label'}) — next macro print could flip")
+    if opts_flag in ("PUT-SKEW", "CALL-SKEW") and tech_flag == "NEUTRAL":
+        known_unknowns.append("Options crowd and price action disagree — one of them is early")
+    if not known_unknowns:
+        known_unknowns.append("No single dominant unknown — uncertainty is distributed across all 5 domains")
+    known_unknowns = known_unknowns[:3]
+
+    return {
+        "lean":             lean,
+        "lean_pct":         lean_pct,
+        "uncertainty_score": uncertainty_sc,
+        "size_mult":        size_mult,
+        "size_label":       size_label,
+        "domains": [
+            {"name": "Macro",        "score": macro_score,  "flag": macro_flag,  "detail": macro_detail},
+            {"name": "Technical",    "score": tech_score,   "flag": tech_flag,   "detail": tech_detail},
+            {"name": "Options Flow", "score": opts_score,   "flag": opts_flag,   "detail": opts_detail},
+            {"name": "Sentiment",    "score": sent_score,   "flag": sent_flag,   "detail": sent_detail},
+            {"name": "Event Risk",   "score": event_risk_score, "flag": event_flag, "detail": event_detail},
+        ],
+        "known_unknowns":   known_unknowns,
+    }
+
+
+def _render_genuine_uncertainty_panel(profile: dict) -> None:
+    """Render the anti-ambiguity-aversion Genuine Uncertainty intelligence panel.
+
+    Always forces a lean — never outputs 'unclear'. Sizes the trade to match
+    the measured uncertainty. Reads only from the pre-built profile dict.
+    """
+    lean         = profile["lean"]
+    lean_pct     = profile["lean_pct"]
+    unc_score    = profile["uncertainty_score"]
+    size_label   = profile["size_label"]
+    domains      = profile["domains"]
+    unknowns     = profile["known_unknowns"]
+
+    lean_color = "#22c55e" if lean == "BULLISH" else "#ef4444"
+    lean_bg    = "#052e16" if lean == "BULLISH" else "#2d0a0a"
+    lean_arrow = "▲" if lean == "BULLISH" else "▼"
+
+    unc_color = "#22c55e" if unc_score < 40 else ("#f59e0b" if unc_score < 65 else "#ef4444")
+
+    flag_colors = {
+        "MILD BULL":  "#22c55e", "CALL-SKEW":   "#22c55e",
+        "MILD BEAR":  "#ef4444", "PUT-SKEW":     "#ef4444",
+        "CONFLICTED": "#f59e0b", "NEUTRAL":      "#f59e0b",
+        "HIGH RISK":  "#ef4444", "ELEVATED":     "#f97316",
+        "MODERATE":   "#64748b",
+    }
+
+    # ── Lean header ───────────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="background:{lean_bg};border:2px solid {lean_color}88;border-radius:8px;'
+        f'padding:12px 16px;margin:10px 0 6px;display:flex;align-items:center;gap:16px;">'
+        f'<div>'
+        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;margin-bottom:3px;">FORCED DIRECTIONAL LEAN</div>'
+        f'<div style="font-size:22px;font-weight:900;color:{lean_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+        f'letter-spacing:0.05em;text-shadow:0 0 12px {lean_color}88;">'
+        f'{lean_arrow} {lean} {lean_pct}%</div>'
+        f'</div>'
+        f'<div style="flex:1;border-left:1px solid #1e293b;padding-left:16px;">'
+        f'<div style="font-size:10px;color:#f59e0b;font-weight:700;margin-bottom:3px;">ANTI-AMBIGUITY OVERRIDE</div>'
+        f'<div style="font-size:11px;color:#94a3b8;line-height:1.5;">'
+        f'Uncertainty is <i>quantified</i> — not an excuse for inaction.<br>'
+        f'A lean exists. Act at <b style="color:#e2e8f0;">{size_label}</b> of normal. Wrong? Stop early.'
+        f'</div>'
+        f'</div>'
+        f'<div style="text-align:right;">'
+        f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:3px;">UNCERTAINTY</div>'
+        f'<div style="font-size:20px;font-weight:800;color:{unc_color};font-family:monospace;">{unc_score}</div>'
+        f'<div style="font-size:9px;color:#475569;">/100</div>'
+        f'</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── 5-domain breakdown ────────────────────────────────────────────────────
+    domain_rows = ""
+    for d in domains:
+        d_score = d["score"]
+        d_flag  = d["flag"]
+        d_col   = flag_colors.get(d_flag, "#64748b")
+        d_bg    = "#052e16" if d["score"] > 62 else ("#2d0a0a" if d["score"] < 38 else "#1a1200")
+        bar_pct = d_score  # score IS 0-100, maps directly to bar width
+        domain_rows += (
+            f'<div style="margin-bottom:6px;">'
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:2px;">'
+            f'<span style="font-size:10px;font-weight:700;color:#94a3b8;">{d["name"].upper()}</span>'
+            f'<span style="font-size:9px;font-weight:700;color:{d_col};background:{d_bg};'
+            f'padding:1px 6px;border-radius:3px;">{d_flag}</span>'
+            f'</div>'
+            f'<div style="background:#1e293b;border-radius:3px;height:5px;margin-bottom:2px;">'
+            f'<div style="background:{d_col};width:{bar_pct}%;height:5px;border-radius:3px;'
+            f'transition:width 0.3s;"></div>'
+            f'</div>'
+            f'<div style="font-size:9px;color:#475569;">{d["detail"]}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div style="background:#0d1117;border:1px solid #1e293b;border-radius:6px;padding:12px 14px;margin:6px 0;">'
+        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;margin-bottom:10px;">UNCERTAINTY DOMAIN BREAKDOWN</div>'
+        f'{domain_rows}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # ── Known unknowns ────────────────────────────────────────────────────────
+    with st.expander("🔍 Known Unknowns — what would flip the call", expanded=False):
+        for i, ku in enumerate(unknowns, 1):
+            st.markdown(
+                f'<div style="background:#0f0f1a;border-left:3px solid #7c3aed;'
+                f'padding:6px 12px;margin-bottom:6px;font-size:11px;color:#94a3b8;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'<span style="color:#7c3aed;font-weight:700;">[{i}]</span> {ku}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        st.caption(
+            "These are the only factors that would flip the forced lean. "
+            "Until they resolve, the lean stands. Don't manufacture uncertainty that isn't here."
+        )
+
+    # ── Decision rule strip ───────────────────────────────────────────────────
+    stop_pct = "−3%" if unc_score >= 65 else "−4%"
+    target   = "first resistance / prior swing high" if lean == "BULLISH" else "prior swing low"
+    st.markdown(
+        f'<div style="background:#0d1117;border:1px solid #7c3aed44;border-radius:6px;'
+        f'padding:10px 14px;margin-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
+        f'<div><div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">IF LEAN CORRECT</div>'
+        f'<div style="font-size:10px;color:#22c55e;margin-top:3px;">Take 50% off at {target}. Trail stop on rest.</div></div>'
+        f'<div><div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">IF LEAN WRONG</div>'
+        f'<div style="font-size:10px;color:#ef4444;margin-top:3px;">Hard stop at {stop_pct}. No averaging in. No exceptions.</div></div>'
+        f'<div><div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">WHEN TO UPSIZE</div>'
+        f'<div style="font-size:10px;color:#f59e0b;margin-top:3px;">Only after 2 of 5 domains shift to confirm. Not before.</div></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_qir_dashboard() -> None:
@@ -284,6 +560,7 @@ def _render_qir_dashboard() -> None:
         _t3 += '<div style="color:#374151;font-size:11px;">No earnings ≤21d</div>'
 
     # ── Verdict section ───────────────────────────────────────────────────
+    _gu_profile = None  # computed inside if _populated when pattern == GENUINE_UNCERTAINTY
     if _populated:
         _verdict_color = _cls["color"]
         _verdict_label = _cls["label"]
@@ -337,6 +614,12 @@ def _render_qir_dashboard() -> None:
             for e in _er
             if e["days_away"] <= 14 and e.get("expected_move_pct")
         ]
+
+        # Pre-compute uncertainty profile for GENUINE_UNCERTAINTY to avoid calling twice
+        _gu_profile = (
+            _build_uncertainty_profile(_rc, _tac, _of)
+            if _cls["pattern"] == "GENUINE_UNCERTAINTY" else None
+        )
 
         # Build verdict HTML helpers
         def _tier_badge(tier):
@@ -396,10 +679,40 @@ def _render_qir_dashboard() -> None:
             f'</div>'
         )
 
-        _verdict_html += (
-            f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
-            f'{_buy_html}{_short_html}</div>'
-        )
+        # GENUINE_UNCERTAINTY: grey out the opposing side — lean-aligned panel is active, other is dimmed.
+        if _cls["pattern"] == "GENUINE_UNCERTAINTY" and _gu_profile:
+            _is_bull_lean = _gu_profile["lean"] == "BULLISH"
+            _dimmed_buy   = not _is_bull_lean
+            _dimmed_shrt  = _is_bull_lean
+
+            def _dim(html: str) -> str:
+                return html.replace(
+                    'background:#0a1628', 'background:#0d1117'
+                ).replace(
+                    'background:#160a0a', 'background:#0d1117'
+                )
+
+            _buy_display  = _buy_html  if not _dimmed_buy  else (
+                f'<div style="opacity:0.35;filter:grayscale(0.7);">'
+                f'<div style="font-size:9px;color:#374151;font-weight:700;'
+                f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bearish</div>'
+                f'{_dim(_buy_html)}</div>'
+            )
+            _shrt_display = _short_html if not _dimmed_shrt else (
+                f'<div style="opacity:0.35;filter:grayscale(0.7);">'
+                f'<div style="font-size:9px;color:#374151;font-weight:700;'
+                f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bullish</div>'
+                f'{_dim(_short_html)}</div>'
+            )
+            _verdict_html += (
+                f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+                f'{_buy_display}{_shrt_display}</div>'
+            )
+        else:
+            _verdict_html += (
+                f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
+                f'{_buy_html}{_short_html}</div>'
+            )
 
         if _earn_caveats:
             _verdict_html += "".join(
@@ -408,11 +721,27 @@ def _render_qir_dashboard() -> None:
                 for c in _earn_caveats
             )
     else:
-        _verdict_html = (
-            f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
-            f'<div style="color:#374151;font-size:12px;text-align:center;padding:12px 0;">'
-            f'Run QIR to activate the intelligence dashboard</div>'
-        )
+        # No fresh QIR run — show stale data if available, or minimal placeholder
+        _stale_syn = st.session_state.get("_macro_synopsis") or {}
+        if _stale_syn.get("conviction"):
+            _sc = _stale_syn["conviction"]
+            _sc_color = {"BULLISH": "#22c55e44", "BEARISH": "#ef444444", "MIXED": "#f59e0b44", "UNCERTAIN": "#94a3b844"}.get(_sc, "#94a3b844")
+            _sc_text  = {"BULLISH": "#22c55e", "BEARISH": "#ef4444", "MIXED": "#f59e0b", "UNCERTAIN": "#94a3b8"}.get(_sc, "#94a3b8")
+            _verdict_html = (
+                f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
+                f'<div style="background:{_sc_color};border-radius:4px;padding:6px 10px;margin-bottom:6px;">'
+                f'<span style="color:{_sc_text};font-weight:700;font-size:11px;">{_sc}</span>'
+                f'<span style="color:#475569;font-size:9px;margin-left:8px;">(last run — re-run QIR to refresh)</span>'
+                f'</div>'
+                f'<div style="color:#64748b;font-size:11px;line-height:1.5;">{_stale_syn.get("summary","")}</div>'
+            )
+        else:
+            _verdict_html = (
+                f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
+                f'<div style="border:1px dashed #1e293b;border-radius:4px;padding:8px;text-align:center;">'
+                f'<span style="color:#334155;font-size:11px;">Run QIR for conviction analysis</span>'
+                f'</div>'
+            )
 
     # ── Signal freshness row ──────────────────────────────────────────────
     _sig_checks = [
@@ -465,6 +794,10 @@ def _render_qir_dashboard() -> None:
         unsafe_allow_html=True,
     )
 
+    # ── Genuine Uncertainty expansion panel ───────────────────────────────
+    if _populated and _cls["pattern"] == "GENUINE_UNCERTAINTY" and _gu_profile:
+        _render_genuine_uncertainty_panel(_gu_profile)
+
     # ── Inline log button for QIR macro verdict ───────────────────────────
     if _populated and _verdict_label:
         from modules.forecast_accuracy import render_log_button
@@ -477,14 +810,20 @@ def _render_qir_dashboard() -> None:
             f"Opt Flow: {_of.get('label','')} ({_of_score}/100)"
         )
 
-        # Map verdict to SPY direction
+        # Map verdict to SPY direction — GENUINE_UNCERTAINTY uses the forced lean
         _buy_verdicts  = {"BULLISH CONFIRMATION", "PULLBACK IN UPTREND", "OPTIONS FLOW DIVERGENCE", "BEAR MARKET BOUNCE"}
         _sell_verdicts = {"BEARISH CONFIRMATION", "LATE CYCLE SQUEEZE"}
-        _spy_prediction = (
-            "Buy"  if _verdict_label in _buy_verdicts  else
-            "Sell" if _verdict_label in _sell_verdicts else
-            None
-        )
+        if _cls["pattern"] == "GENUINE_UNCERTAINTY":
+            _gu_lean = _gu_profile["lean"]
+            _spy_prediction = "Buy" if _gu_lean == "BULLISH" else "Sell"
+            _qir_conf = max(40, min(60, _gu_profile["lean_pct"]))
+            _qir_summary += f" | Uncertainty lean: {_gu_lean} {_gu_profile['lean_pct']}% | {_gu_profile['size_label']}"
+        else:
+            _spy_prediction = (
+                "Buy"  if _verdict_label in _buy_verdicts  else
+                "Sell" if _verdict_label in _sell_verdicts else
+                None
+            )
 
         _qc1, _qc2, _qc3 = st.columns([3, 1, 1])
         with _qc2:
@@ -501,6 +840,9 @@ def _render_qir_dashboard() -> None:
         with _qc3:
             if _spy_prediction:
                 _spy_label = "📈 Trade SPY Long" if _spy_prediction == "Buy" else "📉 Trade SPY Short"
+                if _cls["pattern"] == "GENUINE_UNCERTAINTY":
+                    _spy_label = ("📈 Lean Long (small)" if _spy_prediction == "Buy"
+                                  else "📉 Lean Short (small)")
                 if st.button(_spy_label, key=f"qir_spy_{_verdict_label}_{_tac_score}", use_container_width=True,
                              help="Log this QIR verdict as a SPY ATR trade in Forecast Tracker"):
                     _fid = log_forecast(
@@ -666,8 +1008,8 @@ def render():
             st.caption("*Running in Regard Mode until confirmed.*")
 
     # ── Signal readiness ───────────────────────────────────────────────────────
-    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_sector_regime_digest", "_macro_synopsis", "_portfolio_risk_snapshot", "_stocktwits_digest", "_fear_greed", "_aaii_sentiment", "_vix_curve"]
-    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Sector×Regime", "Macro Synopsis", "Risk Snapshot", "Social Sentiment", "F&G Index", "AAII Sentiment", "VIX Curve"]
+    _signal_keys = ["_regime_context", "_tactical_context", "_options_flow_context", "_dominant_rate_path", "_rp_plays_result", "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_chain_narration", "_custom_swans", "_whale_summary", "_activism_digest", "_sector_regime_digest", "_macro_synopsis", "_adversarial_debate", "_portfolio_risk_snapshot", "_stocktwits_digest", "_fear_greed", "_aaii_sentiment", "_vix_curve"]
+    _signal_labels = ["Regime", "Tactical", "Opt Flow", "Fed Rate Path", "Rate-Path Plays", "Fed Plays", "News Digest", "Doom Briefing", "Policy Trans.", "Black Swans", "Whale Activity", "Activism", "Sector×Regime", "Macro Synopsis", "Debate", "Risk Snapshot", "Social Sentiment", "F&G Index", "AAII Sentiment", "VIX Curve"]
     _populated = [(k, l) for k, l in zip(_signal_keys, _signal_labels) if st.session_state.get(k)]
 
     if _populated:
@@ -763,6 +1105,33 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 > **Rule of thumb:** Tactical tells you *when* to enter. Options Flow tells you *what the crowd is doing today*. Alignment between both = higher conviction. Divergence = reduce size or wait.
         """)
 
+    # ── Run Options ────────────────────────────────────────────────────────────
+    from utils.theme import COLORS as _QR_COLORS
+    st.markdown(
+        f'<div style="background:{_QR_COLORS["surface"]};border:1px solid {_QR_COLORS["border"]};'
+        f'border-radius:6px;padding:10px 14px;margin-bottom:10px;">'
+        f'<div style="font-size:10px;font-weight:700;letter-spacing:0.08em;'
+        f'color:{_QR_COLORS["bloomberg_orange"]};margin-bottom:8px;">RUN OPTIONS</div>',
+        unsafe_allow_html=True,
+    )
+    _qr_opt_c1, _qr_opt_c2 = st.columns(2)
+    _include_swans = _qr_opt_c1.radio(
+        "Black Swan Analysis",
+        ["Skip (faster)", "Include — feeds Discovery, Valuation & Portfolio Intel"],
+        index=st.session_state.get("_qir_include_swans_idx", 0),
+        key="qir_swans_opt",
+        help="When included, 3 regime-relevant black swan scenarios are generated and injected as context into downstream consumers.",
+    )
+    _qr_opt_c2.markdown(
+        f'<div style="font-size:11px;color:{_QR_COLORS["text_dim"]};padding-top:6px;">'
+        f'{"⚡ Faster run — skip tail risk generation" if "Skip" in _include_swans else "🦢 Tail risk scenarios generated for Discovery · Valuation · Portfolio Intel"}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.session_state["_qir_include_swans_idx"] = 0 if "Skip" in _include_swans else 1
+    st.markdown('</div>', unsafe_allow_html=True)
+    _run_black_swans = "Include" in _include_swans
+
     # ── Run button ─────────────────────────────────────────────────────────────
     if st.button("⚡ RUN ALL INTEL MODULES", type="primary", key="qr_run_all", use_container_width=True):
 
@@ -794,8 +1163,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         with st.spinner("📡 Round 1/4 — Regime · Current Events · Whale · Activism · Options Flow · Sector×Regime · Social · Sentiment (parallel)..."):
             _r1_errors = {}
             _macro_ctx, _fred_data = None, None
+            _regime_ctx = None  # initialized here; set inside loop when regime future resolves
             import datetime as _dt_qir
-            with ThreadPoolExecutor(max_workers=7) as _pool:
+            with ThreadPoolExecutor(max_workers=8) as _pool:
                 _fut_regime   = _pool.submit(run_quick_regime, _use_claude, _cl_model)
                 _fut_digest   = _pool.submit(run_quick_digest, _use_claude, _cl_model)
                 _fut_whale    = _pool.submit(run_quick_whale,  _use_claude, _cl_model)
@@ -803,6 +1173,15 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _fut_opts     = _pool.submit(run_quick_options_flow, _use_claude, _cl_model)
                 _fut_stwit    = _pool.submit(run_quick_stocktwits)
                 _fut_sentiment = _pool.submit(_run_sentiment)
+                # SPX GEX — institutional dealer book (background, no st.* calls)
+                def _fetch_spx_gex():
+                    try:
+                        from services.market_data import fetch_gex_profile as _fgp
+                        _fn = getattr(_fgp, "__wrapped__", _fgp)
+                        return _fn("^SPX", 4)
+                    except Exception:
+                        return None
+                _fut_gex_spx  = _pool.submit(_fetch_spx_gex)
                 for _fut, _key in (
                     (_fut_regime,     "regime"),
                     (_fut_digest,     "digest"),
@@ -811,14 +1190,16 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     (_fut_opts,       "opts"),
                     (_fut_stwit,      "social"),
                     (_fut_sentiment,  "sentiment"),
+                    (_fut_gex_spx,    "gex_spx"),
                 ):
                     try:
                         _val = _fut.result()
                         if _key == "regime" and _val:
-                            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq = _val
+                            _macro_ctx, _fred_data, _tac_data, _tac_text, _regime_ctx, _plays, _tier, _dq, _raw_sigs = _val
                             # Write ALL regime data from main thread
                             st.session_state["_regime_context"] = _regime_ctx
                             st.session_state["_regime_context_ts"] = _dt_qir.datetime.now()
+                            st.session_state["_regime_raw_signals"] = _raw_sigs
                             st.session_state["_rp_plays_result"] = _plays
                             st.session_state["_rp_plays_last_tier"] = _tier
                             if _tac_data:
@@ -863,6 +1244,9 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                                 if _val.get(_sk) is not None:
                                     st.session_state[_sk] = _val[_sk]
                                     st.session_state[_sk + "_ts"] = _now_s
+                        elif _key == "gex_spx" and _val:
+                            st.session_state["_gex_profile_spx"] = _val
+                            st.session_state["_gex_profile_spx_ts"] = _dt_qir.datetime.now()
                         _results[_key] = bool(_val)
                     except Exception as _e:
                         _results[_key] = False
@@ -871,10 +1255,16 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             # Sector×Regime runs after regime resolves — call directly (needs regime_ctx)
             try:
                 _val_s = run_quick_sector_regime(_use_claude, _cl_model, regime_ctx=_regime_ctx)
-                if _val_s:
+                if _val_s and "_sector_regime_error" in _val_s:
+                    # Error dict returned — surface the message, don't write to session state
+                    _results["sector"] = False
+                    _r1_errors["sector"] = _val_s["_sector_regime_error"]
+                elif _val_s and "_sector_regime_digest" in _val_s:
                     for _k, _v in _val_s.items():
                         st.session_state[_k] = _v
-                _results["sector"] = bool(_val_s)
+                    _results["sector"] = True
+                else:
+                    _results["sector"] = False
             except Exception as _e:
                 _results["sector"] = False
                 _r1_errors["sector"] = str(_e)
@@ -929,17 +1319,21 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
         # ── Round 2 (parallel): Fed + Doom + Black Swans ──────────────────────
         # Fed uses regime output from Round 1. Doom reads digest from session_state.
-        # Black Swans are fully independent.
+        # Black Swans are optional (controlled by _run_black_swans toggle).
         from modules.fed_forecaster import run_quick_fed, run_quick_swans
         from modules.stress_signals import run_quick_doom
 
-        with st.spinner("📈 Round 2/4 — Fed Rate Path · Doom Briefing · Black Swans (parallel)..."):
+        _r2_spinner = "📈 Round 2/4 — Fed Rate Path · Doom Briefing" + (" · Black Swans" if _run_black_swans else "") + " (parallel)..."
+        with st.spinner(_r2_spinner):
             _r2_errors = {}
             with ThreadPoolExecutor(max_workers=3) as _pool2:
-                _fut_fed   = _pool2.submit(run_quick_fed, _macro_ctx, _fred_data, _use_claude, _cl_model)
-                _fut_doom  = _pool2.submit(run_quick_doom, _use_claude, _cl_model)
-                _fut_swans = _pool2.submit(run_quick_swans, _use_claude, _cl_model)
-                for _fut, _key in ((_fut_fed, "fed"), (_fut_doom, "doom"), (_fut_swans, "swans")):
+                _fut_fed  = _pool2.submit(run_quick_fed, _macro_ctx, _fred_data, _use_claude, _cl_model)
+                _fut_doom = _pool2.submit(run_quick_doom, _use_claude, _cl_model)
+                _r2_jobs  = [(_fut_fed, "fed"), (_fut_doom, "doom")]
+                if _run_black_swans:
+                    _fut_swans = _pool2.submit(run_quick_swans, _use_claude, _cl_model)
+                    _r2_jobs.append((_fut_swans, "swans"))
+                for _fut, _key in _r2_jobs:
                     try:
                         _val = _fut.result()
                         if _val and isinstance(_val, dict):
@@ -958,11 +1352,14 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             st.success("✅ Doom Briefing — done")
         else:
             st.error(f"❌ Doom Briefing failed: {_r2_errors.get('doom', '?')}")
-        if _results.get("swans"):
-            _bs_count = len(st.session_state.get("_custom_swans", {}))
-            st.success(f"✅ Black Swans — {_bs_count} scenarios ready")
+        if _run_black_swans:
+            if _results.get("swans"):
+                _bs_count = len(st.session_state.get("_custom_swans", {}))
+                st.success(f"✅ Black Swans — {_bs_count} scenarios ready → Discovery · Valuation · Portfolio Intel")
+            else:
+                st.warning(f"⚠ Black Swans: {_r2_errors.get('swans', 'no results')}")
         else:
-            st.warning(f"⚠ Black Swans: {_r2_errors.get('swans', 'no results')}")
+            st.info("ℹ️ Black Swans skipped — enable in Run Options to feed downstream consumers")
 
         # ── Round 3: Policy Transmission (needs Fed output from Round 2) ───────
         with st.spinner("🔗 Round 3/4 — Policy transmission path..."):
@@ -1025,6 +1422,69 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         _of_block += f"\n  Signals: {_of_sigs}"
                     _sig_parts.append(_of_block)
 
+                # ── GEX Dealer Positioning (convexity adjustment on options signals) ──
+                # Prefer SPX (institutional dealer book); fall back to per-ticker _gex_profile
+                _gex = st.session_state.get("_gex_profile_spx") or st.session_state.get("_gex_profile")
+                if _gex:
+                    _gz = _gex.get("zone", "")
+                    _gflip = _gex.get("gamma_flip")
+                    _cwall = _gex.get("call_wall")
+                    _pwall = _gex.get("put_wall")
+                    _gex_net = _gex.get("total_gex")
+                    _g_interp = (
+                        "POSITIVE (dealers long gamma — market self-stabilizing, mean-reverting regime; "
+                        "directional options flow signals are DAMPENED by dealer hedging)"
+                        if "Positive" in _gz else
+                        "NEGATIVE (dealers short gamma — market trending/self-amplifying regime; "
+                        "directional options flow signals have ELEVATED conviction)"
+                        if "Negative" in _gz else _gz
+                    )
+                    _gex_parts = [f"GEX DEALER POSITIONING: {_g_interp}"]
+                    if _gflip:
+                        _gex_parts.append(f"  Gamma Flip Level: ${_gflip:.0f} (below = trending regime, above = pinned)")
+                    if _cwall:
+                        _gex_parts.append(f"  Call Wall (resistance): ${_cwall:.0f}")
+                    if _pwall:
+                        _gex_parts.append(f"  Put Wall (support): ${_pwall:.0f}")
+                    if _gex_net is not None:
+                        _gex_parts.append(f"  Net GEX: ${_gex_net/1e9:.2f}B ({'+' if _gex_net >= 0 else ''})")
+                    _sig_parts.append("\n".join(_gex_parts))
+
+                # ── Credit Risk (fixed income convexity) for held positions ──────
+                try:
+                    from utils.journal import load_journal as _lj_cr
+                    from services.market_data import fetch_credit_metrics as _fcr
+                    _cr_tks = list({t["ticker"].upper() for t in _lj_cr() if t.get("status") == "open"})[:6]
+                    _cr_flags = []
+                    for _ctk in _cr_tks:
+                        try:
+                            _cm = _fcr(_ctk)
+                            if not _cm:
+                                continue
+                            _cov = _cm.get("interest_coverage")
+                            _lev = _cm.get("debt_to_ebitda")
+                            _mf  = _cm.get("maturity_flag", "")
+                            _cf  = _cm.get("coverage_flag", "")
+                            if _cov is not None and _cov < 3.0:
+                                _cr_flags.append(
+                                    f"{_ctk}: coverage {_cov:.1f}x"
+                                    + (f", D/EBITDA {_lev:.1f}x" if _lev else "")
+                                    + (f" — {_cf}" if _cf else "")
+                                    + (" | " + _mf if _mf else "")
+                                )
+                            elif _mf and "HIGH" in _mf:
+                                _cr_flags.append(f"{_ctk}: {_mf}")
+                        except Exception:
+                            continue
+                    if _cr_flags:
+                        _sig_parts.append(
+                            "CREDIT RISK IN PORTFOLIO (interest coverage < 3x or high refi risk — "
+                            "options put skew understates tail risk for these positions):\n  "
+                            + "\n  ".join(_cr_flags)
+                        )
+                except Exception:
+                    pass
+
                 # ── Macro Regime ──────────────────────────────────────────────────
                 if _rc.get("regime"):
                     _sig_parts.append(f"MACRO REGIME: {_rc['regime']} (score {_rc.get('score',0):+.2f}) | Quadrant: {_rc.get('quadrant','')}")
@@ -1078,7 +1538,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     ]
                     _sig_parts.append(f"EARNINGS RISK: {', '.join(_er_parts)}")
 
-                _synopsis = _gen_synopsis("\n\n".join(_sig_parts), use_claude=_use_claude, model=_cl_model)
+                _signals_text_for_debate = "\n\n".join(_sig_parts)
+                _synopsis = _gen_synopsis(_signals_text_for_debate, use_claude=_use_claude, model=_cl_model)
                 _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
                     else ("🧠 Regard Mode" if _use_claude else "⚡ Freeloader Mode")
                 st.session_state["_macro_synopsis"] = _synopsis
@@ -1089,6 +1550,36 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             except Exception as e:
                 _results["synopsis"] = False
                 st.error(f"❌ Synopsis failed: {e}")
+
+        # ── Round 4b: Adversarial Debate — Sir Doomburger vs Sir Fukyerputs ─────────
+        with st.spinner("⚔️ Adversarial Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+            try:
+                import datetime as _dbdt
+                from services.claude_client import generate_adversarial_debate as _gen_debate
+                _debate = _gen_debate(_signals_text_for_debate, use_claude=_use_claude, model=_cl_model)
+                st.session_state["_adversarial_debate"] = _debate
+                st.session_state["_adversarial_debate_ts"] = _dbdt.datetime.now()
+                _db_verdict = _debate.get("verdict", "CONTESTED")
+                _db_conf = _debate.get("confidence", 5)
+                # ── Log verdict + auto-resolve old ones ───────────────────────
+                try:
+                    from utils.debate_record import log_verdict as _log_v, resolve_old_verdicts as _resolve_v
+                    _rc_now = st.session_state.get("_regime_context") or {}
+                    _log_v(
+                        verdict=_db_verdict,
+                        confidence=_db_conf,
+                        regime=_rc_now.get("regime", ""),
+                        quadrant=_rc_now.get("quadrant", ""),
+                        regime_score=float(_rc_now.get("score", 0.0)),
+                    )
+                    _resolve_v()
+                except Exception:
+                    pass
+                st.success(f"⚔️ Debate complete — {_db_verdict} (confidence {_db_conf}/10)")
+                _results["debate"] = True
+            except Exception as e:
+                _results["debate"] = False
+                st.error(f"❌ Debate failed: {e}")
 
         # ── Round 5: Portfolio Risk Snapshot (headless risk matrix) ──────────
         with st.spinner("📊 Round 5/5 — Portfolio Risk Snapshot + AI Interpretation..."):
@@ -1238,6 +1729,146 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         else:
             st.warning(f"{_last_ok}/{_last_total} modules completed — check errors above.")
 
+        # ── Adversarial Debate Display ──────────────────────────────────────────────
+        _debate = st.session_state.get("_adversarial_debate") or {}
+        if _debate.get("bear_argument") or _debate.get("bull_argument"):
+            _db_verdict = _debate.get("verdict", "CONTESTED")
+            _db_conf    = _debate.get("confidence", 5)
+            _vc = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
+            _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
+
+            # ── Court formality strings ───────────────────────────────────────
+            _winner = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻", "CONTESTED": None}.get(_db_verdict)
+            _loser  = {"BULL WINS": "Sir Doomburger 🐻", "BEAR WINS": "Sir Fukyerputs 🐂", "CONTESTED": None}.get(_db_verdict)
+            _sentences = {
+                "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip and deep reflection on his pessimism.",
+                "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash and contemplating the dangers of leverage.",
+                "CONTESTED": "Both parties are hereby remanded to gather additional evidence. Court is adjourned pending new data.",
+            }
+            _sentence = _sentences[_db_verdict]
+
+            # ── Verdict record ────────────────────────────────────────────────
+            try:
+                from utils.debate_record import get_stats as _get_stats, get_recent_verdicts as _get_recent
+                _jj_stats = _get_stats()
+                _jj_recent = _get_recent(5)
+            except Exception:
+                _jj_stats = {}
+                _jj_recent = []
+
+            _acc_str = f"{_jj_stats['accuracy_pct']}% accuracy" if _jj_stats.get("accuracy_pct") is not None else "unresolved"
+            _record_str = f"{_jj_stats.get('correct',0)}W-{_jj_stats.get('wrong',0)}L · {_acc_str} · {_jj_stats.get('pending',0)} pending"
+
+            # ── Outcome dots for recent verdicts ──────────────────────────────
+            _dot_html = ""
+            for _rv in reversed(_jj_recent):
+                _oc = _rv.get("outcome", "pending")
+                _rv_v = _rv.get("verdict", "")
+                _dot_c = {"correct": "#22c55e", "wrong": "#ef4444", "pending": "#475569"}.get(_oc, "#475569")
+                _dot_sym = {"BULL WINS": "▲", "BEAR WINS": "▼", "CONTESTED": "■"}.get(_rv_v, "·")
+                _dot_html += f'<span style="color:{_dot_c};font-size:13px;margin-right:4px;" title="{_rv_v} — {_oc}">{_dot_sym}</span>'
+
+            # ── Glow CSS ──────────────────────────────────────────────────────
+            _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88, 0 0 40px {_vc}44"
+
+            st.markdown(
+                f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;'
+                f'padding:18px 20px;margin-top:12px;margin-bottom:4px;">'
+
+                # Court header
+                f'<div style="text-align:center;margin-bottom:14px;">'
+                f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
+                f'<div style="color:#94a3b8;font-size:9px;letter-spacing:0.08em;">THE HONORABLE JUDGE JUDY PRESIDING</div>'
+                f'</div>'
+
+                # Glowing verdict
+                f'<div style="text-align:center;margin-bottom:14px;">'
+                f'<div style="color:{_vc};font-size:28px;font-weight:900;letter-spacing:0.05em;'
+                f'text-shadow:{_glow};line-height:1.1;">⚔️ {_db_verdict}</div>'
+                f'<div style="color:{_vc}aa;font-size:11px;margin-top:4px;font-style:italic;">'
+                + (f'The Court finds in favor of {_winner}' if _winner else 'The Court is divided') +
+                f'</div></div>'
+
+                # Sentence
+                f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
+                f'padding:8px 12px;margin-bottom:12px;font-size:11px;color:#e2e8f0;font-style:italic;">'
+                f'"{_sentence}"</div>'
+
+                # Judge Judy record
+                f'<div style="display:flex;align-items:center;justify-content:space-between;">'
+                f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;">JUDGE JUDY\'S RECORD</div>'
+                f'<div style="color:#64748b;font-size:10px;">{_record_str}</div>'
+                f'</div>'
+                f'<div style="margin-top:4px;display:flex;align-items:center;gap:2px;">'
+                f'<span style="color:#475569;font-size:9px;margin-right:6px;">RECENT:</span>{_dot_html}'
+                f'<span style="color:#334155;font-size:9px;margin-left:6px;">▲=bull ▼=bear ■=contested · 🟢correct 🔴wrong ⚫pending</span>'
+                f'</div>'
+
+                # Confidence
+                f'<div style="margin-top:10px;text-align:right;">'
+                f'<span style="color:#475569;font-size:9px;">AI confidence in verdict: </span>'
+                f'<span style="color:{_vc};font-weight:700;font-size:11px;">{_db_conf}/10</span>'
+                f'<span style="color:#334155;font-size:9px;margin-left:6px;">(Judge Judy self-rated — not a quant score)</span>'
+                f'</div>'
+
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # ── Arguments side by side ────────────────────────────────────────
+            _col_bear, _col_bull = st.columns(2)
+
+            with _col_bear:
+                _bear_border = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
+                _bear_glow = f"box-shadow:0 0 12px #ef444444;" if _db_verdict == "BEAR WINS" else ""
+                st.markdown(
+                    f'<div style="background:#1a0000;border:1px solid {_bear_border};border-radius:6px;padding:12px;{_bear_glow}">'
+                    f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                    + ("🏆 " if _db_verdict == "BEAR WINS" else "")
+                    + f'🐻 SIR DOOMBURGER'
+                    + (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
+                    f'</div>'
+                    f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bear_argument","")}</div>'
+                    f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ef444433;">'
+                    f'<span style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                    f'<span style="color:#fca5a5;font-size:10px;">{_debate.get("bear_strongest","")}</span>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            with _col_bull:
+                _bull_border = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
+                _bull_glow = f"box-shadow:0 0 12px #22c55e44;" if _db_verdict == "BULL WINS" else ""
+                st.markdown(
+                    f'<div style="background:#052e16;border:1px solid {_bull_border};border-radius:6px;padding:12px;{_bull_glow}">'
+                    f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                    + ("🏆 " if _db_verdict == "BULL WINS" else "")
+                    + f'🐂 SIR FUKYERPUTS'
+                    + (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
+                    f'</div>'
+                    f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bull_argument","")}</div>'
+                    f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22c55e33;">'
+                    f'<span style="color:#22c55e;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                    f'<span style="color:#86efac;font-size:10px;">{_debate.get("bull_strongest","")}</span>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── Judge Judy asymmetry ruling ───────────────────────────────────
+            if _debate.get("asymmetry") or _debate.get("key_disagreement"):
+                st.markdown(
+                    f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
+                    f'padding:10px 14px;margin-top:8px;">'
+                    f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">⚖️ JUDGE JUDY — RISK/REWARD RULING</div>'
+                    f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{_debate.get("asymmetry","")}</div>'
+                    f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {_debate.get("key_disagreement","")}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # ── Intelligence Dashboard (always renders fresh after run) ───────────────
+        _render_qir_dashboard()
+
         _synopsis = st.session_state.get("_macro_synopsis") or {}
         if _synopsis.get("conviction"):
             _conv = _synopsis["conviction"]
@@ -1339,6 +1970,11 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                             f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
                         )
                     st.markdown(f'<div style="margin-bottom:8px;">{_of_sigs_html}</div>', unsafe_allow_html=True)
+                _vix_lv = _of_ctx.get("vix_level", "?")
+                _vix_rg = _of_ctx.get("vix_regime", "Normal")
+                _mode   = _of_ctx.get("scoring_mode", "static")
+                _n_hist = _of_ctx.get("n_pc_hist", 0)
+                st.caption(f"VIX {_vix_lv} · {_vix_rg} regime · {_mode} · {_n_hist} samples in history")
 
         _dp = st.session_state.get("_dominant_rate_path") or {}
         if _dp:
@@ -1469,9 +2105,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             )
     except Exception:
         pass
-
-    # ── Intelligence Dashboard (always renders fresh after run) ───────────────
-    _render_qir_dashboard()
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):

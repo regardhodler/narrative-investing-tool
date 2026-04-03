@@ -1390,6 +1390,7 @@ def _render_auto():
     active = get_ticker()
     if active:
         _render_company_overview(active)
+        _render_ticker_snapshot(active)
 
     # --- Trending search interest (auto, no click needed) ---
     if yf_trending:
@@ -1439,6 +1440,7 @@ def _render_manual():
                 add_to_watchlist(active, st.session_state.get("active_narrative", ""))
                 st.rerun()
             _render_company_overview(active)
+            _render_ticker_snapshot(active)
             try:
                 _render_interest_chart(active, key_suffix="ticker")
             except Exception:
@@ -1484,6 +1486,7 @@ def _render_manual():
                 add_to_watchlist(active, kw)
                 st.rerun()
             _render_company_overview(active)
+            _render_ticker_snapshot(active)
             try:
                 _render_interest_chart(active, key_suffix="narrative")
             except Exception:
@@ -1539,6 +1542,125 @@ def _render_trending_interest(trending: list[dict]):
     fig.update_layout(height=400, legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fig, use_container_width=True)
     st.caption("Source: Google Trends · comparing relative search interest across tickers")
+
+
+def _render_ticker_snapshot(ticker: str) -> None:
+    """Inline fundamentals + credit snapshot for a ticker in Discovery.
+
+    Shows: price momentum, valuation multiples, quality metrics, analyst consensus,
+    short interest, and credit risk — all per-ticker, sourced from yfinance.
+    """
+    from services.market_data import fetch_ticker_fundamentals, fetch_credit_metrics, get_yf_info_safe
+
+    with st.spinner(f"Loading {ticker} snapshot..."):
+        fund = fetch_ticker_fundamentals(ticker)
+        credit = fetch_credit_metrics(ticker)
+        info = get_yf_info_safe(ticker) or {}
+
+    if not fund and not credit:
+        return
+
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    target_mean = fund.get("target_mean") if fund else None
+    upside = ((target_mean - price) / price * 100) if (price and target_mean and price > 0) else None
+
+    with st.expander(f"📊 {ticker} Fundamentals & Credit Snapshot", expanded=True):
+
+        # ── Analyst consensus banner ───────────────────────────────────────────
+        if fund:
+            score = fund.get("analyst_score")  # 1=strong buy, 5=strong sell
+            rev = fund.get("revision_score")
+            n = fund.get("analyst_count", 0)
+            if score is not None:
+                if score <= 1.5:
+                    rating_label, rating_color = "STRONG BUY", COLORS["green"]
+                elif score <= 2.5:
+                    rating_label, rating_color = "BUY", COLORS["teal"] if "teal" in COLORS else COLORS["green"]
+                elif score <= 3.5:
+                    rating_label, rating_color = "HOLD", COLORS.get("yellow", "#FFD700")
+                elif score <= 4.5:
+                    rating_label, rating_color = "SELL", COLORS["red"]
+                else:
+                    rating_label, rating_color = "STRONG SELL", COLORS["red"]
+
+                rev_str = ""
+                if rev is not None:
+                    rev_str = f" &nbsp;|&nbsp; Revisions (30d): <b style='color:{'#00D4AA' if rev >= 0 else '#FF4B4B'}'>{rev:+d}</b>"
+
+                upside_str = ""
+                if upside is not None:
+                    upside_str = f" &nbsp;|&nbsp; Upside to consensus: <b style='color:{'#00D4AA' if upside >= 0 else '#FF4B4B'}'>{upside:+.1f}%</b> (${target_mean:.2f} avg)"
+
+                st.markdown(
+                    f'<div style="background:{rating_color}18;border:1px solid {rating_color};'
+                    f'border-radius:5px;padding:8px 14px;margin-bottom:10px;font-size:13px">'
+                    f'<b style="color:{rating_color}">{rating_label}</b> &nbsp;·&nbsp; '
+                    f'{n} analysts{rev_str}{upside_str}</div>',
+                    unsafe_allow_html=True,
+                )
+
+        # ── Valuation multiples ────────────────────────────────────────────────
+        if fund:
+            st.markdown("**Valuation**")
+            v1, v2, v3, v4, v5, v6 = st.columns(6)
+            def _metric(col, label, val, fmt="{:.1f}x", suffix=""):
+                if val is not None:
+                    col.metric(label, fmt.format(val) + suffix)
+                else:
+                    col.metric(label, "—")
+            _metric(v1, "P/E (ttm)", fund.get("pe_trailing"))
+            _metric(v2, "P/E (fwd)", fund.get("pe_forward"))
+            _metric(v3, "PEG", fund.get("peg"), "{:.2f}x")
+            _metric(v4, "EV/EBITDA", fund.get("ev_ebitda"))
+            _metric(v5, "P/S", fund.get("ps_ratio"))
+            _metric(v6, "P/B", fund.get("pb_ratio"))
+
+        # ── Quality metrics ────────────────────────────────────────────────────
+        if fund:
+            st.markdown("**Quality & Growth**")
+            q1, q2, q3, q4, q5, q6 = st.columns(6)
+            roe = fund.get("roe")
+            margin = fund.get("profit_margin")
+            rev_g = fund.get("revenue_growth_yoy")
+            earn_g = fund.get("earnings_growth_yoy")
+            fcf_y = fund.get("fcf_yield")
+            short_pct = fund.get("short_pct_float")
+
+            q1.metric("ROE", f"{roe*100:.1f}%" if roe else "—")
+            q2.metric("Net Margin", f"{margin*100:.1f}%" if margin else "—")
+            q3.metric("Rev Growth", f"{rev_g*100:+.1f}%" if rev_g else "—")
+            q4.metric("EPS Growth", f"{earn_g*100:+.1f}%" if earn_g else "—")
+            q5.metric("FCF Yield", f"{fcf_y*100:.1f}%" if fcf_y else "—")
+            q6.metric("Short Float", f"{short_pct*100:.1f}%" if short_pct else "—")
+
+        # ── Credit health ──────────────────────────────────────────────────────
+        if credit:
+            st.markdown("**Credit & Leverage**")
+            cr1, cr2, cr3, cr4 = st.columns(4)
+            cov = credit.get("interest_coverage")
+            lev = credit.get("debt_to_ebitda")
+            nd  = credit.get("net_debt_B")
+            mflag = credit.get("maturity_flag") or ""
+
+            # Color-code coverage
+            cov_color = ""
+            if cov is not None:
+                if cov < 1.5:
+                    cov_color = "🔴 "
+                elif cov < 3.0:
+                    cov_color = "🟡 "
+                else:
+                    cov_color = "🟢 "
+
+            cr1.metric("Int. Coverage", f"{cov_color}{cov:.1f}x" if cov else "—")
+            cr2.metric("Debt/EBITDA", f"{lev:.1f}x" if lev else "—")
+            cr3.metric("Net Debt", f"${nd:.1f}B" if nd is not None else "—")
+            cr4.metric("Near-term Refi", "⚠ High" if "HIGH" in mflag else ("Moderate" if mflag else "Low"))
+
+            if credit.get("coverage_flag") and credit["interest_coverage"] and credit["interest_coverage"] < 3.0:
+                st.warning(f"⚠ {credit['coverage_flag']}")
+            if "HIGH" in mflag:
+                st.warning(f"⚠ {mflag}")
 
 
 def _render_company_overview(ticker: str):
