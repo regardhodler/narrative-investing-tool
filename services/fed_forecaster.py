@@ -1616,6 +1616,9 @@ def generate_matrix_forecast(context_json: str, scenarios_json: str, model_tier:
         result["_call_status"]["commodities_intl"] = f"error: {exc}"
 
     return result
+
+
+@st.cache_data(ttl=3600)
 def generate_expanded_forecast(context_json: str, scenarios_json: str, model_tier: str = "groq") -> dict:
     """Orchestrate 3 calls and merge into unified expanded forecast dict.
 
