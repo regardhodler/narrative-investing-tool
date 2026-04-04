@@ -89,11 +89,39 @@ def build_macro_block() -> str:
             f"Regime: {rc.get('regime','?')} | Quadrant: {rc.get('quadrant','?')} | "
             f"Score: {rc.get('score', 0):+.2f} (-1=risk-off, +1=risk-on)"
         )
+        # Leading sub-score: fast-reacting signals only (VIX, credit spreads, LEI, etc.)
+        # Divergence from composite = early warning of regime change before lagging data confirms.
+        _ll = rc.get("leading_label", "Aligned")
+        _ld = rc.get("leading_divergence", 0) or 0
+        _ls = rc.get("leading_score")
+        _5d = rc.get("score_5d_trend")
+        if _ls is not None:
+            _early_warn = (
+                f" ⚠ EARLY WARNING: {_ll} — leading signals are {abs(_ld)} pts {'ahead of' if _ld > 0 else 'below'} composite"
+                if _ll != "Aligned" else ""
+            )
+            lines.append(
+                f"Leading sub-score (fast signals only): {_ls}/100 (divergence from composite: {_ld:+d} pts){_early_warn}"
+            )
+        _l5d = rc.get("leading_5d_trend")
+        if _5d is not None or _l5d is not None:
+            _c_str = f"{_5d:+d} pts" if _5d is not None else "—"
+            _l_str = f"{_l5d:+d} pts" if _l5d is not None else "—"
+            _conf = ""
+            if _5d is not None and _l5d is not None:
+                if _5d > 0 and _l5d > 0:
+                    _conf = " — BOTH RISING (high conviction)"
+                elif _5d < 0 and _l5d < 0:
+                    _conf = " — BOTH FALLING (high conviction)"
+                elif (_5d > 0) != (_l5d > 0):
+                    _conf = " — DIVERGING (composite and leading disagree)"
+            lines.append(f"5-session trend — composite: {_c_str} | leading: {_l_str}{_conf}")
 
     # ── Raw macro z-scores from regime engine ─────────────────────────────────
     raw = st.session_state.get("_regime_raw_signals") or {}
     _skip = {"macro_score_norm", "macro_regime", "quadrant", "fear_greed",
-             "fear_greed_label", "tactical_score"}
+             "fear_greed_label", "tactical_score",
+             "leading_label", "leading_score", "leading_divergence", "score_5d_trend"}
     z_lines = [
         f"  {k.replace('_', ' ').title()}: {v:+.3f}"
         for k, v in raw.items()
@@ -178,6 +206,65 @@ def build_macro_block() -> str:
             lines.extend(_cal_lines)
     else:
         lines.append("Upcoming macro events: unavailable (fed_forecaster import failed)")
+
+    # ── QIR macro debate verdict (Judge Judy ruling) ──────────────────────────
+    # Downstream debates (valuation, discovery) inherit this ruling so they don't
+    # re-litigate macro — they argue their narrower question on top of it.
+    # CONFLICT DETECTION: if the math direction contradicts Judge Judy's ruling,
+    # the math wins — the verdict is flagged as advisory only, not settled.
+    _dbt = st.session_state.get("_adversarial_debate") or {}
+    if _dbt.get("verdict"):
+        _dbt_verdict    = _dbt.get("verdict", "CONTESTED")
+        _dbt_conf       = _dbt.get("confidence", 5)
+        _dbt_bull_best  = _dbt.get("bull_strongest", "")
+        _dbt_bear_best  = _dbt.get("bear_strongest", "")
+        _dbt_asym       = _dbt.get("asymmetry", "")
+
+        # Derive math direction from composite score
+        _math_score = rc.get("macro_score", 50) if rc else 50
+        _lead_div   = rc.get("leading_divergence", 0) or 0 if rc else 0
+        if _math_score > 55 or (_math_score > 50 and _lead_div > 5):
+            _math_dir = "BULL"
+        elif _math_score < 45 or (_math_score < 50 and _lead_div < -5):
+            _math_dir = "BEAR"
+        else:
+            _math_dir = "NEUTRAL"
+
+        _judy_dir = (
+            "BULL" if "BULL" in _dbt_verdict.upper()
+            else "BEAR" if "BEAR" in _dbt_verdict.upper()
+            else "CONTESTED"
+        )
+
+        _conflict = (
+            _math_dir != "NEUTRAL"
+            and _judy_dir != "CONTESTED"
+            and _math_dir != _judy_dir
+        )
+
+        lines.append(
+            f"Judge Judy macro verdict (QIR debate): {_dbt_verdict} "
+            f"(confidence {_dbt_conf}/10)"
+        )
+        if _dbt_bull_best:
+            lines.append(f"  Strongest bull argument: {_dbt_bull_best}")
+        if _dbt_bear_best:
+            lines.append(f"  Strongest bear argument: {_dbt_bear_best}")
+        if _dbt_asym:
+            lines.append(f"  Asymmetry: {_dbt_asym}")
+
+        if _conflict:
+            lines.append(
+                f"  ⚠ MATH vs AI CONFLICT: Composite score ({_math_score}/100) and leading "
+                f"divergence ({_lead_div:+d}) signal {_math_dir} but Judge Judy ruled {_judy_dir}. "
+                f"THE MATH IS OBJECTIVE — treat debate verdict as advisory only. "
+                f"Do not treat as settled. Weight the numeric signals over the AI interpretation."
+            )
+        else:
+            lines.append(
+                "  Math and debate verdict are aligned — macro direction SETTLED. "
+                "Build your case on top of this, do not re-argue macro."
+            )
 
     lines.append("=== END MACRO GROUND TRUTH ===")
     return "\n".join(lines)

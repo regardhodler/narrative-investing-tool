@@ -1,4 +1,4 @@
-﻿import json
+import json
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -7,12 +7,17 @@ import yfinance as yf
 
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
+from utils.components import render_rr_score_mode_toggle, render_intel_health_bar, apply_confidence_penalty
 
 
 def render():
     import os
     _has_xai = bool(os.getenv("XAI_API_KEY"))
     _has_anthropic = bool(os.getenv("ANTHROPIC_API_KEY"))
+
+    render_rr_score_mode_toggle(key="valuation_rr_score_mode_ui", compact=True)
+    render_intel_health_bar(compact=True)
+
     from utils.ai_tier import TIER_OPTS as _VAL_MAIN_OPTS, TIER_MAP as _VAL_MAIN_MAP
     _tier_badges = {
         "⚡ Freeloader Mode": '<span style="font-size:11px;background:#2A3040;color:#888;padding:2px 7px;border-radius:3px;">⚡ Freeloader Mode</span>',
@@ -66,13 +71,8 @@ def render():
     from utils.components import render_signal_coverage as _render_sig_cov_val
     _render_sig_cov_val()
 
-    # ── Undervaluation Spotlight toggle ───────────────────────────────────────
-    st.toggle(
-        "🎯 Undervaluation Spotlight",
-        key="underval_spotlight",
-        help="Show a prominent banner with DCF discount % above the analysis",
-    )
-    # ──────────────────────────────────────────────────────────────────────────
+    # Always-on spotlight so valuation opens with the DCF discount banner.
+    st.session_state["underval_spotlight"] = True
 
     _prev_tier = st.session_state.get("_val_tier_prev")
     from utils.ai_tier import render_ai_tier_selector as _val_main_tier
@@ -591,7 +591,10 @@ def render():
     _inj_rows = []
     _rc_v = st.session_state.get("_regime_context") or {}
     if _rc_v.get("regime"):
-        _inj_rows.append(("Macro Regime", f"{_rc_v['regime']} · {_rc_v.get('quadrant','')} · score {_rc_v.get('score',0):+.2f}"))
+        _val_leading_lbl = _rc_v.get("leading_label", "Aligned")
+        _val_leading_div = _rc_v.get("leading_divergence", 0) or 0
+        _val_leading_sfx = f" · {_val_leading_lbl} ({_val_leading_div:+d})" if _val_leading_lbl != "Aligned" else ""
+        _inj_rows.append(("Macro Regime", f"{_rc_v['regime']} · {_rc_v.get('quadrant','')} · score {_rc_v.get('score',0):+.2f}{_val_leading_sfx}"))
     _tac_v = st.session_state.get("_tactical_context") or {}
     if _tac_v:
         _inj_rows.append(("Tactical Regime", f"{_tac_v.get('tactical_score','?')}/100 · {_tac_v.get('label','')} — {_tac_v.get('action_bias','')[:80]}"))
@@ -760,6 +763,83 @@ def render():
     if _dcf_scenarios and result:
         st.markdown("---")
         _render_kelly(result, _dcf_scenarios)
+
+    # ── On-demand adversarial debate ──────────────────────────────────────────
+    st.markdown("---")
+    try:
+        from utils.ai_tier import TIER_OPTS as _vd_tier_opts, TIER_MAP as _vd_tier_map
+    except ImportError:
+        _vd_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        _vd_tier_map  = {
+            "⚡ Freeloader Mode":      (False, None),
+            "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+        }
+    _vd_col1, _vd_col2, _vd_col3 = st.columns([2, 1.5, 1])
+    with _vd_col1:
+        st.markdown(
+            f'<span style="color:#64748b;font-size:11px;">⚔️ Debate this valuation — '
+            f'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
+            f'<span style="color:#475569;">3 LLM calls</span></span>'
+            f'<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run the AI Valuation above first — debate uses the rating &amp; confidence as evidence</div>',
+            unsafe_allow_html=True,
+        )
+    with _vd_col2:
+        _vd_tier = st.selectbox("", _vd_tier_opts, key=f"val_debate_tier_{ticker}", label_visibility="collapsed")
+    with _vd_col3:
+        _run_val_debate = st.button("⚔️ Debate This", key=f"btn_val_debate_{ticker}", use_container_width=True)
+    _vd_use_claude, _vd_model = _vd_tier_map.get(_vd_tier, (False, None))
+    _vd_engine = _vd_tier
+
+    _val_debate_key = f"_val_debate_{ticker}"
+    _val_debate = st.session_state.get(_val_debate_key) or {}
+
+    if _run_val_debate:
+        st.session_state[_val_debate_key] = {}
+        with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+            try:
+                from services.claude_client import generate_adversarial_debate as _gen_vd
+                from utils.signal_block import build_ticker_block as _build_vtb, build_macro_block as _build_vmb
+                _val_signals = ""
+                try:
+                    _val_signals = _build_vmb() + "\n\n" + _build_vtb(ticker)
+                except Exception:
+                    _val_signals = signals_text
+                _val_context = (
+                    f"TICKER: {ticker}\n"
+                    f"AI RATING: {(result or {}).get('rating','?')} | Confidence: {(result or {}).get('confidence','?')}%\n"
+                    f"SUMMARY: {(result or {}).get('summary','')}\n\n"
+                    f"{_val_signals}"
+                )
+                _val_debate = _gen_vd(
+                    _val_context,
+                    use_claude=_vd_use_claude,
+                    model=_vd_model,
+                    ticker=ticker,
+                    topic=f"Is {ticker} a BUY or a SELL at current price given this valuation, macro regime, and AI rating? Argue the specific stock — not the macro.",
+                )
+                _val_debate["engine"] = _vd_engine
+                st.session_state[_val_debate_key] = _val_debate
+                from utils.debate_record import log_verdict as _log_vdv
+                _rc_vd = st.session_state.get("_regime_context") or {}
+                _log_vdv(
+                    verdict=_val_debate.get("verdict", "CONTESTED"),
+                    confidence=_val_debate.get("confidence", 5),
+                    regime=_rc_vd.get("regime", ""),
+                    quadrant=_rc_vd.get("quadrant", ""),
+                    regime_score=float(_rc_vd.get("score", 0.0)),
+                )
+                st.success(
+                    f"⚔️ Debate complete [{_vd_engine}] — "
+                    f"{_val_debate.get('verdict', 'CONTESTED')} "
+                    f"(confidence {apply_confidence_penalty(_val_debate.get('confidence', 5))}/10)"
+                )
+            except Exception as _vde:
+                st.error(f"Debate failed: {_vde}")
+
+    if _val_debate.get("bear_argument") or _val_debate.get("bull_argument"):
+        from modules.trade_journal import _render_debate_panel as _rdp
+        _rdp(_val_debate)
 
     # Disclaimer
     st.markdown("---")

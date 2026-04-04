@@ -14,6 +14,7 @@ from utils.session import get_ticker, set_narrative, set_ticker
 from utils.watchlist import add_to_watchlist, is_in_watchlist
 from utils.theme import COLORS, apply_dark_layout
 from utils.ai_tier import render_ai_tier_selector, TIER_OPTS, TIER_MAP, MODEL_HINT_HTML
+from utils.components import render_rr_score_mode_toggle, render_intel_health_bar, apply_confidence_penalty
 
 ASSET_CLASSES = {
     "Equities": None,  # sentinel — use Yahoo trending
@@ -358,6 +359,9 @@ def _render_trending_narratives():
 
 def render():
     st.header("NARRATIVE DISCOVERY")
+
+    render_rr_score_mode_toggle(key="discovery_rr_score_mode_ui", compact=True)
+    render_intel_health_bar(compact=True)
 
     # ── Signal Coverage ────────────────────────────────────────────────────────
     from utils.components import render_signal_coverage as _render_sig_cov_disc
@@ -705,11 +709,18 @@ def render():
                 _enrichment_parts   = []
 
                 if _cached_regime_ctx:
+                    _disc_leading_lbl = _cached_regime_ctx.get("leading_label", "Aligned")
+                    _disc_leading_div = _cached_regime_ctx.get("leading_divergence", 0) or 0
+                    _disc_leading_sfx = (
+                        f", early_warning={_disc_leading_lbl} ({_disc_leading_div:+d} pts)"
+                        if _disc_leading_lbl != "Aligned" else ""
+                    )
                     _enrichment_parts.append(
                         f"[Regime AI ({_cached_rp_tier}): "
                         f"regime={_cached_regime_ctx['regime']}, "
                         f"score={_cached_regime_ctx.get('score', 0.0):+.2f}, "
-                        f"quadrant={_cached_regime_ctx.get('quadrant', 'Unknown')}, "
+                        f"quadrant={_cached_regime_ctx.get('quadrant', 'Unknown')}"
+                        f"{_disc_leading_sfx}, "
                         f"context={_cached_regime_ctx['signal_summary']}]"
                     )
 
@@ -1127,6 +1138,163 @@ def render():
         _render_auto()
     else:
         _render_manual()
+
+    # ── ⚔️ Narrative Debate — fed by everything above ─────────────────────────
+    st.markdown("---")
+    try:
+        from utils.ai_tier import TIER_OPTS as _nd_tier_opts, TIER_MAP as _nd_tier_map
+    except ImportError:
+        _nd_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        _nd_tier_map  = {
+            "⚡ Freeloader Mode":      (False, None),
+            "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+        }
+    _nd_c1, _nd_c2, _nd_c3 = st.columns([2, 1.5, 1])
+    with _nd_c1:
+        st.markdown(
+            '<span style="color:#64748b;font-size:11px;">'
+            '⚔️ <b style="color:#94a3b8;">Narrative Debate</b> — '
+            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 argue which sectors, narratives &amp; '
+            'tickers are best positioned right now. '
+            '<span style="color:#475569;">Runs on all data above · 3 LLM calls</span></span>'
+            '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: Generate Plays + Trending scan first — debate argues sectors &amp; tickers by name</div>',
+            unsafe_allow_html=True,
+        )
+    with _nd_c2:
+        _nd_tier = st.selectbox("", _nd_tier_opts, key="nd_debate_tier", label_visibility="collapsed")
+    with _nd_c3:
+        _run_nd_debate = st.button("⚔️ Debate Narratives", key="btn_nd_debate", use_container_width=True)
+
+    _nd_uc, _nd_mdl = _nd_tier_map.get(_nd_tier, (False, None))
+
+    if _run_nd_debate:
+        # Build rich context from everything loaded above
+        _nd_parts = []
+
+        _rc_nd = st.session_state.get("_regime_context") or {}
+        if _rc_nd:
+            _nd_parts.append(
+                f"MACRO REGIME: {_rc_nd.get('regime', '')} | "
+                f"Quadrant: {_rc_nd.get('quadrant', '')} | "
+                f"Score: {_rc_nd.get('score', 0):+.2f}"
+            )
+
+        _plays_nd = st.session_state.get("_plays_result") or {}
+        if _plays_nd:
+            _nd_parts.append(
+                f"AI MACRO PLAYS (Cross-Signal Discovery):\n"
+                f"  Favored Sectors: {', '.join(s.get('name','') for s in _plays_nd.get('sectors',[])[:5])}\n"
+                f"  Favored Stocks: {', '.join(s.get('ticker','') for s in _plays_nd.get('stocks',[])[:6])}\n"
+                f"  Favored Bonds: {', '.join(s.get('ticker','') for s in _plays_nd.get('bonds',[])[:3])}\n"
+                f"  Avoid: {', '.join(_plays_nd.get('avoid', []))}\n"
+                f"  Rationale: {_plays_nd.get('rationale', '')}"
+            )
+
+        _tn_nd = st.session_state.get("_trending_narratives") or []
+        if _tn_nd:
+            _nd_parts.append(
+                "TRENDING NARRATIVES (Google Trends + News):\n" +
+                "\n".join(
+                    f"  {n['narrative']} ({n.get('conviction','')}) — "
+                    f"{', '.join(n.get('tickers', []))}"
+                    for n in _tn_nd[:5]
+                )
+            )
+
+        _atg_nd = st.session_state.get("_auto_trending_groups") or []
+        if _atg_nd:
+            _nd_parts.append(
+                "TRENDING PRICE MOVERS (Yahoo Finance — grouped by theme):\n" +
+                "\n".join(
+                    f"  {g['narrative']} ({g.get('conviction','')}, {g.get('regime_alignment','')}) — "
+                    f"{', '.join(g.get('tickers', []))}"
+                    for g in _atg_nd[:5]
+                )
+            )
+
+        _mf_nd = st.session_state.get("_macro_fit_results") or {}
+        if _mf_nd:
+            _nd_parts.append(
+                "MACRO FIT CHECK RESULTS:\n" +
+                "\n".join(
+                    f"  {tk}: {'★' * v.get('fit_stars', 0)} {v.get('verdict', '')} — "
+                    f"{v.get('rationale', '')[:120]}"
+                    for tk, v in list(_mf_nd.items())[:6]
+                )
+            )
+
+        _rp_nd = st.session_state.get("_dominant_rate_path") or {}
+        if _rp_nd:
+            _rp_lbl = {"cut_25": "25bp cut", "cut_50": "50bp cut", "hold": "Hold", "hike_25": "25bp hike"}
+            _nd_parts.append(
+                f"FED RATE PATH: {_rp_lbl.get(_rp_nd.get('scenario',''), _rp_nd.get('scenario',''))} "
+                f"({_rp_nd.get('prob_pct', 0):.0f}% probability)"
+            )
+
+        _of_nd2 = st.session_state.get("_options_flow_context") or {}
+        if _of_nd2:
+            _nd_parts.append(
+                f"OPTIONS FLOW: {_of_nd2.get('label', '')} "
+                f"(score {_of_nd2.get('options_score', 50)}/100) — {_of_nd2.get('action_bias', '')[:150]}"
+            )
+
+        _fg_nd = st.session_state.get("_fear_greed") or {}
+        if _fg_nd:
+            _nd_parts.append(
+                f"FEAR & GREED: {_fg_nd.get('score', '?')}/100 — {_fg_nd.get('label', '?')}"
+            )
+
+        _doom_nd = st.session_state.get("_doom_briefing", "")
+        if _doom_nd:
+            _nd_parts.append(f"RISK INTELLIGENCE BRIEFING: {_doom_nd[:400]}")
+
+        _srd_nd = st.session_state.get("_sector_regime_digest", "")
+        if _srd_nd:
+            _nd_parts.append(f"SECTOR×REGIME: {_srd_nd[:300]}")
+
+        _whale_nd = st.session_state.get("_whale_summary", "")
+        if _whale_nd:
+            _nd_parts.append(f"WHALE ACTIVITY: {_whale_nd[:300]}")
+
+        _nd_signals_text = "\n\n".join(_nd_parts) if _nd_parts else "No signals loaded — run Quick Intel Run first."
+
+        from services.claude_client import generate_adversarial_debate as _gen_nd_debate
+        with st.spinner("⚔️ Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 — debating your narratives..."):
+            try:
+                _nd_debate = _gen_nd_debate(
+                    _nd_signals_text,
+                    use_claude=_nd_uc,
+                    model=_nd_mdl,
+                    topic="Which specific sectors, narratives, and tickers are BEST positioned to outperform right now — and which should be avoided? Argue using the trending themes, macro plays, and macro fit results above.",
+                )
+                _nd_debate["engine"] = _nd_tier
+                st.session_state["_nd_debate"] = _nd_debate
+                st.success(
+                    f"⚔️ Narrative Debate complete [{_nd_tier}] — "
+                    f"{_nd_debate.get('verdict', 'CONTESTED')} "
+                    f"(confidence {apply_confidence_penalty(_nd_debate.get('confidence', 5))}/10)"
+                )
+                try:
+                    from utils.debate_record import log_verdict as _log_nd, resolve_old_verdicts as _resolve_nd
+                    _rc_nd_now = st.session_state.get("_regime_context") or {}
+                    _log_nd(
+                        verdict=_nd_debate.get("verdict", "CONTESTED"),
+                        confidence=_nd_debate.get("confidence", 5),
+                        regime=_rc_nd_now.get("regime", ""),
+                        quadrant=_rc_nd_now.get("quadrant", ""),
+                        regime_score=float(_rc_nd_now.get("score", 0.0)),
+                    )
+                    _resolve_nd()
+                except Exception:
+                    pass
+            except Exception as _nd_e:
+                st.error(f"❌ Narrative Debate failed: {_nd_e}")
+
+    _nd_debate_result = st.session_state.get("_nd_debate") or {}
+    if _nd_debate_result.get("bear_argument") or _nd_debate_result.get("bull_argument"):
+        from modules.trade_journal import _render_debate_panel as _rdp_nd
+        _rdp_nd(_nd_debate_result)
 
 
 def _fetch_curated_assets(ticker_dict: dict[str, str], asset_class: str) -> list[dict]:

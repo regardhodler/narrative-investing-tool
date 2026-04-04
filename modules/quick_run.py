@@ -4,6 +4,12 @@ import streamlit as st
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.theme import COLORS
 from utils.ai_tier import TIER_OPTS, TIER_MAP, MODEL_HINT_HTML
+from utils.components import (
+    render_rr_score_mode_toggle,
+    render_intel_health_bar,
+    render_action_queue,
+    apply_confidence_penalty,
+)
 
 
 # ── QIR Dashboard helpers ────────────────────────────────────────────────────
@@ -12,6 +18,7 @@ _PATTERNS = {
     "BULLISH_CONFIRMATION": {
         "label": "BULLISH CONFIRMATION",
         "color": "#22c55e",
+        "bullish": True,
         "interpretation": "All three timing layers aligned bullish — highest-conviction long entry.",
         "buy_tier": "STRONG",
         "short_tier": "NOT A SHORTING ENV",
@@ -33,6 +40,7 @@ _PATTERNS = {
     "BEARISH_CONFIRMATION": {
         "label": "BEARISH CONFIRMATION",
         "color": "#ef4444",
+        "bullish": False,
         "interpretation": "All three layers aligned bearish — highest-conviction short or cash environment.",
         "buy_tier": "NOT A BUYING ENV",
         "short_tier": "STRONG",
@@ -54,6 +62,7 @@ _PATTERNS = {
     "PULLBACK_IN_UPTREND": {
         "label": "PULLBACK IN UPTREND",
         "color": "#f59e0b",
+        "bullish": True,
         "interpretation": "Regime and Options Flow confirm bull trend — Tactical dip is a buy-the-dip setup.",
         "buy_tier": "STRONG",
         "short_tier": "NOT A SHORTING ENV",
@@ -74,6 +83,7 @@ _PATTERNS = {
     "OPTIONS_FLOW_DIVERGENCE": {
         "label": "OPTIONS FLOW DIVERGENCE",
         "color": "#f59e0b",
+        "bullish": True,
         "interpretation": "Regime and Tactical bullish but options crowd is hedging — smart money buying protection.",
         "buy_tier": "MODERATE",
         "short_tier": "SELECTIVE",
@@ -94,6 +104,7 @@ _PATTERNS = {
     "BEAR_MARKET_BOUNCE": {
         "label": "BEAR MARKET BOUNCE",
         "color": "#f97316",
+        "bullish": False,
         "interpretation": "Short-term momentum against the macro trend — take profits quickly, don't chase.",
         "buy_tier": "SELECTIVE",
         "short_tier": "MODERATE",
@@ -118,6 +129,7 @@ _PATTERNS = {
     "LATE_CYCLE_SQUEEZE": {
         "label": "LATE CYCLE SQUEEZE",
         "color": "#ef4444",
+        "bullish": False,
         "interpretation": "Options crowd squeezing higher against a bearish regime and tactical — high risk of reversal.",
         "buy_tier": "NOT A BUYING ENV",
         "short_tier": "STRONG",
@@ -137,6 +149,7 @@ _PATTERNS = {
     "GENUINE_UNCERTAINTY": {
         "label": "GENUINE UNCERTAINTY",
         "color": "#7c3aed",
+        "bullish": None,
         "interpretation": "Signals are conflicting — but uncertainty is quantified, not an excuse for inaction. A probabilistic lean is forced below. Size down to 25–40% of normal. Act small, act smart.",
         "buy_tier": "LEAN SETUP — SIZE DOWN",
         "short_tier": "LEAN SETUP — SIZE DOWN",
@@ -195,7 +208,62 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     elif r_bear and t_bear and o_bull: pattern = "LATE_CYCLE_SQUEEZE"
     else:                              pattern = "GENUINE_UNCERTAINTY"
 
-    return {"pattern": pattern, **_PATTERNS[pattern]}
+    pat_meta = _PATTERNS[pattern]
+
+    # ── Conviction Score ──────────────────────────────────────────────────────
+    # Measures HOW STRONG the pattern is, not just WHICH pattern fired.
+    # Binary thresholds above decide the pattern; signal magnitudes decide conviction.
+    # GENUINE_UNCERTAINTY uses its own domain math — no conviction score needed.
+    conviction_score = None
+    conviction_size_mult = None
+    conviction_size_label = None
+    leading_warning = None
+
+    if pattern != "GENUINE_UNCERTAINTY":
+        _regime_pts  = abs(score) * 40                              # max 40 — regime strength
+        _tac_pts     = abs(tac_score - 50) / 50.0 * 30             # max 30 — tactical strength
+        _opts_pts    = abs(of_score - 50)  / 50.0 * 20             # max 20 — options strength
+
+        # Leading divergence: does the early-warning direction confirm or contradict?
+        _leading_div = regime_ctx.get("leading_divergence", 0) or 0
+        _is_bullish  = pat_meta.get("bullish")
+        if _is_bullish is True:
+            _dir_match = 1 if _leading_div > 0 else (-1 if _leading_div < 0 else 0)
+        elif _is_bullish is False:
+            _dir_match = 1 if _leading_div < 0 else (-1 if _leading_div > 0 else 0)
+        else:
+            _dir_match = 0
+
+        _lead_pts = _dir_match * min(abs(_leading_div) / 20.0, 1.0) * 10  # ±10 pts
+        conviction_score = int(max(0, min(100, round(_regime_pts + _tac_pts + _opts_pts + _lead_pts))))
+
+        # Position sizing from conviction
+        if conviction_score >= 75:
+            conviction_size_mult, conviction_size_label = 0.50, "50% SIZE"
+        elif conviction_score >= 55:
+            conviction_size_mult, conviction_size_label = 0.40, "40% SIZE"
+        elif conviction_score >= 40:
+            conviction_size_mult, conviction_size_label = 0.30, "30% SIZE"
+        else:
+            conviction_size_mult, conviction_size_label = 0.20, "20% SIZE"
+
+        # Warning: leading divergence is running against the pattern direction
+        if _dir_match == -1 and abs(_leading_div) > 5:
+            _dir_word = "below" if _is_bullish else "above"
+            leading_warning = (
+                f"Leading sub-score running {abs(_leading_div)} pts {_dir_word} composite — "
+                f"fast signals contradict this pattern. Conviction reduced by ~{abs(int(_lead_pts))} pts. "
+                f"Fast signals may be early or this pattern may be near exhaustion."
+            )
+
+    return {
+        "pattern": pattern,
+        "conviction_score": conviction_score,
+        "conviction_size_mult": conviction_size_mult,
+        "conviction_size_label": conviction_size_label,
+        "leading_warning": leading_warning,
+        **pat_meta,
+    }
 
 
 def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
@@ -221,13 +289,20 @@ def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
     fear_greed = st.session_state.get("_fear_greed") or {}
     fg_score   = fear_greed.get("score", 50) if isinstance(fear_greed, dict) else 50
 
-    macro_score = int(regime_score_100 * 0.5 + fg_score * 0.5)
+    # Blend composite score with Fear & Greed, then nudge by leading divergence.
+    # leading_divergence > 0 means fast signals are ahead of lagging ones → slight bullish bias.
+    _leading_div = rc.get("leading_divergence", 0) or 0
+    _leading_lbl = rc.get("leading_label", "Aligned") or "Aligned"
+    _leading_nudge = int(_leading_div * 0.25)  # max ±5 pts at ±20 divergence
+    macro_score = int(regime_score_100 * 0.5 + fg_score * 0.5) + _leading_nudge
+    macro_score = max(0, min(100, macro_score))
     macro_flag  = (
         "CONFLICTED" if 38 <= macro_score <= 62 else
         "MILD BULL"  if macro_score > 62 else
         "MILD BEAR"
     )
-    macro_detail = f"{regime_lbl or 'Regime unclear'} | Quadrant: {quadrant or '—'} | F&G: {fg_score}"
+    _leading_suffix = f" | Leading: {_leading_lbl} ({_leading_div:+d})" if _leading_lbl != "Aligned" else ""
+    macro_detail = f"{regime_lbl or 'Regime unclear'} | Quadrant: {quadrant or '—'} | F&G: {fg_score}{_leading_suffix}"
 
     # ── Technical domain ──────────────────────────────────────────────────────
     tech_score  = tac_score
@@ -318,6 +393,9 @@ def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
     known_unknowns = list(event_unknowns)
     if macro_flag == "CONFLICTED":
         known_unknowns.append(f"Regime direction unresolved ({regime_lbl or 'no clear label'}) — next macro print could flip")
+    if abs(_leading_div) > 7:
+        _dir_word = "ahead of" if _leading_div > 0 else "below"
+        known_unknowns.append(f"Leading indicators running {abs(_leading_div)} pts {_dir_word} composite ({_leading_lbl}) — lagging data may confirm soon")
     if opts_flag in ("PUT-SKEW", "CALL-SKEW") and tech_flag == "NEUTRAL":
         known_unknowns.append("Options crowd and price action disagree — one of them is early")
     if not known_unknowns:
@@ -650,12 +728,46 @@ def _render_qir_dashboard() -> None:
             return (f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
                     f'letter-spacing:0.06em;margin:6px 0 2px;">{label}</div>{rows}')
 
+        _conviction_score = _cls.get("conviction_score")
+        _conviction_size_label = _cls.get("conviction_size_label")
+        _leading_warning = _cls.get("leading_warning")
+
         _verdict_html = (
             f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
             f'<div style="font-size:13px;font-weight:800;color:{_verdict_color};'
             f'letter-spacing:0.04em;margin-bottom:4px;">{_verdict_label}</div>'
             f'<div style="color:#94a3b8;font-size:11px;margin-bottom:10px;">{_verdict_interp}</div>'
         )
+
+        # Conviction score row — only for the 6 concrete patterns
+        if _conviction_score is not None:
+            _cv_color = "#22c55e" if _conviction_score >= 75 else (
+                "#f59e0b" if _conviction_score >= 55 else (
+                "#f97316" if _conviction_score >= 40 else "#ef4444"
+            ))
+            _cv_bar_w = _conviction_score
+            _verdict_html += (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
+                f'<span style="font-size:13px;font-weight:800;color:{_cv_color};">'
+                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
+                f'</div>'
+                f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
+                f'<div style="background:{_cv_color};width:{_cv_bar_w}%;height:4px;border-radius:3px;"></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        # Leading divergence warning
+        if _leading_warning:
+            _verdict_html += (
+                f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
+                f'padding:6px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">'
+                f'⚠ {_leading_warning}</div>'
+            )
+
         if _vix_note:
             _verdict_html += (
                 f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
@@ -871,6 +983,48 @@ def render():
         "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis + Portfolio Risk Snapshot in sequence. "
         "Navigate to Portfolio Intelligence when done."
     )
+
+    render_rr_score_mode_toggle(
+        key="qir_rr_score_mode_ui",
+        help_text="Affects the Risk Regime scoring used in this run.",
+    )
+    render_intel_health_bar()
+
+    # ── Reading Guide ──────────────────────────────────────────────────────
+    with st.expander("📖 How to read QIR", expanded=False):
+        st.markdown(
+            '<div style="font-size:11px;color:#475569;'
+            'font-family:\'JetBrains Mono\',Consolas,monospace;line-height:2.0;">'
+
+            '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">REGIME SCORE (0–100)</span><br>'
+            'Weighted average of 26 macro signals z-scored against their own history. '
+            '&lt;40 = Risk-Off · 40–60 = Neutral · &gt;60 = Risk-On.<br><br>'
+
+            '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">LEADING SUB-SCORE</span><br>'
+            'Fast signals only (VIX, credit spreads, LEI, credit impulse, real yields, etc.). '
+            'Leads the composite by weeks to months.<br>'
+            'Divergence +8 = fast signals already turning Risk-On → buy the dip before the flip<br>'
+            'Divergence −8 = fast signals cracking → reduce before the composite turns red<br><br>'
+
+            '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">5-SESSION TREND  C · L</span><br>'
+            'Composite (C) and Leading (L) 5-day score change. '
+            'Both rising = high conviction bull. Both falling = high conviction bear. '
+            'Diverging = wait for alignment.<br><br>'
+
+            '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">PATTERNS</span><br>'
+            'BULLISH CONFIRMATION — all 3 layers aligned bull → strong long entry<br>'
+            'PULLBACK IN UPTREND — regime + options bull, tactical dipping → buy the dip<br>'
+            'BEAR MARKET BOUNCE — regime bear, tactical/options bull → fade the bounce<br>'
+            'BEARISH CONFIRMATION — all 3 layers aligned bear → defense / short environment<br>'
+            'GENUINE UNCERTAINTY — layers disagree → reduce size, wait for clarity<br><br>'
+
+            '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">JUDGE JUDY DEBATE</span><br>'
+            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 argue the same ground truth numbers. '
+            'Leading divergence and 5-session trend are explicit evidence in the debate — '
+            'a large leading divergence gives the bull/bear case a concrete factual basis to argue.'
+            '</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── VIX live ticker ────────────────────────────────────────────────────────
     try:
@@ -1551,36 +1705,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _results["synopsis"] = False
                 st.error(f"❌ Synopsis failed: {e}")
 
-        # ── Round 4b: Adversarial Debate — Sir Doomburger vs Sir Fukyerputs ─────────
-        with st.spinner("⚔️ Adversarial Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
-            try:
-                import datetime as _dbdt
-                from services.claude_client import generate_adversarial_debate as _gen_debate
-                _debate = _gen_debate(_signals_text_for_debate, use_claude=_use_claude, model=_cl_model)
-                st.session_state["_adversarial_debate"] = _debate
-                st.session_state["_adversarial_debate_ts"] = _dbdt.datetime.now()
-                _db_verdict = _debate.get("verdict", "CONTESTED")
-                _db_conf = _debate.get("confidence", 5)
-                # ── Log verdict + auto-resolve old ones ───────────────────────
-                try:
-                    from utils.debate_record import log_verdict as _log_v, resolve_old_verdicts as _resolve_v
-                    _rc_now = st.session_state.get("_regime_context") or {}
-                    _log_v(
-                        verdict=_db_verdict,
-                        confidence=_db_conf,
-                        regime=_rc_now.get("regime", ""),
-                        quadrant=_rc_now.get("quadrant", ""),
-                        regime_score=float(_rc_now.get("score", 0.0)),
-                    )
-                    _resolve_v()
-                except Exception:
-                    pass
-                st.success(f"⚔️ Debate complete — {_db_verdict} (confidence {_db_conf}/10)")
-                _results["debate"] = True
-            except Exception as e:
-                _results["debate"] = False
-                st.error(f"❌ Debate failed: {e}")
-
         # ── Round 5: Portfolio Risk Snapshot (headless risk matrix) ──────────
         with st.spinner("📊 Round 5/5 — Portfolio Risk Snapshot + AI Interpretation..."):
             try:
@@ -1715,6 +1839,225 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         # Flag that a fresh run just completed — dashboard below will re-render with new data
         st.session_state["_qir_just_ran"] = True
 
+    render_action_queue(max_items=5)
+
+    # ── ⚔️ Adversarial Debate — standalone, no QIR run required ─────────────
+    st.markdown(
+        '<div style="border-top:1px solid #1e293b;margin:16px 0 10px 0;"></div>',
+        unsafe_allow_html=True,
+    )
+    try:
+        from utils.ai_tier import TIER_OPTS as _dbt_opts, TIER_MAP as _dbt_map
+    except ImportError:
+        _dbt_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        _dbt_map  = {
+            "⚡ Freeloader Mode":      (False, None),
+            "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+        }
+    _dbt_c1, _dbt_c2, _dbt_c3 = st.columns([2, 1.5, 1])
+    with _dbt_c1:
+        st.markdown(
+            '<span style="color:#64748b;font-size:11px;">'
+            '⚔️ <b style="color:#94a3b8;">Adversarial Debate</b> — '
+            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
+            '<span style="color:#475569;">Runs independently · 3 LLM calls</span></span>'
+            '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run ⚡ Quick Intel Run first to load regime, rate path, options flow &amp; macro synopsis</div>',
+            unsafe_allow_html=True,
+        )
+    with _dbt_c2:
+        _dbt_tier = st.selectbox("", _dbt_opts, key="qir_debate_tier", label_visibility="collapsed")
+    with _dbt_c3:
+        _run_dbt = st.button("⚔️ Run Debate", key="btn_qir_debate_standalone", use_container_width=True)
+    if _run_dbt:
+        _dbt_uc, _dbt_mdl = _dbt_map.get(_dbt_tier, (False, None))
+        _dbt_engine = _dbt_tier
+        from services.claude_client import generate_adversarial_debate as _gen_dbt_sa
+        from utils.signal_block import build_macro_block as _build_dbt_sa
+        _dbt_sigs = _build_dbt_sa()
+        if _dbt_sigs and _dbt_sigs != "NO_REGIME_DATA":
+            with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+                try:
+                    _dbt_result = _gen_dbt_sa(
+                        _dbt_sigs,
+                        use_claude=_dbt_uc,
+                        model=_dbt_mdl,
+                        topic="Is the current macro regime bullish or bearish for risk assets? Which signals are most decisive right now?",
+                    )
+                    st.session_state["_adversarial_debate"] = _dbt_result
+                    st.session_state["_adversarial_debate_engine"] = _dbt_engine
+                    try:
+                        from utils.debate_record import log_verdict as _log_dbt, resolve_old_verdicts as _resolve_dbt
+                        _rc_dbt = st.session_state.get("_regime_context") or {}
+                        _log_dbt(
+                            verdict=_dbt_result.get("verdict", "CONTESTED"),
+                            confidence=_dbt_result.get("confidence", 5),
+                            regime=_rc_dbt.get("regime", ""),
+                            quadrant=_rc_dbt.get("quadrant", ""),
+                            regime_score=float(_rc_dbt.get("score", 0.0)),
+                        )
+                        _resolve_dbt()
+                    except Exception:
+                        pass
+                    st.rerun()
+                except Exception as _dbt_e:
+                    st.error(f"❌ Debate failed: {_dbt_e}")
+        else:
+            st.warning("⚠️ Run Quick Intel first to load market signals, then debate away.")
+
+    # ── Adversarial Debate Display ──────────────────────────────────────────────
+    _debate = st.session_state.get("_adversarial_debate") or {}
+    if _debate.get("bear_argument") or _debate.get("bull_argument"):
+        _db_verdict = _debate.get("verdict", "CONTESTED")
+        _db_conf    = _debate.get("confidence", 5)
+        _db_conf_adj = apply_confidence_penalty(_db_conf)
+        _db_bias    = _debate.get("contested_bias", "")
+        _db_bias_reason = _debate.get("contested_bias_reason", "")
+        _db_engine  = st.session_state.get("_adversarial_debate_engine", "")
+        _db_engine_badge = (
+            f'<span style="color:#64748b;font-size:10px;margin-left:8px;">{_db_engine}</span>'
+            if _db_engine else ""
+        )
+        _vc = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
+        _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
+
+        # ── Court formality strings ───────────────────────────────────────
+        _winner = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻", "CONTESTED": None}.get(_db_verdict)
+        _loser  = {"BULL WINS": "Sir Doomburger 🐻", "BEAR WINS": "Sir Fukyerputs 🐂", "CONTESTED": None}.get(_db_verdict)
+        _sentences = {
+            "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip and deep reflection on his pessimism.",
+            "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash and contemplating the dangers of leverage.",
+            "CONTESTED": "Both parties are hereby remanded to gather additional evidence. Court is adjourned pending new data.",
+        }
+        _sentence = _sentences.get(_db_verdict, _sentences["CONTESTED"])
+
+        # ── Verdict record ────────────────────────────────────────────────
+        try:
+            from utils.debate_record import get_stats as _get_stats, get_recent_verdicts as _get_recent
+            _jj_stats = _get_stats()
+            _jj_recent = _get_recent(5)
+        except Exception:
+            _jj_stats = {}
+            _jj_recent = []
+
+        _acc_str = f"{_jj_stats['accuracy_pct']}% accuracy" if _jj_stats.get("accuracy_pct") is not None else "unresolved"
+        _record_str = f"{_jj_stats.get('correct',0)}W-{_jj_stats.get('wrong',0)}L · {_acc_str} · {_jj_stats.get('pending',0)} pending"
+
+        # ── Outcome dots for recent verdicts ──────────────────────────────
+        _dot_html = ""
+        for _rv in reversed(_jj_recent):
+            _oc = _rv.get("outcome", "pending")
+            _rv_v = _rv.get("verdict", "")
+            _dot_c = {"correct": "#22c55e", "wrong": "#ef4444", "pending": "#475569"}.get(_oc, "#475569")
+            _dot_sym = {"BULL WINS": "▲", "BEAR WINS": "▼", "CONTESTED": "■"}.get(_rv_v, "·")
+            _dot_html += f'<span style="color:{_dot_c};font-size:13px;margin-right:4px;" title="{_rv_v} — {_oc}">{_dot_sym}</span>'
+
+        # ── Glow CSS ──────────────────────────────────────────────────────
+        _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88, 0 0 40px {_vc}44"
+        _contested_bias_html = ""
+        if _db_verdict == "CONTESTED" and _db_bias:
+            _contested_bias_html = (
+                f'<div style="text-align:center;color:#94a3b8;font-size:10px;margin-top:-8px;margin-bottom:10px;">'
+                f'{_db_bias}' + (f' · {_db_bias_reason}' if _db_bias_reason else '') +
+                f'</div>'
+            )
+
+        st.markdown(
+            f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;'
+            f'padding:18px 20px;margin-top:12px;margin-bottom:4px;">'
+
+            # Court header
+            f'<div style="text-align:center;margin-bottom:14px;">'
+            f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
+            f'<div style="color:#94a3b8;font-size:9px;letter-spacing:0.08em;">THE HONORABLE JUDGE JUDY PRESIDING{_db_engine_badge}</div>'
+            f'</div>'
+
+            # Glowing verdict
+            f'<div style="text-align:center;margin-bottom:14px;">'
+            f'<div style="color:{_vc};font-size:28px;font-weight:900;letter-spacing:0.05em;'
+            f'text-shadow:{_glow};line-height:1.1;">⚔️ {_db_verdict}</div>'
+            f'<div style="color:{_vc}aa;font-size:11px;margin-top:4px;font-style:italic;">'
+            + (f'The Court finds in favor of {_winner}' if _winner else 'The Court is divided') +
+            f'</div></div>'
+            f'{_contested_bias_html}'
+
+            # Sentence
+            f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
+            f'padding:8px 12px;margin-bottom:12px;font-size:11px;color:#e2e8f0;font-style:italic;">'
+            f'"{_sentence}"</div>'
+
+            # Judge Judy record
+            f'<div style="display:flex;align-items:center;justify-content:space-between;">'
+            f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;">JUDGE JUDY\'S RECORD</div>'
+            f'<div style="color:#64748b;font-size:10px;">{_record_str}</div>'
+            f'</div>'
+            f'<div style="margin-top:4px;display:flex;align-items:center;gap:2px;">'
+            f'<span style="color:#475569;font-size:9px;margin-right:6px;">RECENT:</span>{_dot_html}'
+            f'<span style="color:#334155;font-size:9px;margin-left:6px;">▲=bull ▼=bear ■=contested · 🟢correct 🔴wrong ⚫pending</span>'
+            f'</div>'
+
+            # Confidence
+            f'<div style="margin-top:10px;text-align:right;">'
+            f'<span style="color:#475569;font-size:9px;">AI confidence in verdict: </span>'
+            f'<span style="color:{_vc};font-weight:700;font-size:11px;">{_db_conf_adj}/10</span>'
+            f'<span style="color:#334155;font-size:9px;margin-left:6px;">(Judge Judy self-rated — not a quant score)</span>'
+            f'</div>'
+
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Arguments side by side ────────────────────────────────────────
+        _col_bear, _col_bull = st.columns(2)
+
+        with _col_bear:
+            _bear_border = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
+            _bear_glow = f"box-shadow:0 0 12px #ef444444;" if _db_verdict == "BEAR WINS" else ""
+            st.markdown(
+                f'<div style="background:#1a0000;border:1px solid {_bear_border};border-radius:6px;padding:12px;{_bear_glow}">'
+                f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                + ("🏆 " if _db_verdict == "BEAR WINS" else "")
+                + f'🐻 SIR DOOMBURGER'
+                + (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bear_argument","")}</div>'
+                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ef444433;">'
+                f'<span style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                f'<span style="color:#fca5a5;font-size:10px;">{_debate.get("bear_strongest","")}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        with _col_bull:
+            _bull_border = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
+            _bull_glow = f"box-shadow:0 0 12px #22c55e44;" if _db_verdict == "BULL WINS" else ""
+            st.markdown(
+                f'<div style="background:#052e16;border:1px solid {_bull_border};border-radius:6px;padding:12px;{_bull_glow}">'
+                f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                + ("🏆 " if _db_verdict == "BULL WINS" else "")
+                + f'🐂 SIR FUKYERPUTS'
+                + (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bull_argument","")}</div>'
+                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22c55e33;">'
+                f'<span style="color:#22c55e;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                f'<span style="color:#86efac;font-size:10px;">{_debate.get("bull_strongest","")}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Judge Judy asymmetry ruling ───────────────────────────────────
+        if _debate.get("asymmetry") or _debate.get("key_disagreement"):
+            st.markdown(
+                f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
+                f'padding:10px 14px;margin-top:8px;">'
+                f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">⚖️ JUDGE JUDY — RISK/REWARD RULING</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{_debate.get("asymmetry","")}</div>'
+                f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {_debate.get("key_disagreement","")}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
     # ── QIR Post-Run Summary (outside button handler — survives st.rerun()) ──
     _last_ok    = st.session_state.get("_qir_last_n_ok")
     _last_total = st.session_state.get("_qir_last_n_total")
@@ -1728,143 +2071,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             )
         else:
             st.warning(f"{_last_ok}/{_last_total} modules completed — check errors above.")
-
-        # ── Adversarial Debate Display ──────────────────────────────────────────────
-        _debate = st.session_state.get("_adversarial_debate") or {}
-        if _debate.get("bear_argument") or _debate.get("bull_argument"):
-            _db_verdict = _debate.get("verdict", "CONTESTED")
-            _db_conf    = _debate.get("confidence", 5)
-            _vc = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
-            _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
-
-            # ── Court formality strings ───────────────────────────────────────
-            _winner = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻", "CONTESTED": None}.get(_db_verdict)
-            _loser  = {"BULL WINS": "Sir Doomburger 🐻", "BEAR WINS": "Sir Fukyerputs 🐂", "CONTESTED": None}.get(_db_verdict)
-            _sentences = {
-                "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip and deep reflection on his pessimism.",
-                "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash and contemplating the dangers of leverage.",
-                "CONTESTED": "Both parties are hereby remanded to gather additional evidence. Court is adjourned pending new data.",
-            }
-            _sentence = _sentences[_db_verdict]
-
-            # ── Verdict record ────────────────────────────────────────────────
-            try:
-                from utils.debate_record import get_stats as _get_stats, get_recent_verdicts as _get_recent
-                _jj_stats = _get_stats()
-                _jj_recent = _get_recent(5)
-            except Exception:
-                _jj_stats = {}
-                _jj_recent = []
-
-            _acc_str = f"{_jj_stats['accuracy_pct']}% accuracy" if _jj_stats.get("accuracy_pct") is not None else "unresolved"
-            _record_str = f"{_jj_stats.get('correct',0)}W-{_jj_stats.get('wrong',0)}L · {_acc_str} · {_jj_stats.get('pending',0)} pending"
-
-            # ── Outcome dots for recent verdicts ──────────────────────────────
-            _dot_html = ""
-            for _rv in reversed(_jj_recent):
-                _oc = _rv.get("outcome", "pending")
-                _rv_v = _rv.get("verdict", "")
-                _dot_c = {"correct": "#22c55e", "wrong": "#ef4444", "pending": "#475569"}.get(_oc, "#475569")
-                _dot_sym = {"BULL WINS": "▲", "BEAR WINS": "▼", "CONTESTED": "■"}.get(_rv_v, "·")
-                _dot_html += f'<span style="color:{_dot_c};font-size:13px;margin-right:4px;" title="{_rv_v} — {_oc}">{_dot_sym}</span>'
-
-            # ── Glow CSS ──────────────────────────────────────────────────────
-            _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88, 0 0 40px {_vc}44"
-
-            st.markdown(
-                f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;'
-                f'padding:18px 20px;margin-top:12px;margin-bottom:4px;">'
-
-                # Court header
-                f'<div style="text-align:center;margin-bottom:14px;">'
-                f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
-                f'<div style="color:#94a3b8;font-size:9px;letter-spacing:0.08em;">THE HONORABLE JUDGE JUDY PRESIDING</div>'
-                f'</div>'
-
-                # Glowing verdict
-                f'<div style="text-align:center;margin-bottom:14px;">'
-                f'<div style="color:{_vc};font-size:28px;font-weight:900;letter-spacing:0.05em;'
-                f'text-shadow:{_glow};line-height:1.1;">⚔️ {_db_verdict}</div>'
-                f'<div style="color:{_vc}aa;font-size:11px;margin-top:4px;font-style:italic;">'
-                + (f'The Court finds in favor of {_winner}' if _winner else 'The Court is divided') +
-                f'</div></div>'
-
-                # Sentence
-                f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
-                f'padding:8px 12px;margin-bottom:12px;font-size:11px;color:#e2e8f0;font-style:italic;">'
-                f'"{_sentence}"</div>'
-
-                # Judge Judy record
-                f'<div style="display:flex;align-items:center;justify-content:space-between;">'
-                f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;">JUDGE JUDY\'S RECORD</div>'
-                f'<div style="color:#64748b;font-size:10px;">{_record_str}</div>'
-                f'</div>'
-                f'<div style="margin-top:4px;display:flex;align-items:center;gap:2px;">'
-                f'<span style="color:#475569;font-size:9px;margin-right:6px;">RECENT:</span>{_dot_html}'
-                f'<span style="color:#334155;font-size:9px;margin-left:6px;">▲=bull ▼=bear ■=contested · 🟢correct 🔴wrong ⚫pending</span>'
-                f'</div>'
-
-                # Confidence
-                f'<div style="margin-top:10px;text-align:right;">'
-                f'<span style="color:#475569;font-size:9px;">AI confidence in verdict: </span>'
-                f'<span style="color:{_vc};font-weight:700;font-size:11px;">{_db_conf}/10</span>'
-                f'<span style="color:#334155;font-size:9px;margin-left:6px;">(Judge Judy self-rated — not a quant score)</span>'
-                f'</div>'
-
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            # ── Arguments side by side ────────────────────────────────────────
-            _col_bear, _col_bull = st.columns(2)
-
-            with _col_bear:
-                _bear_border = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
-                _bear_glow = f"box-shadow:0 0 12px #ef444444;" if _db_verdict == "BEAR WINS" else ""
-                st.markdown(
-                    f'<div style="background:#1a0000;border:1px solid {_bear_border};border-radius:6px;padding:12px;{_bear_glow}">'
-                    f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:8px;">'
-                    + ("🏆 " if _db_verdict == "BEAR WINS" else "")
-                    + f'🐻 SIR DOOMBURGER'
-                    + (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
-                    f'</div>'
-                    f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bear_argument","")}</div>'
-                    f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ef444433;">'
-                    f'<span style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
-                    f'<span style="color:#fca5a5;font-size:10px;">{_debate.get("bear_strongest","")}</span>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-            with _col_bull:
-                _bull_border = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
-                _bull_glow = f"box-shadow:0 0 12px #22c55e44;" if _db_verdict == "BULL WINS" else ""
-                st.markdown(
-                    f'<div style="background:#052e16;border:1px solid {_bull_border};border-radius:6px;padding:12px;{_bull_glow}">'
-                    f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:8px;">'
-                    + ("🏆 " if _db_verdict == "BULL WINS" else "")
-                    + f'🐂 SIR FUKYERPUTS'
-                    + (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
-                    f'</div>'
-                    f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bull_argument","")}</div>'
-                    f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22c55e33;">'
-                    f'<span style="color:#22c55e;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
-                    f'<span style="color:#86efac;font-size:10px;">{_debate.get("bull_strongest","")}</span>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-            # ── Judge Judy asymmetry ruling ───────────────────────────────────
-            if _debate.get("asymmetry") or _debate.get("key_disagreement"):
-                st.markdown(
-                    f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
-                    f'padding:10px 14px;margin-top:8px;">'
-                    f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">⚖️ JUDGE JUDY — RISK/REWARD RULING</div>'
-                    f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{_debate.get("asymmetry","")}</div>'
-                    f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {_debate.get("key_disagreement","")}</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
 
         # ── Intelligence Dashboard (always renders fresh after run) ───────────────
         _render_qir_dashboard()

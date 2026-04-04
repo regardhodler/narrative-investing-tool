@@ -54,16 +54,79 @@ with st.sidebar:
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:4px 0 8px 0;"></div>', unsafe_allow_html=True)
     render_watchlist_widget()
 
-    top_level = st.radio(
-        "Module",
-        [
-            "⚡ Quick Intel Run", "Risk Regime", "Fed Forecaster", "Current Events",
-            "Tail Risk Studio", "Discovery", "Technical Analysis", "Whale Movement", "Stress Signals",
-            "Short Squeeze Radar", "Backtesting", "My Regarded Portfolio",
-            "Signal Audit", "Forecast Tracker", "Export Hub", "Alerts",
-        ],
-        key="top_module",
+    # ── Tiered navigation — detect which tier was last changed ───────────────
+    _oc = COLORS["bloomberg_orange"]
+    _tier_label_css = (
+        f'font-size:9px;font-weight:700;letter-spacing:0.12em;'
+        f'color:{_oc};text-transform:uppercase;'
+        f'padding:2px 0 2px 0;margin-top:4px;'
     )
+    _sep_css = f'border-top:1px solid {COLORS["border"]};margin:6px 0 4px 0;'
+
+    # Tier 1 — Daily Drivers
+    _t1h, _t1b = st.columns([6, 1])
+    with _t1h:
+        st.markdown(f'<div style="{_tier_label_css}">⚡ Daily Drivers</div>', unsafe_allow_html=True)
+    with _t1b:
+        if st.button("↗", key="nav_open_t1", help="Open selected Daily Drivers module"):
+            st.session_state["_active_tier"] = 1
+    _t1 = st.radio("", ["⚡ Quick Intel Run", "Discovery", "My Regarded Portfolio"],
+                   key="nav_t1", label_visibility="collapsed")
+
+    # Tier 2 — Research
+    _t2h, _t2b = st.columns([6, 1])
+    with _t2h:
+        st.markdown(f'<div style="{_sep_css}"></div><div style="{_tier_label_css}">🔬 Research</div>', unsafe_allow_html=True)
+    with _t2b:
+        if st.button("↗", key="nav_open_t2", help="Open selected Research module"):
+            st.session_state["_active_tier"] = 2
+    _t2 = st.radio("", ["Risk Regime", "Fed Forecaster", "Current Events",
+                         "Tail Risk Studio", "Whale Movement", "Stress Signals"],
+                   key="nav_t2", label_visibility="collapsed")
+
+    # Tier 3 — Tools
+    _t3h, _t3b = st.columns([6, 1])
+    with _t3h:
+        st.markdown(f'<div style="{_sep_css}"></div><div style="{_tier_label_css}">🛠 Tools</div>', unsafe_allow_html=True)
+    with _t3b:
+        if st.button("↗", key="nav_open_t3", help="Open selected Tools module"):
+            st.session_state["_active_tier"] = 3
+    _t3 = st.radio("", ["Technical Analysis", "Short Squeeze Radar", "Backtesting"],
+                   key="nav_t3", label_visibility="collapsed")
+
+    # Tier 4 — Admin
+    _t4h, _t4b = st.columns([6, 1])
+    with _t4h:
+        st.markdown(f'<div style="{_sep_css}"></div><div style="{_tier_label_css}">⚙ Admin</div>', unsafe_allow_html=True)
+    with _t4b:
+        if st.button("↗", key="nav_open_t4", help="Open selected Admin module"):
+            st.session_state["_active_tier"] = 4
+    _t4 = st.radio("", ["Signal Audit", "Forecast Tracker", "Export Hub", "Alerts"],
+                   key="nav_t4", label_visibility="collapsed")
+
+    # Detect which tier changed last — compare to previous session state
+    _prev_t1 = st.session_state.get("_prev_nav_t1")
+    _prev_t2 = st.session_state.get("_prev_nav_t2")
+    _prev_t3 = st.session_state.get("_prev_nav_t3")
+    _prev_t4 = st.session_state.get("_prev_nav_t4")
+
+    if _t1 != _prev_t1:
+        st.session_state["_active_tier"] = 1
+    elif _t2 != _prev_t2:
+        st.session_state["_active_tier"] = 2
+    elif _t3 != _prev_t3:
+        st.session_state["_active_tier"] = 3
+    elif _t4 != _prev_t4:
+        st.session_state["_active_tier"] = 4
+
+    st.session_state["_prev_nav_t1"] = _t1
+    st.session_state["_prev_nav_t2"] = _t2
+    st.session_state["_prev_nav_t3"] = _t3
+    st.session_state["_prev_nav_t4"] = _t4
+
+    _active_tier = st.session_state.get("_active_tier", 1)
+    top_level = {1: _t1, 2: _t2, 3: _t3, 4: _t4}.get(_active_tier, _t1)
+
 
     sub_module = None
     if top_level == "Discovery":
@@ -152,6 +215,16 @@ elif top_level == "Whale Movement":
 elif top_level == "Stress Signals":
     from modules.stress_signals import render; render()
 elif top_level == "Discovery":
+    # Auto-scroll main content to top when switching to Discovery
+    import streamlit.components.v1 as _components
+    _components.html(
+        "<script>"
+        "var _main=window.parent.document.querySelector('section.main');"
+        "if(!_main)_main=window.parent.document.querySelector('[data-testid=\"stMain\"]');"
+        "if(_main)_main.scrollTo(0,0);"
+        "</script>",
+        height=0,
+    )
     _sub_icons = {
         "Narrative Discovery": "📡", "Options Activity": "📊", "Price Action": "📈",
         "EDGAR Scanner": "📋", "Institutional (13F)": "🐋",

@@ -36,6 +36,7 @@ from services.market_data import (
     warm_fred_cache,
 )
 from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
+from utils.components import render_rr_score_mode_toggle
 
 # ─────────────────────────────────────────────
 # HISTORY PERSISTENCE
@@ -101,6 +102,8 @@ def _save_snapshot(macro: dict):
         "regime": macro["macro_regime"],
         "signal_count": len(macro["signals"]),
         "macro_score": macro["macro_score"],
+        "leading_score": macro.get("leading_score"),
+        "leading_divergence": macro.get("leading_divergence"),
         "quadrant": macro["quadrant"],
         "growth_signal": macro.get("growth_signal"),
         "inflation_signal": macro.get("inflation_signal"),
@@ -244,6 +247,43 @@ def _zscore_score(series: pd.Series | None, invert: bool = False, lookback: int 
     return _clamp(z / 2.0)
 
 
+def _ewma_zscore_score(
+    series: pd.Series | None,
+    invert: bool = False,
+    lookback: int = 252,
+    halflife: int = 21,
+) -> float:
+    """EWMA z-score mapped to [-1, 1] with the same scaling as _zscore_score."""
+    if series is None:
+        return 0.0
+    clean = series.dropna()
+    n = min(lookback, len(clean))
+    if n < 20:
+        return 0.0
+    window = clean.iloc[-n:]
+    ew = window.ewm(halflife=halflife, adjust=False)
+    mu = ew.mean().iloc[-1]
+    sigma = ew.std(bias=False).iloc[-1]
+    if sigma is None or not np.isfinite(sigma) or float(sigma) < 1e-9:
+        return 0.0
+    z = (float(window.iloc[-1]) - float(mu)) / float(sigma)
+    if invert:
+        z = -z
+    return _clamp(z / 2.0)
+
+
+def _score_with_mode(
+    series: pd.Series | None,
+    invert: bool = False,
+    lookback: int = 252,
+    mode: str = "normal",
+) -> float:
+    """Switch between classic rolling z-score and EWMA fast-react mode."""
+    if mode == "ewma_fast":
+        return _ewma_zscore_score(series, invert=invert, lookback=lookback)
+    return _zscore_score(series, invert=invert, lookback=lookback)
+
+
 def _yoy_series(series: pd.Series | None, periods: int = 12) -> pd.Series | None:
     """Compute rolling YoY % change series."""
     if series is None:
@@ -277,6 +317,66 @@ def _confidence_label(score: int) -> str:
     if score >= 50:
         return "Medium"
     return "Low"
+
+
+def _compute_dynamic_thresholds(history: list[dict]) -> dict:
+    """Derive adaptive alert thresholds from saved regime history.
+
+    Falls back to conservative static defaults when there is insufficient history.
+    As daily snapshots accumulate the thresholds self-calibrate to the actual
+    distribution of scores rather than relying on hardcoded guesses.
+
+    Returns:
+        div_threshold   — pts of leading divergence that is "unusual" (1.5σ)
+        vel_threshold   — pts of day-over-day velocity that is "meaningful" (1σ)
+        score_pct_rank  — not returned here; computed by callers from the same history list
+    """
+    DIV_DEFAULT = 7
+    VEL_DEFAULT = 3
+
+    # Need at least 20 sessions before trusting the distribution
+    if len(history) < 20:
+        return {"div_threshold": DIV_DEFAULT, "vel_threshold": VEL_DEFAULT}
+
+    # Leading divergence distribution
+    divs = [h["leading_divergence"] for h in history if h.get("leading_divergence") is not None]
+    if len(divs) >= 15:
+        div_std = float(np.std(divs))
+        div_threshold = max(4, min(15, round(div_std * 1.5)))
+    else:
+        div_threshold = DIV_DEFAULT
+
+    # Day-over-day velocity distribution
+    scores = [h["macro_score"] for h in history if h.get("macro_score") is not None]
+    if len(scores) >= 10:
+        day_changes = [abs(scores[i] - scores[i - 1]) for i in range(1, len(scores))]
+        vel_std = float(np.std(day_changes))
+        vel_threshold = max(2, min(8, round(vel_std * 1.0)))
+    else:
+        vel_threshold = VEL_DEFAULT
+
+    return {"div_threshold": div_threshold, "vel_threshold": vel_threshold}
+
+
+def _compute_leading_divergence(
+    leading_score: int,
+    composite_score: int,
+    threshold: int = 7,
+) -> tuple[str, int]:
+    """Return (label, divergence) comparing leading-only sub-score vs. full composite.
+
+    Positive divergence means leading indicators are ahead of the lagging composite —
+    a potential early signal that the regime is about to strengthen.
+    Negative divergence means leading indicators are deteriorating before lagging data confirms.
+
+    threshold is adaptive when a dynamic value is passed from _compute_dynamic_thresholds.
+    """
+    divergence = leading_score - composite_score
+    if divergence > threshold:
+        return "Early Risk-On Setup", divergence
+    if divergence < -threshold:
+        return "Early Risk-Off Warning", divergence
+    return "Aligned", divergence
 
 
 def _neutral_lean_label(score: int) -> str:
@@ -619,12 +719,13 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     import datetime as _dt
 
     _FRED_IDS = [
-        "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
+        "T10Y2Y", "T10Y3M", "BAMLH0A0HYM2", "BAMLC0A0CM", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "PNFI", "THREEFYTP10", "INDPRO", "NFCI", "DGS10",
         "ICSA", "USSLIND", "UMCSENT", "PERMIT", "FEDFUNDS", "DFII10", "MANEMP", "TOTBKCR", "DGS2",
     ]
     fred_key_map = {
-        "yield_curve": "T10Y2Y", "credit_spread": "BAMLH0A0HYM2",
+        "yield_curve": "T10Y2Y", "yield_curve_3m10y": "T10Y3M",
+        "credit_spread": "BAMLH0A0HYM2", "credit_spread_ig": "BAMLC0A0CM",
         "m2": "M2SL", "sahm": "SAHMREALTIME", "unrate": "UNRATE",
         "core_pce": "PCEPILFE", "capex": "PNFI", "icsa": "ICSA",
         "lei": "USSLIND", "term_premium": "THREEFYTP10", "ism": "INDPRO",
@@ -645,7 +746,8 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_key_map.items()}
     from services.market_data import compute_data_quality_score
     _dq = compute_data_quality_score(core_snaps, fred_data)
-    macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
+    _score_mode = st.session_state.get("_rr_score_mode", "normal")
+    macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode)
     macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], core_snaps)
     macro["tactical_opps"] = _tactical_opportunities(macro, core_snaps)
     macro["snaps"] = core_snaps
@@ -701,6 +803,15 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "score": norm_score,
         "signal_summary": signal_summary,
         "quadrant": macro["quadrant"],
+        "macro_score": macro["macro_score"],
+        "leading_score": macro.get("leading_score"),
+        "leading_divergence": macro.get("leading_divergence", 0),
+        "leading_label": macro.get("leading_label", "Aligned"),
+        "score_5d_trend": macro.get("score_5d_trend"),
+        "leading_5d_trend": macro.get("leading_5d_trend"),
+        "pts_to_risk_on": macro.get("pts_to_risk_on"),
+        "pts_to_risk_off": macro.get("pts_to_risk_off"),
+        "velocity_label": macro.get("velocity_label", ""),
     }
 
     # Build structured raw signal dict so downstream prompts can ground to numbers
@@ -712,6 +823,10 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
     _raw_signals["macro_score_norm"] = round(norm_score, 3)
     _raw_signals["macro_regime"]     = _new_regime
     _raw_signals["quadrant"]         = macro.get("quadrant", "")
+    _raw_signals["leading_score"]    = macro.get("leading_score")
+    _raw_signals["leading_divergence"] = macro.get("leading_divergence", 0)
+    _raw_signals["leading_label"]    = macro.get("leading_label", "Aligned")
+    _raw_signals["score_5d_trend"]   = macro.get("score_5d_trend")
     if _fg_score is not None:
         _raw_signals["fear_greed"]    = _fg_score
         _raw_signals["fear_greed_label"] = _fg_label or ""
@@ -886,10 +1001,17 @@ def _fetch_spy_pe_safe() -> float | None:
 
 
 @st.cache_data(ttl=14400, show_spinner=False)
-def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | None = None, fred_data: dict | None = None) -> dict:
+def _build_macro_dashboard(
+    snaps: dict[str, AssetSnapshot],
+    gamma_data: dict | None = None,
+    fred_data: dict | None = None,
+    score_mode: str = "normal",
+) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
+        "yield_curve_3m10y": "T10Y3M",
         "credit_spread": "BAMLH0A0HYM2",
+        "credit_spread_ig": "BAMLC0A0CM",
         "m2": "M2SL",
         "sahm": "SAHMREALTIME",
         "unrate": "UNRATE",
@@ -922,32 +1044,84 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     indicators = []
 
     yc = _safe_latest(fred["yield_curve"])
-    yc_score = _zscore_score(fred["yield_curve"])
-    yc_chg = _series_trend(fred["yield_curve"], lookback=22)
-    dgs10_chg = _series_trend(fred["dgs10"], lookback=22)
+    yc_score_raw = _zscore_score(fred["yield_curve"])
+    # Use the existing _classify_yield_curve() helper instead of inline logic
+    _yc_shape = _classify_yield_curve(fred["yield_curve"], fred["dgs10"], lookback=22)
+    yc_regime_str = _yc_shape["regime"]   # "Bull Steepening" / "Bear Steepening" / etc.
     yc_dir = ""
-    if yc_chg is not None and dgs10_chg is not None:
-        steepening = yc_chg > 0
-        rates_rising = dgs10_chg > 0
-        if steepening and not rates_rising:
-            yc_dir = " — Bull Steepening"
-        elif steepening and rates_rising:
-            yc_dir = " — Bear Steepening"
-        elif not steepening and not rates_rising:
-            yc_dir = " — Bull Flattening"
-        else:
-            yc_dir = " — Bear Flattening"
-        if yc is not None and yc < 0:
+    if yc_regime_str != "Unknown":
+        yc_dir = f" — {yc_regime_str}"
+        if _yc_shape["inverted"]:
             yc_dir += " (Inverted)"
+    # Curve shape modifier: Bull Steepening confirms risk-on; Bear Steepening
+    # carries inflation premium — penalise. Flattening signals late-cycle caution.
+    # Inverted curves are already negative from the z-score; no extra modifier needed.
+    _CURVE_MOD = {
+        "Bull Steepening": 1.10,   # Fed easing, growth recovering — boost score
+        "Bear Steepening": 0.75,   # Inflation premium, long-end selling — penalise
+        "Bull Flattening": 0.85,   # Flight to safety, late-cycle
+        "Bear Flattening": 0.90,   # Fed tightening, normal late cycle
+    }
+    _mod = _CURVE_MOD.get(yc_regime_str, 1.0) if not _yc_shape["inverted"] else 1.0
+    yc_score = _clamp(yc_score_raw * _mod)
     indicators.append(("Yield Curve (10Y-2Y)", yc, f"bps{yc_dir}", yc_score, _confidence_from_age(fred["yield_curve"], expected_days=14)))
 
+    # 3M-10Y yield curve — Fed's preferred recession predictor. Inverts before 10Y-2Y.
+    # Both spreads share the same 10Y anchor so the same shape modifier applies.
+    yc3m = _safe_latest(fred.get("yield_curve_3m10y"))
+    yc3m_score_raw = _zscore_score(fred.get("yield_curve_3m10y"))
+    yc3m_dir = ""
+    if yc_regime_str != "Unknown":
+        yc3m_dir = f" — {yc_regime_str}"  # same curve shape as 10Y-2Y
+    _inv3m = yc3m is not None and yc3m < 0
+    if _inv3m:
+        yc3m_dir += " (Inverted)"
+    yc3m_score = _clamp(yc3m_score_raw * (_CURVE_MOD.get(yc_regime_str, 1.0) if not _inv3m else 1.0))
+    if yc3m_score_raw is not None:
+        indicators.append(("Yield Curve (3M-10Y)", yc3m, f"bps{yc3m_dir}", yc3m_score, _confidence_from_age(fred.get("yield_curve_3m10y"), expected_days=14)))
+
     cs = _safe_latest(fred["credit_spread"])
-    cs_score = _zscore_score(fred["credit_spread"], invert=True)
+    cs_score = _score_with_mode(fred["credit_spread"], invert=True, mode=score_mode)
     cs_chg = _series_trend(fred["credit_spread"], lookback=22)
     cs_dir = ""
     if cs_chg is not None:
         cs_dir = " ▲ Widening" if cs_chg > 0 else " ▼ Narrowing"
-    indicators.append(("Credit Spreads (HY vs Treasuries)", cs, f"%{cs_dir}", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
+    indicators.append(("Credit Spreads (HY vs Treasuries)", cs, f"bps{cs_dir}", cs_score, _confidence_from_age(fred["credit_spread"], expected_days=7)))
+
+    # IG Credit Spreads — Investment-grade OAS. Paired with HY: when HY widens but
+    # IG stays tight = speculative stress only; both widening = systemic credit risk.
+    cs_ig = _safe_latest(fred.get("credit_spread_ig"))
+    cs_ig_score = _score_with_mode(fred.get("credit_spread_ig"), invert=True, mode=score_mode) if fred.get("credit_spread_ig") is not None else None
+    cs_ig_chg = _series_trend(fred.get("credit_spread_ig"), lookback=22) if fred.get("credit_spread_ig") is not None else None
+    cs_ig_dir = ""
+    if cs_ig_chg is not None:
+        cs_ig_dir = " ▲ Widening" if cs_ig_chg > 0 else " ▼ Narrowing"
+    if cs_ig_score is not None:
+        indicators.append(("Credit Spreads (IG OAS)", cs_ig, f"bps{cs_ig_dir}", cs_ig_score, _confidence_from_age(fred.get("credit_spread_ig"), expected_days=7)))
+
+    # HY-IG Quality Spread (derived) — the differential between HY and IG OAS.
+    # Widening = speculative grade deteriorating faster than investment grade → concentrated risk-off signal.
+    _hy_series = fred.get("credit_spread")
+    _ig_series = fred.get("credit_spread_ig")
+    _quality_spread_score = None
+    _quality_spread_val = None
+    _qs_dir = ""
+    if _hy_series is not None and _ig_series is not None:
+        try:
+            _hy_aligned, _ig_aligned = _hy_series.align(_ig_series, join="inner")
+            _qs = _hy_aligned - _ig_aligned
+            _qs_clean = _qs.dropna()
+            if len(_qs_clean) > 0:
+                _quality_spread_val = float(_qs_clean.iloc[-1])
+            if len(_qs_clean) >= 30:
+                _quality_spread_score = _zscore_score(_qs, invert=True)
+                _qs_chg = _series_trend(_qs, lookback=22)
+                if _qs_chg is not None:
+                    _qs_dir = " ▲ Widening" if _qs_chg > 0 else " ▼ Narrowing"
+        except Exception:
+            pass
+    if _quality_spread_score is not None:
+        indicators.append(("HY-IG Quality Spread", _quality_spread_val, f"bps{_qs_dir}", _quality_spread_score, _confidence_from_age(_hy_series, expected_days=7)))
 
     def _blend_pct(snap):
         """Blend 1d/5d/30d pct changes (50%/30%/20%) for a snap."""
@@ -1051,7 +1225,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     vix_snap = snaps.get("^VIX")
     vix = vix_snap.latest_price if vix_snap else None
     vix_series = vix_snap.series if vix_snap else None
-    vix_score = _zscore_score(vix_series, invert=True) if vix_series is not None else _clamp_score((20.0 - (vix or 20.0)), 8.0)
+    vix_score = _score_with_mode(vix_series, invert=True, mode=score_mode) if vix_series is not None else _clamp_score((20.0 - (vix or 20.0)), 8.0)
     indicators.append(("VIX (Equity Volatility)", vix, "level", vix_score, _confidence_from_snap("^VIX", snaps=snaps)))
 
     # --- Initial Jobless Claims ---
@@ -1112,7 +1286,7 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         if len(_brd_df) > 20:
             _brd_ratio = _brd_df["rsp"] / _brd_df["spy"]
             breadth_val = float(_brd_ratio.iloc[-1])
-            breadth_score = _zscore_score(_brd_ratio)  # RSP outperforming SPY = broad participation = risk-on
+            breadth_score = _score_with_mode(_brd_ratio, mode=score_mode)  # RSP outperforming SPY = broad participation = risk-on
     indicators.append(("Market Breadth (RSP/SPY)", breadth_val, "ratio", breadth_score, _confidence_from_snap("RSP", "SPY", snaps=snaps)))
 
     # --- Credit Impulse (acceleration of total bank credit growth, TOTBKCR) ---
@@ -1170,7 +1344,10 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
 
     SIGNAL_CATEGORIES = {
         "Yield Curve (10Y-2Y)": "Rates",
+        "Yield Curve (3M-10Y)": "Rates",
         "Credit Spreads (HY vs Treasuries)": "Credit",
+        "Credit Spreads (IG OAS)": "Credit",
+        "HY-IG Quality Spread": "Credit",
         "VIX (Equity Volatility)": "Volatility",
         "Commodity Trend (Oil + Copper)": "Commodities",
         "US Dollar Index (DXY proxy)": "FX",
@@ -1230,6 +1407,10 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "Credit Impulse (Bank Credit Accel)": 2.0,  # Tier 1 — leads GDP by ~9 months, highest-lead macro signal
         "Rate Expectations (2Y vs Fed Funds)": 1.5, # Tier 2 — market vs Fed pricing gap
         "Global Manufacturing (EWG+FXI)": 1.0,     # Tier 3 — global growth breadth
+        # Yield curve & credit depth
+        "Yield Curve (3M-10Y)": 2.0,                # Tier 1 — Fed's preferred recession indicator
+        "Credit Spreads (IG OAS)": 1.5,             # Tier 2 — IG less volatile than HY, confirms systemic vs idiosyncratic stress
+        "HY-IG Quality Spread": 1.5,                # Tier 2 — HY-IG differential flags concentrated speculative stress
     }
 
     signal_rows = []
@@ -1250,12 +1431,29 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
             "Confidence": confidence,
         })
 
-    # Confidence-weighted scoring: effective_weight = tier_weight * (confidence / 100)
-    weights = [
-        SIGNAL_WEIGHTS.get(row["Indicator"], 1.0) * (row["Confidence"] / 100.0)
-        for row in signal_rows
-    ]
-    aggregate = float(np.average(scores, weights=weights)) if scores else 0.0
+    # ── Two-stage category-averaged scoring ────────────────────────────────────
+    # Stage 1: within each category, compute a confidence-weighted average score.
+    #          Correlated signals (e.g. Rates: Yield Curve + Real Yields + Rate Expectations)
+    #          produce a single category voice instead of triple-voting.
+    # Stage 2: across categories, weight by the category's best tier weight × mean confidence.
+    #          This preserves the tier importance of each domain without letting large
+    #          categories (Growth has 5 signals) dominate small ones (Volatility has 1).
+    _cat_buckets: dict[str, list] = {}
+    for row in signal_rows:
+        _cat_buckets.setdefault(row["Category"], []).append(row)
+
+    _cat_scores: list[float] = []
+    _cat_weights: list[float] = []
+    for _cat_rows in _cat_buckets.values():
+        _s = [r["Score"] for r in _cat_rows]
+        _w = [SIGNAL_WEIGHTS.get(r["Indicator"], 1.0) * (r["Confidence"] / 100.0) for r in _cat_rows]
+        _cat_scores.append(float(np.average(_s, weights=_w)))
+        # Category weight = strongest tier in this category × average confidence
+        _best_tier = max(SIGNAL_WEIGHTS.get(r["Indicator"], 1.0) for r in _cat_rows)
+        _mean_conf = sum(r["Confidence"] for r in _cat_rows) / len(_cat_rows) / 100.0
+        _cat_weights.append(_best_tier * _mean_conf)
+
+    aggregate = float(np.average(_cat_scores, weights=_cat_weights)) if _cat_scores else 0.0
     macro_score = int(round((aggregate + 1.0) * 50))
 
     if macro_score >= 60:
@@ -1264,6 +1462,43 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         macro_regime = "Risk-Off"
     else:
         macro_regime = _neutral_lean_label(macro_score)
+
+    # ── Leading Sub-Score ──────────────────────────────────────────────────
+    # Compute a separate score using only the fastest-leading indicators.
+    # When this diverges from the full composite it signals an upcoming regime flip.
+    _LEADING_SIGNALS = {
+        "Credit Impulse (Bank Credit Accel)",   # leads GDP ~9 months
+        "Leading Economic Index",               # composite leading indicator
+        "Yield Curve (10Y-2Y)",                 # inverts before recessions
+        "Yield Curve (3M-10Y)",                 # Fed's preferred recession signal — inverts earlier
+        "Credit Spreads (HY vs Treasuries)",    # fast-reacting credit risk
+        "Credit Spreads (IG OAS)",              # IG spreads confirm systemic vs speculative stress
+        "HY-IG Quality Spread",                 # quality spread divergence flags early risk-off
+        "Real Yields (10Y TIPS)",               # daily FRED, policy-sensitive
+        "VIX (Equity Volatility)",              # fast-reacting fear gauge
+        "Building Permits",                     # housing leads by 6-12 months
+        "Initial Jobless Claims",               # weekly, fast labor signal
+        "Rate Expectations (2Y vs Fed Funds)",  # market pricing policy path
+    }
+    _leading_rows = [r for r in signal_rows if r["Indicator"] in _LEADING_SIGNALS]
+    if _leading_rows:
+        # Equal tier weights — all 9 signals were selected because they're fast-leading.
+        # The SIGNAL_WEIGHTS tiers were designed to suppress noisy lagging signals, which
+        # is the opposite problem here. Confidence-only weighting lets data freshness
+        # do the work without penalising any fast signal relative to others.
+        _leading_weights = [r["Confidence"] / 100.0 for r in _leading_rows]
+        _leading_agg = float(np.average([r["Score"] for r in _leading_rows], weights=_leading_weights))
+    else:
+        _leading_agg = aggregate
+    leading_score = int(round((_leading_agg + 1.0) * 50))
+    # Dynamic threshold: computed here so it's available for both leading divergence
+    # labeling and velocity thresholding. Falls back to static defaults until enough
+    # history accumulates (~20 sessions).
+    _history_early = _load_history()
+    _dyn_early = _compute_dynamic_thresholds(_history_early)
+    leading_label, leading_divergence = _compute_leading_divergence(
+        leading_score, macro_score, threshold=_dyn_early["div_threshold"]
+    )
 
     growth_signal = np.mean([yc_score, equity_score, ism_score, unemp_score])
     core_series = fred["core_pce"].dropna() if fred["core_pce"] is not None else None
@@ -1315,8 +1550,11 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     fair_pe = round(100.0 / _dgs10_latest, 1) if (_dgs10_latest and _dgs10_latest > 0) else None
     pe_premium_pct = round((cape / fair_pe - 1) * 100) if (cape and fair_pe) else None
 
-    # ── Regime velocity ────────────────────────────────────────────────
-    _history_for_vel = _load_history()
+    # ── Regime velocity + trajectory ──────────────────────────────────────
+    _history_for_vel = _history_early  # reuse already-loaded history
+    _vel_threshold = _dyn_early["vel_threshold"]
+    _div_threshold = _dyn_early["div_threshold"]
+
     _prev_score = None
     # Find the most recent saved snapshot that isn't today
     _today_str = datetime.now().strftime("%Y-%m-%d")
@@ -1330,12 +1568,35 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
     velocity = int(macro_score - _prev_score) if _prev_score is not None else None
     if velocity is None:
         velocity_label = "→ No prior data"
-    elif velocity > 3:
+    elif velocity > _vel_threshold:
         velocity_label = f"↑ Strengthening ({velocity:+d} pts vs {_prev_score_date})"
-    elif velocity < -3:
+    elif velocity < -_vel_threshold:
         velocity_label = f"↓ Weakening ({velocity:+d} pts vs {_prev_score_date})"
     else:
         velocity_label = f"→ Stable ({velocity:+d} pts vs {_prev_score_date})"
+
+    # 5-session trend: composite and leading tracked separately
+    _hist_scores = [
+        h["macro_score"] for h in _history_for_vel
+        if h.get("date") != _today_str and h.get("macro_score") is not None
+    ]
+    score_5d_trend = None
+    if len(_hist_scores) >= 3:
+        _window = _hist_scores[-5:]
+        score_5d_trend = int(_window[-1] - _window[0])
+
+    _hist_leading = [
+        h["leading_score"] for h in _history_for_vel
+        if h.get("date") != _today_str and h.get("leading_score") is not None
+    ]
+    leading_5d_trend = None
+    if len(_hist_leading) >= 3:
+        _lw = _hist_leading[-5:]
+        leading_5d_trend = int(_lw[-1] - _lw[0])
+
+    # Boundary proximity: how many points to cross the regime threshold
+    pts_to_risk_on = 60 - macro_score   # negative = already above, i.e. in Risk-On
+    pts_to_risk_off = macro_score - 40  # negative = already below, i.e. in Risk-Off
 
     # ── Contradiction detection ────────────────────────────────────────
     _strong_bulls = sorted(
@@ -1395,6 +1656,15 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "pe_premium_pct": pe_premium_pct,
         "velocity": velocity,
         "velocity_label": velocity_label,
+        "score_5d_trend": score_5d_trend,
+        "leading_5d_trend": leading_5d_trend,
+        "pts_to_risk_on": pts_to_risk_on,
+        "pts_to_risk_off": pts_to_risk_off,
+        "leading_score": leading_score,
+        "leading_divergence": leading_divergence,
+        "leading_label": leading_label,
+        "div_threshold": _div_threshold,
+        "vel_threshold": _vel_threshold,
         "contradictions": contradictions,
         "cycle_stage": cycle_stage,
         "capex_vs_liquidity": capex_vs_liquidity,
@@ -1405,6 +1675,19 @@ def _build_macro_dashboard(snaps: dict[str, AssetSnapshot], gamma_data: dict | N
         "summary": summary[:5],
         "portfolio_bias": _portfolio_bias(macro_regime),
         "gamma": gamma_data,
+        # Yield curve & credit deep-dive values (for UI panel).
+        # FRED T10Y2Y / T10Y3M are in pct pts (0.45 = 45 bps) → multiply by 100.
+        # FRED BAMLH0A0HYM2 / BAMLC0A0CM are in pct (3.25 = 325 bps) → multiply by 100.
+        "yc_val": _safe_latest(fred["yield_curve"]) * 100 if _safe_latest(fred["yield_curve"]) is not None else None,
+        "yc3m_val": _safe_latest(fred.get("yield_curve_3m10y")) * 100 if _safe_latest(fred.get("yield_curve_3m10y")) is not None else None,
+        "cs_hy_val": _safe_latest(fred["credit_spread"]) * 100 if _safe_latest(fred["credit_spread"]) is not None else None,
+        "cs_ig_val": _safe_latest(fred.get("credit_spread_ig")) * 100 if _safe_latest(fred.get("credit_spread_ig")) is not None else None,
+        "qs_val": _quality_spread_val * 100 if _quality_spread_val is not None else None,
+        "yc_shape": yc_regime_str,
+        "yc_inverted": _yc_shape["inverted"],
+        "cs_hy_dir": cs_dir,
+        "cs_ig_dir": cs_ig_dir,
+        "qs_dir": _qs_dir,
     }
 
     result["risk_alerts"] = _risk_management_alerts(result, snaps)
@@ -2795,11 +3078,16 @@ def render():
     st.title("Macro Dashboard")
     st.caption("Global macro monitor — Risk-On / Risk-Off workflow")
 
+    _score_mode = render_rr_score_mode_toggle(
+        key="rr_score_mode_ui",
+        help_text="Coke Mode only affects Credit Spreads, VIX, and Market Breadth.",
+    )
+
     if st.button("Refresh Data"):
         st.cache_data.clear()
 
     _FRED_SERIES_IDS = [
-        "T10Y2Y", "BAMLH0A0HYM2", "M2SL", "SAHMREALTIME", "UNRATE",
+        "T10Y2Y", "T10Y3M", "BAMLH0A0HYM2", "BAMLC0A0CM", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "PNFI", "THREEFYTP10",
         "INDPRO", "NFCI", "DGS10", "ICSA", "USSLIND",
         "UMCSENT", "PERMIT", "FEDFUNDS",
@@ -2834,7 +3122,9 @@ def render():
         # Collect warmed FRED data (hits st.cache — no new network requests)
         fred_ids = {
             "yield_curve": "T10Y2Y",
+            "yield_curve_3m10y": "T10Y3M",
             "credit_spread": "BAMLH0A0HYM2",
+            "credit_spread_ig": "BAMLC0A0CM",
             "m2": "M2SL",
             "sahm": "SAHMREALTIME",
             "unrate": "UNRATE",
@@ -2855,7 +3145,7 @@ def render():
             "dgs2": "DGS2",
         }
         fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
-        macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data)
+        macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
@@ -2937,6 +3227,201 @@ def render():
                 unsafe_allow_html=True,
             )
 
+        # ── Summary ──
+        _vel_label = macro.get("velocity_label", "")
+        if _vel_label:
+            _vel_color = COLORS["green"] if "↑" in _vel_label else COLORS["red"] if "↓" in _vel_label else COLORS["text_dim"]
+            st.markdown(
+                f'<span style="background:{_vel_color}22;border:1px solid {_vel_color}55;border-radius:3px;'
+                f'padding:3px 10px;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12px;'
+                f'color:{_vel_color};display:inline-block;margin-bottom:8px;">{_vel_label}</span>',
+                unsafe_allow_html=True,
+            )
+        for line in macro["summary"]:
+            st.markdown(f"- {line}")
+        _contradictions = macro.get("contradictions")
+        if _contradictions:
+            _bull_str = ", ".join(_contradictions["bull"][:2])
+            _bear_str = ", ".join(_contradictions["bear"][:2])
+            st.markdown(
+                f'<div style="background:{COLORS["yellow"]}15;border-left:3px solid {COLORS["yellow"]};'
+                f'padding:8px 12px;margin-top:8px;font-size:12px;color:{COLORS["text_dim"]};">'
+                f'⚡ <strong style="color:{COLORS["yellow"]}">Signal Conflict</strong> — '
+                f'Bull: {_bull_str} vs Bear: {_bear_str}. '
+                f'Regime conviction lower than score implies.</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("---")
+
+        # ── Regime Direction (Early Warning) ──────────────────────────────
+        _section_header("Regime Direction")
+        _leading_score_a    = macro.get("leading_score")
+        _leading_div_a      = macro.get("leading_divergence", 0)
+        _leading_lbl_a      = macro.get("leading_label", "Aligned")
+        _score_5d_a         = macro.get("score_5d_trend")
+        _leading_5d_a       = macro.get("leading_5d_trend")
+        _pts_risk_on_a      = macro.get("pts_to_risk_on", 60 - macro["macro_score"])
+        _pts_risk_off_a     = macro.get("pts_to_risk_off", macro["macro_score"] - 40)
+        _div_thr_a          = macro.get("div_threshold", 7)
+        _vel_thr_a          = macro.get("vel_threshold", 3)
+        _thresholds_cal_a   = _div_thr_a != 7 or _vel_thr_a != 3
+
+        _dir_c1a, _dir_c2a, _dir_c3a = st.columns(3)
+        if _leading_score_a is not None:
+            _ld_color_a = COLORS["green"] if _leading_div_a > 0 else COLORS["red"] if _leading_div_a < 0 else COLORS["text_dim"]
+            _ld_sign_a  = f"+{_leading_div_a}" if _leading_div_a > 0 else str(_leading_div_a)
+            _dir_c1a.markdown(bloomberg_metric("Leading Score", f"{_leading_score_a} ({_ld_sign_a})", _ld_color_a), unsafe_allow_html=True)
+        else:
+            _dir_c1a.markdown(bloomberg_metric("Leading Score", "—"), unsafe_allow_html=True)
+
+        def _trend_str_a(val):
+            if val is None: return "—"
+            return f"{'↑' if val > 0 else '↓' if val < 0 else '→'} {val:+d}"
+
+        if _score_5d_a is not None or _leading_5d_a is not None:
+            _both_rising_a  = (_score_5d_a or 0) > _vel_thr_a and (_leading_5d_a or 0) > _vel_thr_a
+            _both_falling_a = (_score_5d_a or 0) < -_vel_thr_a and (_leading_5d_a or 0) < -_vel_thr_a
+            _tr_color_a = COLORS["green"] if _both_rising_a else COLORS["red"] if _both_falling_a else COLORS["text_dim"]
+            _dir_c2a.markdown(bloomberg_metric("5-Session Trend", f"C {_trend_str_a(_score_5d_a)} · L {_trend_str_a(_leading_5d_a)}", _tr_color_a), unsafe_allow_html=True)
+        else:
+            _dir_c2a.markdown(bloomberg_metric("5-Session Trend", "— no history"), unsafe_allow_html=True)
+
+        _at_risk_on_a  = _pts_risk_on_a  <= 0
+        _at_risk_off_a = _pts_risk_off_a <= 0
+        if _at_risk_on_a:
+            _bnd_txt_a, _bnd_color_a = f"In Risk-On ({abs(_pts_risk_on_a)} above)", COLORS["green"]
+        elif _at_risk_off_a:
+            _bnd_txt_a, _bnd_color_a = f"In Risk-Off ({abs(_pts_risk_off_a)} below)", COLORS["red"]
+        elif _pts_risk_on_a < _pts_risk_off_a:
+            _bnd_txt_a  = f"{_pts_risk_on_a} pts → Risk-On"
+            _bnd_color_a = COLORS["green"] if _pts_risk_on_a <= 5 else COLORS["text_dim"]
+        else:
+            _bnd_txt_a  = f"{_pts_risk_off_a} pts → Risk-Off"
+            _bnd_color_a = COLORS["red"] if _pts_risk_off_a <= 5 else COLORS["text_dim"]
+        _dir_c3a.markdown(bloomberg_metric("Boundary", _bnd_txt_a, _bnd_color_a), unsafe_allow_html=True)
+
+        if abs(_leading_div_a) > _div_thr_a:
+            _alert_color_a = COLORS["green"] if _leading_div_a > 0 else COLORS["red"]
+            _alert_emoji_a = "🟢" if _leading_div_a > 0 else "🔴"
+            if _leading_div_a > 0:
+                _alert_body_a = (
+                    f"Leading indicators running <strong>{_leading_div_a} pts ahead</strong> of the composite. "
+                    "Credit, rates, and early-cycle signals are turning before lagging data (PCE, unemployment) confirms. "
+                    "Regime flip may arrive before the composite score crosses 60."
+                )
+            else:
+                _alert_body_a = (
+                    f"Leading indicators deteriorating <strong>{abs(_leading_div_a)} pts below</strong> composite. "
+                    "Fast-reacting signals (credit spreads, VIX, rate expectations) weakening ahead of lagging confirmation. "
+                    "Composite may follow lower before the next FRED data releases."
+                )
+            st.markdown(
+                f'<div style="background:{_alert_color_a}15;border-left:3px solid {_alert_color_a};'
+                f'padding:8px 12px;margin-top:10px;font-size:12px;color:{COLORS["text_dim"]};">'
+                f'{_alert_emoji_a} <strong style="color:{_alert_color_a}">{_leading_lbl_a}</strong> — {_alert_body_a}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        _thr_src_a = "calibrated" if _thresholds_cal_a else "static default — calibrates after 20+ sessions"
+        st.caption(f"Alert threshold: ±{_div_thr_a} pts divergence · ±{_vel_thr_a} pts velocity ({_thr_src_a})")
+
+        # ── Yield Curve & Credit Deep Dive ────────────────────────────────
+        with st.expander("📐 Yield Curve & Credit Deep Dive", expanded=False):
+            _yc_val_a    = macro.get("yc_val")
+            _yc3m_val_a  = macro.get("yc3m_val")
+            _cs_hy_val_a = macro.get("cs_hy_val")
+            _cs_ig_val_a = macro.get("cs_ig_val")
+            _qs_val_a    = macro.get("qs_val")
+            _yc_shape_a  = macro.get("yc_shape", "Unknown")
+            _yc_inv_a    = macro.get("yc_inverted", False)
+            _cs_hy_dir_a = macro.get("cs_hy_dir", "")
+            _cs_ig_dir_a = macro.get("cs_ig_dir", "")
+            _qs_dir_a    = macro.get("qs_dir", "")
+
+            st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;color:{COLORS["text_dim"]};margin-bottom:4px;">YIELD CURVE SHAPE</div>', unsafe_allow_html=True)
+            _yca_cols = st.columns(3)
+            def _spm(col, label, val, inverted=False):
+                _v = f"{val:+.2f} bps" if val is not None else "N/A"
+                _c = COLORS["red"] if inverted else COLORS["green"] if val and val > 0 else COLORS["text_dim"]
+                col.markdown(bloomberg_metric(label, _v, _c), unsafe_allow_html=True)
+            _spm(_yca_cols[0], "10Y-2Y Spread", _yc_val_a, _yc_inv_a)
+            _spm(_yca_cols[1], "3M-10Y Spread", _yc3m_val_a, _yc3m_val_a is not None and _yc3m_val_a < 0)
+            _shape_color_a = (COLORS["green"] if _yc_shape_a == "Bull Steepening" else COLORS["red"] if _yc_shape_a in ("Bear Steepening", "Bear Flattening") else COLORS["text_dim"])
+            _yca_cols[2].markdown(bloomberg_metric("Shape", _yc_shape_a, _shape_color_a), unsafe_allow_html=True)
+            _SHAPE_INTERP_A = {
+                "Bull Steepening": (COLORS["green"], "Fed easing / growth recovering. Score boosted ×1.10 — unambiguous risk-on."),
+                "Bear Steepening": (COLORS["red"],   "Long-end rates rising faster. Inflation premium building. Score penalised ×0.75."),
+                "Bull Flattening": (COLORS["text_dim"], "Flight to safety, 10Y falling. Late-cycle caution. Score penalised ×0.85."),
+                "Bear Flattening": (COLORS["text_dim"], "Fed tightening, 2Y rising faster. Standard late-cycle pressure. Score penalised ×0.90."),
+            }
+            if _yc_inv_a:
+                _sic_a, _sit_a = COLORS["red"], "Yield curve inverted — short rates above long rates. Historically the most reliable recession leading indicator."
+            elif _yc_shape_a in _SHAPE_INTERP_A:
+                _sic_a, _sit_a = _SHAPE_INTERP_A[_yc_shape_a]
+            else:
+                _sic_a, _sit_a = COLORS["text_dim"], "Insufficient data for curve classification."
+            st.markdown(f'<div style="background:{_sic_a}15;border-left:3px solid {_sic_a};padding:6px 10px;margin:6px 0 12px 0;font-size:11px;color:{COLORS["text_dim"]};">{_sit_a}</div>', unsafe_allow_html=True)
+
+            st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;color:{COLORS["text_dim"]};margin-bottom:4px;">CREDIT SPREADS</div>', unsafe_allow_html=True)
+            _csa_cols = st.columns(3)
+            def _csm(col, label, val, direction):
+                _v = f"{val:.0f} bps{direction}" if val is not None else "N/A"
+                _c = COLORS["red"] if "Widening" in direction else COLORS["green"] if "Narrowing" in direction else COLORS["text_dim"]
+                col.markdown(bloomberg_metric(label, _v, _c), unsafe_allow_html=True)
+            _csm(_csa_cols[0], "HY OAS", _cs_hy_val_a, _cs_hy_dir_a)
+            _csm(_csa_cols[1], "IG OAS", _cs_ig_val_a, _cs_ig_dir_a)
+            _csm(_csa_cols[2], "HY-IG Spread", _qs_val_a, _qs_dir_a)
+            _hy_wide_a = "Widening" in _cs_hy_dir_a
+            _ig_wide_a = "Widening" in _cs_ig_dir_a
+            if _hy_wide_a and _ig_wide_a:
+                _crc_a, _crt_a = COLORS["red"], "Both HY and IG widening — systemic credit stress. Strong Risk-Off signal."
+            elif _hy_wide_a and not _ig_wide_a:
+                _crc_a, _crt_a = COLORS["text_dim"], "HY widening, IG stable — speculative grade stress only. Not systemic yet. Early warning."
+            elif not _hy_wide_a and not _ig_wide_a:
+                _crc_a, _crt_a = COLORS["green"], "Both narrowing — broad credit confidence. Supports Risk-On."
+            else:
+                _crc_a, _crt_a = COLORS["text_dim"], "IG widening, HY stable — likely duration/rates driven, not credit quality."
+            st.markdown(f'<div style="background:{_crc_a}15;border-left:3px solid {_crc_a};padding:6px 10px;margin:6px 0 8px 0;font-size:11px;color:{COLORS["text_dim"]};">{_crt_a}</div>', unsafe_allow_html=True)
+
+            with st.expander("📋 Interpretation reference", expanded=False):
+                _tbl_a = ('<table style="width:100%;font-size:10px;border-collapse:collapse;">'
+                    '<tr style="color:#475569;font-weight:700;"><td style="padding:3px 6px;">State</td><td style="padding:3px 6px;">Meaning</td><td style="padding:3px 6px;">Implication</td></tr>')
+                for _rc_a, _st_a, _mn_a, _im_a in [
+                    (COLORS["green"],    "Bull Steepening",          "Fed easing / growth recovering",    "Risk-On — buy the dip"),
+                    (COLORS["red"],      "Bear Steepening",          "Inflation premium, long-end selling","Stagflation risk — reduce longs"),
+                    (COLORS["text_dim"], "Bull Flattening",          "Flight to safety, late cycle",       "Prepare for turn"),
+                    (COLORS["red"],      "Bear Flattening/Inversion","Fed hiking, curve inverted",         "Recession warning"),
+                    (COLORS["green"],    "Both spreads narrow",      "Broad credit confidence",            "Confirms Risk-On"),
+                    (COLORS["text_dim"], "HY widens, IG stable",     "Junk stress, not systemic",          "Early warning — watch"),
+                    (COLORS["red"],      "Both spreads widen",       "Systemic credit stress",             "Risk-Off confirmed"),
+                ]:
+                    _tbl_a += f'<tr style="border-top:1px solid #1e293b;"><td style="padding:3px 6px;color:{_rc_a};">{_st_a}</td><td style="padding:3px 6px;color:{COLORS["text_dim"]};">{_mn_a}</td><td style="padding:3px 6px;color:{COLORS["text_dim"]};">{_im_a}</td></tr>'
+                st.markdown(_tbl_a + '</table>', unsafe_allow_html=True)
+
+        # ── Reading Guide ──────────────────────────────────────────────────
+        with st.expander("📖 How to read Regime Direction", expanded=False):
+            st.markdown(
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;line-height:2.0;">'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">COMPOSITE SCORE (0–100)</span><br>'
+                f'Weighted average of all macro signals after deduplication. Z-scored against own 252-day history — 50 = neutral, &lt;40 = Risk-Off, &gt;60 = Risk-On.<br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">LEADING SUB-SCORE &amp; DIVERGENCE</span><br>'
+                f'Only the 9 fastest signals (VIX, credit spreads, LEI, credit impulse, real yields, building permits, jobless claims, rate expectations, yield curve). '
+                f'Move weeks–months before lagging data (PCE, unemployment, CAPE) confirms.<br>'
+                f'<span style="color:#22c55e;">Divergence +8</span> = fast signals already Risk-On → <b>buy the dip before the flip</b><br>'
+                f'<span style="color:#ef4444;">Divergence −8</span> = fast signals cracking → <b>sell the rip before the turn</b><br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">5-SESSION TREND  C · L</span><br>'
+                f'<span style="color:#22c55e;">Both rising</span> = high conviction, regime strengthening · '
+                f'<span style="color:#ef4444;">Both falling</span> = regime weakening · '
+                f'<span style="color:#94a3b8;">Diverging</span> = transition noise, wait for alignment<br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">BOUNDARY</span><br>'
+                f'Points until composite crosses 40 (Risk-Off) or 60 (Risk-On). Green/red when within 5 pts.'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("---")
+
         # ── Quadrant Probability Distribution ──
         _g = macro.get("growth_signal", 0.0) or 0.0
         _i = macro.get("inflation_signal", 0.0) or 0.0
@@ -2971,147 +3456,6 @@ def render():
         if history_fig:
             st.plotly_chart(history_fig, use_container_width=True)
         st.caption(f"Daily macro verdict: {regime}. Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # ── Current Events ──
-        _section_header("Current Events")
-        from services.news_feed import (
-            fetch_financial_headlines, load_news_inbox, save_to_inbox, clear_inbox,
-            headlines_to_text, inbox_to_text,
-        )
-        from services.claude_client import GROQ_API_URL
-        import requests as _req_ce
-
-        _headlines = fetch_financial_headlines()
-        _inbox = load_news_inbox()
-
-        _ce_col1, _ce_col2 = st.columns([3, 1])
-        with _ce_col1:
-            if _headlines:
-                st.markdown(
-                    f'<div style="font-size:10px;font-weight:700;color:#64748b;'
-                    f'letter-spacing:0.08em;margin-bottom:4px;">RSS HEADLINES</div>',
-                    unsafe_allow_html=True,
-                )
-                for _h in _headlines[:12]:
-                    st.markdown(
-                        f'<div style="padding:3px 0;border-bottom:1px solid #1e293b;">'
-                        f'<span style="font-size:10px;color:#f97316;">[{_h["source"]}]</span> '
-                        f'<a href="{_h.get("url","#")}" target="_blank" style="font-size:12px;color:#C8D8E8;text-decoration:none;">'
-                        f'{_h["title"][:90]}{"…" if len(_h["title"])>90 else ""}</a>'
-                        f'<span style="font-size:10px;color:#475569;margin-left:6px;">{_h["date"]}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
-            else:
-                st.caption("RSS feeds unavailable — check connection.")
-
-        with _ce_col2:
-            if st.button("🔄 Refresh Headlines", key="refresh_headlines"):
-                fetch_financial_headlines.clear()
-                st.rerun()
-
-        if _inbox:
-            st.markdown(
-                f'<div style="font-size:10px;font-weight:700;color:#64748b;'
-                f'letter-spacing:0.08em;margin:10px 0 4px 0;">📥 INBOX ({len(_inbox)} items)</div>',
-                unsafe_allow_html=True,
-            )
-            for _item in reversed(_inbox[-5:]):
-                _ts = _item.get("ts", "")[:16].replace("T", " ")
-                _src = _item.get("source", "manual")
-                st.markdown(
-                    f'<div style="background:#0f172a;border-left:3px solid #f97316;'
-                    f'padding:6px 10px;margin:3px 0;border-radius:0 4px 4px 0;">'
-                    f'<span style="font-size:10px;color:#64748b;">{_ts} · {_src}</span><br>'
-                    f'<span style="font-size:12px;color:#C8D8E8;">{_item.get("text","")[:200]}</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-            if st.button("🗑 Clear Inbox", key="clear_inbox_btn"):
-                clear_inbox()
-                st.rerun()
-
-        with st.expander("📝 Add Note / Paste X Post", expanded=False):
-            _note_text = st.text_area("Paste an X post, news snippet, or your own note:", key="ce_note_input", height=100)
-            if st.button("💾 Save to Inbox", key="ce_save_btn"):
-                if _note_text.strip():
-                    save_to_inbox(_note_text.strip(), source="manual")
-                    st.success("Saved to inbox.")
-                    st.rerun()
-
-        # AI News Digest
-        from utils.ai_tier import render_ai_tier_selector as _rr_ai_tier
-        _ced1, _ced2 = st.columns([2, 2])
-        with _ced1:
-            _use_ce_news, _ce_news_model = _rr_ai_tier(
-                key="ce_engine_radio",
-                label="Engine",
-                recommendation="⚡ Freeloader for quick regime reads · 🧠 Regard for live X/news synthesis",
-            )
-        with _ced2:
-            _ce_run = st.button("🗞 Generate News Digest", key="ce_digest_btn", type="primary")
-
-        if _ce_run:
-            _ce_ctx = headlines_to_text(_headlines, 15) + "\n\n" + inbox_to_text(_inbox, 10)
-            _ce_prompt = (
-                f"You are a macro strategist. Summarize these financial headlines and notes "
-                f"into a 3-4 sentence digest for an investor. Focus on: rate expectations, "
-                f"geopolitical risks, sector rotation signals, and anything surprising.\n\n"
-                f"Headlines & Notes:\n{_ce_ctx}"
-            )
-            _groq_key = os.getenv("GROQ_API_KEY", "")
-            _digest = None
-            if _use_ce_news:
-                try:
-                    _ce_m = _ce_news_model or "grok-4-1-fast-reasoning"
-                    if _ce_m.startswith("grok-") and os.getenv("XAI_API_KEY"):
-                        from services.claude_client import _call_xai
-                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], _ce_m, 400, 0.3)
-                    else:
-                        import anthropic as _ac
-                        _digest = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")).messages.create(
-                            model=_ce_m, max_tokens=400, temperature=0.3,
-                            messages=[{"role": "user", "content": _ce_prompt}],
-                        ).content[0].text.strip()
-                except Exception as _ace:
-                    st.error(f"Claude error: {_ace}")
-            elif _groq_key:
-                try:
-                    _gr = _req_ce.post(
-                        GROQ_API_URL,
-                        headers={"Authorization": f"Bearer {_groq_key}", "Content-Type": "application/json"},
-                        json={"model": "llama-3.3-70b-versatile",
-                              "messages": [{"role": "user", "content": _ce_prompt}],
-                              "max_tokens": 400, "temperature": 0.3},
-                        timeout=20,
-                    )
-                    if _gr.ok:
-                        _digest = _gr.json()["choices"][0]["message"]["content"].strip()
-                    elif _gr.status_code == 400 and _ce_has_claude:
-                        from services.claude_client import _call_xai
-                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], "grok-4-1-fast-reasoning", 400, 0.3)
-                except Exception as _ge:
-                    st.error(f"News digest error: {_ge}")
-
-            if _digest:
-                st.session_state["_current_events_digest"] = _digest
-                st.session_state["_current_events_digest_ts"] = datetime.now()
-                st.session_state["_current_events_engine"] = st.session_state.get("ce_engine_radio", "⚡ Freeloader Mode")
-
-        _digest_val = st.session_state.get("_current_events_digest")
-        if _digest_val:
-            _digest_ts = st.session_state.get("_current_events_digest_ts")
-            _digest_age = f"{int((datetime.now()-_digest_ts).total_seconds()/60)}m ago" if _digest_ts else ""
-            st.markdown(
-                f'<div style="background:#0f172a;border-left:3px solid #22c55e;'
-                f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;">'
-                f'<div style="font-size:10px;color:#475569;margin-bottom:4px;">'
-                f'NEWS DIGEST · {st.session_state.get("_current_events_engine","")}'
-                f'{" · " + _digest_age if _digest_age else ""}</div>'
-                f'<div style="font-size:13px;color:#C8D8E8;">{_digest_val}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
         # ── Dalio Quadrant Scatter ──
         with st.expander("📈 Quadrant History — Growth vs Inflation", expanded=False):
@@ -3176,26 +3520,6 @@ def render():
             styled_health = health_df.style.map(_color_status, subset=["Status"])
             st.dataframe(styled_health, use_container_width=True, hide_index=True)
 
-        # ── Yield Curve Regime ──
-        yc_regime = macro.get("yield_curve_regime", {})
-        if yc_regime.get("regime") != "Unknown":
-            _section_header("Yield Curve Regime")
-            regime_name = yc_regime["regime"]
-            inv_tag = " **(Inverted)**" if yc_regime.get("inverted") else ""
-
-            yc_descriptions = {
-                "Bull Steepening": "Curve widening with rates falling — Fed easing expectations, positive for risk assets",
-                "Bear Steepening": "Curve widening with rates rising — inflation fears, long-end selling off",
-                "Bull Flattening": "Curve narrowing with rates falling — flight to safety, slowing growth expectations",
-                "Bear Flattening": "Curve narrowing with rates rising — Fed tightening, short-end rates rising faster",
-            }
-
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f"**Regime:** {regime_name}{inv_tag}")
-            c2.markdown(f"**10Y-2Y Spread:** {yc_regime['spread_now']} bps ({yc_regime['spread_change']:+.3f} 30d chg)")
-            c3.markdown(f"**10Y Yield:** {yc_regime['ten_year_now']}% ({yc_regime['rate_direction']})")
-            st.caption(yc_descriptions.get(regime_name, ""))
-
         # ── Signal Changes ──
         history = _load_history()
         if len(history) >= 2:
@@ -3255,32 +3579,6 @@ def render():
         capliq_txt = "N/A" if macro["capex_vs_liquidity"] is None else f"{macro['capex_vs_liquidity']:.2f}pp"
         st.markdown(bloomberg_metric("CAPEX vs Liquidity Spread", capliq_txt), unsafe_allow_html=True)
         st.caption(macro["cycle_stage"])
-
-        # ── Summary ──
-        _section_header("Summary")
-        _vel_label = macro.get("velocity_label", "")
-        if _vel_label:
-            _vel_color = COLORS["green"] if "↑" in _vel_label else COLORS["red"] if "↓" in _vel_label else COLORS["text_dim"]
-            st.markdown(
-                f'<span style="background:{_vel_color}22;border:1px solid {_vel_color}55;border-radius:3px;'
-                f'padding:3px 10px;font-family:\'JetBrains Mono\',Consolas,monospace;font-size:12px;'
-                f'color:{_vel_color};display:inline-block;margin-bottom:8px;">{_vel_label}</span>',
-                unsafe_allow_html=True,
-            )
-        for line in macro["summary"]:
-            st.markdown(f"- {line}")
-        _contradictions = macro.get("contradictions")
-        if _contradictions:
-            _bull_str = ", ".join(_contradictions["bull"][:2])
-            _bear_str = ", ".join(_contradictions["bear"][:2])
-            st.markdown(
-                f'<div style="background:{COLORS["yellow"]}15;border-left:3px solid {COLORS["yellow"]};'
-                f'padding:8px 12px;margin-top:8px;font-size:12px;color:{COLORS["text_dim"]};">'
-                f'⚡ <strong style="color:{COLORS["yellow"]}">Signal Conflict</strong> — '
-                f'Bull: {_bull_str} vs Bear: {_bear_str}. '
-                f'Regime conviction lower than score implies.</div>',
-                unsafe_allow_html=True,
-            )
 
         # ── Portfolio Bias ──
         _section_header("Portfolio Bias")
@@ -3475,6 +3773,148 @@ def render():
             if st.button("Retry SPY Gamma", key="retry_gamma"):
                 st.cache_data.clear()
                 st.rerun()
+
+        # ── Current Events ─────────────────────────────────────────────────
+        st.markdown("---")
+        _section_header("Current Events")
+        from services.news_feed import (
+            fetch_financial_headlines, load_news_inbox, save_to_inbox, clear_inbox,
+            headlines_to_text, inbox_to_text,
+        )
+        from services.claude_client import GROQ_API_URL
+        import requests as _req_ce
+
+        _headlines = fetch_financial_headlines()
+        _inbox = load_news_inbox()
+
+        _ce_col1, _ce_col2 = st.columns([3, 1])
+        with _ce_col1:
+            if _headlines:
+                st.markdown(
+                    f'<div style="font-size:10px;font-weight:700;color:#64748b;'
+                    f'letter-spacing:0.08em;margin-bottom:4px;">RSS HEADLINES</div>',
+                    unsafe_allow_html=True,
+                )
+                for _h in _headlines[:12]:
+                    st.markdown(
+                        f'<div style="padding:3px 0;border-bottom:1px solid #1e293b;">'
+                        f'<span style="font-size:10px;color:#f97316;">[{_h["source"]}]</span> '
+                        f'<a href="{_h.get("url","#")}" target="_blank" style="font-size:12px;color:#C8D8E8;text-decoration:none;">'
+                        f'{_h["title"][:90]}{"…" if len(_h["title"])>90 else ""}</a>'
+                        f'<span style="font-size:10px;color:#475569;margin-left:6px;">{_h["date"]}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("RSS feeds unavailable — check connection.")
+
+        with _ce_col2:
+            if st.button("🔄 Refresh Headlines", key="refresh_headlines"):
+                fetch_financial_headlines.clear()
+                st.rerun()
+
+        if _inbox:
+            st.markdown(
+                f'<div style="font-size:10px;font-weight:700;color:#64748b;'
+                f'letter-spacing:0.08em;margin:10px 0 4px 0;">📥 INBOX ({len(_inbox)} items)</div>',
+                unsafe_allow_html=True,
+            )
+            for _item in reversed(_inbox[-5:]):
+                _ts = _item.get("ts", "")[:16].replace("T", " ")
+                _src = _item.get("source", "manual")
+                st.markdown(
+                    f'<div style="background:#0f172a;border-left:3px solid #f97316;'
+                    f'padding:6px 10px;margin:3px 0;border-radius:0 4px 4px 0;">'
+                    f'<span style="font-size:10px;color:#64748b;">{_ts} · {_src}</span><br>'
+                    f'<span style="font-size:12px;color:#C8D8E8;">{_item.get("text","")[:200]}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            if st.button("🗑 Clear Inbox", key="clear_inbox_btn"):
+                clear_inbox()
+                st.rerun()
+
+        with st.expander("📝 Add Note / Paste X Post", expanded=False):
+            _note_text = st.text_area("Paste an X post, news snippet, or your own note:", key="ce_note_input", height=100)
+            if st.button("💾 Save to Inbox", key="ce_save_btn"):
+                if _note_text.strip():
+                    save_to_inbox(_note_text.strip(), source="manual")
+                    st.success("Saved to inbox.")
+                    st.rerun()
+
+        # AI News Digest
+        from utils.ai_tier import render_ai_tier_selector as _rr_ai_tier
+        _ced1, _ced2 = st.columns([2, 2])
+        with _ced1:
+            _use_ce_news, _ce_news_model = _rr_ai_tier(
+                key="ce_engine_radio",
+                label="Engine",
+                recommendation="⚡ Freeloader for quick regime reads · 🧠 Regard for live X/news synthesis",
+            )
+        with _ced2:
+            _ce_run = st.button("🗞 Generate News Digest", key="ce_digest_btn", type="primary")
+
+        if _ce_run:
+            _ce_ctx = headlines_to_text(_headlines, 15) + "\n\n" + inbox_to_text(_inbox, 10)
+            _ce_prompt = (
+                f"You are a macro strategist. Summarize these financial headlines and notes "
+                f"into a 3-4 sentence digest for an investor. Focus on: rate expectations, "
+                f"geopolitical risks, sector rotation signals, and anything surprising.\n\n"
+                f"Headlines & Notes:\n{_ce_ctx}"
+            )
+            _groq_key = os.getenv("GROQ_API_KEY", "")
+            _digest = None
+            if _use_ce_news:
+                try:
+                    _ce_m = _ce_news_model or "grok-4-1-fast-reasoning"
+                    if _ce_m.startswith("grok-") and os.getenv("XAI_API_KEY"):
+                        from services.claude_client import _call_xai
+                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], _ce_m, 400, 0.3)
+                    else:
+                        import anthropic as _ac
+                        _digest = _ac.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY")).messages.create(
+                            model=_ce_m, max_tokens=400, temperature=0.3,
+                            messages=[{"role": "user", "content": _ce_prompt}],
+                        ).content[0].text.strip()
+                except Exception as _ace:
+                    st.error(f"Claude error: {_ace}")
+            elif _groq_key:
+                try:
+                    _gr = _req_ce.post(
+                        GROQ_API_URL,
+                        headers={"Authorization": f"Bearer {_groq_key}", "Content-Type": "application/json"},
+                        json={"model": "llama-3.3-70b-versatile",
+                              "messages": [{"role": "user", "content": _ce_prompt}],
+                              "max_tokens": 400, "temperature": 0.3},
+                        timeout=20,
+                    )
+                    if _gr.ok:
+                        _digest = _gr.json()["choices"][0]["message"]["content"].strip()
+                    elif _gr.status_code == 400 and os.getenv("ANTHROPIC_API_KEY"):
+                        from services.claude_client import _call_xai
+                        _digest = _call_xai([{"role": "user", "content": _ce_prompt}], "grok-4-1-fast-reasoning", 400, 0.3)
+                except Exception as _ge:
+                    st.error(f"News digest error: {_ge}")
+
+            if _digest:
+                st.session_state["_current_events_digest"] = _digest
+                st.session_state["_current_events_digest_ts"] = datetime.now()
+                st.session_state["_current_events_engine"] = st.session_state.get("ce_engine_radio", "⚡ Freeloader Mode")
+
+        _digest_val = st.session_state.get("_current_events_digest")
+        if _digest_val:
+            _digest_ts = st.session_state.get("_current_events_digest_ts")
+            _digest_age = f"{int((datetime.now()-_digest_ts).total_seconds()/60)}m ago" if _digest_ts else ""
+            st.markdown(
+                f'<div style="background:#0f172a;border-left:3px solid #22c55e;'
+                f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;">'
+                f'<div style="font-size:10px;color:#475569;margin-bottom:4px;">'
+                f'NEWS DIGEST · {st.session_state.get("_current_events_engine","")}'
+                f'{" · " + _digest_age if _digest_age else ""}</div>'
+                f'<div style="font-size:13px;color:#C8D8E8;">{_digest_val}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     with tab_sector:
         _render_sector_rotation_tab(macro["quadrant"], macro["macro_regime"])

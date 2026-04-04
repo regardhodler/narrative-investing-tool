@@ -672,9 +672,265 @@ def _render_fed_probability_bars(macro: dict, fred_data: dict, tone_result: dict
         st.rerun()
 
     st.markdown("---")
+    _render_dot_plot_vs_futures(_final_probs, fred_data)
+    _render_data_sensitivity(_final_probs, locals().get("_fed_ctx", {}))
+
+    st.markdown("---")
 
     _render_fed_sector_rotation_panel(macro, _final_probs)
     _render_fed_asset_matrix(macro, fred_data, _final_probs)
+
+
+def _render_dot_plot_vs_futures(final_probs: list[dict], fred_data: dict):
+    """Section: Fed Dot Plot vs Futures — where the market diverges from the Fed's own projections."""
+    from services.fed_forecaster import SCENARIO_KEYS
+    _SCENARIO_DELTAS = {"cut_50": -0.50, "cut_25": -0.25, "hold": 0.00, "hike_25": +0.25}
+
+    _section_header("Dot Plot vs Futures Gap")
+    st.caption(
+        "Fed's own median rate projection (SEP) vs market-implied terminal rate (ZQ futures). "
+        "Gap = where trades live — divergence signals re-pricing risk."
+    )
+
+    # Current rate
+    _ff_series = fred_data.get("fedfunds")
+    current_rate = float(_ff_series.dropna().iloc[-1]) if (_ff_series is not None and not _ff_series.empty) else st.session_state.get("_fed_funds_rate") or 4.50
+
+    # Futures-implied terminal rate: probability-weighted delta from current
+    _weighted_delta = sum(
+        r.get("prob", 0.25) * _SCENARIO_DELTAS.get(r["scenario"], 0.0)
+        for r in final_probs
+    )
+    futures_implied = current_rate + _weighted_delta
+
+    # Latest SEP median projections (March 2026 FOMC — updated each SEP meeting)
+    # Sources: FOMC Summary of Economic Projections, March 2026
+    _SEP = {
+        "2026 Year-End": 3.875,   # median dot for end-2026
+        "2027 Year-End": 3.375,   # median dot for end-2027
+        "Longer Run":    2.875,   # longer-run neutral rate median
+    }
+    _SEP_DATE = "Mar 2026 SEP"
+
+    # Compute implied cuts for each data point (relative to current rate)
+    def _cuts_label(rate: float) -> str:
+        delta_bp = int(round((rate - current_rate) * 100))
+        if delta_bp == 0:
+            return "no change"
+        elif delta_bp < 0:
+            return f"{abs(delta_bp)}bp of cuts"
+        else:
+            return f"{delta_bp}bp of hikes"
+
+    _futures_color = COLORS.get("green", "#22c55e") if futures_implied <= _SEP["2026 Year-End"] else COLORS.get("red", "#ef4444")
+
+    # Chart: rate levels with implied-cut annotation in bar text
+    _chart_labels = [
+        _SEP_DATE + " · Longer Run",
+        _SEP_DATE + " · 2027",
+        _SEP_DATE + " · 2026",
+        "Futures Implied",
+        "Current Rate",
+    ]
+    _chart_vals = [_SEP["Longer Run"], _SEP["2027 Year-End"], _SEP["2026 Year-End"], futures_implied, current_rate]
+    _chart_colors = [
+        COLORS.get("bloomberg_orange", "#FF8811"),
+        COLORS.get("bloomberg_orange", "#FF8811"),
+        COLORS.get("bloomberg_orange", "#FF8811"),
+        _futures_color,
+        COLORS.get("text_dim", "#94a3b8"),
+    ]
+    # Bar text: "3.88% (62bp cuts)" — rate level + what that implies in cut terms
+    _chart_text = [
+        f"{v:.2f}%  ({_cuts_label(v)})" for v in _chart_vals
+    ]
+
+    fig = go.Figure(go.Bar(
+        x=_chart_vals,
+        y=_chart_labels,
+        orientation="h",
+        marker_color=_chart_colors,
+        marker_line_width=0,
+        text=_chart_text,
+        textposition="outside",
+    ))
+    apply_dark_layout(fig)
+    fig.update_layout(
+        height=200,
+        margin=dict(l=0, r=160, t=10, b=10),
+        xaxis=dict(range=[0, max(_chart_vals) * 1.35], ticksuffix="%", showgrid=False),
+        yaxis=dict(autorange="reversed"),
+        showlegend=False,
+    )
+    # Reference line at current rate for visual clarity
+    fig.add_vline(
+        x=current_rate,
+        line_dash="dot",
+        line_color=COLORS.get("text_dim", "#64748b"),
+        line_width=1,
+        annotation_text="Today",
+        annotation_position="top",
+        annotation_font_size=10,
+        annotation_font_color=COLORS.get("text_dim", "#64748b"),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Gap analysis
+    gap_26 = futures_implied - _SEP["2026 Year-End"]
+    gap_bp = int(round(gap_26 * 100))
+    abs_bp = abs(gap_bp)
+
+    if gap_bp < -10:
+        signal_color = COLORS.get("green", "#22c55e")
+        signal_label = f"Futures pricing {abs_bp}bp MORE CUTS than Fed dots → dovish repricing risk"
+        signal_sub   = "If Fed validates: bonds rally, growth stocks outperform. If pushback: rate shock."
+    elif gap_bp > 10:
+        signal_color = COLORS.get("red", "#ef4444")
+        signal_label = f"Futures pricing {abs_bp}bp FEWER CUTS than Fed dots → hawkish drift risk"
+        signal_sub   = "Rates staying higher longer. Value/financials benefit, duration gets punished."
+    else:
+        signal_color = COLORS.get("yellow", "#f0c040")
+        signal_label = f"Futures aligned with Fed dots (gap: {gap_bp:+d}bp) → low re-pricing risk"
+        signal_sub   = "Market and Fed broadly agree. Watch incoming data for the next catalyst."
+
+    st.markdown(
+        f'<div style="border-left:4px solid {signal_color};background:{COLORS.get("surface","#1e293b")};'
+        f'border-radius:0 6px 6px 0;padding:10px 16px;margin:8px 0;">'
+        f'<div style="font-size:13px;font-weight:700;color:{signal_color};">{signal_label}</div>'
+        f'<div style="font-size:12px;color:{COLORS.get("text_dim","#94a3b8")};margin-top:4px;">{signal_sub}</div>'
+        f'<div style="font-size:11px;color:{COLORS.get("text_dim","#64748b")};margin-top:6px;">'
+        f'Current: {current_rate:.2f}%  ·  Futures implied: {futures_implied:.2f}%  ·  '
+        f'Fed dot 2026: {_SEP["2026 Year-End"]:.3f}%  ·  Neutral: {_SEP["Longer Run"]:.3f}%  ·  '
+        f'Source: {_SEP_DATE} (hardcoded — update each SEP meeting)</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_data_sensitivity(final_probs: list[dict], context: dict):
+    """Section: Data Sensitivity — what macro print would flip the dominant scenario?"""
+    from services.fed_forecaster import (
+        SCENARIO_KEYS, SCENARIO_LABELS, calibrate_probabilities, adjust_probabilities,
+    )
+
+    with st.expander("📊 Data Sensitivity — What Would Flip the Dominant Scenario?", expanded=False):
+        st.caption(
+            "Runs Bayesian re-calibration with perturbed macro inputs. "
+            "Shows how much each signal would need to change to shift the dominant scenario probability by ≥10pp."
+        )
+
+        if not context:
+            st.info("Context unavailable — generate forecast first.")
+            return
+
+        dominant = max(final_probs, key=lambda r: r.get("prob", 0))
+        dom_key   = dominant.get("scenario", "hold")
+        dom_prob  = dominant.get("prob", 0.25)
+        dom_label = SCENARIO_LABELS.get(dom_key, dom_key)
+
+        st.markdown(
+            f'<div style="font-size:12px;color:{COLORS.get("text_dim","#94a3b8")};margin-bottom:10px;">'
+            f'Dominant scenario: <b style="color:{COLORS.get("bloomberg_orange","#FF8811")};">'
+            f'{dom_label} ({int(round(dom_prob*100))}%)</b> — showing what shifts it by ≥10pp</div>',
+            unsafe_allow_html=True,
+        )
+
+        def _perturb_prob(signal: str, delta: float) -> float:
+            """Return dominant scenario probability after perturbing one signal."""
+            ctx2 = dict(context)
+            if signal == "core_pce":
+                ctx2["core_pce"] = (ctx2.get("core_pce") or 2.5) + delta
+            elif signal == "unemployment":
+                ctx2["unemployment"] = (ctx2.get("unemployment") or 4.0) + delta
+            elif signal == "vix_z":
+                ctx2["vix_z"] = (ctx2.get("vix_z") or 0.0) + delta
+            elif signal == "credit_z":
+                ctx2["credit_z"] = (ctx2.get("credit_z") or 0.0) + delta
+            try:
+                _c = calibrate_probabilities(final_probs, final_probs, ctx2)
+                _pm = {p["scenario"]: p["posterior"] for p in _c["posteriors"]}
+                return _pm.get(dom_key, dom_prob)
+            except Exception:
+                return dom_prob
+
+        _rows = []
+        _scenarios = [
+            ("core_pce",    +0.30, "CPI/PCE +0.3pp",         "Hot inflation print"),
+            ("core_pce",    -0.30, "CPI/PCE -0.3pp",         "Cool inflation print"),
+            ("unemployment",+0.30, "Unemployment +0.3pp",     "Softer jobs report"),
+            ("unemployment",-0.30, "Unemployment -0.3pp",     "Strong jobs report"),
+            ("vix_z",       +1.00, "VIX shock (+1σ)",         "Sudden market stress"),
+            ("vix_z",       -0.50, "VIX calms (-0.5σ)",       "Stress relief rally"),
+            ("credit_z",    +0.80, "Credit spreads widen",    "Risk-off / HY selloff"),
+        ]
+
+        for sig, delta, label, desc in _scenarios:
+            new_prob = _perturb_prob(sig, delta)
+            shift_pp = int(round((new_prob - dom_prob) * 100))
+            if shift_pp > 0:
+                shift_str = f'+{shift_pp}pp'
+                shift_color = COLORS.get("green", "#22c55e")
+                direction = "▲ Reinforces"
+            elif shift_pp < 0:
+                shift_str = f'{shift_pp}pp'
+                shift_color = COLORS.get("red", "#ef4444")
+                direction = "▼ Weakens"
+            else:
+                shift_str = "—"
+                shift_color = COLORS.get("text_dim", "#64748b")
+                direction = "Neutral"
+            _rows.append({
+                "Signal": label,
+                "Description": desc,
+                f"{dom_label} Δ": shift_str,
+                "Direction": direction,
+                "_color": shift_color,
+                "_abs": abs(shift_pp),
+            })
+
+        # Sort by impact magnitude
+        _rows.sort(key=lambda r: r["_abs"], reverse=True)
+
+        # Render table
+        _header_html = (
+            f'<div style="display:grid;grid-template-columns:1fr 1.4fr 90px 120px;'
+            f'gap:0;padding:6px 12px;background:{COLORS.get("bg","#0f172a")};'
+            f'font-size:10px;font-weight:700;color:{COLORS.get("text_dim","#94a3b8")};'
+            f'text-transform:uppercase;letter-spacing:0.07em;border-radius:6px 6px 0 0;">'
+            f'<span>Signal</span><span>What it means</span>'
+            f'<span style="text-align:right;">Δ {dom_label[:8]}</span>'
+            f'<span style="text-align:center;">Effect</span></div>'
+        )
+        _rows_html = ""
+        for i, row in enumerate(_rows):
+            bg = COLORS.get("surface", "#1e293b") if i % 2 == 0 else COLORS.get("bg", "#0f172a")
+            _rows_html += (
+                f'<div style="display:grid;grid-template-columns:1fr 1.4fr 90px 120px;'
+                f'gap:0;padding:7px 12px;background:{bg};font-size:12px;">'
+                f'<span style="font-weight:600;">{row["Signal"]}</span>'
+                f'<span style="color:{COLORS.get("text_dim","#94a3b8")};">{row["Description"]}</span>'
+                f'<span style="text-align:right;font-weight:700;color:{row["_color"]};">{row[f"{dom_label} Δ"]}</span>'
+                f'<span style="text-align:center;color:{row["_color"]};font-size:11px;">{row["Direction"]}</span>'
+                f'</div>'
+            )
+        st.markdown(
+            f'<div style="border:1px solid {COLORS.get("border","#334155")};border-radius:6px;'
+            f'overflow:hidden;margin-top:8px;">'
+            f'{_header_html}{_rows_html}</div>',
+            unsafe_allow_html=True,
+        )
+
+        # Flip threshold indicator
+        _flip_candidates = [r for r in _rows if r["_abs"] >= 10]
+        if _flip_candidates:
+            _biggest = _flip_candidates[0]
+            st.markdown(
+                f'<div style="margin-top:10px;font-size:12px;color:{COLORS.get("text_dim","#94a3b8")};">'
+                f'⚠ Largest flip risk: <b>{_biggest["Signal"]}</b> would shift '
+                f'<b style="color:{_biggest["_color"]};">{_biggest[f"{dom_label} Δ"]}</b> '
+                f'on {dom_label}</div>',
+                unsafe_allow_html=True,
+            )
 
 
 def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]):
@@ -912,55 +1168,6 @@ def _render_fed_causal_chain(chains: dict, adj_probs: list[dict], medium: dict, 
                     unsafe_allow_html=True,
                 )
 
-    _render_fed_causal_chain_narration(chains, adj_probs)
-
-
-def _render_fed_causal_chain_narration(chains: dict, adj_probs: list[dict]):
-    """AI narration panel appended to the causal chain section."""
-    import json as _json
-    st.markdown("---")
-    _use_cl_cc, _cc_model = _ff_ai_tier(
-        key="causal_chain_engine",
-        label="Transmission Engine",
-        recommendation="⚡ Freeloader sufficient for causal chain mapping · 🧠 Regard for complex multi-step transmission paths",
-    )
-    _sel_cc = st.session_state.get("causal_chain_engine", "⚡ Freeloader Mode")
-
-    _prev_cc_tier = st.session_state.get("_cc_tier_prev")
-    if _prev_cc_tier and _prev_cc_tier != _sel_cc:
-        st.session_state.pop("_chain_narration", None)
-    st.session_state["_cc_tier_prev"] = _sel_cc
-
-    if st.button("Narrate Transmission Path", key="narrate_chain_btn", type="primary"):
-        from services.claude_client import narrate_policy_transmission
-        try:
-            _chains_json = _json.dumps({k: v for k, v in chains.items()}, default=str)
-            _probs_json  = _json.dumps([{"scenario": r.get("scenario"), "prob": r.get("prob")} for r in adj_probs])
-        except Exception:
-            _chains_json = str(chains)
-            _probs_json  = str(adj_probs)
-        with st.spinner("Analyzing transmission path..."):
-            _narration = narrate_policy_transmission(_chains_json, _probs_json, use_claude=_use_cl_cc, model=_cc_model)
-        st.session_state["_chain_narration"] = _narration
-        st.session_state["_chain_narration_engine"] = _sel_cc
-        from services.play_log import append_play as _append_play
-        _append_play("Transmission Path", _sel_cc, {"narration": _narration})
-    if st.session_state.get("_chain_narration"):
-        _eng = st.session_state.get("_chain_narration_engine", "")
-        _border = "2px solid #FF8811" if "👑" in _eng else "1px solid #334155"
-        st.markdown(
-            f'<div style="border:{_border};border-left-width:4px;border-radius:6px;'
-            f'padding:14px 18px;background:#1A1F2E;margin-top:8px;">'
-            f'<div style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
-            f'text-transform:uppercase;margin-bottom:8px;">Transmission Narrative · {_eng}</div>'
-            f'<div style="font-size:13px;line-height:1.7;">{st.session_state["_chain_narration"]}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        if st.button("Clear Narration", key="clear_chain_narration"):
-            st.session_state.pop("_chain_narration", None)
-            st.rerun()
-
 
 def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict, use_claude: bool = False, engine: str = ""):
     """Section 6: probability-weighted medium-term fan charts in tabbed layout."""
@@ -1142,156 +1349,6 @@ def _render_fed_fan_charts(medium: dict, adj_probs: list[dict], expanded: dict, 
 
     with tabs[4]:
         _draw_fan_chart("usd")
-
-    st.markdown("---")
-    _render_fed_long_term(expanded, adj_probs, use_claude=use_claude, engine=engine)
-
-
-def _render_fed_long_term(expanded: dict, adj_probs: list, use_claude: bool = False, engine: str = ""):
-    """Section 7: 2-year quarterly long-term outlook bar charts."""
-    from services.fed_forecaster import (
-        SCENARIO_KEYS, SCENARIO_LABELS, ASSET_LABELS as SVC_ASSET_LABELS,
-    )
-
-    _badge = engine or ("🧠 Regard Mode" if use_claude else "⚡ Standard")
-    _section_header("Long-Term Asset Impact — 2-Year Quarterly Outlook", badge=_badge)
-    st.caption("Market-implied forecast — probability-weighted cumulative quarterly % change (Q1–Q8)")
-
-    long = expanded.get("long_term", {})
-    if not long:
-        st.info("Long-term forecast unavailable.")
-        return
-
-    _lt_assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
-    _lt_prob = {r["scenario"]: r["prob"] for r in adj_probs}
-    _lt_returns = {}
-    for _asset in _lt_assets:
-        _wf = sum(
-            _lt_prob.get(sk, 0.25) * (
-                long.get(sk, {}).get(_asset, [0.0]*8)[-1]
-                if long.get(sk, {}).get(_asset)
-                else 0.0
-            )
-            for sk in SCENARIO_KEYS
-        )
-        if _wf != 0.0:
-            _lt_returns[_asset] = _wf
-
-    if _lt_returns:
-        _sorted_lt = sorted(_lt_returns.items(), key=lambda x: x[1], reverse=True)
-        _gainers = [(k, v) for k, v in _sorted_lt if v > 0][:3]
-        _losers = [(k, v) for k, v in _sorted_lt if v < 0][-3:]
-        _losers.reverse()
-
-        _gain_str = "  ".join(
-            f'<span style="color:#22c55e;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
-            for k, v in _gainers
-        ) if _gainers else '<span style="color:#888;">none</span>'
-        _loss_str = "  ".join(
-            f'<span style="color:#ef4444;font-weight:600;">{SVC_ASSET_LABELS.get(k, k)} {v:+.1f}%</span>'
-            for k, v in _losers
-        ) if _losers else '<span style="color:#888;">none</span>'
-
-        st.markdown(
-            f'<div style="background:{COLORS.get("surface", "#1e293b")};border:1px solid {COLORS.get("border", "#334155")};'
-            f'border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;">'
-            f'<b>2-Year Outlook:</b>&nbsp;&nbsp;'
-            f'▲ {_gain_str}&nbsp;&nbsp;&nbsp;▼ {_loss_str}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    prob_map = {r["scenario"]: r["prob"] for r in adj_probs}
-    assets = ["spy", "qqq", "iwm", "dji", "bonds_long", "bonds_short", "usd"]
-    quarters = [f"Q{i+1}" for i in range(8)]
-
-    cols = st.columns(2)
-    for idx, asset in enumerate(assets):
-        weighted = [0.0] * 8
-        for sk in SCENARIO_KEYS:
-            prob = prob_map.get(sk, 0.25)
-            vals = long.get(sk, {}).get(asset, [0.0] * 8)
-            for q in range(8):
-                weighted[q] += prob * (vals[q] if q < len(vals) else 0.0)
-
-        bar_colors = [
-            COLORS.get("green", "#22c55e") if v >= 0 else COLORS.get("red", "#ef4444")
-            for v in weighted
-        ]
-        fig = go.Figure(go.Bar(
-            x=quarters,
-            y=weighted,
-            marker_color=bar_colors,
-            marker_line_width=0,
-            showlegend=False,
-        ))
-        apply_dark_layout(fig)
-        fig.update_layout(
-            title=dict(text=SVC_ASSET_LABELS.get(asset, asset), font_size=13),
-            height=220,
-            margin=dict(l=0, r=10, t=30, b=20),
-            xaxis_title="Quarter",
-            yaxis_title="% cum.",
-        )
-        fig.add_hline(y=0, line_dash="dot",
-            line_color=COLORS.get("border", "#444"), line_width=1)
-        cols[idx % 2].plotly_chart(fig, use_container_width=True)
-
-    st.markdown("---")
-    _render_fed_black_swans(expanded, adj_probs, use_claude=use_claude, engine=engine)
-
-
-def _render_fed_black_swans(expanded: dict, adj_probs: list[dict], use_claude: bool = False, engine: str = ""):
-    """Compact black swan summary — full analysis lives in Tail Risk Studio."""
-    from services.fed_forecaster import BLACK_SWAN_EVENTS, ASSET_LABELS as SVC_ASSET_LABELS
-
-    _section_header("Black Swan Risk Summary")
-
-    swans = expanded.get("black_swans", {})
-    if not swans:
-        st.info("Black swan data unavailable — re-generate forecast or visit Tail Risk Studio.")
-        st.markdown("---")
-        _render_fed_causal_chain(
-            expanded.get("causal_chains", {}), adj_probs,
-            expanded.get("medium_term", {}), expanded,
-            use_claude=use_claude, engine=engine,
-        )
-        return
-
-    avg_prob = sum(swans.get(k, {}).get("probability_pct", 0) for k in BLACK_SWAN_EVENTS) / max(len(BLACK_SWAN_EVENTS), 1)
-    if avg_prob > 8:
-        agg_color, agg_label = COLORS.get("red", "#ef4444"), "ELEVATED"
-    elif avg_prob > 3:
-        agg_color, agg_label = "#f59e0b", "MODERATE"
-    else:
-        agg_color, agg_label = COLORS.get("green", "#22c55e"), "LOW"
-
-    # Compact row of event badges
-    badges_html = ""
-    for k, label in BLACK_SWAN_EVENTS.items():
-        prob = swans.get(k, {}).get("probability_pct", 0)
-        if prob > 10:
-            c = COLORS.get("red", "#ef4444")
-        elif prob > 3:
-            c = "#f59e0b"
-        else:
-            c = COLORS.get("green", "#22c55e")
-        badges_html += (
-            f'<span style="border:1px solid {c};border-radius:6px;padding:4px 10px;'
-            f'margin:3px;display:inline-block;font-size:12px;">'
-            f'<span style="color:{c};font-weight:700;">{prob:.1f}%</span>'
-            f' <span style="color:{COLORS.get("text_dim","#888")};font-size:11px;">{label}</span>'
-            f'</span>'
-        )
-
-    st.markdown(
-        f'<div style="margin-bottom:8px;font-size:13px;">'
-        f'Aggregate tail risk: <span style="color:{agg_color};font-weight:700;">{agg_label}</span>'
-        f' &nbsp;·&nbsp; avg {avg_prob:.1f}% annual probability</div>'
-        f'<div style="margin-bottom:10px;">{badges_html}</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption("Full scenario analysis, custom events & impact heatmap → **Tail Risk Studio** in sidebar")
 
     st.markdown("---")
     _render_fed_causal_chain(

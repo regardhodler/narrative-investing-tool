@@ -10,6 +10,7 @@ from datetime import date
 from utils.journal import load_journal, add_trade, close_trade, delete_trade, update_trade
 from utils.theme import COLORS, apply_dark_layout
 from utils.ai_tier import render_ai_tier_selector
+from utils.components import render_rr_score_mode_toggle, render_intel_health_bar, apply_confidence_penalty
 from services.sec_client import search_ticker_by_name
 
 _REGIME_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "regime_history.json")
@@ -674,12 +675,101 @@ def _regime_badge(direction: str, regime: str) -> tuple:
         return ("✅ Aligned", "#22c55e") if is_risk_off else ("❌ Misaligned", "#ef4444")
 
 
+def _render_debate_panel(debate: dict) -> None:
+    """Shared renderer for adversarial debate results — used in Portfolio & Valuation."""
+    _db_verdict = debate.get("verdict", "CONTESTED")
+    _db_conf    = debate.get("confidence", 5)
+    _db_conf_adj = apply_confidence_penalty(_db_conf)
+    _db_engine  = debate.get("engine", "")
+    _db_bias    = debate.get("contested_bias", "")
+    _db_bias_reason = debate.get("contested_bias_reason", "")
+    _engine_badge = (
+        f'<div style="color:#64748b;font-size:10px;margin-top:2px;">Engine: {_db_engine}</div>'
+        if _db_engine else ""
+    )
+    _vc  = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
+    _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
+    _winner  = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻"}.get(_db_verdict)
+    _sentences = {
+        "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip.",
+        "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash.",
+        "CONTESTED": "Both parties are remanded pending new evidence. Court adjourned.",
+    }
+    _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88"
+
+    st.markdown(
+        f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;padding:16px 18px;margin-top:10px;">'
+        f'<div style="text-align:center;margin-bottom:10px;">'
+        f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
+        f'{_engine_badge}'
+        f'<div style="color:{_vc};font-size:24px;font-weight:900;text-shadow:{_glow};">⚔️ {_db_verdict}</div>'
+        + (f'<div style="color:{_vc}aa;font-size:11px;font-style:italic;">The Court finds in favor of {_winner}</div>' if _winner else '') +
+        (
+            f'<div style="color:#94a3b8;font-size:10px;margin-top:4px;">{_db_bias}'
+            + (f' · {_db_bias_reason}' if _db_bias_reason else '')
+            + '</div>'
+            if _db_verdict == "CONTESTED" and _db_bias else ''
+        ) +
+        f'</div>'
+        f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
+        f'padding:7px 12px;margin-bottom:10px;font-size:11px;color:#e2e8f0;font-style:italic;">'
+        f'"{_sentences.get(_db_verdict, _sentences["CONTESTED"])}"</div>'
+        f'<div style="text-align:right;color:#475569;font-size:9px;">AI confidence: <b style="color:{_vc};">{_db_conf_adj}/10</b> (Judge Judy self-rated)</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    _col_bear, _col_bull = st.columns(2)
+    with _col_bear:
+        _bb = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
+        st.markdown(
+            f'<div style="background:#1a0000;border:1px solid {_bb};border-radius:6px;padding:12px;margin-top:8px;">'
+            f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:6px;">'
+            + ("🏆 " if _db_verdict == "BEAR WINS" else "") + '🐻 SIR DOOMBURGER' +
+            (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
+            f'</div><div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{debate.get("bear_argument","")}</div>'
+            f'<div style="margin-top:6px;padding-top:5px;border-top:1px solid #ef444433;">'
+            f'<span style="color:#ef4444;font-size:9px;font-weight:700;">STRONGEST: </span>'
+            f'<span style="color:#fca5a5;font-size:10px;">{debate.get("bear_strongest","")}</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+    with _col_bull:
+        _bl = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
+        st.markdown(
+            f'<div style="background:#052e16;border:1px solid {_bl};border-radius:6px;padding:12px;margin-top:8px;">'
+            f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:6px;">'
+            + ("🏆 " if _db_verdict == "BULL WINS" else "") + '🐂 SIR FUKYERPUTS' +
+            (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
+            f'</div><div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{debate.get("bull_argument","")}</div>'
+            f'<div style="margin-top:6px;padding-top:5px;border-top:1px solid #22c55e33;">'
+            f'<span style="color:#22c55e;font-size:9px;font-weight:700;">STRONGEST: </span>'
+            f'<span style="color:#86efac;font-size:10px;">{debate.get("bull_strongest","")}</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    if debate.get("asymmetry") or debate.get("key_disagreement"):
+        st.markdown(
+            f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
+            f'padding:10px 14px;margin-top:8px;">'
+            f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">⚖️ JUDGE JUDY — RULING</div>'
+            f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{debate.get("asymmetry","")}</div>'
+            f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {debate.get("key_disagreement","")}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
 def render():
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
         f'letter-spacing:0.1em;margin-bottom:12px;">MY REGARDED PORTFOLIO</div>',
         unsafe_allow_html=True,
     )
+
+    render_rr_score_mode_toggle(key="portfolio_rr_score_mode_ui")
+    render_intel_health_bar(compact=True)
 
     journal = load_journal()
     open_trades = [t for t in journal if t["status"] == "open"]
@@ -1384,6 +1474,157 @@ def render():
                     + '</div>',
                     unsafe_allow_html=True,
                 )
+
+            # ── On-demand adversarial debate for portfolio ─────────────────────
+            st.markdown('<div style="border-top:1px solid #1e293b;margin:14px 0 10px 0;"></div>', unsafe_allow_html=True)
+            try:
+                from utils.ai_tier import TIER_OPTS as _pd_tier_opts, TIER_MAP as _pd_tier_map
+            except ImportError:
+                _pd_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+                _pd_tier_map  = {
+                    "⚡ Freeloader Mode":      (False, None),
+                    "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+                    "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+                }
+            _db_col1, _db_col2, _db_col3 = st.columns([2, 1.5, 1])
+            with _db_col1:
+                st.markdown(
+                    '<span style="color:#64748b;font-size:11px;">⚔️ Adversarial debate on your portfolio — '
+                    'Sir Doomburger vs Sir Fukyerputs, judged by Judge Judy. '
+                    '<span style="color:#475569;">3 LLM calls</span></span>'
+                    '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run 🧠 Portfolio Analysis first — debate cites per-position actions &amp; stress tests by name</div>',
+                    unsafe_allow_html=True,
+                )
+            with _db_col2:
+                _pd_tier = st.selectbox("", _pd_tier_opts, key="portfolio_debate_tier", label_visibility="collapsed")
+            with _db_col3:
+                _run_portfolio_debate = st.button("⚔️ Debate Portfolio", key="btn_portfolio_debate", use_container_width=True)
+            _pd_use_claude, _pd_model = _pd_tier_map.get(_pd_tier, (False, None))
+            _pd_engine = _pd_tier
+
+            _portfolio_debate = st.session_state.get("_portfolio_debate") or {}
+            if _run_portfolio_debate:
+                _portfolio_debate = {}
+                st.session_state["_portfolio_debate"] = {}
+                with st.spinner("⚔️ Debate starting — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+                    try:
+                        from services.claude_client import generate_adversarial_debate as _gen_pd
+                        from utils.signal_block import build_macro_block as _build_pmb
+
+                        # ── Macro ground truth ────────────────────────────────
+                        try:
+                            _port_signals = _build_pmb()
+                        except Exception:
+                            _port_signals = ""
+
+                        # ── Open positions with entry, size, thesis ───────────
+                        _port_positions_str = "\n".join(
+                            f"  {t['direction'].upper()} {t['ticker']} @ ${t['entry_price']:.2f} "
+                            f"x{t['position_size']} shares"
+                            + (f" — Thesis: {t['thesis'][:80]}" if t.get("thesis") else "")
+                            for t in open_trades
+                        )
+
+                        # ── Per-position AI assessments from Portfolio Analysis ─
+                        _pa_positions = _pa.get("positions") or []
+                        _per_pos_lines = []
+                        for _pp in _pa_positions:
+                            _pp_tk = _pp.get("ticker", "?")
+                            _pp_act = _pp.get("action", "HOLD")
+                            _pp_conf = _pp.get("confidence", "?")
+                            _pp_rat = (_pp.get("rationale") or "")[:120]
+                            _pp_tail = ", ".join(_pp.get("tailwinds", [])[:2])
+                            _pp_head = ", ".join(_pp.get("headwinds", [])[:2])
+                            _per_pos_lines.append(
+                                f"  {_pp_tk}: {_pp_act} (confidence {_pp_conf}/10) — {_pp_rat}"
+                                + (f"\n    Tailwinds: {_pp_tail}" if _pp_tail else "")
+                                + (f"\n    Headwinds: {_pp_head}" if _pp_head else "")
+                            )
+                        _per_pos_str = "\n".join(_per_pos_lines) if _per_pos_lines else "  (Run Portfolio Analysis first)"
+
+                        # ── Priority actions ──────────────────────────────────
+                        _priority_actions_str = "\n".join(
+                            f"  ▸ {a}" for a in (_pa.get("priority_actions") or [])
+                        ) or "  None"
+
+                        # ── Portfolio risk snapshot ───────────────────────────
+                        _pr_snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+                        _pr_lines = []
+                        if _pr_snap.get("beta") is not None:
+                            _pr_lines.append(f"Beta {_pr_snap['beta']} | VaR95 {_pr_snap.get('var_95_pct','?')}% | CVaR95 {_pr_snap.get('cvar_95_pct','?')}%")
+                        _sw_snap = _pr_snap.get("sector_weights") or {}
+                        if _sw_snap:
+                            _pr_lines.append("Sector weights: " + ", ".join(f"{s} {w}%" for s, w in sorted(_sw_snap.items(), key=lambda x: -x[1])))
+                        _stress_snaps = _pr_snap.get("stress_scenarios") or []
+                        if _stress_snaps:
+                            _pr_lines.append("Stress tests: " + " | ".join(
+                                f"{s['scenario']} {s['port_impact_pct']:+.1f}%" for s in _stress_snaps[:4]
+                            ))
+                        _rf_snap = _pr_snap.get("risk_flags") or []
+                        if _rf_snap:
+                            _pr_lines.append("Risk flags: " + "; ".join(f.replace("⚠ ", "") for f in _rf_snap))
+                        _risk_interp = st.session_state.get("_risk_matrix_interpretation") or {}
+                        if _risk_interp.get("summary"):
+                            _pr_lines.append(f"AI Risk Interpretation: {_risk_interp['summary'][:200]}")
+                        _pr_str = "\n".join(f"  {l}" for l in _pr_lines) if _pr_lines else "  Not computed"
+
+                        # ── Macro regime + rate path ──────────────────────────
+                        _rc_pd2 = st.session_state.get("_regime_context") or {}
+                        _rp_pd2 = st.session_state.get("_dominant_rate_path") or {}
+                        _rp_lbl = {"cut_25": "25bp cut", "cut_50": "50bp cut", "hold": "Hold", "hike_25": "25bp hike"}
+                        _tac_pd2 = st.session_state.get("_tactical_context") or {}
+                        _of_pd2  = st.session_state.get("_options_flow_context") or {}
+                        _synopsis_pd = st.session_state.get("_macro_synopsis") or {}
+
+                        _port_context = (
+                            f"OPEN POSITIONS:\n{_port_positions_str}\n\n"
+
+                            f"PORTFOLIO INTELLIGENCE (AI Analysis — {_pa_engine}):\n"
+                            f"  Overall Verdict: {_pa.get('verdict','?')} | Risk Score: {_pa.get('risk_score','?')}/10\n"
+                            f"  Narrative: {_pa.get('narrative','')[:300]}\n\n"
+
+                            f"PER-POSITION AI ASSESSMENTS:\n{_per_pos_str}\n\n"
+
+                            f"PRIORITY ACTIONS (from Portfolio Analysis):\n{_priority_actions_str}\n\n"
+
+                            f"PORTFOLIO RISK METRICS:\n{_pr_str}\n\n"
+
+                            f"MACRO REGIME:\n"
+                            f"  Regime: {_rc_pd2.get('regime','')} | Quadrant: {_rc_pd2.get('quadrant','')} | Score: {_rc_pd2.get('score',0):+.2f}\n"
+                            f"  Rate Path: {_rp_lbl.get(_rp_pd2.get('scenario',''), _rp_pd2.get('scenario',''))} ({_rp_pd2.get('prob_pct',0):.0f}%)\n"
+                            + (f"  Tactical: {_tac_pd2.get('tactical_score',50)}/100 — {_tac_pd2.get('label','')} | {_tac_pd2.get('action_bias','')}\n" if _tac_pd2 else "")
+                            + (f"  Options Flow: {_of_pd2.get('options_score',50)}/100 — {_of_pd2.get('label','')} | {_of_pd2.get('action_bias','')}\n" if _of_pd2 else "")
+                            + (f"  Macro Synopsis: {_synopsis_pd.get('conviction','')} — {_synopsis_pd.get('summary','')[:200]}\n" if _synopsis_pd.get("conviction") else "")
+                            + f"\nMACRO GROUND TRUTH (raw signals):\n{_port_signals}"
+                        )
+                        _portfolio_debate = _gen_pd(
+                            _port_context,
+                            use_claude=_pd_use_claude,
+                            model=_pd_model,
+                            ticker="portfolio",
+                            topic=f"Should this specific portfolio be HELD, REDUCED, or EXITED right now? Argue each position by name — cite the AI verdict ({_pa.get('verdict','?')} risk {_pa.get('risk_score','?')}/10), per-position actions, and the stress test results.",
+                        )
+                        _portfolio_debate["engine"] = _pd_engine
+                        st.session_state["_portfolio_debate"] = _portfolio_debate
+                        from utils.debate_record import log_verdict as _log_pdv
+                        _rc_pd = st.session_state.get("_regime_context") or {}
+                        _log_pdv(
+                            verdict=_portfolio_debate.get("verdict", "CONTESTED"),
+                            confidence=_portfolio_debate.get("confidence", 5),
+                            regime=_rc_pd.get("regime", ""),
+                            quadrant=_rc_pd.get("quadrant", ""),
+                            regime_score=float(_rc_pd.get("score", 0.0)),
+                        )
+                        st.success(
+                            f"⚔️ Debate complete [{_pd_engine}] — "
+                            f"{_portfolio_debate.get('verdict', 'CONTESTED')} "
+                            f"(confidence {apply_confidence_penalty(_portfolio_debate.get('confidence', 5))}/10)"
+                        )
+                    except Exception as _pde:
+                        st.error(f"Debate failed: {_pde}")
+
+            if _portfolio_debate.get("bear_argument") or _portfolio_debate.get("bull_argument"):
+                _render_debate_panel(_portfolio_debate)
 
             # Section D — Per-position intelligence cards
             # Normalize ticker: Claude sometimes echoes "XTLH.TO @ $36.81" — strip price suffix

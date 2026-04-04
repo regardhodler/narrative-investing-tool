@@ -2594,6 +2594,8 @@ def generate_adversarial_debate(
     signals_text: str,
     use_claude: bool = False,
     model: str | None = None,
+    ticker: str | None = None,
+    topic: str | None = None,
 ) -> dict:
     """Run a 3-agent adversarial debate on the current macro signals.
 
@@ -2611,7 +2613,27 @@ def generate_adversarial_debate(
       asymmetry: str (which side has better risk/reward asymmetry and why)
       key_disagreement: str (the single most important point of contention)
       confidence: int (1-10, Judge Judy's confidence in verdict, low = truly contested)
+    contested_bias: str (optional tie-break lean when verdict is CONTESTED)
+    contested_bias_reason: str (short rationale for the lean)
     """
+    # ── Fingerprint cache — skip 3 LLM calls if signals unchanged ────────────
+    try:
+        import streamlit as _st
+        from utils.signal_block import get_signal_fingerprint as _get_fp, get_ticker_fingerprint as _get_tkfp
+        _fp = _get_tkfp(ticker) if ticker else _get_fp()
+        _cache_key = f"_debate_fp_{ticker or 'macro'}"
+        _cached = _st.session_state.get(f"_adversarial_debate{'_' + ticker if ticker else ''}")
+        if (
+            _cached
+            and _cached.get("bear_argument")
+            and _st.session_state.get(_cache_key) == _fp
+            and _fp not in ("NO_REGIME_DATA", "")
+        ):
+            return _cached  # signals unchanged — return cached verdict
+        _st.session_state[_cache_key] = _fp
+    except Exception:
+        pass
+
     # ── Raw macro ground truth — prevents hallucination of numbers ────────────
     try:
         from utils.signal_block import build_macro_block as _build_mb
@@ -2628,12 +2650,14 @@ def generate_adversarial_debate(
         _court_record = ""
 
     # ── Sir Doomburger (Bear) ──────────────────────────────────────────────────
+    _topic_line = f"DEBATE QUESTION: {topic}\n\n" if topic else ""
     bear_prompt = (
         "You are Sir Doomburger, a legendary permabear macro analyst. "
         "Your job is to make the strongest possible BEARISH case using ONLY the data provided. "
         "You are not allowed to be balanced — you must argue the bear case with maximum conviction. "
         "Cite specific numbers and signal names from the data. "
         "Be sharp, clinical, and ruthless. 3-5 sentences max.\n\n"
+        f"{_topic_line}"
         f"{_raw_header}MARKET DATA (narrative context):\n{signals_text[:2500]}\n\n"
         "Make your bear case now:"
     )
@@ -2645,6 +2669,7 @@ def generate_adversarial_debate(
         "You are not allowed to be balanced — you must argue the bull case with maximum conviction. "
         "Dismiss bear concerns with specific data points. "
         "Be sharp, aggressive, and cite numbers. 3-5 sentences max.\n\n"
+        f"{_topic_line}"
         f"{_raw_header}MARKET DATA (narrative context):\n{signals_text[:2500]}\n\n"
         "Make your bull case now:"
     )
@@ -2655,10 +2680,10 @@ def generate_adversarial_debate(
     # Use same LLM routing as generate_macro_synopsis — try xAI, Claude, Groq in that order
     _cl_model = model or "grok-4-1-fast-reasoning"
 
-    def _call_llm(prompt: str, max_tokens: int = 400) -> str:
+    def _call_llm(prompt: str, max_tokens: int = 400, temperature: float = 0.5) -> str:
         if use_claude and _is_xai_model(_cl_model) and os.getenv("XAI_API_KEY"):
             try:
-                return _call_xai([{"role": "user", "content": prompt}], _cl_model, max_tokens, 0.5)
+                return _call_xai([{"role": "user", "content": prompt}], _cl_model, max_tokens, temperature)
             except Exception:
                 pass
         if use_claude and os.getenv("ANTHROPIC_API_KEY"):
@@ -2666,7 +2691,7 @@ def generate_adversarial_debate(
                 import anthropic as _ant
                 client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
                 msg = client.messages.create(
-                    model=_cl_model, max_tokens=max_tokens, temperature=0.5,
+                    model=_cl_model, max_tokens=max_tokens, temperature=temperature,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 return msg.content[0].text.strip()
@@ -2683,7 +2708,7 @@ def generate_adversarial_debate(
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "user", "content": prompt}],
                     "max_tokens": max_tokens,
-                    "temperature": 0.5,
+                    "temperature": temperature,
                 },
                 timeout=30,
             )
@@ -2692,17 +2717,20 @@ def generate_adversarial_debate(
         except Exception:
             return ""
 
-    bear_arg = _call_llm(bear_prompt, 400)
-    bull_arg = _call_llm(bull_prompt, 400)
+    # Agents argue at 0.5 (creative), Judge Judy rules at 0.1 (decisive)
+    bear_arg = _call_llm(bear_prompt, 400, temperature=0.5)
+    bull_arg = _call_llm(bull_prompt, 400, temperature=0.5)
 
     # ── Judge Judy ────────────────────────────────────────────────────────────
     _record_line = f"YOUR COURT RECORD: {_court_record}\n" if _court_record else ""
+    _topic_verdict_line = f"DEBATE QUESTION BEFORE THE COURT: {topic}\n\n" if topic else ""
     mod_prompt = (
         "You are Judge Judy, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
         "You have heard the bear case from Sir Doomburger and the bull case from Sir Fukyerputs. "
         "Your job is to deliver a structured verdict. Be blunt, be decisive, take no prisoners. "
         "Your confidence score should reflect how one-sided the evidence is — high = decisive, low = genuinely contested.\n\n"
         f"{_record_line}"
+        f"{_topic_verdict_line}"
         f"{_raw_header}SIR DOOMBURGER (BEAR CASE):\n{bear_arg}\n\n"
         f"SIR FUKYERPUTS (BULL CASE):\n{bull_arg}\n\n"
         "Return ONLY valid JSON (no markdown fences):\n"
@@ -2714,7 +2742,7 @@ def generate_adversarial_debate(
         '"confidence": <1-10 integer>}'
     )
 
-    mod_raw = _call_llm(mod_prompt, 500)
+    mod_raw = _call_llm(mod_prompt, 500, temperature=0.1)  # Judge Judy rules decisively
 
     import json as _json, re as _re
     try:
@@ -2731,6 +2759,39 @@ def generate_adversarial_debate(
             "confidence": 5,
         }
 
+    # ── Tie-break lean for contested verdicts (small directional bias) ───────
+    _contested_bias = ""
+    _contested_bias_reason = ""
+    if str(mod_result.get("verdict", "CONTESTED")).upper() == "CONTESTED":
+        _score = None
+        try:
+            import streamlit as _st
+            _rc = _st.session_state.get("_regime_context") or {}
+            _score = float(_rc.get("score")) if _rc.get("score") is not None else None
+        except Exception:
+            _score = None
+
+        if _score is not None:
+            if _score >= 0.10:
+                _contested_bias = "Lean Bullish"
+                _contested_bias_reason = f"Macro score {_score:+.2f} leans risk-on."
+            elif _score <= -0.10:
+                _contested_bias = "Lean Bearish"
+                _contested_bias_reason = f"Macro score {_score:+.2f} leans risk-off."
+
+        if not _contested_bias:
+            _txt = f"{mod_result.get('asymmetry', '')} {mod_result.get('key_disagreement', '')}".lower()
+            if "bull" in _txt or "upside" in _txt:
+                _contested_bias = "Lean Bullish"
+                _contested_bias_reason = "Judge asymmetry commentary tilts to upside."
+            elif "bear" in _txt or "downside" in _txt or "stress" in _txt:
+                _contested_bias = "Lean Bearish"
+                _contested_bias_reason = "Judge asymmetry commentary tilts to downside risk."
+
+        if not _contested_bias:
+            _contested_bias = "Lean Neutral"
+            _contested_bias_reason = "Evidence split is balanced; awaiting fresher data."
+
     return {
         "bear_argument": bear_arg,
         "bull_argument": bull_arg,
@@ -2740,4 +2801,6 @@ def generate_adversarial_debate(
         "asymmetry": mod_result.get("asymmetry", ""),
         "key_disagreement": mod_result.get("key_disagreement", ""),
         "confidence": int(mod_result.get("confidence", 5)),
+        "contested_bias": _contested_bias,
+        "contested_bias_reason": _contested_bias_reason,
     }
