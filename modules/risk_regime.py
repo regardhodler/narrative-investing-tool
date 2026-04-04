@@ -3301,6 +3301,54 @@ def render():
             _bnd_color_a = COLORS["red"] if _pts_risk_off_a <= 5 else COLORS["text_dim"]
         _dir_c3a.markdown(bloomberg_metric("Boundary", _bnd_txt_a, _bnd_color_a), unsafe_allow_html=True)
 
+        # ── Per-metric interpretation chips ───────────────────────────────
+        _ci1, _ci2, _ci3 = st.columns(3)
+        if _leading_score_a is not None:
+            if _leading_div_a > _div_thr_a:
+                _chip1_txt = f"↑ Fast signals <strong>{_leading_div_a} pts ahead</strong> of composite — buy-dip window"
+                _chip1_col = COLORS["green"]
+            elif _leading_div_a < -_div_thr_a:
+                _chip1_txt = f"↓ Fast signals <strong>{abs(_leading_div_a)} pts behind</strong> composite — sell-rip warning"
+                _chip1_col = COLORS["red"]
+            elif abs(_leading_div_a) <= 3:
+                _chip1_txt = "→ Leading aligned with composite — no early signal"
+                _chip1_col = COLORS["text_dim"]
+            else:
+                _chip1_txt = f"{'↑' if _leading_div_a > 0 else '↓'} Mild divergence — monitor for widening"
+                _chip1_col = COLORS["text_dim"]
+            _ci1.markdown(f'<div style="font-size:10px;color:{_chip1_col};padding:2px 0 10px 2px;line-height:1.5;">{_chip1_txt}</div>', unsafe_allow_html=True)
+
+        if _score_5d_a is not None or _leading_5d_a is not None:
+            if _both_rising_a:
+                _chip2_txt = "↑↑ Both rising — high conviction, regime strengthening"
+                _chip2_col = COLORS["green"]
+            elif _both_falling_a:
+                _chip2_txt = "↓↓ Both falling — regime deteriorating fast"
+                _chip2_col = COLORS["red"]
+            elif ((_score_5d_a or 0) > 0) != ((_leading_5d_a or 0) > 0):
+                _chip2_txt = "↕ Diverging — transition noise, wait for alignment"
+                _chip2_col = COLORS["text_dim"]
+            else:
+                _chip2_txt = "→ Neutral drift — no strong momentum signal"
+                _chip2_col = COLORS["text_dim"]
+            _ci2.markdown(f'<div style="font-size:10px;color:{_chip2_col};padding:2px 0 10px 2px;line-height:1.5;">{_chip2_txt}</div>', unsafe_allow_html=True)
+
+        if _at_risk_on_a:
+            _chip3_txt = f"Confirmed Risk-On — {abs(_pts_risk_on_a)} pts above threshold"
+            _chip3_col = COLORS["green"]
+        elif _at_risk_off_a:
+            _chip3_txt = f"Confirmed Risk-Off — {abs(_pts_risk_off_a)} pts below threshold"
+            _chip3_col = COLORS["red"]
+        elif _pts_risk_on_a < _pts_risk_off_a:
+            _chip3_txt = (f"⚡ {_pts_risk_on_a} pts from Risk-On flip — imminent" if _pts_risk_on_a <= 5
+                          else f"Neutral — {_pts_risk_on_a} pts to Risk-On threshold")
+            _chip3_col = COLORS["green"] if _pts_risk_on_a <= 5 else COLORS["text_dim"]
+        else:
+            _chip3_txt = (f"⚡ {_pts_risk_off_a} pts from Risk-Off flip — imminent" if _pts_risk_off_a <= 5
+                          else f"Neutral — {_pts_risk_off_a} pts to Risk-Off threshold")
+            _chip3_col = COLORS["red"] if _pts_risk_off_a <= 5 else COLORS["text_dim"]
+        _ci3.markdown(f'<div style="font-size:10px;color:{_chip3_col};padding:2px 0 10px 2px;line-height:1.5;">{_chip3_txt}</div>', unsafe_allow_html=True)
+
         if abs(_leading_div_a) > _div_thr_a:
             _alert_color_a = COLORS["green"] if _leading_div_a > 0 else COLORS["red"]
             _alert_emoji_a = "🟢" if _leading_div_a > 0 else "🔴"
@@ -3355,13 +3403,43 @@ def render():
                 "Bull Flattening": (COLORS["text_dim"], "Flight to safety, 10Y falling. Late-cycle caution. Score penalised ×0.85."),
                 "Bear Flattening": (COLORS["text_dim"], "Fed tightening, 2Y rising faster. Standard late-cycle pressure. Score penalised ×0.90."),
             }
+            _SHAPE_META_A = {
+                "Bull Steepening": ("🐂", "×1.10 ↑", COLORS["green"],
+                    "Short rates falling faster than long rates — the Fed is easing and growth expectations are recovering. "
+                    "This is the clean risk-on signal of early expansion. Score boosted."),
+                "Bear Steepening": ("⚠️", "×0.75 ↓", COLORS["red"],
+                    "Long rates rising faster — inflation premium building, bond vigilantes selling the long end. "
+                    "Positive spread but for the wrong reasons. Stagflation risk elevated. Score penalised."),
+                "Bull Flattening": ("🛡️", "×0.85 ↓", COLORS["text_dim"],
+                    "Long rates falling on a flight-to-safety bid. Late-cycle caution — growth slowing, investors rotating to duration. Score penalised."),
+                "Bear Flattening": ("📉", "×0.90 ↓", COLORS["text_dim"],
+                    "Short rates rising faster — Fed hiking aggressively. Standard late-cycle tightening. Watch for progression toward inversion. Score penalised."),
+            }
             if _yc_inv_a:
-                _sic_a, _sit_a = COLORS["red"], "Yield curve inverted — short rates above long rates. Historically the most reliable recession leading indicator."
-            elif _yc_shape_a in _SHAPE_INTERP_A:
-                _sic_a, _sit_a = _SHAPE_INTERP_A[_yc_shape_a]
+                _sc_icon_a, _sc_mod_a, _sc_col_a = "🚨", "×1.00", COLORS["red"]
+                _sc_title_a = "Inverted Yield Curve"
+                _sc_body_a = ("Short rates above long rates — historically the most reliable recession leading indicator. "
+                    "The z-score is already deeply negative from the spread itself. No additional modifier applied, "
+                    "but this is the highest-conviction risk-off yield curve signal.")
+            elif _yc_shape_a in _SHAPE_META_A:
+                _sc_icon_a, _sc_mod_a, _sc_col_a, _sc_body_a = _SHAPE_META_A[_yc_shape_a]
+                _sc_title_a = _yc_shape_a
             else:
-                _sic_a, _sit_a = COLORS["text_dim"], "Insufficient data for curve classification."
-            st.markdown(f'<div style="background:{_sic_a}15;border-left:3px solid {_sic_a};padding:6px 10px;margin:6px 0 12px 0;font-size:11px;color:{COLORS["text_dim"]};">{_sit_a}</div>', unsafe_allow_html=True)
+                _sc_icon_a, _sc_mod_a, _sc_col_a, _sc_body_a = "❓", "×1.00", COLORS["text_dim"], "Insufficient data for curve shape classification."
+                _sc_title_a = "Shape Unclear"
+            st.markdown(
+                f'<div style="background:{_sc_col_a}12;border:1px solid {_sc_col_a}30;border-radius:6px;'
+                f'padding:10px 14px;margin:8px 0 14px 0;">'
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                f'<span style="font-size:16px;">{_sc_icon_a}</span>'
+                f'<span style="font-size:12px;font-weight:700;color:{_sc_col_a};">{_sc_title_a}</span>'
+                f'<span style="font-size:10px;background:{_sc_col_a}25;color:{_sc_col_a};'
+                f'padding:2px 8px;border-radius:10px;font-weight:700;margin-left:auto;">{_sc_mod_a}</span>'
+                f'</div>'
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};line-height:1.6;">{_sc_body_a}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             st.markdown(f'<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;color:{COLORS["text_dim"]};margin-bottom:4px;">CREDIT SPREADS</div>', unsafe_allow_html=True)
             _csa_cols = st.columns(3)
@@ -3374,15 +3452,45 @@ def render():
             _csm(_csa_cols[2], "HY-IG Spread", _qs_val_a, _qs_dir_a)
             _hy_wide_a = "Widening" in _cs_hy_dir_a
             _ig_wide_a = "Widening" in _cs_ig_dir_a
+            _hy_narrow_a = "Narrowing" in _cs_hy_dir_a
+            _ig_narrow_a = "Narrowing" in _cs_ig_dir_a
+            _hy_sc_a = COLORS["red"] if _hy_wide_a else COLORS["green"] if _hy_narrow_a else COLORS["text_dim"]
+            _ig_sc_a = COLORS["red"] if _ig_wide_a else COLORS["green"] if _ig_narrow_a else COLORS["text_dim"]
+            _hy_sl_a = "▲ Widening" if _hy_wide_a else "▼ Narrowing" if _hy_narrow_a else "→ Stable"
+            _ig_sl_a = "▲ Widening" if _ig_wide_a else "▼ Narrowing" if _ig_narrow_a else "→ Stable"
             if _hy_wide_a and _ig_wide_a:
-                _crc_a, _crt_a = COLORS["red"], "Both HY and IG widening — systemic credit stress. Strong Risk-Off signal."
+                _crc_a, _crt_icon_a, _crt_lbl_a = COLORS["red"], "🔴", "SYSTEMIC STRESS"
+                _crt_a = "Both HY and IG widening — this is not isolated junk stress. Systemic credit deterioration across the quality spectrum. Strong Risk-Off signal."
             elif _hy_wide_a and not _ig_wide_a:
-                _crc_a, _crt_a = COLORS["text_dim"], "HY widening, IG stable — speculative grade stress only. Not systemic yet. Early warning."
+                _crc_a, _crt_icon_a, _crt_lbl_a = COLORS["text_dim"], "🟡", "SPECULATIVE STRESS"
+                _crt_a = "HY widening while IG stays tight — junk bonds under pressure but investment-grade issuers are fine. Not systemic yet. Watch for IG follow-through as the early warning trigger."
             elif not _hy_wide_a and not _ig_wide_a:
-                _crc_a, _crt_a = COLORS["green"], "Both narrowing — broad credit confidence. Supports Risk-On."
+                _crc_a, _crt_icon_a, _crt_lbl_a = COLORS["green"], "🟢", "CREDIT CONFIDENCE"
+                _crt_a = "Both HY and IG narrowing — broad market confidence across the full credit spectrum. Lenders pricing in low default risk. Confirms Risk-On thesis."
             else:
-                _crc_a, _crt_a = COLORS["text_dim"], "IG widening, HY stable — likely duration/rates driven, not credit quality."
-            st.markdown(f'<div style="background:{_crc_a}15;border-left:3px solid {_crc_a};padding:6px 10px;margin:6px 0 8px 0;font-size:11px;color:{COLORS["text_dim"]};">{_crt_a}</div>', unsafe_allow_html=True)
+                _crc_a, _crt_icon_a, _crt_lbl_a = COLORS["text_dim"], "🔵", "DURATION PRESSURE"
+                _crt_a = "IG widening while HY stays tight — likely rates/duration driven, not credit quality concerns. Typically a Fed-sensitivity story, not a recession signal."
+            st.markdown(
+                f'<div style="background:{_crc_a}12;border:1px solid {_crc_a}30;border-radius:6px;'
+                f'padding:10px 14px;margin:8px 0 8px 0;">'
+                f'<div style="display:flex;gap:10px;margin-bottom:10px;">'
+                f'<div style="flex:1;padding:6px 10px;background:{_hy_sc_a}18;border-radius:4px;">'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:{COLORS["text_dim"]};margin-bottom:2px;">HY OAS</div>'
+                f'<div style="font-size:12px;font-weight:700;color:{_hy_sc_a};">{_hy_sl_a}</div>'
+                f'</div>'
+                f'<div style="flex:1;padding:6px 10px;background:{_ig_sc_a}18;border-radius:4px;">'
+                f'<div style="font-size:9px;font-weight:700;letter-spacing:0.07em;color:{COLORS["text_dim"]};margin-bottom:2px;">IG OAS</div>'
+                f'<div style="font-size:12px;font-weight:700;color:{_ig_sc_a};">{_ig_sl_a}</div>'
+                f'</div>'
+                f'</div>'
+                f'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">'
+                f'<span style="font-size:13px;">{_crt_icon_a}</span>'
+                f'<span style="font-size:10px;font-weight:700;color:{_crc_a};letter-spacing:0.06em;">{_crt_lbl_a}</span>'
+                f'</div>'
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};line-height:1.6;">{_crt_a}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
             with st.expander("📋 Interpretation reference", expanded=False):
                 _tbl_a = ('<table style="width:100%;font-size:10px;border-collapse:collapse;">'
