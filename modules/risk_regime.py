@@ -3374,6 +3374,27 @@ def render():
         _thr_src_a = "calibrated" if _thresholds_cal_a else "static default — calibrates after 20+ sessions"
         st.caption(f"Alert threshold: ±{_div_thr_a} pts divergence · ±{_vel_thr_a} pts velocity ({_thr_src_a})")
 
+        # ── Reading Guide ──────────────────────────────────────────────────
+        with st.expander("📖 How to read Regime Direction", expanded=False):
+            st.markdown(
+                f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;line-height:2.0;">'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">COMPOSITE SCORE (0–100)</span><br>'
+                f'Weighted average of all macro signals after deduplication. Z-scored against own 252-day history — 50 = neutral, &lt;40 = Risk-Off, &gt;60 = Risk-On.<br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">LEADING SUB-SCORE &amp; DIVERGENCE</span><br>'
+                f'Only the 9 fastest signals (VIX, credit spreads, LEI, credit impulse, real yields, building permits, jobless claims, rate expectations, yield curve). '
+                f'Move weeks–months before lagging data (PCE, unemployment, CAPE) confirms.<br>'
+                f'<span style="color:#22c55e;">Divergence +8</span> = fast signals already Risk-On → <b>buy the dip before the flip</b><br>'
+                f'<span style="color:#ef4444;">Divergence −8</span> = fast signals cracking → <b>sell the rip before the turn</b><br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">5-SESSION TREND  C · L</span><br>'
+                f'<span style="color:#22c55e;">Both rising</span> = high conviction, regime strengthening · '
+                f'<span style="color:#ef4444;">Both falling</span> = regime weakening · '
+                f'<span style="color:#94a3b8;">Diverging</span> = transition noise, wait for alignment<br><br>'
+                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">BOUNDARY</span><br>'
+                f'Points until composite crosses 40 (Risk-Off) or 60 (Risk-On). Green/red when within 5 pts.'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
         # ── Yield Curve & Credit Deep Dive ────────────────────────────────
         with st.expander("📐 Yield Curve & Credit Deep Dive", expanded=False):
             _yc_val_a    = macro.get("yc_val")
@@ -3506,27 +3527,6 @@ def render():
                 ]:
                     _tbl_a += f'<tr style="border-top:1px solid #1e293b;"><td style="padding:3px 6px;color:{_rc_a};">{_st_a}</td><td style="padding:3px 6px;color:{COLORS["text_dim"]};">{_mn_a}</td><td style="padding:3px 6px;color:{COLORS["text_dim"]};">{_im_a}</td></tr>'
                 st.markdown(_tbl_a + '</table>', unsafe_allow_html=True)
-
-        # ── Reading Guide ──────────────────────────────────────────────────
-        with st.expander("📖 How to read Regime Direction", expanded=False):
-            st.markdown(
-                f'<div style="font-size:11px;color:{COLORS["text_dim"]};font-family:\'JetBrains Mono\',Consolas,monospace;line-height:2.0;">'
-                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">COMPOSITE SCORE (0–100)</span><br>'
-                f'Weighted average of all macro signals after deduplication. Z-scored against own 252-day history — 50 = neutral, &lt;40 = Risk-Off, &gt;60 = Risk-On.<br><br>'
-                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">LEADING SUB-SCORE &amp; DIVERGENCE</span><br>'
-                f'Only the 9 fastest signals (VIX, credit spreads, LEI, credit impulse, real yields, building permits, jobless claims, rate expectations, yield curve). '
-                f'Move weeks–months before lagging data (PCE, unemployment, CAPE) confirms.<br>'
-                f'<span style="color:#22c55e;">Divergence +8</span> = fast signals already Risk-On → <b>buy the dip before the flip</b><br>'
-                f'<span style="color:#ef4444;">Divergence −8</span> = fast signals cracking → <b>sell the rip before the turn</b><br><br>'
-                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">5-SESSION TREND  C · L</span><br>'
-                f'<span style="color:#22c55e;">Both rising</span> = high conviction, regime strengthening · '
-                f'<span style="color:#ef4444;">Both falling</span> = regime weakening · '
-                f'<span style="color:#94a3b8;">Diverging</span> = transition noise, wait for alignment<br><br>'
-                f'<span style="color:#475569;font-weight:700;letter-spacing:0.05em;">BOUNDARY</span><br>'
-                f'Points until composite crosses 40 (Risk-Off) or 60 (Risk-On). Green/red when within 5 pts.'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
         st.markdown("---")
 
