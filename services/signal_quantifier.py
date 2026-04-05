@@ -201,11 +201,22 @@ def compute_events_sentiment(text: str) -> dict:
 # 4. Canary breadth score
 # ---------------------------------------------------------------------------
 
+
+# HY ETFs are excluded from canary to avoid double-dipping with stress_z:
+# HYG/JNK/BKLN/SJNK price is the mirror of BAMLH0A0HYM2 (HY OAS) already in stress_z.
+# TLT is excluded because it's rate-driven (already in T10Y2Y via stress_z).
+# VIX is excluded because it's inverse. Remaining canaries are genuinely orthogonal:
+# Regional Banks, CRE REITs, PE firms, Consumer Credit — structural stress canaries.
+_CANARY_EXCLUDE = {"^VIX", "TLT", "HYG", "JNK", "BKLN", "SJNK"}
+
+
 def compute_canary_score(canary_df) -> dict:
     """Cross-sectional breadth + momentum from canary watchlist DataFrame.
 
+    Excludes HY ETFs and rate proxies (TLT, ^VIX) to avoid double-dipping
+    with stress_zscore which already z-scores HY OAS and yield curve from FRED.
+
     Expects columns: ticker, 1m_ret, drawdown_52w, volume_ratio.
-    Excludes ^VIX (inverse behaviour).
     Returns:
         {"composite": float, "breadth_pct": float, "momentum_avg": float,
          "drawdown_pct": float, "vol_surge": float}
@@ -215,7 +226,7 @@ def compute_canary_score(canary_df) -> dict:
     if canary_df is None or canary_df.empty:
         return _empty
 
-    df = canary_df[canary_df["ticker"] != "^VIX"].copy()
+    df = canary_df[~canary_df["ticker"].isin(_CANARY_EXCLUDE)].copy()
     if df.empty:
         return _empty
 
