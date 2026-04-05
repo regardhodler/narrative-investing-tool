@@ -1047,14 +1047,40 @@ def render():
     _coengine = st.session_state.get("_coengine_content")
     if _coengine:
         _coengine_filename = f"coengine_brief_{datetime.now().strftime('%Y%m%d')}.md"
-        st.download_button(
-            "⬇ Download Co-Engineer Brief",
-            _coengine,
-            file_name=_coengine_filename,
-            mime="text/markdown",
-            key="export_coengine_dl",
-            use_container_width=True,
-        )
+        _ce1, _ce2, _ce3 = st.columns([1, 1, 2])
+        with _ce1:
+            st.download_button(
+                "⬇ Download Co-Engineer Brief",
+                _coengine,
+                file_name=_coengine_filename,
+                mime="text/markdown",
+                key="export_coengine_dl",
+            )
+        with _ce2:
+            try:
+                from services.telegram_client import is_configured as _tg_ce_ok, send_document as _tg_ce_send
+                if _tg_ce_ok():
+                    if st.button("📲 Send to Telegram", key="export_coengine_tg"):
+                        with st.spinner("Sending to Telegram..."):
+                            _ce_ok = _tg_ce_send(
+                                _coengine_filename,
+                                _coengine,
+                                caption=f"🤖 AI Co-Engineer Brief — {datetime.now().strftime('%Y-%m-%d')}",
+                            )
+                        if _ce_ok:
+                            st.success("✅ Sent to Telegram")
+                        else:
+                            st.error("❌ Telegram send failed")
+                else:
+                    st.caption("📲 Telegram not configured")
+            except ImportError:
+                st.caption("📲 Telegram not configured")
+        with _ce3:
+            st.markdown(
+                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
+                f'{len(_coengine.splitlines())} lines · {len(_coengine):,} chars · ~{len(_coengine)//4:,} tokens</div>',
+                unsafe_allow_html=True,
+            )
         with st.expander("📋 Preview", expanded=False):
             st.code(_coengine, language="markdown")
 
