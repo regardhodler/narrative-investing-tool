@@ -598,6 +598,41 @@ def _build_coengine_export() -> str:
         "FED / RATE PATH",
         f"  Current Fed Funds: {fed_rate}%",
         f"  Dominant scenario: {scenario} ({prob_pct}%)",
+    ]
+
+    # Quantified scores block (populated after QIR runs signal_quantifier)
+    _sq_stress  = st.session_state.get("_stress_zscore") or {}
+    _sq_whale   = st.session_state.get("_whale_flow_score") or {}
+    _sq_events  = st.session_state.get("_events_sentiment_score") or {}
+    _sq_canary  = st.session_state.get("_canary_score") or {}
+
+    def _fmt(v, fmt=None):
+        if v in ("–", None, ""):
+            return "–"
+        try:
+            return format(v, fmt) if fmt else str(v)
+        except Exception:
+            return str(v)
+
+    lines += [
+        "",
+        "QUANTIFIED SCORES (z-scored vs 1yr history where applicable)",
+        f"  Stress z-score:  {_fmt(_sq_stress.get('z'), '+.2f')}  ({_fmt(_sq_stress.get('pct'))}th pct)"
+        + (("  [" + "  ".join(f"{k} {v:+.1f}σ" for k, v in _sq_stress.get('components', {}).items()) + "]")
+           if _sq_stress.get("components") else ""),
+        f"  Whale flow:      {_fmt(_sq_whale.get('bull_pct'), '.1f')}% bull"
+        f"   net {_fmt(_sq_whale.get('net_flow_bn'), '+.2f')}B"
+        f"   rotation {_fmt(_sq_whale.get('rotation'), '+.2f')}"
+        f"   conviction {_fmt(_sq_whale.get('conviction'), '.2f')}"
+        f"   — {_sq_whale.get('label', '–')}",
+        f"  Events tone:     {_fmt(_sq_events.get('sentiment'), '+.3f')}"
+        f"   uncertainty {_fmt(_sq_events.get('uncertainty'), '.2f')}"
+        f"   bull {_sq_events.get('bull_hits', '–')} / bear {_sq_events.get('bear_hits', '–')}"
+        f"   — {_sq_events.get('label', '–')}",
+        f"  Canary breadth:  {_fmt(_sq_canary.get('composite'), '.1f')}/100"
+        f"   breadth {_fmt(_sq_canary.get('breadth_pct'), '.1f')}%"
+        f"   1m avg {_fmt(_sq_canary.get('momentum_avg'), '+.2f')}%"
+        f"   vol surge {_fmt(_sq_canary.get('vol_surge'), '.2f')}x",
         "",
         f"Missing signals: {missing_str}",
         "",

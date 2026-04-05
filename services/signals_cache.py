@@ -131,6 +131,11 @@ _SIGNAL_KEYS = [
     "_aaii_sentiment_ts",
     "_vix_curve",
     "_vix_curve_ts",
+    # Quantified signal scores (computed by services/signal_quantifier.py in QIR Round 1)
+    "_stress_zscore",
+    "_whale_flow_score",
+    "_events_sentiment_score",
+    "_canary_score",
 ]
 
 

@@ -1660,6 +1660,28 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         _results[_key] = False
                         _r1_errors[_key] = str(_e)
 
+            # Signal Quantifier — runs after Round 1 pool so digest is in session_state
+            try:
+                from services.signal_quantifier import (
+                    compute_stress_zscore, compute_whale_flow_score,
+                    compute_events_sentiment, compute_canary_score,
+                )
+                from services.stress_client import get_credit_spreads, get_canary_signals
+                from services.whale_screener import screen_whale_buyers
+                _sq_fred   = get_credit_spreads()
+                _sq_canary = get_canary_signals()
+                _sq_whale  = screen_whale_buyers(top_n=100, whale_only=True,
+                                                  exclude_etfs=True, lookback_quarters=1)
+                _sq_digest = st.session_state.get("_current_events_digest", "") or ""
+                st.session_state["_stress_zscore"]          = compute_stress_zscore(_sq_fred)
+                st.session_state["_whale_flow_score"]       = compute_whale_flow_score(_sq_whale)
+                st.session_state["_events_sentiment_score"] = compute_events_sentiment(_sq_digest)
+                st.session_state["_canary_score"]           = compute_canary_score(_sq_canary)
+                _results["signal_quant"] = True
+            except Exception as _sq_e:
+                _results["signal_quant"] = False
+                _r1_errors["signal_quant"] = str(_sq_e)
+
             # Sector×Regime runs after regime resolves — call directly (needs regime_ctx)
             try:
                 _val_s = run_quick_sector_regime(_use_claude, _cl_model, regime_ctx=_regime_ctx)
