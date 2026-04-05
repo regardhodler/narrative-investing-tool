@@ -956,135 +956,125 @@ def render():
     if ready_count < total_count:
         st.caption("💡 For best results, populate missing signals before exporting. Run them in the order shown above.")
 
-    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
-
-    # --- Section B: Format selector + Generate ---
-    _fmt = st.radio(
-        "Format",
-        ["📝 Text / Markdown (for AI chat)", "🔧 JSON (raw data)"],
-        horizontal=True,
-        key="export_fmt",
-    )
-    st.caption("💡 Markdown recommended — paste directly into Claude.ai, ChatGPT, or Gemini for instant macro analysis.")
-
-    if st.button("⬇ Generate Export", type="primary", key="export_generate"):
-        with st.spinner("Building export document..."):
-            if "Markdown" in _fmt:
-                content = _build_markdown_export(open_trades)
-                filename = f"macro_briefing_{datetime.now().strftime('%Y%m%d_%H%M')}.txt"
-                mime = "text/plain"
-            else:
-                content = _build_json_export(open_trades)
-                filename = f"macro_signals_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-                mime = "application/json"
-
-        st.session_state["_export_content"] = content
-        st.session_state["_export_filename"] = filename
-        st.session_state["_export_mime"] = mime
-
-    # --- Section C: Download + Preview ---
-    content = st.session_state.get("_export_content")
-    if content:
-        filename = st.session_state.get("_export_filename", "export.txt")
-        mime = st.session_state.get("_export_mime", "text/markdown")
-
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
+    # ── helper: render download / telegram / stats row ──────────────────────
+    def _export_action_row(data: str, filename: str, mime: str, dl_key: str, tg_key: str, tg_caption: str):
+        _a1, _a2, _a3 = st.columns([1, 1, 2])
+        with _a1:
             st.download_button(
-                label=f"💾 Download {filename.split('.')[-1].upper()}",
-                data=content,
+                f"💾 Download {filename.rsplit('.', 1)[-1].upper()}",
+                data,
                 file_name=filename,
                 mime=mime,
-                type="primary",
-                key="export_download",
+                key=dl_key,
+                use_container_width=True,
             )
-        with col2:
-            from services.telegram_client import is_configured as _tg_ok, send_document as _tg_send_doc
-            if _tg_ok():
-                if st.button("📲 Send to Telegram", key="export_telegram"):
-                    with st.spinner("Sending to Telegram..."):
-                        _caption = f"📊 Macro Briefing — {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-                        _ok = _tg_send_doc(filename, content, caption=_caption)
-                    if _ok:
-                        st.success("✅ Sent to Telegram")
-                    else:
-                        st.error("❌ Telegram send failed — check bot token & chat ID")
-            else:
+        with _a2:
+            try:
+                from services.telegram_client import is_configured as _tg_chk, send_document as _tg_snd
+                if _tg_chk():
+                    if st.button("📲 Send to Telegram", key=tg_key, use_container_width=True):
+                        with st.spinner("Sending…"):
+                            _sent = _tg_snd(filename, data, caption=tg_caption)
+                        st.success("✅ Sent") if _sent else st.error("❌ Failed — check bot token")
+                else:
+                    st.caption("📲 Telegram not configured")
+            except ImportError:
                 st.caption("📲 Telegram not configured")
-        with col3:
-            char_count = len(content)
-            line_count = content.count("\n")
+        with _a3:
             st.markdown(
-                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
-                f'{line_count} lines · {char_count:,} characters · {char_count // 4:,} est. tokens</div>',
+                f'<div style="padding:7px 0 0 4px;font-size:11px;color:#475569;font-family:\'JetBrains Mono\',monospace;">'
+                f'{data.count(chr(10)):,} lines &nbsp;·&nbsp; {len(data):,} chars &nbsp;·&nbsp; ~{len(data)//4:,} tokens</div>',
                 unsafe_allow_html=True,
             )
 
-        with st.expander("Preview (first 60 lines)", expanded=False):
-            preview_lines = content.split("\n")[:60]
-            st.code("\n".join(preview_lines), language="markdown")
-
+    def _export_card_header(label: str, subtitle: str):
         st.markdown(
-            f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
-            f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;font-size:12px;color:#bbb;">'
-            f'💡 <b>Tip:</b> Paste this into Claude.ai and ask:<br>'
-            f'<i>"Analyze my portfolio given this macro environment and suggest my top 3 priority actions."</i>'
+            f'<div style="margin:18px 0 10px 0;">'
+            f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.1em;margin-bottom:3px;">{label}</div>'
+            f'<div style="font-size:12px;color:#64748b;">{subtitle}</div>'
             f'</div>',
             unsafe_allow_html=True,
         )
 
-    st.caption("📊 Use this export for trade decisions — paste into any AI to ask: what should I do with my portfolio right now?")
+    def _export_card_tip(text: str):
+        st.markdown(
+            f'<div style="margin:10px 0 4px 0;font-size:11px;color:#334155;'
+            f'border-left:2px solid #1e293b;padding-left:8px;">{text}</div>',
+            unsafe_allow_html=True,
+        )
 
-    # --- Section D: AI Co-Engineer Brief ---
-    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
-    st.markdown("#### 🤖 AI Co-Engineer Brief")
-    st.caption("Full architecture + live signal state + module internals. Paste into Grok, ChatGPT, or Gemini.")
-    if st.button("🤖 Generate AI Co-Engineer Brief", key="export_coengine_gen"):
-        with st.spinner("Building..."):
+    # ── Section B: Macro Briefing ─────────────────────────────────────────────
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 0 0;"></div>', unsafe_allow_html=True)
+
+    _export_card_header(
+        "📊 MACRO BRIEFING EXPORT",
+        "Live signals, regime, rate path &amp; portfolio. Use when making trade decisions.",
+    )
+
+    _fmt = st.radio(
+        "Format",
+        ["📝 Markdown (AI chat)", "🔧 JSON (raw data)"],
+        horizontal=True,
+        key="export_fmt",
+        label_visibility="collapsed",
+    )
+
+    if st.button("⬇ Generate Macro Briefing", type="primary", key="export_generate", use_container_width=True):
+        with st.spinner("Building…"):
+            if "Markdown" in _fmt:
+                content = _build_markdown_export(open_trades)
+                filename = f"macro_briefing_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
+                mime = "text/markdown"
+            else:
+                content = _build_json_export(open_trades)
+                filename = f"macro_signals_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+                mime = "application/json"
+        st.session_state["_export_content"] = content
+        st.session_state["_export_filename"] = filename
+        st.session_state["_export_mime"] = mime
+
+    content = st.session_state.get("_export_content")
+    if content:
+        filename = st.session_state.get("_export_filename", "export.md")
+        mime = st.session_state.get("_export_mime", "text/markdown")
+        _export_action_row(
+            content, filename, mime,
+            dl_key="export_download",
+            tg_key="export_telegram",
+            tg_caption=f"📊 Macro Briefing — {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+        )
+        with st.expander("Preview", expanded=False):
+            st.code("\n".join(content.split("\n")[:60]), language="markdown")
+
+    _export_card_tip("Trade decisions — ask: <i>\"What should I do with my portfolio right now?\"</i>")
+
+    # ── Section D: AI Co-Engineer Brief ──────────────────────────────────────
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 0 0;"></div>', unsafe_allow_html=True)
+
+    _export_card_header(
+        "🤖 AI CO-ENGINEER BRIEF",
+        "Architecture, data flow &amp; module internals. Use when improving the tool.",
+    )
+
+    if st.button("⬇ Generate Co-Engineer Brief", type="primary", key="export_coengine_gen", use_container_width=True):
+        with st.spinner("Building…"):
             _coengine_content = _build_coengine_export()
         st.session_state["_coengine_content"] = _coengine_content
 
     _coengine = st.session_state.get("_coengine_content")
     if _coengine:
         _coengine_filename = f"coengine_brief_{datetime.now().strftime('%Y%m%d')}.md"
-        _ce1, _ce2, _ce3 = st.columns([1, 1, 2])
-        with _ce1:
-            st.download_button(
-                "⬇ Download Co-Engineer Brief",
-                _coengine,
-                file_name=_coengine_filename,
-                mime="text/markdown",
-                key="export_coengine_dl",
-            )
-        with _ce2:
-            try:
-                from services.telegram_client import is_configured as _tg_ce_ok, send_document as _tg_ce_send
-                if _tg_ce_ok():
-                    if st.button("📲 Send to Telegram", key="export_coengine_tg"):
-                        with st.spinner("Sending to Telegram..."):
-                            _ce_ok = _tg_ce_send(
-                                _coengine_filename,
-                                _coengine,
-                                caption=f"🤖 AI Co-Engineer Brief — {datetime.now().strftime('%Y-%m-%d')}",
-                            )
-                        if _ce_ok:
-                            st.success("✅ Sent to Telegram")
-                        else:
-                            st.error("❌ Telegram send failed")
-                else:
-                    st.caption("📲 Telegram not configured")
-            except ImportError:
-                st.caption("📲 Telegram not configured")
-        with _ce3:
-            st.markdown(
-                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
-                f'{len(_coengine.splitlines())} lines · {len(_coengine):,} chars · ~{len(_coengine)//4:,} tokens</div>',
-                unsafe_allow_html=True,
-            )
-        with st.expander("📋 Preview", expanded=False):
+        _export_action_row(
+            _coengine, _coengine_filename, "text/markdown",
+            dl_key="export_coengine_dl",
+            tg_key="export_coengine_tg",
+            tg_caption=f"🤖 Co-Engineer Brief — {datetime.now().strftime('%Y-%m-%d')}",
+        )
+        with st.expander("Preview", expanded=False):
             st.code(_coengine, language="markdown")
 
-    st.caption("🔧 Use this export to improve the tool — paste into any AI to ask: what should I add, fix, or refactor?")
+    _export_card_tip("Tool improvements — ask: <i>\"What should I add, fix, or refactor?\"</i>")
 
     # --- Section E: Suggested prompts ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
