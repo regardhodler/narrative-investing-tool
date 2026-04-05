@@ -507,377 +507,284 @@ def _build_markdown_export(open_trades: list) -> str:
     return "\n".join(body_parts)
 
 
-def _build_pipeline_export() -> str:
-    """Build a deep, runtime-aware pipeline map of the app for AI review."""
+def _build_coengine_export() -> str:
+    """Build a rich AI co-engineer brief with live signal state + full architecture."""
+    from services.signals_cache import _SIGNAL_KEYS
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    ctx = st.session_state.get("_regime_context") or {}
-    regime = ctx.get("regime", "unknown")
-    quadrant = ctx.get("quadrant", "unknown")
-    score_mode = st.session_state.get("_rr_score_mode", "normal")
 
-    data_sources = [
-        "yfinance - prices, OHLCV, options chain snapshots",
-        "FRED - rates, credit, growth, inflation, liquidity, labor",
-        "SEC EDGAR - filings, insider Form 4, 13F holdings",
-        "Google Trends - narrative momentum",
-        "Congress trading feed - disclosed congressional transactions",
-    ]
-
-    service_layer = [
-        "services/market_data.py - batch fetch, FRED wrappers, snapshots",
-        "services/sec_client.py - EDGAR requests, CIK/ticker mapping, rate limiting",
-        "services/claude_client.py - all LLM synthesis, debates, valuation, plays",
-        "services/signals_cache.py - persist/reload session signals",
-        "services/backtest_engine.py - backtest orchestration",
-        "services/forecast_tracker.py - call logging and evaluation",
-        "services/telegram_client.py - outbound alert and report delivery",
-    ]
-
-    module_layer = [
-        ("modules/risk_regime.py", "cross-asset macro classifier + quadrant + tactical overlay"),
-        ("modules/quick_run.py", "orchestrated multi-round intelligence run"),
-        ("modules/fed_forecaster.py", "Fed path probabilities and implications"),
-        ("modules/current_events.py", "headline/inbox context feed"),
-        ("modules/stress_signals.py", "doom and stress framing"),
-        ("modules/whale_buyers.py", "whale movement intelligence"),
-        ("modules/narrative_discovery.py", "cross-signal discovery and narrative mapping"),
-        ("modules/options_activity.py", "options flow and unusual activity signal"),
-        ("modules/valuation.py", "AI valuation and DCF overlays"),
-        ("modules/trade_journal.py", "portfolio intelligence, factor lens, debate display"),
-        ("modules/signal_audit.py", "signal quality/consistency audit"),
-        ("modules/forecast_accuracy.py", "signal outcome scoring + ATR outcomes"),
-        ("modules/backtesting.py", "strategy simulation + walk-forward"),
-        ("modules/export_hub.py", "briefing and pipeline exports"),
-    ]
-
-    qir_rounds = [
-        "Round 1: Risk Regime + Fed path context",
-        "Round 2: Policy/chain and event context",
-        "Round 3: Stress, whale, and swan context",
-        "Round 4: Macro synthesis and recommendation",
-        "Round 5: Portfolio risk snapshot",
-        "Debate: manual trigger only (not auto-run inside QIR)",
-    ]
-
-    debate_contract = [
-        "Inputs: signal block + optional topic + model tier",
-        "Agents: Sir Doomburger (bear), Sir Fukyerputs (bull), Judge Judy (arbiter)",
-        "Outputs: bear_argument, bull_argument, verdict, confidence, asymmetry, key_disagreement",
-        "Tie handling: contested_bias + contested_bias_reason when verdict=CONTESTED",
-    ]
-
-    signal_keys = [
-        "_regime_context", "_rate_path_probs", "_dominant_rate_path", "_rp_plays_result",
-        "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_whale_summary",
-        "_plays_result", "_portfolio_analysis", "_factor_analysis", "_sim_verdict",
-        "_adversarial_debate", "_portfolio_risk_snapshot",
-    ]
-    loaded = [k for k in signal_keys if st.session_state.get(k) is not None]
-    missing = [k for k in signal_keys if st.session_state.get(k) is None]
-
-    lines = [
-        "# REGARDED TERMINALS - DEEP PIPELINE MAP",
-        f"Generated: {now_str}",
-        f"Runtime Regime: {regime} | Quadrant: {quadrant} | Score Mode: {score_mode}",
-        "Purpose: exact end-to-end architecture, contracts, execution order, and live runtime coverage.",
-        "",
-        "---",
-        "## 1) SYSTEM TOPOLOGY",
-        "",
-        "### External Sources",
-    ]
-
-    lines.extend([f"- {x}" for x in data_sources])
-    lines.extend(["", "### Services Layer"])
-    lines.extend([f"- {x}" for x in service_layer])
-    lines.extend(["", "### Module Layer"])
-    lines.extend([f"- {path}: {desc}" for path, desc in module_layer])
-
-    lines.extend([
-        "",
-        "---",
-        "## 2) ORCHESTRATION FLOWS",
-        "",
-        "### Quick Intel Run (QIR)",
-    ])
-    lines.extend([f"- {step}" for step in qir_rounds])
-
-    lines.extend([
-        "",
-        "### Discovery -> Valuation -> Portfolio Chain",
-        "- Discovery builds narratives/themes/ticker shortlist and optional plays.",
-        "- Valuation consumes ticker + macro + tactical + risk context for AI verdict + DCF.",
-        "- Portfolio Intelligence aggregates positions + macro + factor + stress views.",
-        "",
-        "### Risk Regime Scoring Modes",
-        "- Normal: rolling z-score baseline.",
-        "- Coke Mode: EWMA fast-react on selected fast signals (credit, VIX, breadth).",
-        "",
-        "---",
-        "## 3) DATA CONTRACTS",
-        "",
-        "### Debate Contract",
-    ])
-    lines.extend([f"- {item}" for item in debate_contract])
-
-    lines.extend([
-        "",
-        "### Core Session Contracts (selected)",
-        "- _regime_context: regime, score, quadrant, signal summary",
-        "- _dominant_rate_path: scenario + probability",
-        "- _portfolio_analysis: verdict, risk_score, positions, actions",
-        "- _factor_analysis: factor verdicts, top risk, suggestions",
-        "- _sim_verdict: GO/CAUTION/PASS style pre-trade verdict",
-        "- _adversarial_debate: arguments, verdict, confidence, contested lean",
-        "",
-        "---",
-        "## 4) LIVE RUNTIME SNAPSHOT",
-        "",
-        f"- Loaded signal keys: {len(loaded)}/{len(signal_keys)}",
-        f"- Loaded: {', '.join(loaded) if loaded else '(none)'}",
-        f"- Missing: {', '.join(missing) if missing else '(none)'}",
-        f"- Current selected ticker: {st.session_state.get('ticker', 'unknown')}",
-        f"- Current selected narrative: {st.session_state.get('narrative', 'unknown')}",
-        "",
-        "---",
-        "## 5) CACHING, LIMITS, AND INTEGRITY",
-        "",
-        "- Streamlit cache used across heavy fetch/synthesis paths.",
-        "- SEC request pacing and bounded concurrency enforced in SEC client paths.",
-        "- Session signals persisted through signals_cache for cross-module continuity.",
-        "- Export Hub serializes runtime state via services.signals_cache._serialize().",
-        "",
-        "---",
-        "## 6) GAP-ANALYSIS PROMPTS",
-        "",
-        "Use these prompts with this pipeline map:",
-        "- Which contracts are weakly defined and should become typed schemas?",
-        "- Which modules rely on stale assumptions or duplicated logic?",
-        "- What monitoring and tests are missing for high-impact failure points?",
-        "- Where should the pipeline add probabilistic uncertainty and calibration?",
-        "",
-        "---",
-        f"Deep Pipeline Map generated by Regarded Terminals | {now_str}",
-    ])
-    return "\n".join(lines)
-
-
-def _build_pipeline_graph_json() -> str:
-    """Build machine-readable dependency graph JSON for LLM/tool analysis."""
-    now_iso = datetime.now().isoformat()
-    score_mode = st.session_state.get("_rr_score_mode", "normal")
-
-    modules = [
-        "modules/risk_regime.py",
-        "modules/quick_run.py",
-        "modules/fed_forecaster.py",
-        "modules/current_events.py",
-        "modules/stress_signals.py",
-        "modules/whale_buyers.py",
-        "modules/narrative_discovery.py",
-        "modules/options_activity.py",
-        "modules/valuation.py",
-        "modules/trade_journal.py",
-        "modules/signal_audit.py",
-        "modules/forecast_accuracy.py",
-        "modules/backtesting.py",
-        "modules/export_hub.py",
-    ]
-
-    services = [
-        "services/market_data.py",
-        "services/sec_client.py",
-        "services/claude_client.py",
-        "services/signals_cache.py",
-        "services/forecast_tracker.py",
-        "services/backtest_engine.py",
-        "services/news_feed.py",
-        "services/telegram_client.py",
-    ]
-
-    data_sources = [
-        "source:yfinance",
-        "source:FRED",
-        "source:SEC_EDGAR",
-        "source:Google_Trends",
-        "source:Congress_API",
-        "source:Telegram_API",
-    ]
-
-    signal_keys = [
-        "_regime_context", "_rate_path_probs", "_dominant_rate_path", "_rp_plays_result",
-        "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_whale_summary",
-        "_plays_result", "_portfolio_analysis", "_factor_analysis", "_sim_verdict",
-        "_adversarial_debate", "_portfolio_risk_snapshot",
-    ]
-
-    nodes = []
-    for m in modules:
-        nodes.append({"id": m, "kind": "module"})
-    for s in services:
-        nodes.append({"id": s, "kind": "service"})
-    for src in data_sources:
-        nodes.append({"id": src, "kind": "source"})
-    for key in signal_keys:
-        nodes.append({
-            "id": f"state:{key}",
-            "kind": "state_key",
-            "populated": st.session_state.get(key) is not None,
-        })
-
-    # Weights: 1=light, 3=medium, 5=heavy dependency.
-    edges = [
-        # Module -> Service
-        {"source": "modules/risk_regime.py", "target": "services/market_data.py", "type": "uses", "weight": 5},
-        {"source": "modules/risk_regime.py", "target": "services/claude_client.py", "type": "uses", "weight": 2},
-        {"source": "modules/risk_regime.py", "target": "services/signals_cache.py", "type": "uses", "weight": 2},
-
-        {"source": "modules/quick_run.py", "target": "services/claude_client.py", "type": "uses", "weight": 5},
-        {"source": "modules/quick_run.py", "target": "services/market_data.py", "type": "uses", "weight": 3},
-        {"source": "modules/quick_run.py", "target": "services/forecast_tracker.py", "type": "uses", "weight": 4},
-
-        {"source": "modules/fed_forecaster.py", "target": "services/claude_client.py", "type": "uses", "weight": 4},
-        {"source": "modules/fed_forecaster.py", "target": "services/market_data.py", "type": "uses", "weight": 4},
-
-        {"source": "modules/current_events.py", "target": "services/news_feed.py", "type": "uses", "weight": 4},
-        {"source": "modules/current_events.py", "target": "services/claude_client.py", "type": "uses", "weight": 3},
-
-        {"source": "modules/stress_signals.py", "target": "services/claude_client.py", "type": "uses", "weight": 4},
-        {"source": "modules/whale_buyers.py", "target": "services/sec_client.py", "type": "uses", "weight": 4},
-        {"source": "modules/whale_buyers.py", "target": "services/claude_client.py", "type": "uses", "weight": 2},
-
-        {"source": "modules/narrative_discovery.py", "target": "services/claude_client.py", "type": "uses", "weight": 4},
-        {"source": "modules/narrative_discovery.py", "target": "services/market_data.py", "type": "uses", "weight": 3},
-        {"source": "modules/narrative_discovery.py", "target": "services/sec_client.py", "type": "uses", "weight": 2},
-
-        {"source": "modules/options_activity.py", "target": "services/market_data.py", "type": "uses", "weight": 5},
-        {"source": "modules/options_activity.py", "target": "services/claude_client.py", "type": "uses", "weight": 2},
-
-        {"source": "modules/valuation.py", "target": "services/claude_client.py", "type": "uses", "weight": 5},
-        {"source": "modules/valuation.py", "target": "services/market_data.py", "type": "uses", "weight": 3},
-
-        {"source": "modules/trade_journal.py", "target": "services/claude_client.py", "type": "uses", "weight": 4},
-        {"source": "modules/trade_journal.py", "target": "services/market_data.py", "type": "uses", "weight": 3},
-
-        {"source": "modules/signal_audit.py", "target": "services/signals_cache.py", "type": "uses", "weight": 4},
-        {"source": "modules/forecast_accuracy.py", "target": "services/forecast_tracker.py", "type": "uses", "weight": 5},
-        {"source": "modules/backtesting.py", "target": "services/backtest_engine.py", "type": "uses", "weight": 5},
-
-        {"source": "modules/export_hub.py", "target": "services/signals_cache.py", "type": "uses", "weight": 4},
-        {"source": "modules/export_hub.py", "target": "services/telegram_client.py", "type": "uses", "weight": 2},
-
-        # Service -> Data source
-        {"source": "services/market_data.py", "target": "source:yfinance", "type": "reads", "weight": 5},
-        {"source": "services/market_data.py", "target": "source:FRED", "type": "reads", "weight": 5},
-        {"source": "services/sec_client.py", "target": "source:SEC_EDGAR", "type": "reads", "weight": 5},
-        {"source": "services/news_feed.py", "target": "source:Google_Trends", "type": "reads", "weight": 2},
-        {"source": "services/telegram_client.py", "target": "source:Telegram_API", "type": "writes", "weight": 3},
-
-        # Module -> session state contracts (high fan-out keys marked heavy)
-        {"source": "modules/risk_regime.py", "target": "state:_regime_context", "type": "produces", "weight": 5},
-        {"source": "modules/fed_forecaster.py", "target": "state:_rate_path_probs", "type": "produces", "weight": 4},
-        {"source": "modules/fed_forecaster.py", "target": "state:_dominant_rate_path", "type": "produces", "weight": 4},
-        {"source": "modules/current_events.py", "target": "state:_current_events_digest", "type": "produces", "weight": 3},
-        {"source": "modules/stress_signals.py", "target": "state:_doom_briefing", "type": "produces", "weight": 3},
-        {"source": "modules/whale_buyers.py", "target": "state:_whale_summary", "type": "produces", "weight": 3},
-        {"source": "modules/narrative_discovery.py", "target": "state:_plays_result", "type": "produces", "weight": 3},
-        {"source": "modules/trade_journal.py", "target": "state:_portfolio_analysis", "type": "produces", "weight": 4},
-        {"source": "modules/trade_journal.py", "target": "state:_factor_analysis", "type": "produces", "weight": 3},
-        {"source": "modules/trade_journal.py", "target": "state:_sim_verdict", "type": "produces", "weight": 3},
-        {"source": "modules/quick_run.py", "target": "state:_adversarial_debate", "type": "produces", "weight": 3},
-        {"source": "modules/quick_run.py", "target": "state:_portfolio_risk_snapshot", "type": "produces", "weight": 3},
-
-        {"source": "modules/quick_run.py", "target": "state:_regime_context", "type": "consumes", "weight": 5},
-        {"source": "modules/valuation.py", "target": "state:_regime_context", "type": "consumes", "weight": 5},
-        {"source": "modules/valuation.py", "target": "state:_dominant_rate_path", "type": "consumes", "weight": 4},
-        {"source": "modules/trade_journal.py", "target": "state:_regime_context", "type": "consumes", "weight": 5},
-        {"source": "modules/trade_journal.py", "target": "state:_portfolio_risk_snapshot", "type": "consumes", "weight": 4},
-        {"source": "modules/narrative_discovery.py", "target": "state:_regime_context", "type": "consumes", "weight": 4},
-        {"source": "modules/export_hub.py", "target": "state:_regime_context", "type": "consumes", "weight": 5},
-    ]
-
-    payload = {
-        "schema_version": "1.0",
-        "generated_at": now_iso,
-        "runtime": {
-            "score_mode": score_mode,
-            "regime": (st.session_state.get("_regime_context") or {}).get("regime"),
-            "quadrant": (st.session_state.get("_regime_context") or {}).get("quadrant"),
-        },
-        "weight_scale": {
-            "1": "light",
-            "3": "medium",
-            "5": "heavy",
-        },
-        "nodes": nodes,
-        "edges": edges,
-    }
-    return json.dumps(payload, indent=2)
-
-
-def _build_pipeline_upgrade_brief() -> str:
-    """Build a concise upgrade-ready brief for external AI consultations."""
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # --- Live signal state ---
     rc = st.session_state.get("_regime_context") or {}
-    regime = rc.get("regime", "unknown")
-    quadrant = rc.get("quadrant", "unknown")
-    score_mode = st.session_state.get("_rr_score_mode", "normal")
+    tac = st.session_state.get("_tactical_context") or {}
+    of = st.session_state.get("_options_flow_context") or {}
+    rp = st.session_state.get("_dominant_rate_path") or {}
 
-    key_signals = [
-        "_regime_context", "_dominant_rate_path", "_current_events_digest", "_doom_briefing",
-        "_whale_summary", "_plays_result", "_portfolio_analysis", "_factor_analysis",
-        "_sim_verdict", "_adversarial_debate", "_portfolio_risk_snapshot",
-    ]
-    loaded = [k for k in key_signals if st.session_state.get(k) is not None]
-    missing = [k for k in key_signals if st.session_state.get(k) is None]
+    regime = rc.get("regime", "not run")
+    quadrant = rc.get("quadrant", "unknown")
+    score = rc.get("score", 0)
+    macro_score = rc.get("macro_score", "–")
+    leading_score = rc.get("leading_score", "–")
+    div_pts = rc.get("leading_divergence", 0)
+    div_label = rc.get("leading_label", "Aligned")
+    score_5d = rc.get("score_5d_trend", "–")
+
+    tac_score = tac.get("tactical_score", "–")
+    tac_label = tac.get("label", "–")
+    action_bias = tac.get("action_bias", "–")
+
+    of_score = of.get("options_score", "–")
+    of_label = of.get("label", "–")
+    pc_ratio = of.get("pc_ratio", "–")
+
+    fed_rate = st.session_state.get("_fed_funds_rate", "–")
+    scenario = rp.get("scenario", "–")
+    prob_pct = rp.get("prob_pct", "–")
+
+    qir_ts = st.session_state.get("_regime_context_ts")
+    qir_run = qir_ts.strftime("%Y-%m-%d %H:%M") if isinstance(qir_ts, datetime) else "not run this session"
+
+    # Entry verdict
+    entry_verdict = "N/A — run QIR first"
+    if rc and tac:
+        try:
+            from modules.quick_run import _classify_entry_recommendation
+            _ls = rc.get("leading_score", 50)
+            _ms = rc.get("macro_score", 50)
+            _ts = tac.get("tactical_score", 50)
+            _os = of.get("options_score", 50) if of else 50
+            _dl = rc.get("leading_label", "Aligned")
+            _dp = int(rc.get("leading_divergence", 0))
+            _er = _classify_entry_recommendation(_ls, _ms, _ts, _os, _dl, _dp)
+            entry_verdict = _er.get("verdict", "–")
+        except Exception:
+            pass
+
+    # Signals loaded count
+    loaded = sum(1 for k in _SIGNAL_KEYS if st.session_state.get(k) is not None)
+    total = len(_SIGNAL_KEYS)
+    missing_keys = [k for k in _SIGNAL_KEYS if st.session_state.get(k) is None]
+    missing_str = ", ".join(missing_keys[:8]) + ("…" if len(missing_keys) > 8 else "") if missing_keys else "all loaded"
 
     lines = [
-        "# PIPELINE UPGRADE BRIEF (FOR EXTERNAL AI)",
+        "# NARRATIVE INVESTING TOOL — AI CO-ENGINEER BRIEF",
         f"Generated: {now_str}",
-        f"Current runtime: regime={regime}, quadrant={quadrant}, score_mode={score_mode}",
-        "Goal: get practical upgrade recommendations with implementation priority.",
         "",
-        "## 1) SYSTEM STRUCTURE",
-        "- UI router: app.py (tiered navigation across drivers/research/tools/admin)",
-        "- Modules: risk_regime, quick_run, fed_forecaster, current_events, stress_signals, whale_buyers, discovery, options, valuation, trade_journal, audit, backtesting, export",
-        "- Services: market_data, sec_client, claude_client, forecast_tracker, backtest_engine, signals_cache, telegram_client",
-        "- Core state bus: streamlit session_state with cross-module signal keys",
+        "## PURPOSE",
+        "Paste this into Grok / ChatGPT / Gemini to discuss architecture,",
+        "recommend upgrades, and help engineer improvements.",
         "",
-        "## 2) CRITICAL FLOWS",
-        "- Macro flow: Risk Regime -> Fed path -> QIR synthesis -> Portfolio/Valuation/Discovery consumers",
-        "- Decision flow: Discovery ideas -> Valuation -> Portfolio AI actions -> tracking/backtest",
-        "- Debate flow: 3-agent adversarial debate with contested tie-bias lean",
+        "---",
         "",
-        "## 3) DEPENDENCY HOTSPOTS",
-        "- services/claude_client.py is a central dependency for synthesis and recommendations",
-        "- services/market_data.py is a central dependency for market and macro inputs",
-        "- _regime_context is a high blast-radius state key consumed by many modules",
-        "- Export Hub depends on broad state coverage to produce complete outputs",
+        "## 1. LIVE SIGNAL STATE",
+        f"QIR last run: {qir_run}",
+        f"Signals loaded: {loaded}/{total} keys",
         "",
-        "## 4) CURRENT COVERAGE SNAPSHOT",
-        f"- Loaded keys ({len(loaded)}/{len(key_signals)}): {', '.join(loaded) if loaded else '(none)'}",
-        f"- Missing keys: {', '.join(missing) if missing else '(none)'}",
+        "MACRO REGIME",
+        f"  Status:     {regime} | Quadrant: {quadrant}",
+        f"  Score:      {score:+.2f}  (−1=risk-off, +1=risk-on)" if isinstance(score, (int, float)) else f"  Score:      {score}",
+        f"  Composite:  {macro_score}/100",
+        f"  Leading:    {leading_score}/100",
+        f"  Divergence: {div_pts:+d} pts — {div_label}" if isinstance(div_pts, (int, float)) else f"  Divergence: {div_pts} pts — {div_label}",
+        f"  Entry Signal: {entry_verdict}  (BUY THE DIP / WAIT / HOLD / SELL THE RIP)",
+        f"  5d Trend:   {score_5d}",
         "",
-        "## 5) KNOWN CONSTRAINTS",
-        "- Multi-source API variability and intermittent data freshness",
-        "- Session-state coupling across modules",
-        "- Mixed output contracts across AI features",
-        "- Need to preserve Streamlit responsiveness under heavier analysis",
+        "TACTICAL",
+        f"  Score:  {tac_score}/100 — {tac_label}",
+        f"  Action: {action_bias}",
         "",
-        "## 6) WHAT I WANT FROM YOU (OTHER AI)",
-        "Please answer with:",
-        "1. Top 10 upgrade ideas ranked by impact x effort",
-        "2. 3 highest-risk dependencies and hardening steps",
-        "3. Contract/schema improvements for session-state and AI outputs",
-        "4. Testing strategy to prevent regressions in QIR, Valuation, and Portfolio",
-        "5. Performance optimizations (cache strategy, parallelization, fallback behavior)",
-        "6. A 2-week implementation roadmap with milestones",
+        "OPTIONS FLOW",
+        f"  Score:  {of_score}/100 — {of_label}",
+        f"  P/C Ratio: {pc_ratio}",
         "",
-        "## 7) COPY-PASTE PROMPT",
-        "Use this prompt with the brief:",
-        "\"You are a principal engineer reviewing an investment intelligence Streamlit app. Use this pipeline brief to produce a prioritized upgrade plan with concrete code-level recommendations, risk controls, and measurable success criteria.\"",
+        "FED / RATE PATH",
+        f"  Current Fed Funds: {fed_rate}%",
+        f"  Dominant scenario: {scenario} ({prob_pct}%)",
         "",
-        f"Pipeline Upgrade Brief generated by Regarded Terminals | {now_str}",
+        f"Missing signals: {missing_str}",
+        "",
+        "---",
+        "",
+        "## 2. ARCHITECTURE OVERVIEW",
+        "",
+        "Entry point: app.py — Streamlit sidebar with 8 modules, password auth via APP_PASSWORD env var.",
+        "State bus: Streamlit session_state (~134 keys, persisted to GitHub Gist + data/signals_cache.json).",
+        "",
+        "MODULE MAP",
+        "  Module 0: Risk Regime         modules/risk_regime.py",
+        "  QIR:      Quick Intel Run     modules/quick_run.py",
+        "  Module 1: Narrative Discovery modules/narrative_discovery.py",
+        "  Module 6: Options Activity    modules/options_activity.py",
+        "  Module 7: Valuation           modules/valuation.py",
+        "  –:        Portfolio Intel     modules/tail_risk_studio.py (+ related)",
+        "  –:        Export Hub          modules/export_hub.py",
+        "",
+        "SERVICES",
+        "  market_data.py      — yfinance + FRED batch fetch, caching, AssetSnapshot dataclass",
+        "  claude_client.py    — Claude AI + Groq LLM integration",
+        "  scoring.py          — 0-100 per-ticker composite score (6 dimensions)",
+        "  sec_client.py       — SEC EDGAR rate-limited API (10 req/sec)",
+        "  fed_forecaster.py   — FOMC scenario forecasting, rate path probabilities",
+        "  signals_cache.py    — _SIGNAL_KEYS registry, GitHub Gist persistence",
+        "",
+        "UTILS",
+        "  signal_block.py     — build_macro_block() + build_ticker_block() ground-truth injectors",
+        "  debate_record.py    — Judge Judy court record persistence (SQLite)",
+        "  options_history.py  — options flow history tracking",
+        "",
+        "---",
+        "",
+        "## 3. DATA FLOW: QIR → EVERYTHING",
+        "",
+        "QIR (quick_run.py) is the data loader. It runs concurrent rounds of tasks:",
+        "",
+        "  Round 1 (parallel, ThreadPoolExecutor):",
+        "    → run_quick_regime()        writes: _regime_context, _regime_raw_signals, _tactical_context",
+        "    → run_quick_options_flow()  writes: _options_flow_context, _unusual_activity_sentiment",
+        "    → run_quick_rate_path()     writes: _dominant_rate_path, _rate_path_probs, _fed_funds_rate",
+        "    → run_fed_plays()           writes: _fed_plays_result",
+        "    → run_current_events()      writes: _current_events_digest",
+        "    → run_doom_briefing()       writes: _doom_briefing",
+        "",
+        "  Round 2 (after regime resolves):",
+        "    → run_quick_sector_regime() writes: _sector_regime_digest",
+        "",
+        "  Round 3 (ad-hoc):",
+        "    → generate_macro_synopsis() writes: _macro_synopsis",
+        "    → adversarial_debate()      writes: _adversarial_debate",
+        "",
+        "  Downstream readers:",
+        "    narrative_discovery.py  reads: _regime_context, _tactical_context, _dominant_rate_path,",
+        "                                   _sector_regime_digest, _fed_funds_rate",
+        "    valuation.py            reads: ALL of the above + _options_flow_context, _doom_briefing,",
+        "                                   _whale_summary, _fed_plays_result, _rp_plays_result,",
+        "                                   _options_sentiment, _unusual_activity_sentiment,",
+        "                                   _institutional_bias, _insider_net_flow, _congress_bias,",
+        "                                   _fear_greed, _aaii_sentiment, _vix_curve, _portfolio_risk_snapshot",
+        "    portfolio intel         reads: _regime_context, _dominant_rate_path, _sector_regime_digest,",
+        "                                   _portfolio_risk_snapshot, _macro_synopsis",
+        "",
+        "AI GROUNDING PATTERN (signal_block.py):",
+        "  Every AI call injects: build_macro_block() + build_ticker_block(ticker)",
+        "  These pull raw z-scores and numeric values — not AI interpretations — to prevent",
+        "  \"telephone game\" compounding errors across multi-step AI chains.",
+        "",
+        "---",
+        "",
+        "## 4. HOW NARRATIVE DISCOVERY WORKS (modules/narrative_discovery.py)",
+        "",
+        "Input:  User enters a ticker or narrative theme (or runs auto-trending mode)",
+        "Output: AI-grouped ticker clusters with macro-aligned play ideas",
+        "",
+        "Step-by-step:",
+        "  1. _get_macro_context_for_plays() — reads _regime_context + _tactical_context + _dominant_rate_path",
+        "     → builds a macro summary string injected into every AI call in this module",
+        "  2. Auto mode: fetches trending tickers from StockTwits + unusual options activity",
+        "  3. claude_client.group_tickers_by_narrative(tickers) — AI groups tickers by theme",
+        "  4. For each group: generates regime-aligned play (bull/bear/neutral) using macro context",
+        "  5. Conviction stars (1–5) derived from alignment of: regime direction × tactical score × options sentiment",
+        "  6. Rate path overlay: if _dominant_rate_path loaded, overlays rate sensitivity on each play",
+        "",
+        "Key session keys written:",
+        "  _plays_result, _trending_narratives, _auto_trending_groups, _sector_regime_digest (consumed from QIR)",
+        "",
+        "---",
+        "",
+        "## 5. HOW VALUATION WORKS (modules/valuation.py)",
+        "",
+        "Input:  Single ticker + AI model selection",
+        "Output: Buy/Hold/Sell rating + DCF + Kelly sizing + signal transparency",
+        "",
+        "Step-by-step:",
+        "  1. _collect_signals(ticker) — gathers 15+ signal dimensions from session_state + live fetch:",
+        "       Technicals (SMA/RSI/momentum), Fundamentals (P/E, PEG, growth, margins),",
+        "       Insider flow (SEC Form 4), Institutional (13F changes), Congress trades,",
+        "       Options sentiment (P/C ratio, gamma zone), Short interest,",
+        "       Macro regime score, Rate path sensitivity, Sector rotation signal",
+        "  2. build_macro_block() + build_ticker_block(ticker) — raw-number ground truth injected into prompt",
+        "  3. Claude/Groq generates rating + thesis + entry/exit levels + risk factors",
+        "  4. _compute_dcf(ticker) — DCF engine with 3 scenarios (base/bull/bear):",
+        "       Fetches: revenue growth, margins, WACC, terminal growth from fundamentals",
+        "       Produces: intrinsic value range, upside/downside %, scenario sensitivity table",
+        "  5. _render_kelly() — Kelly criterion position sizing:",
+        "       Inputs: AI win probability, expected gain/loss, account size",
+        "       Output: full Kelly %, half Kelly %, suggested position size in $",
+        "  6. Signal fingerprinting (signal_block.get_ticker_fingerprint) — MD5 hash of all inputs",
+        "       If fingerprint unchanged since last run → reuse cached verdict (avoids redundant AI calls)",
+        "",
+        "Key session keys written: _val_result_{ticker}, _dcf_result_{ticker}",
+        "",
+        "---",
+        "",
+        "## 6. HOW PORTFOLIO INTELLIGENCE WORKS",
+        "",
+        "Input:  Open positions from trade journal + all QIR macro signals",
+        "Output: Portfolio-level risk snapshot, factor exposures, regime-aligned action items",
+        "",
+        "Step-by-step:",
+        "  1. Reads open positions from data/plays_log.json",
+        "  2. Fetches live prices for all held tickers (market_data.fetch_batch_safe)",
+        "  3. Correlates each position against regime quadrant:",
+        "       Goldilocks → tech/growth overweight OK",
+        "       Stagflation → commodities/defensives, reduce growth exposure",
+        "  4. _portfolio_risk_snapshot: VaR, beta-adjusted exposure, correlation concentration",
+        "  5. Factor analysis: maps positions against macro factors (duration, inflation, credit, growth)",
+        "  6. AI action items: regime-specific position adjustments via Claude prompt",
+        "     Prompt includes: build_macro_block() + full position table + factor exposures",
+        "",
+        "Key session keys read/written: _portfolio_risk_snapshot, _portfolio_analysis, _factor_analysis",
+        "",
+        "---",
+        "",
+        "## 7. KEY ENGINEERING PATTERNS",
+        "",
+        "Caching:      @st.cache_data(ttl=3600) for live data; ttl=86400 for historical FRED",
+        "Concurrency:  ThreadPoolExecutor(max_workers=5) for SEC + yfinance batch fetches",
+        "Rate limits:  SEC EDGAR: 10 req/sec via _rate_limit() in sec_client.py",
+        "AI models:    Groq (fast/cheap for synthesis) + Claude (deep reasoning for valuation/debate)",
+        "Persistence:  GitHub Gist (survives Streamlit Cloud redeploys) + local JSON fallback",
+        "Fingerprinting: MD5 hash of signal inputs → skip AI if inputs unchanged (signals_cache.py)",
+        "Adversarial:  3-agent debate: Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️",
+        "              Verdict + confidence stored in _adversarial_debate, logged to data/debate_record.db",
+        "",
+        "---",
+        "",
+        "## 8. KNOWN GAPS & HONEST CONSTRAINTS",
+        "",
+        "- Session state coupling: all modules share one global dict — no isolation between runs",
+        "- No unit tests: all logic is tested manually via the UI",
+        "- FRED data latency: some series update monthly; stale data silently lowers confidence scores",
+        "- Options data: market-hours only; after-hours runs get data_unavailable flag",
+        "- AI output contracts: no JSON schema validation on LLM responses — rely on try/except fallbacks",
+        "- Streamlit rerun overhead: heavy QIR runs can feel slow due to sequential st.session_state writes",
+        "- GitHub Gist as DB: single-file JSON is fine for now but will hit size limits with more signal keys",
+        "",
+        "---",
+        "",
+        "## 9. STARTER PROMPTS FOR AI",
+        "",
+        "Use one of these to start your conversation:",
+        "",
+        "ARCHITECTURE REVIEW:",
+        "\"You are a principal engineer reviewing a Streamlit investment intelligence app.",
+        "Here is the full architecture brief. Identify the top 5 architectural risks and",
+        "suggest concrete improvements with code-level guidance.\"",
+        "",
+        "FEATURE ENGINEERING:",
+        "\"Based on this app brief, suggest 3 high-impact features I could add to improve",
+        "the Discovery → Valuation → Portfolio flow. For each: describe the feature,",
+        "what data it needs, which files to modify, and rough implementation complexity.\"",
+        "",
+        "UPGRADE ROADMAP:",
+        "\"Review this app and produce a prioritized 2-week upgrade roadmap. Focus on:",
+        "signal quality, UI clarity, AI prompt improvements, and engineering robustness.",
+        "Be specific — name files, functions, and patterns to change.\"",
+        "",
+        "CODE REVIEW:",
+        "\"Given this architecture, what are the most likely sources of silent bugs or",
+        "data quality issues? Focus on the session state data flow and AI grounding patterns.\"",
+        "",
+        "---",
+        "",
+        f"Brief generated by Regarded Terminals | {now_str}",
     ]
     return "\n".join(lines)
 
@@ -1126,190 +1033,28 @@ def render():
             unsafe_allow_html=True,
         )
 
-    # --- Section D: Pipeline Map Export ---
+    # --- Section D: AI Co-Engineer Brief ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
-    st.markdown(
-        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
-        f'letter-spacing:0.08em;margin-bottom:4px;">PIPELINE MAP EXPORT</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "Exports a full structured description of every module, signal, data source, and "
-        "engine in this app. Paste into any AI to find gaps, missing signals, or architecture improvements."
-    )
-    st.markdown(
-        f'<div style="background:{COLORS["surface"]};border-left:3px solid #475569;'
-        f'padding:8px 12px;border-radius:0 4px 4px 0;margin:6px 0 10px 0;font-size:11px;color:#94a3b8;">'
-        f'<b style="color:#cbd5e1;">Tips:</b> '
-        f'1) Export both <b>Pipeline Map</b> and <b>Dependency Graph JSON</b>. '
-        f'2) Ask AI to rank upgrades by <i>impact x effort</i>. '
-        f'3) Ask for top single points of failure and a 2-week hardening plan. '
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown("#### 🤖 AI Co-Engineer Brief")
+    st.caption("Full architecture + live signal state + module internals. Paste into Grok, ChatGPT, or Gemini.")
+    if st.button("🤖 Generate AI Co-Engineer Brief", key="export_coengine_gen"):
+        with st.spinner("Building..."):
+            _coengine_content = _build_coengine_export()
+        st.session_state["_coengine_content"] = _coengine_content
 
-    if st.button("🗺 Generate Pipeline Map", key="export_pipeline_gen"):
-        with st.spinner("Building pipeline map..."):
-            _pipeline_content = _build_pipeline_export()
-        st.session_state["_pipeline_content"] = _pipeline_content
-
-    if st.button("🕸 Generate Dependency Graph JSON", key="export_pipeline_graph_gen"):
-        with st.spinner("Building dependency graph JSON..."):
-            _graph_content = _build_pipeline_graph_json()
-        st.session_state["_pipeline_graph_content"] = _graph_content
-
-    if st.button("🧭 Generate Pipeline Upgrade Brief", key="export_pipeline_upgrade_gen"):
-        with st.spinner("Building upgrade brief..."):
-            _upgrade_content = _build_pipeline_upgrade_brief()
-        st.session_state["_pipeline_upgrade_content"] = _upgrade_content
-
-    st.markdown(
-        '<div style="font-size:10px;color:#64748b;margin-top:4px;line-height:1.6;">'
-        '🗺 <b style="color:#94a3b8;">Pipeline Map</b> — human-readable architecture flow<br>'
-        '🕸 <b style="color:#94a3b8;">Dependency Graph JSON</b> — machine-readable weighted dependencies<br>'
-        '🧭 <b style="color:#94a3b8;">Upgrade Brief</b> — prompt-ready summary for external AI advice'
-        '</div>',
-        unsafe_allow_html=True,
-    )
-
-    _pipe = st.session_state.get("_pipeline_content")
-    if _pipe:
-        _pipe_filename = f"regarded_terminals_pipeline_{datetime.now().strftime('%Y%m%d')}.txt"
-        col_p1, col_p2, col_p3 = st.columns([1, 1, 2])
-        with col_p1:
-            st.download_button(
-                label="💾 Download Pipeline Map",
-                data=_pipe,
-                file_name=_pipe_filename,
-                mime="text/plain",
-                key="export_pipeline_dl",
-            )
-        with col_p2:
-            try:
-                from services.telegram_client import is_configured as _tg_ok2, send_document as _tg_send_doc2
-                if _tg_ok2():
-                    if st.button("📲 Send Pipeline to Telegram", key="export_pipeline_tg"):
-                        with st.spinner("Sending to Telegram..."):
-                            _ok2 = _tg_send_doc2(_pipe_filename, _pipe,
-                                                  caption=f"🗺 Regarded Terminals Pipeline Map — {datetime.now().strftime('%Y-%m-%d')}")
-                        if _ok2:
-                            st.success("✅ Sent to Telegram")
-                        else:
-                            st.error("❌ Telegram send failed")
-                else:
-                    st.caption("📲 Telegram not configured")
-            except ImportError:
-                st.caption("📲 Telegram not configured")
-        with col_p3:
-            st.markdown(
-                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
-                f'{len(_pipe.splitlines())} lines · {len(_pipe):,} chars · ~{len(_pipe)//4:,} tokens</div>',
-                unsafe_allow_html=True,
-            )
-        with st.expander("Preview Pipeline Map", expanded=False):
-            st.code(_pipe[:3000] + ("\n…[truncated]" if len(_pipe) > 3000 else ""), language="markdown")
-
-        st.markdown(
-            f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
-            f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;font-size:12px;color:#bbb;">'
-            f'💡 <b>Suggested prompt:</b> <i>"Given this full pipeline map of my investment tool, '
-            f'what analytical capabilities, data sources, or signal types are missing? '
-            f'List gaps by priority with a brief explanation for each."</i>'
-            f'</div>',
-            unsafe_allow_html=True,
+    _coengine = st.session_state.get("_coengine_content")
+    if _coengine:
+        _coengine_filename = f"coengine_brief_{datetime.now().strftime('%Y%m%d')}.md"
+        st.download_button(
+            "⬇ Download Co-Engineer Brief",
+            _coengine,
+            file_name=_coengine_filename,
+            mime="text/markdown",
+            key="export_coengine_dl",
+            use_container_width=True,
         )
-
-    _graph = st.session_state.get("_pipeline_graph_content")
-    if _graph:
-        _graph_filename = f"regarded_terminals_dependency_graph_{datetime.now().strftime('%Y%m%d')}.json"
-        _g1, _g2, _g3 = st.columns([1, 1, 2])
-        with _g1:
-            st.download_button(
-                label="💾 Download Dependency JSON",
-                data=_graph,
-                file_name=_graph_filename,
-                mime="application/json",
-                key="export_pipeline_graph_dl",
-            )
-        with _g2:
-            try:
-                from services.telegram_client import is_configured as _tg_ok3, send_document as _tg_send_doc3
-                if _tg_ok3():
-                    if st.button("📲 Send Dependency JSON", key="export_pipeline_graph_tg"):
-                        with st.spinner("Sending to Telegram..."):
-                            _ok3 = _tg_send_doc3(
-                                _graph_filename,
-                                _graph,
-                                caption=f"🕸 Dependency Graph JSON — {datetime.now().strftime('%Y-%m-%d')}",
-                            )
-                        if _ok3:
-                            st.success("✅ Sent to Telegram")
-                        else:
-                            st.error("❌ Telegram send failed")
-                else:
-                    st.caption("📲 Telegram not configured")
-            except ImportError:
-                st.caption("📲 Telegram not configured")
-        with _g3:
-            st.markdown(
-                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
-                f'{len(_graph.splitlines())} lines · {len(_graph):,} chars · ~{len(_graph)//4:,} tokens</div>',
-                unsafe_allow_html=True,
-            )
-
-        with st.expander("Preview Dependency Graph JSON", expanded=False):
-            st.code(_graph[:3000] + ("\n...[truncated]" if len(_graph) > 3000 else ""), language="json")
-
-        st.markdown(
-            f'<div style="background:{COLORS["surface"]};border-left:3px solid {COLORS["bloomberg_orange"]};'
-            f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;font-size:12px;color:#bbb;">'
-            f'💡 <b>Suggested prompt:</b> <i>"Use this graph JSON to identify the top heavy dependencies '
-            f'(weight=5), single points of failure, and highest blast-radius session keys. '
-            f'Propose hardening steps in priority order."</i>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    _upgrade = st.session_state.get("_pipeline_upgrade_content")
-    if _upgrade:
-        _upgrade_filename = f"regarded_terminals_upgrade_brief_{datetime.now().strftime('%Y%m%d')}.txt"
-        _u1, _u2, _u3 = st.columns([1, 1, 2])
-        with _u1:
-            st.download_button(
-                label="💾 Download Upgrade Brief",
-                data=_upgrade,
-                file_name=_upgrade_filename,
-                mime="text/plain",
-                key="export_pipeline_upgrade_dl",
-            )
-        with _u2:
-            try:
-                from services.telegram_client import is_configured as _tg_ok4, send_document as _tg_send_doc4
-                if _tg_ok4():
-                    if st.button("📲 Send Upgrade Brief", key="export_pipeline_upgrade_tg"):
-                        with st.spinner("Sending to Telegram..."):
-                            _ok4 = _tg_send_doc4(
-                                _upgrade_filename,
-                                _upgrade,
-                                caption=f"🧭 Pipeline Upgrade Brief — {datetime.now().strftime('%Y-%m-%d')}",
-                            )
-                        if _ok4:
-                            st.success("✅ Sent to Telegram")
-                        else:
-                            st.error("❌ Telegram send failed")
-                else:
-                    st.caption("📲 Telegram not configured")
-            except ImportError:
-                st.caption("📲 Telegram not configured")
-        with _u3:
-            st.markdown(
-                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
-                f'{len(_upgrade.splitlines())} lines · {len(_upgrade):,} chars · ~{len(_upgrade)//4:,} tokens</div>',
-                unsafe_allow_html=True,
-            )
-
-        with st.expander("Preview Pipeline Upgrade Brief", expanded=False):
-            st.code(_upgrade[:3000] + ("\n...[truncated]" if len(_upgrade) > 3000 else ""), language="markdown")
+        with st.expander("📋 Preview", expanded=False):
+            st.code(_coengine, language="markdown")
 
     # --- Section E: Suggested prompts ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
