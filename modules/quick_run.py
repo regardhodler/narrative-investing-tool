@@ -266,6 +266,102 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     }
 
 
+def _classify_entry_recommendation(
+    leading_score: int,
+    macro_score: int,
+    tactical_score: int,
+    options_score: int,
+    divergence_label: str,
+    divergence_pts: int,
+) -> dict:
+    """Map leading/lagging indicator divergence + tactical + options into a single entry verdict.
+
+    Returns one of: BUY THE DIP | HOLD | WAIT | SELL THE RIP
+    """
+    leading_bull  = leading_score  >= 58
+    leading_bear  = leading_score  <  42
+    macro_bear    = macro_score    <  40
+    tac_dip       = tactical_score <  45
+    tac_rip       = tactical_score >= 65
+    opts_bearish  = options_score  <  40
+    opts_bullish  = options_score  >= 62
+    early_risk_on  = divergence_label == "Early Risk-On Setup"
+    early_risk_off = divergence_label == "Early Risk-Off Warning"
+    large_div      = abs(divergence_pts) >= 8
+
+    # Decision tree — priority: SELL THE RIP > BUY THE DIP > WAIT > HOLD
+    if leading_bear and tac_rip and not macro_bear:
+        verdict = "SELL THE RIP"
+    elif early_risk_off and large_div and tac_rip:
+        verdict = "SELL THE RIP"
+    elif leading_bull and tac_dip and not macro_bear:
+        if opts_bearish and not early_risk_on:
+            verdict = "WAIT"
+        else:
+            verdict = "BUY THE DIP"
+    elif early_risk_on and large_div and tac_dip and not macro_bear:
+        verdict = "BUY THE DIP"
+    elif early_risk_off and large_div:
+        verdict = "WAIT"
+    elif leading_bear and not tac_rip:
+        verdict = "WAIT"
+    elif leading_bull and tac_dip and macro_bear:
+        verdict = "WAIT"
+    elif not leading_bull and not leading_bear and tac_dip and opts_bearish:
+        verdict = "WAIT"
+    else:
+        verdict = "HOLD"
+        # Tiebreaker: upgrade HOLD → BUY THE DIP if options also confirm
+        if opts_bullish and leading_bull and tac_dip:
+            verdict = "BUY THE DIP"
+
+    _meta = {
+        "BUY THE DIP":  ("#22c55e", "#052e16", "▲"),
+        "HOLD":         ("#4B9FFF", "#0a1628", "◆"),
+        "WAIT":         ("#FFD700", "#1a1200", "◌"),
+        "SELL THE RIP": ("#ef4444", "#2d0a0a", "▼"),
+    }
+    color, bg, icon = _meta[verdict]
+
+    div_sign = f"+{divergence_pts}" if divergence_pts >= 0 else str(divergence_pts)
+    if verdict == "BUY THE DIP":
+        reasoning = (
+            f"Leading indicators healthy at {leading_score}/100 vs macro {macro_score}/100 "
+            f"({div_sign} pts divergence). "
+            f"Tactical pullback to {tactical_score}/100 creates a favorable entry before lagging confirms."
+        )
+    elif verdict == "HOLD":
+        reasoning = (
+            f"All layers aligned — leading {leading_score}/100, macro {macro_score}/100, "
+            f"tactical {tactical_score}/100. "
+            f"No new entry trigger or exit signal; maintain existing positions."
+        )
+    elif verdict == "WAIT":
+        reasoning = (
+            f"Leading score ({leading_score}/100) diverging {div_sign} pts from composite — "
+            f"fast signals have weakened. "
+            f"Hold new entries until divergence resolves or macro catches down."
+        )
+    else:  # SELL THE RIP
+        reasoning = (
+            f"Leading indicators cracking ({leading_score}/100) while price remains elevated "
+            f"(tactical {tactical_score}/100). "
+            f"Use current strength to reduce exposure before lagging composite confirms the move."
+        )
+
+    return {
+        "verdict":          verdict,
+        "color":            color,
+        "bg":               bg,
+        "icon":             icon,
+        "reasoning":        reasoning,
+        "leading_score":    leading_score,
+        "macro_score":      macro_score,
+        "divergence_pts":   divergence_pts,
+        "divergence_label": divergence_label,
+    }
+
+
 def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
     """Decompose the GENUINE_UNCERTAINTY state into a 5-domain uncertainty profile.
 
@@ -559,6 +655,160 @@ def _render_qir_dashboard() -> None:
     _tac_score    = _tac.get("tactical_score", 50) if _tac else 50
     _of_score     = _of.get("options_score", 50)   if _of  else 50
 
+    # ── Zone 1: Signal Strip data ─────────────────────────────────────────
+    _macro_s   = int(_rc.get("macro_score") or 50)
+    _leading_s = int(_rc.get("leading_score") or 50)
+    _div_pts   = int(_rc.get("leading_divergence") or 0)
+    _div_label = _rc.get("leading_label") or "Aligned"
+
+    # Tactical: find signals by name, not index
+    _tac_sigs   = _tac.get("signals", []) if _tac else []
+    _spy_ma_sig = next((s for s in _tac_sigs if "SPY vs" in s["Signal"]), None)
+    _roc_sig    = next((s for s in _tac_sigs if "Momentum" in s["Signal"]), None)
+    _vix_sig    = next((s for s in _tac_sigs if "VIX Level" in s["Signal"]), None)
+
+    # Options: gamma by name; call% from separate session key
+    _of_sigs   = _of.get("signals", [])
+    _gamma_sig = next((s for s in _of_sigs if s["Signal"] == "Gamma Zone"), None)
+    _ua_sent   = st.session_state.get("_unusual_activity_sentiment") or {}
+    _call_pct  = _ua_sent.get("call_pct")
+
+    def _cell(label_icon, content_html, border_color="#1e293b"):
+        return (
+            f'<div style="background:#0d1117;border:1px solid {border_color};'
+            f'border-radius:5px;padding:8px 10px;">'
+            f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+            f'letter-spacing:0.08em;margin-bottom:4px;">{label_icon}</div>'
+            f'{content_html}'
+            f'</div>'
+        )
+
+    # Regime cell
+    if _rc:
+        _r_bull  = "Risk-On" in _regime_label or _regime_score > 0.3
+        _r_bear  = "Risk-Off" in _regime_label or _regime_score < -0.3
+        _rc_col  = "#22c55e" if _r_bull else ("#ef4444" if _r_bear else "#f59e0b")
+        _rc_arr  = "▲" if _r_bull else ("▼" if _r_bear else "◆")
+        _div_sign    = f"+{_div_pts}" if _div_pts >= 0 else str(_div_pts)
+        _div_pill_bg = (
+            "#22c55e" if _div_label == "Early Risk-On Setup" else
+            "#ef4444" if _div_label == "Early Risk-Off Warning" else
+            "#1e293b"
+        )
+        _div_pill_fg = "#052e16" if _div_pill_bg == "#22c55e" else "white"
+        _div_badge = (
+            f'<span style="background:{_div_pill_bg};color:{_div_pill_fg};'
+            f'font-weight:800;font-size:8px;padding:1px 5px;border-radius:3px;">'
+            f'{_div_sign} pts · {_div_label.upper()}</span>'
+        )
+        _regime_cell = _cell("📡 REGIME", (
+            f'<div style="color:{_rc_col};font-size:12px;font-weight:800;'
+            f'font-family:\'JetBrains Mono\',Consolas,monospace;margin-bottom:5px;">'
+            f'{_rc_arr} {_regime_label}</div>'
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'
+            f'<span style="font-size:9px;color:#475569;">Composite</span>'
+            f'<span style="font-size:12px;font-weight:800;color:#f1f5f9;">{_macro_s}/100</span>'
+            f'</div>'
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:5px;">'
+            f'<span style="font-size:9px;color:#475569;">Leading</span>'
+            f'<span style="font-size:12px;font-weight:800;color:#f1f5f9;">{_leading_s}/100</span>'
+            f'</div>'
+            f'{_div_badge}'
+        ), border_color=_rc_col + "44")
+    else:
+        _regime_cell = _cell("📡 REGIME",
+            '<div style="color:#374151;font-size:11px;">◌ Regime — run QIR</div>')
+
+    # Tactical cell
+    if _tac:
+        _t_bull = _tac_score >= 65; _t_bear = _tac_score < 38
+        _tc     = "#22c55e" if _t_bull else ("#ef4444" if _t_bear else "#f59e0b")
+        _ta     = "▲" if _t_bull else ("▼" if _t_bear else "◆")
+        _tac_lines = (
+            f'<div style="color:{_tc};font-size:12px;font-weight:800;'
+            f'font-family:\'JetBrains Mono\',Consolas,monospace;margin-bottom:5px;">'
+            f'{_ta} {_tac.get("label","")}</div>'
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'
+            f'<span style="font-size:9px;color:#475569;">Score</span>'
+            f'<span style="font-size:12px;font-weight:800;color:#f1f5f9;">{_tac_score}/100</span>'
+            f'</div>'
+        )
+        if _spy_ma_sig:
+            _tac_lines += (
+                f'<div style="font-size:10px;color:#64748b;padding:1px 0;">'
+                f'<span style="color:#94a3b8;">SPY MA</span> '
+                f'<span style="color:#e2e8f0;">{_spy_ma_sig["Value"]}</span></div>'
+            )
+        if _roc_sig:
+            _tac_lines += (
+                f'<div style="font-size:10px;color:#64748b;padding:1px 0;">'
+                f'<span style="color:#94a3b8;">Momo</span> '
+                f'<span style="color:#e2e8f0;">{_roc_sig["Value"]}</span></div>'
+            )
+        if _vix_sig:
+            try:
+                import re as _vre2
+                _vm2 = _vre2.search(r"(\d+\.?\d*)", str(_vix_sig.get("Value", "")))
+                if _vm2:
+                    _vix2 = float(_vm2.group(1))
+                    if _vix2 > 28:
+                        _tac_lines += f'<div style="font-size:9px;color:#f59e0b;margin-top:3px;">⚠ VIX {_vix2:.0f} — premiums elevated</div>'
+                    elif _vix2 < 15:
+                        _tac_lines += f'<div style="font-size:9px;color:#4B9FFF;margin-top:3px;">ℹ VIX {_vix2:.0f} — options cheap</div>'
+            except Exception:
+                pass
+        _tactical_cell = _cell("⚡ TACTICAL", _tac_lines, border_color=_tc + "44")
+    else:
+        _tactical_cell = _cell("⚡ TACTICAL",
+            '<div style="color:#374151;font-size:11px;">◌ Tactical — run QIR</div>')
+
+    # Options Flow cell
+    if _of and not _of.get("data_unavailable"):
+        _o_bull = _of_score >= 65; _o_bear = _of_score < 38
+        _oc     = "#22c55e" if _o_bull else ("#ef4444" if _o_bear else "#f59e0b")
+        _oa     = "▲" if _o_bull else ("▼" if _o_bear else "◆")
+        _of_lines = (
+            f'<div style="color:{_oc};font-size:12px;font-weight:800;'
+            f'font-family:\'JetBrains Mono\',Consolas,monospace;margin-bottom:5px;">'
+            f'{_oa} {_of.get("label","")}</div>'
+            f'<div style="display:flex;justify-content:space-between;margin-bottom:3px;">'
+            f'<span style="font-size:9px;color:#475569;">Score</span>'
+            f'<span style="font-size:12px;font-weight:800;color:#f1f5f9;">{_of_score}/100</span>'
+            f'</div>'
+        )
+        _pc = _of.get("pc_ratio")
+        if _pc is not None:
+            _of_lines += (
+                f'<div style="font-size:10px;padding:1px 0;">'
+                f'<span style="color:#94a3b8;">P/C Ratio</span> '
+                f'<span style="color:#e2e8f0;">{_pc:.2f}</span></div>'
+            )
+        if _gamma_sig:
+            _of_lines += (
+                f'<div style="font-size:10px;padding:1px 0;">'
+                f'<span style="color:#94a3b8;">Gamma</span> '
+                f'<span style="color:#e2e8f0;">{_gamma_sig["Value"]}</span></div>'
+            )
+        if _call_pct is not None:
+            _of_lines += (
+                f'<div style="font-size:10px;padding:1px 0;">'
+                f'<span style="color:#94a3b8;">Unusual Call%</span> '
+                f'<span style="color:#e2e8f0;">{_call_pct:.0f}%</span></div>'
+            )
+        _options_cell = _cell("📊 OPTIONS FLOW", _of_lines, border_color=_oc + "44")
+    elif _of.get("data_unavailable"):
+        _options_cell = _cell("📊 OPTIONS FLOW",
+            '<div style="color:#475569;font-size:11px;">◆ Opt Flow — market closed</div>')
+    else:
+        _options_cell = _cell("📊 OPTIONS FLOW",
+            '<div style="color:#374151;font-size:11px;">◌ Opt Flow — run QIR</div>')
+
+    _sig_strip_html = (
+        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'
+        f'{_regime_cell}{_tactical_cell}{_options_cell}'
+        f'</div>'
+    )
+
     _t1 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">TIMING STACK</div>'
     if _rc:
         _r_bull = "Risk-On"  in _regime_label or _regime_score >  0.3
@@ -732,6 +982,17 @@ def _render_qir_dashboard() -> None:
         _conviction_size_label = _cls.get("conviction_size_label")
         _leading_warning = _cls.get("leading_warning")
 
+        # Entry signal recommendation (leading vs lagging synthesis)
+        _leading_s = int(_rc.get("leading_score") or 50)
+        _macro_s   = int(_rc.get("macro_score") or 50)
+        _div_pts   = int(_rc.get("leading_divergence") or 0)
+        _div_label = _rc.get("leading_label") or "Aligned"
+        _tac_s     = int(_tac.get("tactical_score", 50)) if _tac else 50
+        _opts_s    = int(_of.get("options_score", 50))   if _of  else 50
+        _entry_rec = _classify_entry_recommendation(
+            _leading_s, _macro_s, _tac_s, _opts_s, _div_label, _div_pts
+        )
+
         _verdict_html = (
             f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
             f'<div style="font-size:13px;font-weight:800;color:{_verdict_color};'
@@ -773,6 +1034,47 @@ def _render_qir_dashboard() -> None:
                 f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
                 f'padding:5px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">{_vix_note}</div>'
             )
+
+        # ── Entry Signal card ─────────────────────────────────────────────
+        _er_color = _entry_rec["color"]
+        _er_bg    = _entry_rec["bg"]
+        _er_icon  = _entry_rec["icon"]
+        _er_verb  = _entry_rec["verdict"]
+        _er_rsn   = _entry_rec["reasoning"]
+        _er_ldg   = _entry_rec["leading_score"]
+        _er_mac   = _entry_rec["macro_score"]
+        _er_dpts  = _entry_rec["divergence_pts"]
+        _er_dlbl  = _entry_rec["divergence_label"]
+        _er_dsign = f"+{_er_dpts}" if _er_dpts >= 0 else str(_er_dpts)
+        _er_div_color = (
+            "#22c55e" if _er_dlbl == "Early Risk-On Setup" else
+            "#ef4444" if _er_dlbl == "Early Risk-Off Warning" else
+            "#64748b"
+        )
+        _er_div_badge = (
+            f'<span style="background:{_er_div_color};color:{"#052e16" if _er_div_color == "#22c55e" else ("white" if _er_div_color == "#ef4444" else "white")};'
+            f'font-weight:800;font-size:8px;padding:1px 6px;border-radius:3px;letter-spacing:0.05em;">'
+            f'{_er_dsign} pts · {_er_dlbl.upper()}</span>'
+        )
+        _verdict_html += (
+            f'<div style="background:{_er_bg};border:1px solid {_er_color}44;'
+            f'border-radius:6px;padding:10px 14px;margin:8px 0 6px;">'
+            f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">ENTRY SIGNAL</div>'
+            f'<div style="font-size:20px;font-weight:900;color:{_er_color};'
+            f'letter-spacing:0.04em;margin-bottom:8px;">{_er_icon} {_er_verb}</div>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:8px;">'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">LEADING</div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_ldg}/100</div></div>'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">MACRO</div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_mac}/100</div></div>'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">DIVERGENCE</div>'
+            f'<div style="margin-top:2px;">{_er_div_badge}</div></div>'
+            f'</div>'
+            f'<div style="background:#0d1117;border-left:3px solid {_er_color}44;'
+            f'padding:7px 10px;font-size:11px;color:#94a3b8;line-height:1.6;border-radius:0 3px 3px 0;">'
+            f'{_er_rsn}</div>'
+            f'</div>'
+        )
 
         _buy_html = (
             f'<div style="padding:8px;background:#0a1628;border:1px solid {_cls["color"]}22;border-radius:5px;">'
