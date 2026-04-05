@@ -809,45 +809,8 @@ def _render_qir_dashboard() -> None:
         f'</div>'
     )
 
-    _t1 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">TIMING STACK</div>'
-    if _rc:
-        _r_bull = "Risk-On"  in _regime_label or _regime_score >  0.3
-        _r_bear = "Risk-Off" in _regime_label or _regime_score < -0.3
-        _rc_color = "#22c55e" if _r_bull else ("#ef4444" if _r_bear else "#f59e0b")
-        _rc_arrow = "▲" if _r_bull else ("▼" if _r_bear else "◆")
-        _t1 += (f'<div style="color:{_rc_color};font-size:11px;padding:1px 0;'
-                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
-                f'{_rc_arrow} 📡 Regime: <span style="color:#e2e8f0;">{_regime_label[:28]}</span>'
-                f'<span style="color:{_rc_color};font-size:10px;"> ({_regime_score:+.2f})</span></div>')
-    else:
-        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ 📡 Regime — run QIR</div>'
-
-    if _tac:
-        _t_bull = _tac_score >= 65; _t_bear = _tac_score < 38
-        _tc = "#22c55e" if _t_bull else ("#ef4444" if _t_bear else "#f59e0b")
-        _ta = "▲" if _t_bull else ("▼" if _t_bear else "◆")
-        _t1 += (f'<div style="color:{_tc};font-size:11px;padding:1px 0;'
-                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
-                f'{_ta} ⚡ Tactical: <span style="color:#e2e8f0;">{_tac.get("label","")}</span>'
-                f'<span style="color:{_tc};font-size:10px;"> ({_tac_score}/100)</span></div>')
-    else:
-        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ ⚡ Tactical — run QIR</div>'
-
-    if _of:
-        _o_bull = _of_score >= 65; _o_bear = _of_score < 38
-        _oc = "#22c55e" if _o_bull else ("#ef4444" if _o_bear else "#f59e0b")
-        _oa = "▲" if _o_bull else ("▼" if _o_bear else "◆")
-        _t1 += (f'<div style="color:{_oc};font-size:11px;padding:1px 0;'
-                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
-                f'{_oa} 📊 Opt Flow: <span style="color:#e2e8f0;">{_of.get("label","")}</span>'
-                f'<span style="color:{_oc};font-size:10px;"> ({_of_score}/100)</span></div>')
-    elif _of.get("data_unavailable"):
-        _t1 += '<div style="color:#475569;font-size:11px;padding:1px 0;">◆ 📊 Opt Flow — market closed</div>'
-    else:
-        _t1 += '<div style="color:#374151;font-size:11px;padding:1px 0;">◌ 📊 Opt Flow — run QIR</div>'
-
-    # ── Macro Events column ───────────────────────────────────────────────
-    _t2 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">MACRO EVENTS</div>'
+    # ── Zone 4: Compact footer (macro events + earnings) ─────────────────
+    _footer_parts = []
     try:
         from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
         for _ev_label, _ev_fn in (("FOMC", get_next_fomc), ("CPI", get_next_cpi), ("NFP", get_next_nfp)):
@@ -855,37 +818,54 @@ def _render_qir_dashboard() -> None:
                 _ev = _ev_fn()
                 _d  = _ev.get("days_away", 99)
                 _dt = _ev.get("date", "")[:6]
-                if   _d == 0:  _ec = "#ef4444"; _ds = "TODAY"
-                elif _d == 1:  _ec = "#f97316"; _ds = "TMRW"
-                elif _d <= 5:  _ec = "#f59e0b"; _ds = f"{_d}d"
-                else:          _ec = "#475569"; _ds = f"{_d}d"
-                _t2 += (f'<div style="font-size:11px;padding:1px 0;'
-                        f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
-                        f'<span style="color:#64748b;">{_ev_label}</span>'
-                        f'<span style="color:{_ec};"> {_ds}</span>'
-                        f'<span style="color:#475569;font-size:10px;"> {_dt}</span></div>')
+                if   _d == 0: _ec = "#ef4444"; _ds = "TODAY"
+                elif _d == 1: _ec = "#f97316"; _ds = "TMRW"
+                elif _d <= 5: _ec = "#f59e0b"; _ds = f"{_d}d"
+                else:         _ec = "#475569"; _ds = f"{_d}d"
+                _footer_parts.append(
+                    f'<span style="color:#64748b;">{_ev_label}</span>'
+                    f'<span style="color:{_ec};"> {_ds}</span>'
+                    f'<span style="color:#475569;font-size:9px;"> {_dt}</span>'
+                )
             except Exception:
-                _t2 += f'<div style="color:#374151;font-size:11px;padding:1px 0;">{_ev_label} —</div>'
+                _footer_parts.append(f'<span style="color:#374151;">{_ev_label} —</span>')
     except Exception:
-        _t2 += '<div style="color:#374151;font-size:11px;">Macro events unavailable</div>'
+        _footer_parts.append('<span style="color:#374151;">Macro events unavailable</span>')
 
-    # ── Earnings Risk column ──────────────────────────────────────────────
-    _t3 = '<div style="margin-bottom:2px;font-size:9px;font-weight:700;letter-spacing:0.1em;color:#475569;">EARNINGS RISK</div>'
+    _earn_parts = []
     if _er:
-        for _e in _er[:4]:
+        for _e in _er[:3]:
             _ed = _e["days_away"]
             _em = _e.get("expected_move_pct")
             _em_str = f" ±{_em:.1f}%" if _em else ""
-            if   _ed <= 3: _ec2 = "#ef4444"; _eicon = "⚠"
-            elif _ed <= 7: _ec2 = "#f59e0b"; _eicon = "⚠"
-            else:          _ec2 = "#475569"; _eicon = "📅"
-            _t3 += (f'<div style="font-size:11px;padding:1px 0;'
-                    f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
-                    f'<span style="color:{_ec2};">{_eicon} {_e["ticker"]}</span>'
-                    f'<span style="color:#64748b;"> {_ed}d</span>'
-                    f'<span style="color:{_ec2};font-size:10px;">{_em_str}</span></div>')
-    else:
-        _t3 += '<div style="color:#374151;font-size:11px;">No earnings ≤21d</div>'
+            _ec2 = "#ef4444" if _ed <= 3 else ("#f59e0b" if _ed <= 7 else "#475569")
+            _eicon = "⚠" if _ed <= 7 else "📅"
+            _earn_parts.append(
+                f'<span style="color:{_ec2};">{_eicon} {_e["ticker"]}</span>'
+                f'<span style="color:#64748b;"> {_ed}d</span>'
+                f'<span style="color:{_ec2};font-size:9px;">{_em_str}</span>'
+            )
+
+    _macro_inline = (
+        f'<span style="color:#475569;font-size:8px;font-weight:700;'
+        f'letter-spacing:0.08em;margin-right:6px;">EVENTS</span>'
+        + ' · '.join(_footer_parts)
+    )
+    if _earn_parts:
+        _macro_inline += (
+            f'<span style="color:#1e293b;margin:0 8px;">│</span>'
+            f'<span style="color:#475569;font-size:8px;font-weight:700;'
+            f'letter-spacing:0.08em;margin-right:6px;">EARNINGS</span>'
+            + '  '.join(_earn_parts)
+        )
+
+    _footer_html = (
+        f'<div style="border-top:1px solid #1e293b;margin-top:8px;padding-top:6px;'
+        f'font-size:10px;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        f'display:flex;flex-wrap:wrap;gap:4px;align-items:center;">'
+        f'{_macro_inline}'
+        f'</div>'
+    )
 
     # ── Verdict section ───────────────────────────────────────────────────
     _gu_profile = None  # computed inside if _populated when pattern == GENUINE_UNCERTAINTY
@@ -1173,10 +1153,10 @@ def _render_qir_dashboard() -> None:
         f'text-transform:uppercase;">QIR Intelligence Dashboard</div>'
         f'</div>'
         f'{_freshness_html}'
-        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
-        f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
-        f'</div>'
+        f'{_sig_strip_html}'
+        f'{_entry_rec_html}'
         f'{_verdict_html}'
+        f'{_footer_html}'
         f'</div>',
         unsafe_allow_html=True,
     )
