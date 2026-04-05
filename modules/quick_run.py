@@ -920,21 +920,6 @@ def _render_qir_dashboard() -> None:
                 _instr_shrt = _instr_shrt + [("XLF Puts", "Credit losses mount in deflation/recession"),
                                               ("XLE Puts", "Demand collapses before supply adjusts")]
 
-        # VIX note
-        _vix_note = ""
-        try:
-            import re as _vre
-            _vix_raw = (_tac.get("signals") or [{}])[0].get("Value", "") if _tac else ""
-            _vm = _vre.search(r"(\d+\.?\d*)", str(_vix_raw))
-            if _vm:
-                _vix = float(_vm.group(1))
-                if _vix > 28:
-                    _vix_note = f"⚠ VIX {_vix:.0f} — premiums elevated. Prefer ETFs over options."
-                elif _vix < 15:
-                    _vix_note = f"ℹ VIX {_vix:.0f} — low vol. Options cheap: calls over ETFs for leverage efficiency."
-        except Exception:
-            pass
-
         # Earnings footer caveat (≤14 days)
         _earn_caveats = [
             f"⚠ {e['ticker']} earnings in {e['days_away']}d — size to survive "
@@ -1021,21 +1006,7 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
             )
 
-        # Leading divergence warning
-        if _leading_warning:
-            _verdict_html += (
-                f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
-                f'padding:6px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">'
-                f'⚠ {_leading_warning}</div>'
-            )
-
-        if _vix_note:
-            _verdict_html += (
-                f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
-                f'padding:5px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">{_vix_note}</div>'
-            )
-
-        # ── Entry Signal card ─────────────────────────────────────────────
+        # ── Zone 2: Entry Recommendation card (standalone, placed before verdict) ─
         _er_color = _entry_rec["color"]
         _er_bg    = _entry_rec["bg"]
         _er_icon  = _entry_rec["icon"]
@@ -1051,14 +1022,15 @@ def _render_qir_dashboard() -> None:
             "#ef4444" if _er_dlbl == "Early Risk-Off Warning" else
             "#64748b"
         )
+        _er_div_fg = "#052e16" if _er_div_color == "#22c55e" else "white"
         _er_div_badge = (
-            f'<span style="background:{_er_div_color};color:{"#052e16" if _er_div_color == "#22c55e" else ("white" if _er_div_color == "#ef4444" else "white")};'
+            f'<span style="background:{_er_div_color};color:{_er_div_fg};'
             f'font-weight:800;font-size:8px;padding:1px 6px;border-radius:3px;letter-spacing:0.05em;">'
             f'{_er_dsign} pts · {_er_dlbl.upper()}</span>'
         )
-        _verdict_html += (
+        _entry_rec_html = (
             f'<div style="background:{_er_bg};border:1px solid {_er_color}44;'
-            f'border-radius:6px;padding:10px 14px;margin:8px 0 6px;">'
+            f'border-radius:6px;padding:10px 14px;margin:0 0 10px;">'
             f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">ENTRY SIGNAL</div>'
             f'<div style="font-size:20px;font-weight:900;color:{_er_color};'
             f'letter-spacing:0.04em;margin-bottom:8px;">{_er_icon} {_er_verb}</div>'
@@ -1136,6 +1108,7 @@ def _render_qir_dashboard() -> None:
             )
     else:
         # No fresh QIR run — show stale data if available, or minimal placeholder
+        _entry_rec_html = ""
         _stale_syn = st.session_state.get("_macro_synopsis") or {}
         if _stale_syn.get("conviction"):
             _sc = _stale_syn["conviction"]
