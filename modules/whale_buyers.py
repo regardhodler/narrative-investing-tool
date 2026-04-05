@@ -712,3 +712,11 @@ def _render_activism_tab():
             f'{_existing_digest.replace(chr(10), "<br>")}</div>',
             unsafe_allow_html=True,
         )
+
+
+def render():
+    tab1, tab2 = st.tabs(["🐋 Whale Movement", "📢 Activism Tracker"])
+    with tab1:
+        _render_whale_tab()
+    with tab2:
+        _render_activism_tab()
