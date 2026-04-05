@@ -16,6 +16,67 @@ from services.news_feed import (
 from utils.theme import COLORS
 
 
+_SENTIMENT_JSON_INSTRUCTION = (
+    "\n\nAfter your digest paragraph(s), append on its own line exactly:\n"
+    'SENTIMENT:{"sentiment":<float -1.0 to 1.0>,"uncertainty":<float 0.0 to 1.0>,'
+    '"dominant_theme":"<2-4 words>","risk_events":["<event1>","<event2>"]}\n'
+    "sentiment: +1.0=very bullish tone, -1.0=very bearish tone. "
+    "uncertainty: 0.0=confident/clear, 1.0=very uncertain/contradictory."
+)
+
+
+def _parse_digest_sentiment(raw: str) -> tuple[str, dict]:
+    """Split raw LLM response into (prose, sentiment_meta).
+
+    Looks for a SENTIMENT:{...} line at the end. Returns the prose with that
+    line stripped, and the parsed metadata dict. Falls back to empty dict if
+    the model didn't include it or JSON is malformed.
+    """
+    import re, json as _json
+    meta: dict = {}
+    match = re.search(r'SENTIMENT:(\{[^\n]+\})', raw or "")
+    if match:
+        try:
+            meta = _json.loads(match.group(1))
+            raw = raw[:match.start()].strip()
+        except Exception:
+            pass
+    return raw, meta
+
+
+def _meta_to_sentiment_score(meta: dict, fallback_text: str) -> dict:
+    """Convert parsed sentiment metadata to a _events_sentiment_score dict.
+
+    Falls back to keyword counting if meta is empty (model didn't comply).
+    """
+    if meta and "sentiment" in meta:
+        sentiment = float(meta.get("sentiment", 0.0))
+        uncertainty = float(meta.get("uncertainty", 0.0))
+        dominant = meta.get("dominant_theme", "")
+        risk_events = meta.get("risk_events", [])
+        if sentiment > 0.15:
+            label = "Risk-On Tone"
+        elif sentiment < -0.15:
+            label = "Risk-Off Tone"
+        elif uncertainty > 0.5:
+            label = "High Uncertainty"
+        else:
+            label = "Neutral"
+        return {
+            "sentiment":       round(sentiment, 3),
+            "uncertainty":     round(uncertainty, 3),
+            "dominant_theme":  dominant,
+            "risk_events":     risk_events,
+            "label":           label,
+            "source":          "ai",
+        }
+    # Fallback: keyword counting
+    from services.signal_quantifier import compute_events_sentiment
+    result = compute_events_sentiment(fallback_text)
+    result["source"] = "keyword"
+    return result
+
+
 def _fetch_x_feed_via_grok(queries: list, regime_context: str = "") -> str:
     """Call xAI Responses API with x_search tool. Returns live X context string or empty string."""
     import os, requests as _req
@@ -138,15 +199,14 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
             f"or contradicts the regime.\n\n"
         )
 
-    prompt = (
+    _digest_base = (
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
         "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
-        "Be clinical, specific, and reference actual catalysts.\n\n"
-        + _regime_line
-        + f"{context[:5000]}"
+        "Be clinical, specific, and reference actual catalysts."
     )
+    prompt = _digest_base + "\n\n" + _regime_line + f"{context[:5000]}" + _SENTIMENT_JSON_INSTRUCTION
 
     digest = None
     _use_cl = use_claude
@@ -164,15 +224,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
         if x_content:
             parts.insert(0, "LIVE X FEED (real-time macro/financial posts):\n" + x_content)
             context = "\n\n".join(parts)
-            prompt = (
-                "You are a senior macro research analyst. Based on the following current events, "
-                "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
-                "dominant narratives, and flags any actionable risks or opportunities. "
-                "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
-                "Be clinical, specific, and reference actual catalysts.\n\n"
-                + _regime_line
-                + f"{context[:5000]}"
-            )
+            prompt = _digest_base + "\n\n" + _regime_line + f"{context[:5000]}" + _SENTIMENT_JSON_INSTRUCTION
             _x_injected = True
             _x_content_out = x_content
 
@@ -184,7 +236,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
                 resp = Groq(api_key=groq_key).chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
-                    temperature=0.2, max_tokens=300,
+                    temperature=0.2, max_tokens=420,
                 )
                 digest = resp.choices[0].message.content.strip()
         except Exception:
@@ -196,12 +248,12 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
         try:
             if _cl_model.startswith("grok-") and os.getenv("XAI_API_KEY"):
                 from services.claude_client import _call_xai
-                digest = _call_xai([{"role": "user", "content": prompt}], _cl_model, 300, 0.2)
+                digest = _call_xai([{"role": "user", "content": prompt}], _cl_model, 420, 0.2)
             else:
                 import anthropic
                 msg = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "")).messages.create(
                     model=_cl_model,
-                    max_tokens=300,
+                    max_tokens=420,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 digest = msg.content[0].text.strip()
@@ -209,6 +261,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
             return False
 
     if digest:
+        digest, _sent_meta = _parse_digest_sentiment(digest)
         _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
         _conflict = _detect_source_conflict(_x_content_out, _raw_hl_text)
         return {
@@ -223,6 +276,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
                 "headlines": _raw_hl_text,
                 "inbox": _raw_inbox_text,
             },
+            "_events_sentiment_score": _meta_to_sentiment_score(_sent_meta, digest),
         }
     return None
 
@@ -608,15 +662,14 @@ def _run_digest(headlines, inbox, gist, engine: str):
             f"or contradicts the regime.\n\n"
         )
 
-    prompt = (
+    _digest_base_ui = (
         "You are a senior macro research analyst. Based on the following current events, "
         "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
         "dominant narratives, and flags any actionable risks or opportunities. "
         "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
-        "Be clinical, specific, and reference actual catalysts.\n\n"
-        + _regime_line
-        + f"{context[:5000]}"
+        "Be clinical, specific, and reference actual catalysts."
     )
+    prompt = _digest_base_ui + "\n\n" + _regime_line + f"{context[:5000]}" + _SENTIMENT_JSON_INSTRUCTION
 
     _tier_model = {
         "⚡ Freeloader Mode": None,
@@ -638,7 +691,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
                     model="llama-3.3-70b-versatile",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.2,
-                    max_tokens=300,
+                    max_tokens=420,
                 )
                 digest = resp.choices[0].message.content.strip()
         except Exception as e:
@@ -657,15 +710,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
         if x_content:
             parts.insert(0, "LIVE X FEED (real-time macro/financial posts):\n" + x_content)
             context = "\n\n".join(parts)
-            prompt = (
-                "You are a senior macro research analyst. Based on the following current events, "
-                "generate a 3-4 sentence market digest that synthesizes the key themes, identifies "
-                "dominant narratives, and flags any actionable risks or opportunities. "
-                "Prioritize the USER FIELD NOTES section if present — these are hand-curated signals. "
-                "Be clinical, specific, and reference actual catalysts.\n\n"
-                + _regime_line
-                + f"{context[:5000]}"
-            )
+            prompt = _digest_base_ui + "\n\n" + _regime_line + f"{context[:5000]}" + _SENTIMENT_JSON_INSTRUCTION
             st.session_state["_x_feed_injected"] = True
             st.session_state["_x_feed_content"] = x_content
         else:
@@ -676,13 +721,13 @@ def _run_digest(headlines, inbox, gist, engine: str):
         try:
             if cl_model and cl_model.startswith("grok-") and os.getenv("XAI_API_KEY"):
                 from services.claude_client import _call_xai
-                digest = _call_xai([{"role": "user", "content": prompt}], cl_model, 300, 0.2)
+                digest = _call_xai([{"role": "user", "content": prompt}], cl_model, 420, 0.2)
             else:
                 import anthropic
                 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
                 msg = client.messages.create(
                     model=cl_model,
-                    max_tokens=300,
+                    max_tokens=420,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 digest = msg.content[0].text.strip()
@@ -691,6 +736,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
             return
 
     if digest:
+        digest, _sent_meta = _parse_digest_sentiment(digest)
         _x_out = st.session_state.get("_x_feed_content", "")
         st.session_state["_current_events_digest"] = digest
         st.session_state["_current_events_digest_ts"] = datetime.now()
@@ -701,4 +747,5 @@ def _run_digest(headlines, inbox, gist, engine: str):
             "headlines": _raw_hl_text,
             "inbox": _raw_inbox_text,
         }
+        st.session_state["_events_sentiment_score"] = _meta_to_sentiment_score(_sent_meta, digest)
         st.rerun()

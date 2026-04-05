@@ -165,9 +165,12 @@ _UNCERTAIN_W = [
 def compute_events_sentiment(text: str) -> dict:
     """Keyword ratio + uncertainty index from digest text.
 
+    FALLBACK ONLY — used when the AI digest didn't return a SENTIMENT: block.
+    The preferred path is the AI-extracted score from current_events._meta_to_sentiment_score().
+
     Returns:
         {"sentiment": float [-1,+1], "uncertainty": float [0,1],
-         "bull_hits": int, "bear_hits": int, "label": str}
+         "bull_hits": int, "bear_hits": int, "label": str, "source": "keyword"}
     """
     if not text:
         return {"sentiment": 0.0, "uncertainty": 0.0,
@@ -194,6 +197,7 @@ def compute_events_sentiment(text: str) -> dict:
         "bull_hits":   b,
         "bear_hits":   s,
         "label":       label,
+        "source":      "keyword",
     }
 
 

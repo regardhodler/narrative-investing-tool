@@ -1673,10 +1673,14 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _sq_whale  = screen_whale_buyers(top_n=100, whale_only=True,
                                                   exclude_etfs=True, lookback_quarters=1)
                 _sq_digest = st.session_state.get("_current_events_digest", "") or ""
-                st.session_state["_stress_zscore"]          = compute_stress_zscore(_sq_fred)
-                st.session_state["_whale_flow_score"]       = compute_whale_flow_score(_sq_whale)
-                st.session_state["_events_sentiment_score"] = compute_events_sentiment(_sq_digest)
-                st.session_state["_canary_score"]           = compute_canary_score(_sq_canary)
+                st.session_state["_stress_zscore"]    = compute_stress_zscore(_sq_fred)
+                st.session_state["_whale_flow_score"] = compute_whale_flow_score(_sq_whale)
+                st.session_state["_canary_score"]     = compute_canary_score(_sq_canary)
+                # Events sentiment: prefer AI-extracted score from digest (set by run_quick_digest).
+                # Only fall back to keyword counting if the AI score isn't present yet.
+                _ai_sent = st.session_state.get("_events_sentiment_score")
+                if not _ai_sent or _ai_sent.get("source") == "keyword":
+                    st.session_state["_events_sentiment_score"] = compute_events_sentiment(_sq_digest)
                 _results["signal_quant"] = True
             except Exception as _sq_e:
                 _results["signal_quant"] = False
