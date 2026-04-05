@@ -1033,6 +1033,8 @@ def render():
             unsafe_allow_html=True,
         )
 
+    st.caption("📊 Use this export for trade decisions — paste into any AI to ask: what should I do with my portfolio right now?")
+
     # --- Section D: AI Co-Engineer Brief ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
     st.markdown("#### 🤖 AI Co-Engineer Brief")
@@ -1055,6 +1057,8 @@ def render():
         )
         with st.expander("📋 Preview", expanded=False):
             st.code(_coengine, language="markdown")
+
+    st.caption("🔧 Use this export to improve the tool — paste into any AI to ask: what should I add, fix, or refactor?")
 
     # --- Section E: Suggested prompts ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
