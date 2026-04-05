@@ -136,6 +136,7 @@ _SIGNAL_KEYS = [
     "_whale_flow_score",
     "_events_sentiment_score",
     "_canary_score",
+    "_fear_composite",
 ]
 
 

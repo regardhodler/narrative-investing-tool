@@ -430,3 +430,131 @@ def render_action_queue(*, max_items: int = 5) -> None:
             f'</div>',
             unsafe_allow_html=True,
         )
+
+
+def render_signal_scorecard() -> None:
+    """Bloomberg-style compact signal scorecard — shown at the top of every page.
+
+    Displays all quantified signals + fear composite in a single dark strip.
+    Shows greyed placeholders if QIR hasn't run yet.
+    """
+    rc  = st.session_state.get("_regime_context") or {}
+    tac = st.session_state.get("_tactical_context") or {}
+    of  = st.session_state.get("_options_flow_context") or {}
+    sz  = st.session_state.get("_stress_zscore") or {}
+    wf  = st.session_state.get("_whale_flow_score") or {}
+    ev  = st.session_state.get("_events_sentiment_score") or {}
+    ca  = st.session_state.get("_canary_score") or {}
+    fc  = st.session_state.get("_fear_composite") or {}
+
+    qir_run = bool(rc)
+    dim = "#334155"
+    orange = COLORS.get("bloomberg_orange", "#f59e0b")
+
+    def _cell(label: str, value: str, color: str, sub: str = "") -> str:
+        sub_html = f'<div style="font-size:9px;color:#475569;margin-top:1px;">{sub}</div>' if sub else ""
+        return (
+            f'<div style="padding:6px 10px;border-right:1px solid #1e293b;min-width:90px;">'
+            f'<div style="font-size:8px;color:{orange};font-weight:700;letter-spacing:0.08em;">{label}</div>'
+            f'<div style="font-size:12px;font-weight:700;color:{color};">{value}</div>'
+            f'{sub_html}'
+            f'</div>'
+        )
+
+    if not qir_run:
+        # Pre-run placeholder strip
+        cells = "".join([
+            _cell("REGIME",   "— run QIR", dim),
+            _cell("TACTICAL", "— run QIR", dim),
+            _cell("OPT FLOW", "— run QIR", dim),
+            _cell("STRESS",   "— run QIR", dim),
+            _cell("WHALE",    "— run QIR", dim),
+            _cell("EVENTS",   "— run QIR", dim),
+            _cell("CANARY",   "— run QIR", dim),
+        ])
+        fear_html = (
+            f'<div style="padding:6px 14px;background:#0f172a;border-left:2px solid #1e293b;">'
+            f'<div style="font-size:8px;color:{dim};font-weight:700;letter-spacing:0.08em;">FEAR INDEX</div>'
+            f'<div style="font-size:13px;font-weight:800;color:{dim};">— / 100</div>'
+            f'</div>'
+        )
+    else:
+        # Regime cell
+        macro_s  = int(rc.get("macro_score", 50) or 50)
+        regime   = rc.get("regime", "—")
+        r_arrow  = "▲" if "Risk-On" in regime else ("▼" if "Risk-Off" in regime else "◆")
+        r_color  = "#22c55e" if "Risk-On" in regime else ("#ef4444" if "Risk-Off" in regime else "#f59e0b")
+        div_pts  = int(rc.get("leading_divergence", 0) or 0)
+        div_col  = "#22c55e" if div_pts > 5 else ("#ef4444" if div_pts < -5 else "#64748b")
+        div_sub  = f'{div_pts:+d}pts leading' if div_pts != 0 else "aligned"
+
+        # Tactical cell
+        tac_s   = int(tac.get("tactical_score", 50) or 50)
+        tac_lbl = tac.get("label", "—")
+        t_arrow = "▲" if tac_s >= 55 else ("▼" if tac_s < 45 else "◆")
+        t_color = "#22c55e" if tac_s >= 55 else ("#ef4444" if tac_s < 45 else "#f59e0b")
+
+        # Options flow cell
+        of_s    = int(of.get("options_score", 50) or 50) if of else 50
+        of_lbl  = of.get("label", "—") if of else "—"
+        o_color = "#22c55e" if of_s >= 55 else ("#ef4444" if of_s < 45 else "#f59e0b")
+
+        # Stress z-score cell
+        sz_z    = sz.get("z", "—")
+        sz_pct  = sz.get("pct", "—")
+        sz_str  = f'{sz_z:+.1f}σ' if isinstance(sz_z, (int, float)) else "—"
+        sz_col  = "#ef4444" if isinstance(sz_z, (int, float)) and sz_z > 1.5 else (
+                  "#f59e0b" if isinstance(sz_z, (int, float)) and sz_z > 0.5 else "#22c55e")
+
+        # Whale flow cell
+        wf_b    = wf.get("bull_pct", "—")
+        wf_lbl  = wf.get("label", "—")
+        wf_str  = f'{wf_b:.0f}% bull' if isinstance(wf_b, (int, float)) else "—"
+        wf_col  = "#22c55e" if isinstance(wf_b, (int, float)) and wf_b > 55 else (
+                  "#ef4444" if isinstance(wf_b, (int, float)) and wf_b < 45 else "#f59e0b")
+
+        # Events sentiment cell
+        ev_s    = ev.get("sentiment", "—")
+        ev_lbl  = ev.get("label", "—")
+        ev_str  = f'{ev_s:+.2f}' if isinstance(ev_s, (int, float)) else "—"
+        ev_col  = "#22c55e" if isinstance(ev_s, (int, float)) and ev_s > 0.15 else (
+                  "#ef4444" if isinstance(ev_s, (int, float)) and ev_s < -0.15 else "#f59e0b")
+        ev_src  = "ai" if ev.get("source") == "ai" else "kw"
+
+        # Canary cell
+        ca_s    = ca.get("composite", "—")
+        ca_str  = f'{ca_s:.0f}/100' if isinstance(ca_s, (int, float)) else "—"
+        ca_col  = "#22c55e" if isinstance(ca_s, (int, float)) and ca_s >= 60 else (
+                  "#ef4444" if isinstance(ca_s, (int, float)) and ca_s < 40 else "#f59e0b")
+
+        cells = "".join([
+            _cell("REGIME",   f'{r_arrow} {macro_s}', r_color, div_sub),
+            _cell("TACTICAL", f'{t_arrow} {tac_s}', t_color, tac_lbl[:12]),
+            _cell("OPT FLOW", f'{of_s}', o_color, of_lbl[:12]),
+            _cell("STRESS",   sz_str, sz_col, f'{sz_pct}th pct'),
+            _cell("WHALE 13F", wf_str, wf_col, wf_lbl[:14]),
+            _cell("EVENTS",   ev_str, ev_col, f'{ev_lbl[:12]} [{ev_src}]'),
+            _cell("CANARY",   ca_str, ca_col, f'breadth {ca.get("breadth_pct","—")}%'),
+        ])
+
+        # Fear composite badge
+        fc_s    = fc.get("score", "—")
+        fc_lbl  = fc.get("label", "—")
+        fc_col  = ("#ef4444" if isinstance(fc_s, (int, float)) and fc_s >= 60 else
+                   "#f59e0b" if isinstance(fc_s, (int, float)) and fc_s >= 40 else "#22c55e")
+        fear_html = (
+            f'<div style="padding:6px 14px;background:#0f172a;border-left:3px solid {fc_col};">'
+            f'<div style="font-size:8px;color:{orange};font-weight:700;letter-spacing:0.08em;">FEAR INDEX</div>'
+            f'<div style="font-size:15px;font-weight:800;color:{fc_col};">{fc_s:.0f}</div>'
+            f'<div style="font-size:9px;color:{fc_col};margin-top:1px;">{fc_lbl}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div style="display:flex;align-items:stretch;background:#0f172a;'
+        f'border:1px solid #1e293b;border-radius:6px;margin-bottom:12px;overflow:hidden;">'
+        f'{cells}'
+        f'{fear_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )

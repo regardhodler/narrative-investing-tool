@@ -266,6 +266,46 @@ def build_macro_block() -> str:
                 "Build your case on top of this, do not re-argue macro."
             )
 
+    # ── Quantified signal scores ──────────────────────────────────────────────
+    _fc = st.session_state.get("_fear_composite") or {}
+    if _fc:
+        lines.append(
+            f"Fear Composite Index: {_fc.get('score','?')}/100 — {_fc.get('label','?')} "
+            f"(Stress {_fc.get('components',{}).get('Stress','?')} · "
+            f"Macro {_fc.get('components',{}).get('Macro','?')} · "
+            f"Canary {_fc.get('components',{}).get('Canary','?')} · "
+            f"Whale {_fc.get('components',{}).get('Whale','?')} · "
+            f"Events {_fc.get('components',{}).get('Events','?')})"
+        )
+    _sq_stress = st.session_state.get("_stress_zscore") or {}
+    if _sq_stress:
+        lines.append(f"Stress z-score: {_sq_stress.get('z','?'):+} ({_sq_stress.get('pct','?')}th pct vs 1yr history)")
+    _sq_whale = st.session_state.get("_whale_flow_score") or {}
+    if _sq_whale:
+        lines.append(
+            f"Whale 13F flow: {_sq_whale.get('bull_pct','?')}% bull · "
+            f"net {_sq_whale.get('net_flow_bn','?'):+.1f}B · "
+            f"rotation {_sq_whale.get('rotation','?'):+.2f} · "
+            f"{_sq_whale.get('label','?')} (NOTE: 13F is 45-day lagged — structural bias, not timing)"
+        )
+    _sq_events = st.session_state.get("_events_sentiment_score") or {}
+    if _sq_events:
+        _src = _sq_events.get("source", "keyword")
+        lines.append(
+            f"Events sentiment [{_src}]: {_sq_events.get('sentiment','?'):+.2f} · "
+            f"uncertainty {_sq_events.get('uncertainty','?'):.2f} · "
+            f"{_sq_events.get('label','?')}"
+            + (f" · theme: {_sq_events['dominant_theme']}" if _sq_events.get("dominant_theme") else "")
+        )
+    _sq_canary = st.session_state.get("_canary_score") or {}
+    if _sq_canary:
+        lines.append(
+            f"Canary breadth: {_sq_canary.get('composite','?')}/100 · "
+            f"breadth {_sq_canary.get('breadth_pct','?')}% · "
+            f"1m avg {_sq_canary.get('momentum_avg','?'):+.2f}% · "
+            f"vol surge {_sq_canary.get('vol_surge','?')}x"
+        )
+
     lines.append("=== END MACRO GROUND TRUTH ===")
     return "\n".join(lines)
 

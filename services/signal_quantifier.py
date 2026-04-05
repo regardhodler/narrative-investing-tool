@@ -254,3 +254,73 @@ def compute_canary_score(canary_df) -> dict:
         "drawdown_pct": round(dd_pct, 1),
         "vol_surge":    round(vol_surge, 2),
     }
+
+
+# ---------------------------------------------------------------------------
+# 5. Fear Composite Index
+# ---------------------------------------------------------------------------
+
+def compute_fear_composite(
+    stress_zscore: dict,
+    whale_flow: dict,
+    events_sentiment: dict,
+    canary: dict,
+    macro_score: float = 50.0,
+) -> dict:
+    """Combine all 4 quantified scores + macro regime into a single 0-100 fear index.
+
+    100 = maximum fear / risk-off. 0 = maximum complacency / risk-on.
+    Weights:
+      Stress z-score percentile  25%  (credit/rate stress vs history)
+      Macro regime score         20%  (inverted: low macro = high fear)
+      Canary breadth             20%  (inverted: low breadth = high fear)
+      Whale flow bull%           20%  (inverted: distribution = fear)
+      Events sentiment           15%  (inverted: risk-off tone = fear)
+
+    Returns:
+        {"score": int, "label": str, "components": {name: contribution}}
+    """
+    stress_pct  = float(stress_zscore.get("pct", 50))
+    whale_bull  = float(whale_flow.get("bull_pct", 50))
+    sentiment   = float(events_sentiment.get("sentiment", 0.0))
+    canary_comp = float(canary.get("composite", 50))
+    macro       = float(macro_score)
+
+    # Convert each to a 0-100 fear scale (high = more fear)
+    c_stress  = stress_pct                        # already 0-100, high = stress
+    c_macro   = 100.0 - macro                     # invert: low macro = high fear
+    c_canary  = 100.0 - canary_comp               # invert: low canary = high fear
+    c_whale   = 100.0 - whale_bull                # invert: distribution = fear
+    c_events  = (0.5 - sentiment * 0.5) * 100.0  # -1→100, 0→50, +1→0
+
+    score = (
+        c_stress  * 0.25 +
+        c_macro   * 0.20 +
+        c_canary  * 0.20 +
+        c_whale   * 0.20 +
+        c_events  * 0.15
+    )
+    score = round(min(100.0, max(0.0, score)), 1)
+
+    if score >= 75:
+        label = "Extreme Fear"
+    elif score >= 60:
+        label = "High Fear"
+    elif score >= 45:
+        label = "Elevated"
+    elif score >= 30:
+        label = "Moderate"
+    else:
+        label = "Low Fear"
+
+    return {
+        "score": score,
+        "label": label,
+        "components": {
+            "Stress":  round(c_stress, 1),
+            "Macro":   round(c_macro, 1),
+            "Canary":  round(c_canary, 1),
+            "Whale":   round(c_whale, 1),
+            "Events":  round(c_events, 1),
+        },
+    }

@@ -1665,6 +1665,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 from services.signal_quantifier import (
                     compute_stress_zscore, compute_whale_flow_score,
                     compute_events_sentiment, compute_canary_score,
+                    compute_fear_composite,
                 )
                 from services.stress_client import get_credit_spreads, get_canary_signals
                 from services.whale_screener import screen_whale_buyers
@@ -1681,6 +1682,17 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _ai_sent = st.session_state.get("_events_sentiment_score")
                 if not _ai_sent or _ai_sent.get("source") == "keyword":
                     st.session_state["_events_sentiment_score"] = compute_events_sentiment(_sq_digest)
+
+                # Fear composite — combines all 4 scores + macro regime
+                _rc_q = st.session_state.get("_regime_context") or {}
+                _ms_q = float(_rc_q.get("macro_score", 50) or 50)
+                st.session_state["_fear_composite"] = compute_fear_composite(
+                    st.session_state.get("_stress_zscore") or {},
+                    st.session_state.get("_whale_flow_score") or {},
+                    st.session_state.get("_events_sentiment_score") or {},
+                    st.session_state.get("_canary_score") or {},
+                    _ms_q,
+                )
                 _results["signal_quant"] = True
             except Exception as _sq_e:
                 _results["signal_quant"] = False
