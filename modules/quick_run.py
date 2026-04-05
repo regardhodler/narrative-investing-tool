@@ -717,7 +717,7 @@ def _render_qir_dashboard() -> None:
         ), border_color=_rc_col + "44")
     else:
         _regime_cell = _cell("📡 REGIME",
-            '<div style="color:#374151;font-size:11px;">◌ Regime — run QIR</div>')
+            '<div style="color:#374151;font-size:11px;">◌ 📡 Regime — run QIR</div>')
 
     # Tactical cell
     if _tac:
@@ -760,7 +760,7 @@ def _render_qir_dashboard() -> None:
         _tactical_cell = _cell("⚡ TACTICAL", _tac_lines, border_color=_tc + "44")
     else:
         _tactical_cell = _cell("⚡ TACTICAL",
-            '<div style="color:#374151;font-size:11px;">◌ Tactical — run QIR</div>')
+            '<div style="color:#374151;font-size:11px;">◌ ⚡ Tactical — run QIR</div>')
 
     # Options Flow cell
     if _of and not _of.get("data_unavailable"):
@@ -801,7 +801,7 @@ def _render_qir_dashboard() -> None:
             '<div style="color:#475569;font-size:11px;">◆ Opt Flow — market closed</div>')
     else:
         _options_cell = _cell("📊 OPTIONS FLOW",
-            '<div style="color:#374151;font-size:11px;">◌ Opt Flow — run QIR</div>')
+            '<div style="color:#374151;font-size:11px;">◌ 📊 Opt Flow — run QIR</div>')
 
     _sig_strip_html = (
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">'
