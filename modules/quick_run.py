@@ -945,7 +945,6 @@ def _render_qir_dashboard() -> None:
 
         _conviction_score = _cls.get("conviction_score")
         _conviction_size_label = _cls.get("conviction_size_label")
-        _leading_warning = _cls.get("leading_warning")
 
         # Entry signal recommendation (leading vs lagging synthesis)
         _leading_s = int(_rc.get("leading_score") or 50)
