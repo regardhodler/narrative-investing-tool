@@ -1,29 +1,29 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-03T14:42:23",
+  "generated_at": "2026-04-06T14:47:36",
   "regime": {
-    "label": "Neutral — Leaning Risk-Off",
-    "score": -0.06,
+    "label": "True Neutral",
+    "score": -0.04,
     "quadrant": "Stagflation",
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Credit Spreads (HY vs Treasuries): z=-0.79 ()\n- Market Breadth (RSP/SPY): z=+0.65 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.63 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- VIX (Equity Volatility): z=-0.58 ()\n- Fear & Greed Index: 9/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Market Breadth (RSP/SPY): z=+0.61 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.59 ()\n- VIX (Equity Volatility): z=-0.58 ()\n- Fear & Greed Index: 13/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 56,
+    "score": 55,
     "label": "Neutral / Hold",
     "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
-    "interpretation": "No edge — signals are conflicting with no clear majority direction. Hold existing positions. No new entries until at least 2 of 3 layers align.",
-    "buy_tier": "HOLD — NO NEW LONGS",
-    "short_tier": "HOLD — NO NEW SHORTS"
+    "interpretation": "Signals are conflicting — but uncertainty is quantified, not an excuse for inaction. A probabilistic lean is forced below. Size down to 25–40% of normal. Act small, act smart.",
+    "buy_tier": "LEAN SETUP — SIZE DOWN",
+    "short_tier": "LEAN SETUP — SIZE DOWN"
   },
   "rate_path": {
     "top_scenario": "hold",
     "top_prob": 0.665,
     "source": "yfinance"
   },
-  "current_events_digest": "In the current neutral-leaning risk-off macro regime, characterized by stagflation, recent events confirm the dominant narrative of supply chain disruptions and rising costs. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapses, as reported by zerohedge, highlights the vulnerability of critical industries such as semiconductor manufacturing, which relies heavily on helium for cooling and lithography. This development, coupled with rising bond yields in Japan and the US, suggests increasing pressure on global markets, potentially exacerbating the stagflationary environment. Meanwhile, Polymarket prediction markets indicate a low probability of the Fed's lower bound reaching 0% or lower before 2027, but a significant chance of inflation reaching over 5% in 2026, underscoring the complex and uncertain outlook for monetary policy and inflation.",
+  "current_events_digest": "The current macro regime of True Neutral with a Stagflation quadrant is being tested by recent events, particularly the collapse of Qatar's helium production, which has led to AirGas declaring force majeure on helium shipments. This development, combined with rising bond yields in Japan and concerns over oil-driven crises, suggests that inflation and supply chain disruptions may become more pronounced, contradicting the neutral regime. The Polymarket prediction of a 35% chance of inflation reaching over 5% in 2026 and Jamie Dimon's warning of a potential recession due to rising oil prices further support this narrative. Meanwhile, the USDJPY reaching 160 and potential BOJ intervention add to the uncertainty.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
