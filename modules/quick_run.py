@@ -1153,8 +1153,8 @@ def _render_qir_dashboard() -> None:
         f'</div>'
         f'{_freshness_html}'
         f'{_sig_strip_html}'
-        f'{_entry_rec_html}'
         f'{_verdict_html}'
+        f'{_entry_rec_html}'
         f'{_footer_html}'
         f'</div>',
         unsafe_allow_html=True,
@@ -1273,7 +1273,7 @@ def render():
             'GENUINE UNCERTAINTY — layers disagree → reduce size, wait for clarity<br><br>'
 
             '<span style="color:#334155;font-weight:700;letter-spacing:0.05em;">JUDGE JUDY DEBATE</span><br>'
-            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 argue the same ground truth numbers. '
+            'Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂 argue the same ground truth numbers. '
             'Leading divergence and 5-session trend are explicit evidence in the debate — '
             'a large leading divergence gives the bull/bear case a concrete factual basis to argue.'
             '</div>',
@@ -1674,8 +1674,19 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _sq_whale  = screen_whale_buyers(top_n=100, whale_only=True,
                                                   exclude_etfs=True, lookback_quarters=1)
                 _sq_digest = st.session_state.get("_current_events_digest", "") or ""
+
+                # Fetch 13D activism filings as leading indicator for whale flow
+                _sq_activism = []
+                try:
+                    from services.activism_screener import get_activism_filings as _get_act
+                    _sq_activism = _get_act(days_back=30) or []
+                except Exception:
+                    pass
+
                 st.session_state["_stress_zscore"]    = compute_stress_zscore(_sq_fred)
-                st.session_state["_whale_flow_score"] = compute_whale_flow_score(_sq_whale)
+                st.session_state["_whale_flow_score"] = compute_whale_flow_score(
+                    _sq_whale, activism_filings=_sq_activism
+                )
                 st.session_state["_canary_score"]     = compute_canary_score(_sq_canary)
                 # Events sentiment: prefer AI-extracted score from digest (set by run_quick_digest).
                 # Only fall back to keyword counting if the AI score isn't present yet.
@@ -2133,223 +2144,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
     render_action_queue(max_items=5)
 
-    # ── ⚔️ Adversarial Debate — standalone, no QIR run required ─────────────
-    st.markdown(
-        '<div style="border-top:1px solid #1e293b;margin:16px 0 10px 0;"></div>',
-        unsafe_allow_html=True,
-    )
-    try:
-        from utils.ai_tier import TIER_OPTS as _dbt_opts, TIER_MAP as _dbt_map
-    except ImportError:
-        _dbt_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
-        _dbt_map  = {
-            "⚡ Freeloader Mode":      (False, None),
-            "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
-        }
-    _dbt_c1, _dbt_c2, _dbt_c3 = st.columns([2, 1.5, 1])
-    with _dbt_c1:
-        st.markdown(
-            '<span style="color:#64748b;font-size:11px;">'
-            '⚔️ <b style="color:#94a3b8;">Adversarial Debate</b> — '
-            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
-            '<span style="color:#475569;">Runs independently · 3 LLM calls</span></span>'
-            '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run ⚡ Quick Intel Run first to load regime, rate path, options flow &amp; macro synopsis</div>',
-            unsafe_allow_html=True,
-        )
-    with _dbt_c2:
-        _dbt_tier = st.selectbox("", _dbt_opts, key="qir_debate_tier", label_visibility="collapsed")
-    with _dbt_c3:
-        _run_dbt = st.button("⚔️ Run Debate", key="btn_qir_debate_standalone", use_container_width=True)
-    if _run_dbt:
-        _dbt_uc, _dbt_mdl = _dbt_map.get(_dbt_tier, (False, None))
-        _dbt_engine = _dbt_tier
-        from services.claude_client import generate_adversarial_debate as _gen_dbt_sa
-        from utils.signal_block import build_macro_block as _build_dbt_sa
-        _dbt_sigs = _build_dbt_sa()
-        if _dbt_sigs and _dbt_sigs != "NO_REGIME_DATA":
-            with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
-                try:
-                    _dbt_result = _gen_dbt_sa(
-                        _dbt_sigs,
-                        use_claude=_dbt_uc,
-                        model=_dbt_mdl,
-                        topic="Is the current macro regime bullish or bearish for risk assets? Which signals are most decisive right now?",
-                    )
-                    st.session_state["_adversarial_debate"] = _dbt_result
-                    st.session_state["_adversarial_debate_engine"] = _dbt_engine
-                    try:
-                        from utils.debate_record import log_verdict as _log_dbt, resolve_old_verdicts as _resolve_dbt
-                        _rc_dbt = st.session_state.get("_regime_context") or {}
-                        _log_dbt(
-                            verdict=_dbt_result.get("verdict", "CONTESTED"),
-                            confidence=_dbt_result.get("confidence", 5),
-                            regime=_rc_dbt.get("regime", ""),
-                            quadrant=_rc_dbt.get("quadrant", ""),
-                            regime_score=float(_rc_dbt.get("score", 0.0)),
-                        )
-                        _resolve_dbt()
-                    except Exception:
-                        pass
-                    st.rerun()
-                except Exception as _dbt_e:
-                    st.error(f"❌ Debate failed: {_dbt_e}")
-        else:
-            st.warning("⚠️ Run Quick Intel first to load market signals, then debate away.")
-
-    # ── Adversarial Debate Display ──────────────────────────────────────────────
-    _debate = st.session_state.get("_adversarial_debate") or {}
-    if _debate.get("bear_argument") or _debate.get("bull_argument"):
-        _db_verdict = _debate.get("verdict", "CONTESTED")
-        _db_conf    = _debate.get("confidence", 5)
-        _db_conf_adj = apply_confidence_penalty(_db_conf)
-        _db_bias    = _debate.get("contested_bias", "")
-        _db_bias_reason = _debate.get("contested_bias_reason", "")
-        _db_engine  = st.session_state.get("_adversarial_debate_engine", "")
-        _db_engine_badge = (
-            f'<span style="color:#64748b;font-size:10px;margin-left:8px;">{_db_engine}</span>'
-            if _db_engine else ""
-        )
-        _vc = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
-        _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
-
-        # ── Court formality strings ───────────────────────────────────────
-        _winner = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻", "CONTESTED": None}.get(_db_verdict)
-        _loser  = {"BULL WINS": "Sir Doomburger 🐻", "BEAR WINS": "Sir Fukyerputs 🐂", "CONTESTED": None}.get(_db_verdict)
-        _sentences = {
-            "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip and deep reflection on his pessimism.",
-            "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash and contemplating the dangers of leverage.",
-            "CONTESTED": "Both parties are hereby remanded to gather additional evidence. Court is adjourned pending new data.",
-        }
-        _sentence = _sentences.get(_db_verdict, _sentences["CONTESTED"])
-
-        # ── Verdict record ────────────────────────────────────────────────
-        try:
-            from utils.debate_record import get_stats as _get_stats, get_recent_verdicts as _get_recent
-            _jj_stats = _get_stats()
-            _jj_recent = _get_recent(5)
-        except Exception:
-            _jj_stats = {}
-            _jj_recent = []
-
-        _acc_str = f"{_jj_stats['accuracy_pct']}% accuracy" if _jj_stats.get("accuracy_pct") is not None else "unresolved"
-        _record_str = f"{_jj_stats.get('correct',0)}W-{_jj_stats.get('wrong',0)}L · {_acc_str} · {_jj_stats.get('pending',0)} pending"
-
-        # ── Outcome dots for recent verdicts ──────────────────────────────
-        _dot_html = ""
-        for _rv in reversed(_jj_recent):
-            _oc = _rv.get("outcome", "pending")
-            _rv_v = _rv.get("verdict", "")
-            _dot_c = {"correct": "#22c55e", "wrong": "#ef4444", "pending": "#475569"}.get(_oc, "#475569")
-            _dot_sym = {"BULL WINS": "▲", "BEAR WINS": "▼", "CONTESTED": "■"}.get(_rv_v, "·")
-            _dot_html += f'<span style="color:{_dot_c};font-size:13px;margin-right:4px;" title="{_rv_v} — {_oc}">{_dot_sym}</span>'
-
-        # ── Glow CSS ──────────────────────────────────────────────────────
-        _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88, 0 0 40px {_vc}44"
-        _contested_bias_html = ""
-        if _db_verdict == "CONTESTED" and _db_bias:
-            _contested_bias_html = (
-                f'<div style="text-align:center;color:#94a3b8;font-size:10px;margin-top:-8px;margin-bottom:10px;">'
-                f'{_db_bias}' + (f' · {_db_bias_reason}' if _db_bias_reason else '') +
-                f'</div>'
-            )
-
-        st.markdown(
-            f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;'
-            f'padding:18px 20px;margin-top:12px;margin-bottom:4px;">'
-
-            # Court header
-            f'<div style="text-align:center;margin-bottom:14px;">'
-            f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
-            f'<div style="color:#94a3b8;font-size:9px;letter-spacing:0.08em;">THE HONORABLE JUDGE JUDY PRESIDING{_db_engine_badge}</div>'
-            f'</div>'
-
-            # Glowing verdict
-            f'<div style="text-align:center;margin-bottom:14px;">'
-            f'<div style="color:{_vc};font-size:28px;font-weight:900;letter-spacing:0.05em;'
-            f'text-shadow:{_glow};line-height:1.1;">⚔️ {_db_verdict}</div>'
-            f'<div style="color:{_vc}aa;font-size:11px;margin-top:4px;font-style:italic;">'
-            + (f'The Court finds in favor of {_winner}' if _winner else 'The Court is divided') +
-            f'</div></div>'
-            f'{_contested_bias_html}'
-
-            # Sentence
-            f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
-            f'padding:8px 12px;margin-bottom:12px;font-size:11px;color:#e2e8f0;font-style:italic;">'
-            f'"{_sentence}"</div>'
-
-            # Judge Judy record
-            f'<div style="display:flex;align-items:center;justify-content:space-between;">'
-            f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;">JUDGE JUDY\'S RECORD</div>'
-            f'<div style="color:#64748b;font-size:10px;">{_record_str}</div>'
-            f'</div>'
-            f'<div style="margin-top:4px;display:flex;align-items:center;gap:2px;">'
-            f'<span style="color:#475569;font-size:9px;margin-right:6px;">RECENT:</span>{_dot_html}'
-            f'<span style="color:#334155;font-size:9px;margin-left:6px;">▲=bull ▼=bear ■=contested · 🟢correct 🔴wrong ⚫pending</span>'
-            f'</div>'
-
-            # Confidence
-            f'<div style="margin-top:10px;text-align:right;">'
-            f'<span style="color:#475569;font-size:9px;">AI confidence in verdict: </span>'
-            f'<span style="color:{_vc};font-weight:700;font-size:11px;">{_db_conf_adj}/10</span>'
-            f'<span style="color:#334155;font-size:9px;margin-left:6px;">(Judge Judy self-rated — not a quant score)</span>'
-            f'</div>'
-
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-        # ── Arguments side by side ────────────────────────────────────────
-        _col_bear, _col_bull = st.columns(2)
-
-        with _col_bear:
-            _bear_border = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
-            _bear_glow = f"box-shadow:0 0 12px #ef444444;" if _db_verdict == "BEAR WINS" else ""
-            st.markdown(
-                f'<div style="background:#1a0000;border:1px solid {_bear_border};border-radius:6px;padding:12px;{_bear_glow}">'
-                f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:8px;">'
-                + ("🏆 " if _db_verdict == "BEAR WINS" else "")
-                + f'🐻 SIR DOOMBURGER'
-                + (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
-                f'</div>'
-                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bear_argument","")}</div>'
-                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ef444433;">'
-                f'<span style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
-                f'<span style="color:#fca5a5;font-size:10px;">{_debate.get("bear_strongest","")}</span>'
-                f'</div></div>',
-                unsafe_allow_html=True,
-            )
-
-        with _col_bull:
-            _bull_border = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
-            _bull_glow = f"box-shadow:0 0 12px #22c55e44;" if _db_verdict == "BULL WINS" else ""
-            st.markdown(
-                f'<div style="background:#052e16;border:1px solid {_bull_border};border-radius:6px;padding:12px;{_bull_glow}">'
-                f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:8px;">'
-                + ("🏆 " if _db_verdict == "BULL WINS" else "")
-                + f'🐂 SIR FUKYERPUTS'
-                + (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
-                f'</div>'
-                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bull_argument","")}</div>'
-                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22c55e33;">'
-                f'<span style="color:#22c55e;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
-                f'<span style="color:#86efac;font-size:10px;">{_debate.get("bull_strongest","")}</span>'
-                f'</div></div>',
-                unsafe_allow_html=True,
-            )
-
-        # ── Judge Judy asymmetry ruling ───────────────────────────────────
-        if _debate.get("asymmetry") or _debate.get("key_disagreement"):
-            st.markdown(
-                f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
-                f'padding:10px 14px;margin-top:8px;">'
-                f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">⚖️ JUDGE JUDY — RISK/REWARD RULING</div>'
-                f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{_debate.get("asymmetry","")}</div>'
-                f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {_debate.get("key_disagreement","")}</div>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
     # ── QIR Post-Run Summary (outside button handler — survives st.rerun()) ──
     _last_ok    = st.session_state.get("_qir_last_n_ok")
     _last_total = st.session_state.get("_qir_last_n_total")
@@ -2566,6 +2360,223 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 f'padding:8px 12px;font-size:11px;color:{COLORS["text_dim"]};margin-top:6px;">'
                 f'🦢 <b style="color:#8899CC">Black Swans</b> — '
                 f'{len(_bs)} scenarios: <span style="color:{COLORS["text"]}">{_bs_names}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── ⚔️ Adversarial Debate — standalone, secondary context ────────────────
+    st.markdown(
+        '<div style="border-top:1px solid #1e293b;margin:16px 0 10px 0;"></div>',
+        unsafe_allow_html=True,
+    )
+    try:
+        from utils.ai_tier import TIER_OPTS as _dbt_opts, TIER_MAP as _dbt_map
+    except ImportError:
+        _dbt_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+        _dbt_map  = {
+            "⚡ Freeloader Mode":      (False, None),
+            "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+        }
+    _dbt_c1, _dbt_c2, _dbt_c3 = st.columns([2, 1.5, 1])
+    with _dbt_c1:
+        st.markdown(
+            '<span style="color:#64748b;font-size:11px;">'
+            '⚔️ <b style="color:#94a3b8;">Adversarial Debate</b> — '
+            'Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
+            '<span style="color:#475569;">Runs independently · 3 LLM calls</span></span>'
+            '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run ⚡ Quick Intel Run first to load regime, rate path, options flow &amp; macro synopsis</div>',
+            unsafe_allow_html=True,
+        )
+    with _dbt_c2:
+        _dbt_tier = st.selectbox("", _dbt_opts, key="qir_debate_tier", label_visibility="collapsed")
+    with _dbt_c3:
+        _run_dbt = st.button("⚔️ Run Debate", key="btn_qir_debate_standalone", use_container_width=True)
+    if _run_dbt:
+        _dbt_uc, _dbt_mdl = _dbt_map.get(_dbt_tier, (False, None))
+        _dbt_engine = _dbt_tier
+        from services.claude_client import generate_adversarial_debate as _gen_dbt_sa
+        from utils.signal_block import build_macro_block as _build_dbt_sa
+        _dbt_sigs = _build_dbt_sa()
+        if _dbt_sigs and _dbt_sigs != "NO_REGIME_DATA":
+            with st.spinner("⚔️ Debate — Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+                try:
+                    _dbt_result = _gen_dbt_sa(
+                        _dbt_sigs,
+                        use_claude=_dbt_uc,
+                        model=_dbt_mdl,
+                        topic="Is the current macro regime bullish or bearish for risk assets? Which signals are most decisive right now?",
+                    )
+                    st.session_state["_adversarial_debate"] = _dbt_result
+                    st.session_state["_adversarial_debate_engine"] = _dbt_engine
+                    try:
+                        from utils.debate_record import log_verdict as _log_dbt, resolve_old_verdicts as _resolve_dbt
+                        _rc_dbt = st.session_state.get("_regime_context") or {}
+                        _log_dbt(
+                            verdict=_dbt_result.get("verdict", "CONTESTED"),
+                            confidence=_dbt_result.get("confidence", 5),
+                            regime=_rc_dbt.get("regime", ""),
+                            quadrant=_rc_dbt.get("quadrant", ""),
+                            regime_score=float(_rc_dbt.get("score", 0.0)),
+                        )
+                        _resolve_dbt()
+                    except Exception:
+                        pass
+                    st.rerun()
+                except Exception as _dbt_e:
+                    st.error(f"❌ Debate failed: {_dbt_e}")
+        else:
+            st.warning("⚠️ Run Quick Intel first to load market signals, then debate away.")
+
+    # ── Adversarial Debate Display ──────────────────────────────────────────────
+    _debate = st.session_state.get("_adversarial_debate") or {}
+    if _debate.get("bear_argument") or _debate.get("bull_argument"):
+        _db_verdict = _debate.get("verdict", "CONTESTED")
+        _db_conf    = _debate.get("confidence", 5)
+        _db_conf_adj = apply_confidence_penalty(_db_conf)
+        _db_bias    = _debate.get("contested_bias", "")
+        _db_bias_reason = _debate.get("contested_bias_reason", "")
+        _db_engine  = st.session_state.get("_adversarial_debate_engine", "")
+        _db_engine_badge = (
+            f'<span style="color:#64748b;font-size:10px;margin-left:8px;">{_db_engine}</span>'
+            if _db_engine else ""
+        )
+        _vc = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
+        _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
+
+        # ── Court formality strings ───────────────────────────────────────
+        _winner = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Dr. Doomburger 🐻", "CONTESTED": None}.get(_db_verdict)
+        _loser  = {"BULL WINS": "Dr. Doomburger 🐻", "BEAR WINS": "Sir Fukyerputs 🐂", "CONTESTED": None}.get(_db_verdict)
+        _sentences = {
+            "BULL WINS": "Dr. Doomburger is hereby sentenced to 30 days of buying the dip and deep reflection on his pessimism.",
+            "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash and contemplating the dangers of leverage.",
+            "CONTESTED": "Both parties are hereby remanded to gather additional evidence. Court is adjourned pending new data.",
+        }
+        _sentence = _sentences.get(_db_verdict, _sentences["CONTESTED"])
+
+        # ── Verdict record ────────────────────────────────────────────────
+        try:
+            from utils.debate_record import get_stats as _get_stats, get_recent_verdicts as _get_recent
+            _jj_stats = _get_stats()
+            _jj_recent = _get_recent(5)
+        except Exception:
+            _jj_stats = {}
+            _jj_recent = []
+
+        _acc_str = f"{_jj_stats['accuracy_pct']}% accuracy" if _jj_stats.get("accuracy_pct") is not None else "unresolved"
+        _record_str = f"{_jj_stats.get('correct',0)}W-{_jj_stats.get('wrong',0)}L · {_acc_str} · {_jj_stats.get('pending',0)} pending"
+
+        # ── Outcome dots for recent verdicts ──────────────────────────────
+        _dot_html = ""
+        for _rv in reversed(_jj_recent):
+            _oc = _rv.get("outcome", "pending")
+            _rv_v = _rv.get("verdict", "")
+            _dot_c = {"correct": "#22c55e", "wrong": "#ef4444", "pending": "#475569"}.get(_oc, "#475569")
+            _dot_sym = {"BULL WINS": "▲", "BEAR WINS": "▼", "CONTESTED": "■"}.get(_rv_v, "·")
+            _dot_html += f'<span style="color:{_dot_c};font-size:13px;margin-right:4px;" title="{_rv_v} — {_oc}">{_dot_sym}</span>'
+
+        # ── Glow CSS ──────────────────────────────────────────────────────
+        _glow = f"0 0 8px {_vc}, 0 0 20px {_vc}88, 0 0 40px {_vc}44"
+        _contested_bias_html = ""
+        if _db_verdict == "CONTESTED" and _db_bias:
+            _contested_bias_html = (
+                f'<div style="text-align:center;color:#94a3b8;font-size:10px;margin-top:-8px;margin-bottom:10px;">'
+                f'{_db_bias}' + (f' · {_db_bias_reason}' if _db_bias_reason else '') +
+                f'</div>'
+            )
+
+        st.markdown(
+            f'<div style="background:{_vbg};border:2px solid {_vc};border-radius:10px;'
+            f'padding:18px 20px;margin-top:12px;margin-bottom:4px;">'
+
+            # Court header
+            f'<div style="text-align:center;margin-bottom:14px;">'
+            f'<div style="color:#64748b;font-size:9px;font-weight:700;letter-spacing:0.15em;margin-bottom:4px;">⚖️ IN THE COURT OF MACRO JUSTICE</div>'
+            f'<div style="color:#94a3b8;font-size:9px;letter-spacing:0.08em;">THE HONORABLE JUDGE JUDY PRESIDING{_db_engine_badge}</div>'
+            f'</div>'
+
+            # Glowing verdict
+            f'<div style="text-align:center;margin-bottom:14px;">'
+            f'<div style="color:{_vc};font-size:28px;font-weight:900;letter-spacing:0.05em;'
+            f'text-shadow:{_glow};line-height:1.1;">⚔️ {_db_verdict}</div>'
+            f'<div style="color:{_vc}aa;font-size:11px;margin-top:4px;font-style:italic;">'
+            + (f'The Court finds in favor of {_winner}' if _winner else 'The Court is divided') +
+            f'</div></div>'
+            f'{_contested_bias_html}'
+
+            # Sentence
+            f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
+            f'padding:8px 12px;margin-bottom:12px;font-size:11px;color:#e2e8f0;font-style:italic;">'
+            f'"{_sentence}"</div>'
+
+            # Judge Judy record
+            f'<div style="display:flex;align-items:center;justify-content:space-between;">'
+            f'<div style="color:#475569;font-size:9px;font-weight:700;letter-spacing:0.1em;">JUDGE JUDY\'S RECORD</div>'
+            f'<div style="color:#64748b;font-size:10px;">{_record_str}</div>'
+            f'</div>'
+            f'<div style="margin-top:4px;display:flex;align-items:center;gap:2px;">'
+            f'<span style="color:#475569;font-size:9px;margin-right:6px;">RECENT:</span>{_dot_html}'
+            f'<span style="color:#334155;font-size:9px;margin-left:6px;">▲=bull ▼=bear ■=contested · 🟢correct 🔴wrong ⚫pending</span>'
+            f'</div>'
+
+            # Confidence
+            f'<div style="margin-top:10px;text-align:right;">'
+            f'<span style="color:#475569;font-size:9px;">AI confidence in verdict: </span>'
+            f'<span style="color:{_vc};font-weight:700;font-size:11px;">{_db_conf_adj}/10</span>'
+            f'<span style="color:#334155;font-size:9px;margin-left:6px;">(Judge Judy self-rated — not a quant score)</span>'
+            f'</div>'
+
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── Arguments side by side ────────────────────────────────────────
+        _col_bear, _col_bull = st.columns(2)
+
+        with _col_bear:
+            _bear_border = "#ef444499" if _db_verdict == "BEAR WINS" else "#ef444433"
+            _bear_glow = f"box-shadow:0 0 12px #ef444444;" if _db_verdict == "BEAR WINS" else ""
+            st.markdown(
+                f'<div style="background:#1a0000;border:1px solid {_bear_border};border-radius:6px;padding:12px;{_bear_glow}">'
+                f'<div style="color:#ef4444;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                + ("🏆 " if _db_verdict == "BEAR WINS" else "")
+                + f'🐻 SIR DOOMBURGER'
+                + (" — WINS" if _db_verdict == "BEAR WINS" else " — SENTENCED" if _db_verdict == "BULL WINS" else "") +
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bear_argument","")}</div>'
+                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #ef444433;">'
+                f'<span style="color:#ef4444;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                f'<span style="color:#fca5a5;font-size:10px;">{_debate.get("bear_strongest","")}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        with _col_bull:
+            _bull_border = "#22c55e99" if _db_verdict == "BULL WINS" else "#22c55e33"
+            _bull_glow = f"box-shadow:0 0 12px #22c55e44;" if _db_verdict == "BULL WINS" else ""
+            st.markdown(
+                f'<div style="background:#052e16;border:1px solid {_bull_border};border-radius:6px;padding:12px;{_bull_glow}">'
+                f'<div style="color:#22c55e;font-weight:700;font-size:12px;margin-bottom:8px;">'
+                + ("🏆 " if _db_verdict == "BULL WINS" else "")
+                + f'🐂 SIR FUKYERPUTS'
+                + (" — WINS" if _db_verdict == "BULL WINS" else " — SENTENCED" if _db_verdict == "BEAR WINS" else "") +
+                f'</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;line-height:1.6;">{_debate.get("bull_argument","")}</div>'
+                f'<div style="margin-top:8px;padding-top:6px;border-top:1px solid #22c55e33;">'
+                f'<span style="color:#22c55e;font-size:9px;font-weight:700;letter-spacing:0.1em;">STRONGEST POINT: </span>'
+                f'<span style="color:#86efac;font-size:10px;">{_debate.get("bull_strongest","")}</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+
+        # ── Judge Judy asymmetry ruling ───────────────────────────────────
+        if _debate.get("asymmetry") or _debate.get("key_disagreement"):
+            st.markdown(
+                f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
+                f'padding:10px 14px;margin-top:8px;">'
+                f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">⚖️ JUDGE JUDY — RISK/REWARD RULING</div>'
+                f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{_debate.get("asymmetry","")}</div>'
+                f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {_debate.get("key_disagreement","")}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )

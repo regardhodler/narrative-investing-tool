@@ -507,11 +507,16 @@ def render_signal_scorecard() -> None:
                   "#f59e0b" if isinstance(sz_z, (int, float)) and sz_z > 0.5 else "#22c55e")
 
         # Whale flow cell
-        wf_b    = wf.get("bull_pct", "—")
-        wf_lbl  = wf.get("label", "—")
-        wf_str  = f'{wf_b:.0f}% bull' if isinstance(wf_b, (int, float)) else "—"
-        wf_col  = "#22c55e" if isinstance(wf_b, (int, float)) and wf_b > 55 else (
-                  "#ef4444" if isinstance(wf_b, (int, float)) and wf_b < 45 else "#f59e0b")
+        wf_b       = wf.get("bull_pct", "—")
+        wf_lbl     = wf.get("label", "—")
+        wf_leading = wf.get("leading_signal", "NONE")
+        wf_act_n   = wf.get("activism_aligned", 0)
+        wf_str     = f'{wf_b:.0f}% bull' if isinstance(wf_b, (int, float)) else "—"
+        wf_col     = "#22c55e" if isinstance(wf_b, (int, float)) and wf_b > 55 else (
+                     "#ef4444" if isinstance(wf_b, (int, float)) and wf_b < 45 else "#f59e0b")
+        # Sub-label: show 13D leading signal badge when activists align with flow
+        _lead_icon = {"BULLISH": "▲13D", "BEARISH": "▼13D", "MIXED": "◆13D"}.get(wf_leading, "")
+        wf_sub     = (f'{wf_lbl[:10]} {_lead_icon}' if _lead_icon else wf_lbl[:14]).strip()
 
         # Events sentiment cell
         ev_s    = ev.get("sentiment", "—")
@@ -532,7 +537,7 @@ def render_signal_scorecard() -> None:
             _cell("TACTICAL", f'{t_arrow} {tac_s}', t_color, tac_lbl[:12]),
             _cell("OPT FLOW", f'{of_s}', o_color, of_lbl[:12]),
             _cell("STRESS",   sz_str, sz_col, f'{sz_pct}th pct'),
-            _cell("WHALE 13F", wf_str, wf_col, wf_lbl[:14]),
+            _cell("WHALE 13F", wf_str, wf_col, wf_sub),
             _cell("EVENTS",   ev_str, ev_col, f'{ev_lbl[:12]} [{ev_src}]'),
             _cell("CANARY",   ca_str, ca_col, f'breadth {ca.get("breadth_pct","—")}%'),
         ])
@@ -545,8 +550,24 @@ def render_signal_scorecard() -> None:
         fear_html = (
             f'<div style="padding:6px 14px;background:#0f172a;border-left:3px solid {fc_col};">'
             f'<div style="font-size:8px;color:{orange};font-weight:700;letter-spacing:0.08em;">FEAR INDEX</div>'
-            f'<div style="font-size:15px;font-weight:800;color:{fc_col};">{fc_s:.0f}</div>'
+            f'<div style="font-size:15px;font-weight:800;color:{fc_col};">{f"{fc_s:.0f}" if isinstance(fc_s, (int, float)) else fc_s}</div>'
             f'<div style="font-size:9px;color:{fc_col};margin-top:1px;">{fc_lbl}</div>'
+            f'</div>'
+        )
+
+    # API error badge — shown when any service silently failed
+    api_errs = st.session_state.get("_api_errors") or {}
+    err_badge = ""
+    if api_errs:
+        n = len(api_errs)
+        names = ", ".join(list(api_errs.keys())[:3])
+        err_badge = (
+            f'<div style="padding:6px 10px;background:#0f172a;border-left:3px solid #f59e0b;'
+            f'display:flex;flex-direction:column;justify-content:center;min-width:60px;" '
+            f'title="{names}">'
+            f'<div style="font-size:8px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;">DATA</div>'
+            f'<div style="font-size:13px;font-weight:800;color:#f59e0b;">⚠ {n}</div>'
+            f'<div style="font-size:9px;color:#94a3b8;margin-top:1px;">error{"s" if n>1 else ""}</div>'
             f'</div>'
         )
 
@@ -555,6 +576,7 @@ def render_signal_scorecard() -> None:
         f'border:1px solid #1e293b;border-radius:6px;margin-bottom:12px;overflow:hidden;">'
         f'{cells}'
         f'{fear_html}'
+        f'{err_badge}'
         f'</div>',
         unsafe_allow_html=True,
     )

@@ -14,6 +14,8 @@ import os
 from io import StringIO
 from dataclasses import dataclass, field
 
+from utils.api_helpers import _store_error
+
 
 class _FredFetchError(Exception):
     """Raised when a FRED series fetch fails, preventing st.cache_data from caching None."""
@@ -316,7 +318,8 @@ def fetch_batch(tickers: dict[str, str], period: str = "1y", interval: str = "1d
     try:
         raw = yf.download(ticker_list, period=period, interval=interval,
                           progress=False, auto_adjust=True, threads=True)
-    except Exception:
+    except Exception as e:
+        _store_error("yfinance", e)
         raw = pd.DataFrame()
 
     for ticker, label in tickers.items():

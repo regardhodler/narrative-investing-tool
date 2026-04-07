@@ -577,3 +577,118 @@ def render():
 
     # Auto-refresh note
     st.caption("⟳ This page reflects the current session state. Navigate away and back to refresh, or use the Streamlit rerun button.")
+
+    # ── AI Play Log ────────────────────────────────────────────────────────────
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:24px 0 16px 0;"></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+        f'letter-spacing:0.1em;margin-bottom:4px;">AI PLAY LOG</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("History of every AI-generated play — regime calls, rate path plays, discovery, portfolio analysis.")
+
+    try:
+        from services.play_log import load_plays, clear_plays
+        _all_plays = load_plays()
+
+        if not _all_plays:
+            st.info("No AI plays logged yet. Generate plays in Risk Regime, Discovery, or Portfolio Intelligence to start building history.")
+        else:
+            _features = sorted({p["feature"] for p in _all_plays})
+            _engines  = sorted({p["engine"]  for p in _all_plays})
+            _s1, _s2, _s3, _s4 = st.columns(4)
+            _s1.metric("Total Entries", len(_all_plays))
+            _s2.metric("Features", len(_features))
+            _s3.metric("Engines", len(_engines))
+            _last_ts = _all_plays[0].get("timestamp", "")
+            try:
+                _last_label = datetime.fromisoformat(_last_ts).strftime("%b %d %H:%M")
+            except Exception:
+                _last_label = _last_ts[:16]
+            _s4.metric("Last Entry", _last_label)
+
+            st.markdown("---")
+
+            _fc1, _fc2 = st.columns(2)
+            with _fc1:
+                _feat_filter = st.selectbox("Filter by Feature", ["All"] + _features, key="sa_playlog_feat_filter")
+            with _fc2:
+                _eng_filter = st.selectbox("Filter by Engine", ["All"] + _engines, key="sa_playlog_eng_filter")
+
+            _filtered = [
+                p for p in _all_plays
+                if (_feat_filter == "All" or p["feature"] == _feat_filter)
+                and (_eng_filter == "All" or p["engine"] == _eng_filter)
+            ]
+            st.caption(f"Showing {len(_filtered)} of {len(_all_plays)} entries")
+
+            for _entry in _filtered:
+                _ts   = _entry.get("timestamp", "")[:16].replace("T", " ")
+                _feat = _entry.get("feature", "")
+                _eng  = _entry.get("engine", "")
+                _eng_color = "#FF8811" if "👑" in _eng else ("#22c55e" if "🧠" in _eng else "#64748b")
+                _data = _entry.get("data", {})
+                _meta = _entry.get("meta", {})
+
+                if isinstance(_data, dict):
+                    _sectors   = ", ".join(s.get("name","") for s in _data.get("sectors",[])[:3])
+                    _stocks    = ", ".join(s.get("ticker","") for s in _data.get("stocks",[])[:4])
+                    _rationale = (_data.get("rationale","") or "")[:120]
+                    _narration = (_data.get("narration","") or "")[:120]
+                    _briefing  = (_data.get("briefing","") or "")[:120]
+                    if _sectors:
+                        _summary = f"Sectors: {_sectors}" + (f" | Stocks: {_stocks}" if _stocks else "")
+                    elif _narration:
+                        _summary = _narration
+                    elif _briefing:
+                        _summary = _briefing
+                    elif "rate_path_probs" in _data:
+                        _dom = _data.get("dominant", {})
+                        _summary = f"Dominant: {_dom.get('scenario','')} {_dom.get('prob_pct',0):.0f}%"
+                    else:
+                        _summary = str(_data)[:100]
+                else:
+                    _summary = str(_data)[:100]
+                    _rationale = _sectors = _stocks = _narration = _briefing = ""
+
+                with st.expander(
+                    f"{_ts} &nbsp; **{_feat}** &nbsp; `{_eng}` — {_summary[:80]}{'…' if len(_summary) > 80 else ''}",
+                    expanded=False,
+                ):
+                    _col_a, _col_b = st.columns([1, 2])
+                    with _col_a:
+                        st.markdown(
+                            f'<div style="font-size:11px;color:#94a3b8;">Feature</div>'
+                            f'<div style="font-weight:700;">{_feat}</div>'
+                            f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Engine</div>'
+                            f'<div style="color:{_eng_color};font-weight:700;">{_eng}</div>'
+                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Regime</div>'
+                               f'<div>{_meta.get("regime","—")}</div>' if _meta.get("regime") else "")
+                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fed Rate</div>'
+                               f'<div>{_meta.get("fed_funds_rate","—")}</div>' if _meta.get("fed_funds_rate") else ""),
+                            unsafe_allow_html=True,
+                        )
+                    with _col_b:
+                        if _rationale:
+                            st.markdown(f"**Rationale:** {_data.get('rationale','')}")
+                        if _sectors:
+                            st.markdown(f"**Sectors:** {_sectors}")
+                        if _stocks:
+                            st.markdown(f"**Stocks:** {_stocks}")
+                        _bonds = ", ".join(s.get("ticker","") for s in _data.get("bonds",[])[:3]) if isinstance(_data, dict) else ""
+                        if _bonds:
+                            st.markdown(f"**Bonds:** {_bonds}")
+                        if _narration:
+                            st.markdown(f"**Narration:** {_data.get('narration','')}")
+                        if _briefing:
+                            st.markdown(f"**Briefing:** {_data.get('briefing','')[:600]}")
+                    with st.expander("Raw JSON", expanded=False):
+                        st.json(_entry)
+
+            st.markdown("---")
+            if st.button("🗑 Clear Play Log", key="sa_clear_playlog"):
+                clear_plays()
+                st.success("Play log cleared.")
+                st.rerun()
+    except Exception as _pl_err:
+        st.error(f"Play log unavailable: {_pl_err}")

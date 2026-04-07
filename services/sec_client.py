@@ -4,6 +4,8 @@ import requests
 import pandas as pd
 import streamlit as st
 
+from utils.api_helpers import capture_api_error
+
 SEC_HEADERS = {
     "User-Agent": "NarrativeInvestingTool jud_rabs@yahoo.com",
     "Accept-Encoding": "gzip, deflate",
@@ -23,6 +25,7 @@ def _rate_limit():
         _last_request_time = time.time()
 
 
+@capture_api_error("SEC", fallback={})
 @st.cache_data(ttl=86400)
 def get_cik_ticker_map() -> dict[str, str]:
     """Fetch CIK-to-ticker mapping from SEC. Returns {CIK_str: ticker}."""
@@ -41,6 +44,7 @@ def get_cik_ticker_map() -> dict[str, str]:
     return mapping
 
 
+@capture_api_error("SEC", fallback=[])
 @st.cache_data(ttl=86400)
 def get_ticker_company_map() -> list[tuple[str, str]]:
     """Return (ticker, company_name) pairs from SEC company_tickers.json."""

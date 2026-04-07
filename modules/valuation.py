@@ -779,7 +779,7 @@ def render():
     with _vd_col1:
         st.markdown(
             f'<span style="color:#64748b;font-size:11px;">⚔️ Debate this valuation — '
-            f'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
+            f'Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
             f'<span style="color:#475569;">3 LLM calls</span></span>'
             f'<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run the AI Valuation above first — debate uses the rating &amp; confidence as evidence</div>',
             unsafe_allow_html=True,
@@ -796,7 +796,7 @@ def render():
 
     if _run_val_debate:
         st.session_state[_val_debate_key] = {}
-        with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+        with st.spinner("⚔️ Debate — Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
             try:
                 from services.claude_client import generate_adversarial_debate as _gen_vd
                 from utils.signal_block import build_ticker_block as _build_vtb, build_macro_block as _build_vmb

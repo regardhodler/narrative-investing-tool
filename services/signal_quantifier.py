@@ -88,56 +88,95 @@ _RISK_ON_CATS = {"Technology", "Consumer Cyclical", "Communication Services"}
 _DEFENSIVE_CATS = {"Healthcare", "Consumer Defensive", "Utilities", "Financials"}
 
 
-def compute_whale_flow_score(df) -> dict:
+def compute_whale_flow_score(df, activism_filings: list | None = None) -> dict:
     """Net $ flow bias + category rotation from whale screener DataFrame.
 
-    Expects columns: value_change, status, whale_category.
+    Expects columns: value_change, status, whale_category, issuer.
+    activism_filings: optional list of 13D filing dicts from get_activism_filings().
+      When provided, cross-references activist targets against 13F bull positions
+      to produce a leading signal and conviction boost.
+
     Returns:
-        {"bull_pct": float, "net_flow_bn": float, "rotation": float,
-         "conviction": float, "label": str}
+        {"bull_pct", "net_flow_bn", "rotation", "conviction", "label",
+         "activism_count", "activism_aligned", "leading_signal"}
     """
+    _empty = {"bull_pct": 50.0, "net_flow_bn": 0.0, "rotation": 0.0,
+              "conviction": 0.5, "label": "No Data",
+              "activism_count": 0, "activism_aligned": 0, "leading_signal": "NONE"}
+
     if df is None or df.empty:
-        return {"bull_pct": 50.0, "net_flow_bn": 0.0, "rotation": 0.0,
-                "conviction": 0.5, "label": "No Data"}
+        return _empty
+
+    # Normalize status to lowercase — screener returns uppercase ("NEW", "INCREASED")
+    df = df.copy()
+    df["status"] = df["status"].str.lower().str.strip()
 
     bull_rows = df[df["status"].isin(["new", "increased"])]
-    bear_rows = df[df["status"].isin(["decreased", "sold"])]
+    bear_rows = df[df["status"].isin(["decreased", "sold", "closed"])]
     bull_flow = float(bull_rows["value_change"].sum())
     bear_flow = float(bear_rows["value_change"].abs().sum())
     total = bull_flow + bear_flow
     if total < 1:
-        return {"bull_pct": 50.0, "net_flow_bn": 0.0, "rotation": 0.0,
-                "conviction": 0.5, "label": "No Data"}
+        return _empty
 
     bull_pct = bull_flow / total * 100
     net_bn = (bull_flow - bear_flow) / 1e9
 
-    new_c = int((df["status"] == "new").sum())
-    sold_c = int((df["status"] == "sold").sum())
+    new_c  = int((df["status"] == "new").sum())
+    sold_c = int((df["status"].isin(["sold", "closed"])).sum())
     conviction = new_c / (new_c + sold_c + 1)
 
     # Category rotation: risk-on flow vs defensive flow
-    ro_flow = float(df[df["whale_category"].isin(_RISK_ON_CATS)]["value_change"].sum())
+    ro_flow  = float(df[df["whale_category"].isin(_RISK_ON_CATS)]["value_change"].sum())
     def_flow = float(df[df["whale_category"].isin(_DEFENSIVE_CATS)]["value_change"].sum())
     rotation = (ro_flow - def_flow) / (abs(ro_flow) + abs(def_flow) + 1)
 
-    if bull_pct > 70:
-        label = "Heavy Accumulation"
-    elif bull_pct > 55:
-        label = "Mild Accumulation"
-    elif bull_pct > 45:
-        label = "Neutral"
-    elif bull_pct > 30:
-        label = "Distribution"
-    else:
-        label = "Heavy Distribution"
+    # ── 13D activism cross-reference (leading indicator) ─────────────────────
+    activism_count   = 0
+    activism_aligned = 0
+    leading_signal   = "NONE"
+
+    if activism_filings:
+        activism_count = len(activism_filings)
+        # Normalize activist target names for partial-match against 13F issuer column
+        act_subjects = [f.get("subject", "").lower().strip() for f in activism_filings]
+        bull_issuers = bull_rows["issuer"].str.lower().str.strip().tolist() if "issuer" in df.columns else []
+        bear_issuers = bear_rows["issuer"].str.lower().str.strip().tolist() if "issuer" in df.columns else []
+
+        def _fuzzy_match(subject: str, issuers: list) -> bool:
+            # Match if subject is substring of issuer or vice versa (handles "Apple" vs "Apple Inc")
+            return any(subject in iss or iss in subject for iss in issuers if subject and iss)
+
+        aligned_bull = sum(1 for s in act_subjects if _fuzzy_match(s, bull_issuers))
+        aligned_bear = sum(1 for s in act_subjects if _fuzzy_match(s, bear_issuers))
+        activism_aligned = aligned_bull
+
+        # Boost conviction when 13D activist targets overlap with 13F accumulation
+        # Each aligned activist adds +0.15 conviction, capped at +0.4 total boost
+        conviction = min(1.0, conviction + min(0.4, 0.15 * aligned_bull))
+
+        if aligned_bull > 0 and aligned_bear == 0:
+            leading_signal = "BULLISH"
+        elif aligned_bear > 0 and aligned_bull == 0:
+            leading_signal = "BEARISH"
+        elif aligned_bull > 0 and aligned_bear > 0:
+            leading_signal = "MIXED"
+
+    if bull_pct > 70:   label = "Heavy Accumulation"
+    elif bull_pct > 55: label = "Mild Accumulation"
+    elif bull_pct > 45: label = "Neutral"
+    elif bull_pct > 30: label = "Distribution"
+    else:               label = "Heavy Distribution"
 
     return {
-        "bull_pct":    round(bull_pct, 1),
-        "net_flow_bn": round(net_bn, 2),
-        "rotation":    round(rotation, 2),
-        "conviction":  round(conviction, 2),
-        "label":       label,
+        "bull_pct":        round(bull_pct, 1),
+        "net_flow_bn":     round(net_bn, 2),
+        "rotation":        round(rotation, 2),
+        "conviction":      round(conviction, 2),
+        "label":           label,
+        "activism_count":  activism_count,
+        "activism_aligned": activism_aligned,
+        "leading_signal":  leading_signal,
     }
 
 

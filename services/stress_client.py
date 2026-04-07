@@ -15,6 +15,7 @@ import streamlit as st
 import yfinance as yf
 
 from services.sec_client import SEC_HEADERS, _rate_limit, get_cik_ticker_map
+from utils.api_helpers import _store_error
 
 # ---------------------------------------------------------------------------
 # FRED API
@@ -56,7 +57,8 @@ def fetch_fred_series(series_id: str, observation_start: str | None = None) -> p
         )
         resp.raise_for_status()
         data = resp.json()
-    except Exception:
+    except Exception as e:
+        _store_error("FRED", e)
         return pd.DataFrame(columns=["date", "value"])
 
     observations = data.get("observations", [])

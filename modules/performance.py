@@ -13,6 +13,28 @@ from utils.theme import COLORS, apply_dark_layout
 
 _RISK_FREE_ANNUAL = 0.045  # ~current T-bill rate
 
+_CAD_SUFFIXES_PERF = (".TO", ".V", ".TSX", ".CN", ".NE", ".VN")
+
+
+def _ticker_currency_perf(ticker: str) -> str:
+    return "CAD" if ticker.upper().endswith(_CAD_SUFFIXES_PERF) else "USD"
+
+
+@st.cache_data(ttl=3600)
+def _get_usdcad_perf() -> float:
+    try:
+        raw = yf.download("USDCAD=X", period="5d", interval="1d", progress=False, auto_adjust=True)
+        if raw is not None and not raw.empty:
+            close = raw["Close"]
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            rate = float(close.dropna().iloc[-1])
+            if 1.0 < rate < 2.0:
+                return rate
+    except Exception:
+        pass
+    return 1.36
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data helpers
@@ -44,6 +66,7 @@ def _build_nav_series(
     trades: list[dict],
     prices: pd.DataFrame,
     initial_capital: float,
+    usdcad_rate: float = 1.0,
 ) -> pd.Series:
     """
     Construct a daily portfolio NAV series.
@@ -76,10 +99,12 @@ def _build_nav_series(
                 else:
                     mark = t.get("entry_price", 0)
 
-            entry_px = t.get("entry_price", 0) or 0
-            size     = t.get("position_size", 0) or 0
-            mult     = 1.0 if t.get("direction", "long").lower() == "long" else -1.0
-            day_pnl += mult * (mark - entry_px) * size
+            entry_px   = t.get("entry_price", 0) or 0
+            size       = t.get("position_size", 0) or 0
+            mult       = 1.0 if t.get("direction", "long").lower() == "long" else -1.0
+            pnl_native = mult * (mark - entry_px) * size
+            ccy_mult   = usdcad_rate if _ticker_currency_perf(t.get("ticker", "")) == "USD" else 1.0
+            day_pnl   += pnl_native * ccy_mult
 
         nav_rows.append({"date": dt, "nav": initial_capital + day_pnl})
 
@@ -276,7 +301,7 @@ def render():
     col_cap, col_bench, col_period = st.columns([1.5, 1.5, 1.5])
     with col_cap:
         initial_capital = st.number_input(
-            "Starting Capital ($)", min_value=1000, value=10000, step=1000,
+            "Starting Capital (CAD)", min_value=1000, value=10000, step=1000,
             key="perf_capital",
         )
     with col_bench:
@@ -307,8 +332,21 @@ def render():
         st.warning("Could not fetch price data. Check your internet connection.")
         return
 
+    # ── Load cash (CAD) + live USD/CAD rate ──────────────────────────────────
+    import json as _pf_json, os as _pf_os
+    _pf_path = _pf_os.path.join(_pf_os.path.dirname(_pf_os.path.dirname(__file__)), "data", "portfolio_settings.json")
+    try:
+        with open(_pf_path) as _pf:
+            _cash_cad = float(_pf_json.load(_pf).get("cash_holdings", 0.0))
+    except Exception:
+        _cash_cad = 0.0
+    _usdcad = _get_usdcad_perf()
+    _initial_total = initial_capital + _cash_cad
+    if _cash_cad != 0:
+        st.caption(f"{'+ ' if _cash_cad > 0 else ''}C${_cash_cad:,.0f} cash/margin from Portfolio Intel → Total C${_initial_total:,.0f} · USD/CAD {_usdcad:.4f}")
+
     # ── Build NAV series ──────────────────────────────────────────────────────
-    port_nav = _build_nav_series(all_trades, prices, initial_capital)
+    port_nav = _build_nav_series(all_trades, prices, _initial_total, usdcad_rate=_usdcad)
     if port_nav.empty or len(port_nav) < 2:
         st.info("Not enough price history to build a NAV curve. Ensure entry dates are set correctly.")
         return
@@ -318,7 +356,7 @@ def render():
     if bench_raw is not None and not bench_raw.empty:
         bench_aligned = bench_raw.reindex(port_nav.index, method="ffill").dropna()
         if not bench_aligned.empty:
-            bench_nav = bench_aligned / bench_aligned.iloc[0] * initial_capital
+            bench_nav = bench_aligned / bench_aligned.iloc[0] * _initial_total
         else:
             bench_nav = None
     else:
@@ -330,8 +368,8 @@ def render():
     sortino   = _sortino(port_ret)
     max_dd    = _max_drawdown(port_nav)
     cagr_val  = _cagr(port_nav)
-    total_pnl = port_nav.iloc[-1] - initial_capital
-    total_pct = (total_pnl / initial_capital) * 100
+    total_pnl = port_nav.iloc[-1] - _initial_total
+    total_pct = (total_pnl / _initial_total) * 100
 
     beta, alpha = 0.0, 0.0
     bench_ret_pct = 0.0

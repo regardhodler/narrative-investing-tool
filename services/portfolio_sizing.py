@@ -26,7 +26,9 @@ Output per position:
 """
 from __future__ import annotations
 
+import numpy as np
 import pandas as pd
+import streamlit as st
 
 # ── Regime Sensitivity Map ────────────────────────────────────────────────────
 # Each ticker maps to [growth, inflation, liquidity, credit] sensitivities (-1 to +1)
@@ -82,6 +84,65 @@ _SENSITIVITY: dict[str, list[float]] = {
     "IBIT":    [ 0.9, -0.2,  0.5, -0.3],
 }
 
+# ── Dynamic Factor Sensitivity ───────────────────────────────────────────────
+# ETF proxies for each factor (all daily via yfinance, already cached)
+#   growth    = SPY  — broad equity market tracks the growth cycle
+#   inflation = TIP  — TIPS ETF directly tracks inflation expectations
+#   liquidity = IEI  — 3-7yr treasuries; flight-to-safety when credit tightens
+#   credit    = HYG  — high yield bonds track the credit cycle
+_FACTOR_PROXIES = ["SPY", "TIP", "IEI", "HYG"]
+_FACTOR_NAMES   = ["growth", "inflation", "liquidity", "credit"]
+
+
+@st.cache_data(ttl=86400)
+def compute_dynamic_sensitivity(ticker: str, lookback_days: int = 126) -> list[float] | None:
+    """OLS regression of ticker daily log-returns vs 4 factor proxy returns.
+
+    Returns [growth, inflation, liquidity, credit] each normalized to [-1, 1]
+    via tanh(beta / 2).  Returns None if insufficient data (< 63 trading days).
+
+    Cached for 24 hours per ticker — recomputes once daily.
+    """
+    try:
+        from services.market_data import _fetch_single
+        frames = {t: _fetch_single(t, period="1y") for t in [ticker] + _FACTOR_PROXIES}
+        if any(f is None or f.empty for f in frames.values()):
+            return None
+
+        closes = {}
+        for t, df in frames.items():
+            col = df.get("Close", df.iloc[:, 0])
+            closes[t] = col.squeeze()
+
+        price_df = pd.DataFrame(closes).dropna()
+        if len(price_df) < 63:
+            return None
+
+        log_rets = np.log(price_df / price_df.shift(1)).dropna().tail(lookback_days)
+        y = log_rets[ticker].values
+        X = log_rets[_FACTOR_PROXIES].values
+
+        # OLS via least squares: beta = (X'X)^-1 X'y
+        betas, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+        # Normalize to [-1, 1] via tanh(beta / 2)
+        normalized = [float(np.tanh(b / 2)) for b in betas]
+        return [round(v, 3) for v in normalized]
+    except Exception:
+        return None
+
+
+def get_sensitivity(ticker: str) -> list[float]:
+    """Get factor sensitivities for a ticker.
+
+    Priority: dynamic OLS (if ≥63 days data) → static _SENSITIVITY → [0, 0, 0, 0].
+    Use this instead of _SENSITIVITY.get() for all new code.
+    """
+    dynamic = compute_dynamic_sensitivity(ticker.upper())
+    if dynamic is not None:
+        return dynamic
+    return _SENSITIVITY.get(ticker.upper(), [0.0, 0.0, 0.0, 0.0])
+
+
 # Quadrant → [growth, inflation, liquidity, credit] environment vector
 _QUADRANT_VECTOR: dict[str, list[float]] = {
     "Goldilocks":  [ 0.9, -0.2,  0.6,  0.4],
@@ -95,7 +156,7 @@ _QUADRANT_VECTOR: dict[str, list[float]] = {
 
 def _regime_fit_score(ticker: str, regime_ctx: dict) -> float:
     """Return regime fit 0-100. 50 = neutral."""
-    sens = _SENSITIVITY.get(ticker.upper(), [0.0, 0.0, 0.0, 0.0])
+    sens = get_sensitivity(ticker)
     quadrant = regime_ctx.get("quadrant", "")
     qvec = _QUADRANT_VECTOR.get(quadrant)
 
@@ -402,7 +463,7 @@ def aggregate_factor_exposure(
     for p in positions:
         tk = p.get("ticker", "").upper()
         wt = p.get("current_weight", 0) / 100.0  # convert % to decimal
-        sens = _SENSITIVITY.get(tk, [0.0, 0.0, 0.0, 0.0])
+        sens = get_sensitivity(tk)
         for i, f in enumerate(_FACTORS):
             exposure[f] += wt * sens[i]
 

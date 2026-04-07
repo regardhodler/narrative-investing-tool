@@ -96,7 +96,7 @@ def _fetch_sector(ticker: str) -> str:
         return "Unknown"
 
 
-def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) -> bool:
+def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None, cash_amount: float = 0.0) -> bool:
     """
     Headless risk matrix computation for Quick Intel Run.
     Computes portfolio risk metrics and stores _portfolio_risk_snapshot to session state.
@@ -128,9 +128,12 @@ def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) 
             px = prices_latest.get(tk, trade.get("entry_price", 0))
             position_values[tk] = position_values.get(tk, 0) + px * trade.get("position_size", 0)
     total_val = sum(position_values.values())
+    # Cash dilutes position weights — portfolio beta and concentration drop proportionally
+    _total_account = total_val + max(0.0, cash_amount)
+    _cash_weight   = (cash_amount / _total_account) if _total_account > 0 and cash_amount > 0 else 0.0
     weights = (
-        {tk: v / total_val for tk, v in position_values.items()}
-        if total_val > 0 else {tk: 1 / len(port_tickers) for tk in port_tickers}
+        {tk: v / _total_account for tk, v in position_values.items()}
+        if _total_account > 0 else {tk: 1 / len(port_tickers) for tk in port_tickers}
     )
 
     # Portfolio daily return series
@@ -196,6 +199,7 @@ def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) 
                 "spy_shock_pct": round(_spy_shock * 100),
                 "port_impact_pct": round(_port_impact * 100, 1),
                 "port_impact_dollar": round(_port_impact * total_val),
+                "account_impact_pct": round(_port_impact * (1 - _cash_weight) * 100, 1),
             })
 
     # Risk flags
@@ -226,6 +230,9 @@ def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) 
         "cvar_95_pct": round(cvar_95, 2) if cvar_95 else None,
         "var_95_dollar": round(var_95_dollar) if var_95_dollar else None,
         "total_value": round(total_val) if total_val else None,
+        "total_account": round(_total_account) if _total_account else None,
+        "cash_amount": round(cash_amount) if cash_amount > 0 else 0,
+        "cash_weight_pct": round(_cash_weight * 100, 1),
         "position_count": len(port_tickers),
         "sector_weights": {k: round(v * 100, 1) for k, v in sector_weights.items()},
         "max_position_weight": round(max_wt, 1),
@@ -689,9 +696,9 @@ def _render_debate_panel(debate: dict) -> None:
     )
     _vc  = {"BULL WINS": "#22c55e", "BEAR WINS": "#ef4444", "CONTESTED": "#f59e0b"}.get(_db_verdict, "#f59e0b")
     _vbg = {"BULL WINS": "#020d06", "BEAR WINS": "#0d0000", "CONTESTED": "#0d0800"}.get(_db_verdict, "#0d0800")
-    _winner  = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Sir Doomburger 🐻"}.get(_db_verdict)
+    _winner  = {"BULL WINS": "Sir Fukyerputs 🐂", "BEAR WINS": "Dr. Doomburger 🐻"}.get(_db_verdict)
     _sentences = {
-        "BULL WINS": "Sir Doomburger is hereby sentenced to 30 days of buying the dip.",
+        "BULL WINS": "Dr. Doomburger is hereby sentenced to 30 days of buying the dip.",
         "BEAR WINS": "Sir Fukyerputs is hereby sentenced to 30 days of holding cash.",
         "CONTESTED": "Both parties are remanded pending new evidence. Court adjourned.",
     }
@@ -846,7 +853,7 @@ def render():
     )
 
     # --- Tabs ---
-    tab_open, tab_intel, tab_risk, tab_closed, tab_analytics, tab_perf, tab_playlog = st.tabs(["OPEN POSITIONS", "🧠 PORTFOLIO INTELLIGENCE", "⚠ RISK MATRIX", "CLOSED TRADES", "ANALYTICS", "📈 PERFORMANCE", "📋 AI PLAY LOG"])
+    tab_intel, tab_open, tab_risk, tab_record, tab_perf = st.tabs(["🧠 PORTFOLIO INTELLIGENCE", "OPEN POSITIONS", "⚠ RISK MATRIX", "📊 TRADE RECORD", "📈 PERFORMANCE"])
 
     # --- Open Positions ---
     with tab_open:
@@ -856,11 +863,24 @@ def render():
             live_tickers = list({t["ticker"] for t in open_trades})
             prices = _get_live_prices(live_tickers)
 
+            # ── Currency toggle ───────────────────────────────────────────────
+            _usdcad_op = _get_usdcad()
+            _op_show_cad = st.session_state.get("op_show_cad", False)
+            _op_tog_col, _op_btn_col = st.columns([6, 1])
+            with _op_btn_col:
+                if st.button("🌐 Native" if _op_show_cad else "🇨🇦 CAD", key="op_cad_toggle",
+                             help="Toggle between native currency and CAD-converted display"):
+                    st.session_state["op_show_cad"] = not _op_show_cad
+                    st.rerun()
+            if _op_show_cad:
+                st.caption(f"USD positions converted to CAD · USD/CAD {_usdcad_op:.4f}")
+
             # Compute total portfolio value for portfolio % calc
             total_portfolio_val = 0.0
             for trade in open_trades:
                 cur = prices.get(trade["ticker"]) or trade["entry_price"]
-                total_portfolio_val += cur * trade["position_size"]
+                _ccy_m = _usdcad_op if (_op_show_cad and _ticker_currency(trade["ticker"]) == "USD") else 1.0
+                total_portfolio_val += cur * trade["position_size"] * _ccy_m
 
             _cur_regime = st.session_state.get("_regime_context", {}).get("regime", "")
             _tac_pos = st.session_state.get("_tactical_context") or {}
@@ -882,10 +902,11 @@ def render():
                 for _t in open_trades:
                     _tk = _t["ticker"]
                     _cur = prices.get(_tk) or _t["entry_price"]
-                    _val = _cur * _t["position_size"]
+                    _chart_ccy_m = _usdcad_op if (_op_show_cad and _ticker_currency(_tk) == "USD") else 1.0
+                    _val = _cur * _t["position_size"] * _chart_ccy_m
                     _pnl = ((_cur - _t["entry_price"]) * _t["position_size"]
                             if _t["direction"] == "Long"
-                            else (_t["entry_price"] - _cur) * _t["position_size"])
+                            else (_t["entry_price"] - _cur) * _t["position_size"]) * _chart_ccy_m
                     if _tk not in _alloc:
                         _alloc[_tk] = {"val": 0.0, "pnl": 0.0, "direction": _t["direction"]}
                     _alloc[_tk]["val"] += _val
@@ -900,8 +921,9 @@ def render():
                     COLORS["positive"] if p >= 0 else COLORS["negative"]
                     for p in _pnls
                 ]
+                _chart_sym = "C$" if _op_show_cad else "$"
                 _text_labels = [
-                    f"{w:.1f}%  {'+' if p >= 0 else ''}${p:,.0f}"
+                    f"{w:.1f}%  {'+' if p >= 0 else ''}{_chart_sym}{p:,.0f}"
                     for w, p in zip(_wts, _pnls)
                 ]
 
@@ -968,6 +990,9 @@ def render():
 
                 pos_val = (current or entry) * size
                 port_pct = (pos_val / total_portfolio_val * 100) if total_portfolio_val > 0 else 0
+
+                _pos_ccy_m = _usdcad_op if (_op_show_cad and _ticker_currency(trade["ticker"]) == "USD") else 1.0
+                _ccy_sym = "C$" if (_op_show_cad and _ticker_currency(trade["ticker"]) == "USD") else "$"
 
                 col1, col2, col3, col4, col5, col6 = st.columns([2, 1.5, 1.2, 1, 1.2, 1.2])
                 _badge_text, _badge_color = _regime_badge(direction, _cur_regime)
@@ -1062,9 +1087,9 @@ def render():
                     if trade.get("regime_at_entry") and _cur_regime and trade["regime_at_entry"] != _cur_regime:
                         st.caption(f"⚠ Entered in {trade['regime_at_entry']} · now {_cur_regime}")
                 with col2:
-                    st.markdown(f'Entry: **${entry:.2f}** × {size}')
+                    st.markdown(f'Entry: **{_ccy_sym}{entry * _pos_ccy_m:.2f}** × {size}')
                 with col3:
-                    st.markdown(f'Now: **${current:.2f}**')
+                    st.markdown(f'Now: **{_ccy_sym}{current * _pos_ccy_m:.2f}**')
                 with col4:
                     st.markdown(
                         f'<span style="color:{COLORS["text_dim"]};font-size:12px;">{port_pct:.1f}% port</span>',
@@ -1072,7 +1097,7 @@ def render():
                     )
                 with col5:
                     st.markdown(
-                        f'<span style="color:{color};font-weight:700;">${pnl:+,.2f} ({pnl_pct:+.1f}%)</span>',
+                        f'<span style="color:{color};font-weight:700;">{_ccy_sym}{pnl * _pos_ccy_m:+,.2f} ({pnl_pct:+.1f}%)</span>',
                         unsafe_allow_html=True,
                     )
                 with col6:
@@ -1222,6 +1247,74 @@ def render():
 
         st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:12px 0;"></div>', unsafe_allow_html=True)
 
+        # ── Cash / Dry Powder input ────────────────────────────────────────────
+        _SETTINGS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "portfolio_settings.json")
+
+        def _load_port_settings() -> dict:
+            try:
+                with open(_SETTINGS_PATH) as _f:
+                    return json.load(_f)
+            except Exception:
+                return {}
+
+        def _save_port_settings(d: dict) -> None:
+            try:
+                _existing = _load_port_settings()
+                _existing.update(d)
+                with open(_SETTINGS_PATH, "w") as _f:
+                    json.dump(_existing, _f, indent=2)
+            except Exception:
+                pass
+
+        _port_settings = _load_port_settings()
+        _cash_default = float(_port_settings.get("cash_holdings", 0.0))
+        _cash_col1, _cash_col2 = st.columns([4, 1])
+        with _cash_col1:
+            _cash_input = st.number_input(
+                "💵 Cash / Margin (CAD)  —  positive = dry powder · negative = margin debt",
+                step=1000.0,
+                value=_cash_default,
+                key="cash_holdings_input",
+                help="Positive = uninvested cash (reduces beta). Negative = margin/borrowed capital (amplifies beta and losses).",
+            )
+        with _cash_col2:
+            st.markdown('<div style="margin-top:28px;"></div>', unsafe_allow_html=True)
+            if st.button("Save", key="save_cash_btn"):
+                _save_port_settings({"cash_holdings": float(_cash_input)})
+                st.success("Saved")
+        _cash_amount = float(_cash_input)
+
+        # ── Account summary bar ───────────────────────────────────────────────
+        _rs_existing = st.session_state.get("_portfolio_risk_snapshot") or {}
+        _pos_val = _rs_existing.get("total_value") or 0
+        _acct_val = _pos_val + _cash_amount if _pos_val else None
+        if _pos_val or _cash_amount != 0:
+            _cash_color = "#22c55e" if _cash_amount >= 0 else "#ef4444"
+            _cash_label = f"💵 ${_cash_amount:+,.0f}" if _cash_amount != 0 else "💵 $0"
+            _pos_str    = f"Positions <b style='color:#94a3b8;'>${_pos_val:,.0f}</b>" if _pos_val else "Positions <b style='color:#555;'>—</b>"
+            _cash_str   = f"Cash/Margin <b style='color:{_cash_color};'>{_cash_label}</b>"
+            _total_str  = (
+                f"Total Account <b style='color:#FF8811;'>${_acct_val:,.0f}</b>"
+                if _acct_val is not None else ""
+            )
+            _pct_invested = (
+                f"<span style='color:#64748b;font-size:10px;'> · {round(_pos_val / _acct_val * 100)}% invested</span>"
+                if _acct_val and _acct_val != 0 else ""
+            )
+            st.markdown(
+                f'<div style="background:#0d1117;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:7px 14px;font-size:12px;display:flex;gap:20px;flex-wrap:wrap;margin-top:4px;">'
+                f'<span>{_pos_str}</span>'
+                f'<span>{_cash_str}</span>'
+                f'{"<span>" + _total_str + "</span>" + _pct_invested if _total_str else ""}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        elif not _pos_val:
+            st.caption("Run ⚠ Risk Snapshot to see total account value.")
+
+        st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:8px 0 12px 0;"></div>', unsafe_allow_html=True)
+
         # Section B — Engine selector + Run button
         st.markdown(
             f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
@@ -1342,6 +1435,10 @@ def render():
                     "congress_bias": st.session_state.get("_congress_bias") or {},
                     "macro_synopsis": st.session_state.get("_macro_synopsis") or {},
                     "portfolio_risk": st.session_state.get("_portfolio_risk_snapshot") or {},
+                    "cash_buffer": (
+                        f"${_cash_amount:,.0f} ({round(_cash_amount / (_cash_amount + _up_pv) * 100) if _up_pv else 0}% of account) — dry powder available"
+                        if _cash_amount > 0 else "Not specified"
+                    ),
                     "tactical_regime": (
                         f"{_tac_pos['tactical_score']}/100 ({_tac_pos['label']}) — {_tac_pos['action_bias']}"
                         if _tac_pos else ""
@@ -1387,8 +1484,27 @@ def render():
                 if _pi_result and "_error" not in _pi_result:
                     st.session_state["_portfolio_analysis"] = _pi_result
                     st.session_state["_portfolio_analysis_ts"] = _dt.now()
-                    st.session_state["_portfolio_analysis_engine"] = st.session_state.get("portfolio_intel_engine", "⚡ Freeloader Mode")
-                    _pi_tier_label = st.session_state.get("portfolio_intel_engine", "⚡ Freeloader Mode")
+                    _pi_engine_label = st.session_state.get("portfolio_intel_engine", "⚡ Freeloader Mode")
+                    st.session_state["_portfolio_analysis_engine"] = _pi_engine_label
+                    # Auto-run factor AI analysis using already-computed exposure
+                    try:
+                        from services.claude_client import analyze_factor_exposure as _afe_ai
+                        _afe_input = {"factors": _up_factor_exposure, "dominant": "", "warnings": []}
+                        if _up_factor_exposure:
+                            _fa_auto = _afe_ai(
+                                factor_exposure=_afe_input,
+                                regime_ctx=_rc,
+                                open_trades=open_trades,
+                                use_claude=_use_claude,
+                                model=_pi_model,
+                            )
+                            if _fa_auto and "_error" not in _fa_auto:
+                                st.session_state["_factor_analysis"] = _fa_auto
+                                st.session_state["_factor_analysis_ts"] = _dt.now()
+                                st.session_state["_factor_analysis_engine"] = _pi_engine_label
+                    except Exception:
+                        pass  # factor analysis is additive — skip silently
+                    _pi_tier_label = _pi_engine_label
                     append_play("Portfolio Analysis", _pi_tier_label, _pi_result,
                                 meta={"n_positions": len(open_trades), "verdict": _pi_result.get("verdict")})
                     # Telegram alert for high-risk verdicts
@@ -1414,6 +1530,116 @@ def render():
                         st.warning("⚠ ANTHROPIC_API_KEY not found — Claude modes require this key in Streamlit secrets.")
                     with st.expander("🔍 Debug — raw result", expanded=False):
                         st.json(_pi_result or {"result": "None returned"})
+
+        # ── Inline Risk Snapshot button ────────────────────────────────────
+        if open_trades:
+            _rs_snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+            _rs_col1, _rs_col2, _rs_col3 = st.columns([2, 1.5, 1])
+            with _rs_col1:
+                st.markdown(
+                    '<span style="color:#64748b;font-size:11px;">⚠ Quadrant analysis: beta, VaR95, stress scenarios, correlation — '
+                    'also feeds Judge Judy with richer context.</span>',
+                    unsafe_allow_html=True,
+                )
+            with _rs_col2:
+                try:
+                    from utils.ai_tier import TIER_OPTS as _rs_tier_opts, TIER_MAP as _rs_tier_map
+                except ImportError:
+                    _rs_tier_opts = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mode"]
+                    _rs_tier_map  = {
+                        "⚡ Freeloader Mode":      (False, None),
+                        "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
+                        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+                    }
+                _rs_tier = st.selectbox("", _rs_tier_opts, key="risk_snap_tier_intel", label_visibility="collapsed")
+            with _rs_col3:
+                _run_rs = st.button("⚠ Risk Snapshot", key="btn_risk_snap_intel", use_container_width=True)
+            if _run_rs:
+                _rs_use_claude, _rs_model = _rs_tier_map.get(_rs_tier, (False, None))
+                with st.spinner("Computing risk metrics…"):
+                    try:
+                        run_quick_risk_snapshot(use_claude=_rs_use_claude, model=_rs_model, cash_amount=_cash_amount)
+                        _rs_snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+                        st.success("Risk snapshot updated.")
+                    except Exception as _rs_err:
+                        st.error(f"Risk snapshot failed: {_rs_err}")
+
+            # Compact inline risk summary (shown if snapshot exists)
+            if _rs_snap:
+                _rs_beta     = _rs_snap.get("beta")
+                _rs_var      = _rs_snap.get("var_95_pct")
+                _rs_cvar     = _rs_snap.get("cvar_95_pct")
+                _rs_worst    = _rs_snap.get("worst_stress_pct")
+                _rs_flags    = _rs_snap.get("risk_flags") or []
+                _rs_sectors  = _rs_snap.get("sector_weights") or {}
+                _rs_stress   = _rs_snap.get("stress_scenarios") or []
+                _rs_cash_pct = _rs_snap.get("cash_weight_pct", 0.0)
+
+                # Metric pills
+                _rs_metrics = []
+                if _rs_beta is not None:
+                    _b_col = "#ef4444" if _rs_beta > 1.4 else "#22c55e" if _rs_beta < 0.8 else "#f59e0b"
+                    _rs_metrics.append(f'<span style="color:{_b_col};">β {_rs_beta:.2f}</span>')
+                if _rs_cash_pct > 0:
+                    _rs_metrics.append(f'<span style="color:#22c55e;">💵 Cash {_rs_cash_pct:.1f}%</span>')
+                if _rs_var is not None:
+                    _rs_metrics.append(f'<span style="color:#f59e0b;">VaR95 {_rs_var:+.1f}%</span>')
+                if _rs_cvar is not None:
+                    _rs_metrics.append(f'<span style="color:#f87171;">CVaR95 {_rs_cvar:+.1f}%</span>')
+                if _rs_worst is not None:
+                    _w_col = "#ef4444" if _rs_worst < -20 else "#f59e0b"
+                    _rs_metrics.append(f'<span style="color:{_w_col};">Worst stress {_rs_worst:+.1f}%</span>')
+
+                _rs_sep = '<span style="color:#334155;"> · </span>'
+                _rs_pills_html = _rs_sep.join(_rs_metrics) if _rs_metrics else ""
+
+                # Top 4 stress scenarios — show account-level impact when cash is present
+                _rs_stress_html = ""
+                if _rs_stress:
+                    def _disp_impact(s):
+                        if _rs_cash_pct > 0 and "account_impact_pct" in s:
+                            return s["account_impact_pct"]
+                        return s["port_impact_pct"]
+                    _rows = "".join(
+                        f'<span style="color:#94a3b8;">{s["scenario"]}</span>'
+                        f'<span style="color:{"#ef4444" if _disp_impact(s) < -10 else "#f59e0b"};font-weight:600;"> {_disp_impact(s):+.1f}%</span>'
+                        f'<span style="color:#334155;"> · </span>'
+                        for s in _rs_stress[:4]
+                    ).rstrip('<span style="color:#334155;"> · </span>')
+                    _stress_label = "Account stress" if _rs_cash_pct > 0 else "Stress"
+                    _rs_stress_html = (
+                        f'<div style="font-size:10px;margin-top:4px;color:#64748b;">{_stress_label}: {_rows}</div>'
+                    )
+
+                # Sector bar
+                _rs_sector_html = ""
+                if _rs_sectors:
+                    _top_s = sorted(_rs_sectors.items(), key=lambda x: -x[1])[:4]
+                    _sec_parts = "".join(
+                        f'<span style="color:#94a3b8;">{s}</span><span style="color:#64748b;"> {w:.0f}% · </span>'
+                        for s, w in _top_s
+                    ).rstrip('<span style="color:#64748b;"> · </span>')
+                    _rs_sector_html = (
+                        f'<div style="font-size:10px;margin-top:3px;color:#64748b;">Sectors: {_sec_parts}</div>'
+                    )
+
+                # Risk flags
+                _rs_flags_html = ""
+                if _rs_flags:
+                    _rs_flags_html = "".join(
+                        f'<div style="font-size:10px;color:#f87171;margin-top:2px;">▸ {f}</div>'
+                        for f in _rs_flags
+                    )
+
+                st.markdown(
+                    f'<div style="background:#0d1117;border:1px solid #1e3a2e;border-radius:6px;'
+                    f'padding:10px 14px;margin:6px 0 10px 0;">'
+                    f'<div style="font-size:11px;color:#475569;font-weight:600;margin-bottom:4px;">RISK SNAPSHOT</div>'
+                    f'<div style="font-size:12px;">{_rs_pills_html}</div>'
+                    f'{_rs_stress_html}{_rs_sector_html}{_rs_flags_html}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
         # Section C — Portfolio Verdict card
         _pa = st.session_state.get("_portfolio_analysis")
@@ -1490,7 +1716,7 @@ def render():
             with _db_col1:
                 st.markdown(
                     '<span style="color:#64748b;font-size:11px;">⚔️ Adversarial debate on your portfolio — '
-                    'Sir Doomburger vs Sir Fukyerputs, judged by Judge Judy. '
+                    'Dr. Doomburger vs Sir Fukyerputs, judged by Judge Judy. '
                     '<span style="color:#475569;">3 LLM calls</span></span>'
                     '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run 🧠 Portfolio Analysis first — debate cites per-position actions &amp; stress tests by name</div>',
                     unsafe_allow_html=True,
@@ -1506,7 +1732,7 @@ def render():
             if _run_portfolio_debate:
                 _portfolio_debate = {}
                 st.session_state["_portfolio_debate"] = {}
-                with st.spinner("⚔️ Debate starting — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+                with st.spinner("⚔️ Debate starting — Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
                     try:
                         from services.claude_client import generate_adversarial_debate as _gen_pd
                         from utils.signal_block import build_macro_block as _build_pmb
@@ -2061,37 +2287,11 @@ def render():
                     unsafe_allow_html=True,
                 )
 
-            _fa_col1, _fa_col2 = st.columns([4, 2])
-            with _fa_col1:
-                _fa_use_claude, _fa_model = render_ai_tier_selector(
-                    key="factor_analysis_engine",
-                    label="Factor Engine",
-                    recommendation="🧠 Regard for daily checks · 👑 Highly Regarded for rebalancing decisions",
-                )
-            with _fa_col2:
-                _fa_run = st.button("🧠 Analyze Factors", key="run_factor_analysis", type="primary")
-
-            if _fa_run:
-                try:
-                    from services.portfolio_sizing import aggregate_factor_exposure as _agg_fa
-                    _fe_for_ai = _agg_fa(_sz_result.values())
-                except Exception:
-                    _fe_for_ai = {"factors": {}, "dominant": "", "warnings": []}
-                from services.claude_client import analyze_factor_exposure as _analyze_fe
-                with st.spinner("Analyzing factor exposure…"):
-                    _fa_result = _analyze_fe(
-                        factor_exposure=_fe_for_ai,
-                        regime_ctx=_rc_for_sz,
-                        open_trades=open_trades,
-                        use_claude=_fa_use_claude,
-                        model=_fa_model,
-                    )
-                if _fa_result and "_error" not in _fa_result:
-                    st.session_state["_factor_analysis"] = _fa_result
-                    st.session_state["_factor_analysis_ts"] = _dt.now()
-                    st.session_state["_factor_analysis_engine"] = st.session_state.get("factor_analysis_engine", "⚡ Freeloader Mode")
-                else:
-                    st.error(f"Factor analysis failed: {(_fa_result or {}).get('_error', 'Unknown error')}")
+            st.markdown(
+                '<div style="font-size:10px;color:#475569;margin-bottom:6px;">'
+                '💡 Factor analysis runs automatically with Portfolio Analysis.</div>',
+                unsafe_allow_html=True,
+            )
 
             _fa = st.session_state.get("_factor_analysis")
             _fa_engine = st.session_state.get("_factor_analysis_engine", "")
@@ -2473,121 +2673,8 @@ def render():
     with tab_risk:
         _render_risk_matrix(open_trades)
 
-    # --- Closed Trades ---
-    with tab_closed:
-        if not closed_trades:
-            st.info("No closed trades yet.")
-        else:
-            rows = []
-            for t in closed_trades:
-                entry = t["entry_price"]
-                exit_p = t["exit_price"] or 0
-                size = t["position_size"]
-                if t["direction"] == "Long":
-                    pnl = (exit_p - entry) * size
-                    pnl_pct = (exit_p / entry - 1) * 100 if entry > 0 else 0
-                else:
-                    pnl = (entry - exit_p) * size
-                    pnl_pct = (entry / exit_p - 1) * 100 if exit_p > 0 else 0
-                rows.append({
-                    "Ticker": t["ticker"],
-                    "Dir": t["direction"],
-                    "Entry": f"${entry:.2f}",
-                    "Exit": f"${exit_p:.2f}",
-                    "Shares": size,
-                    "P&L": f"${pnl:+,.2f}",
-                    "Return": f"{pnl_pct:+.1f}%",
-                    "Signal": t["signal_source"],
-                    "Regime": t.get("regime_at_entry", ""),
-                    "Entry Date": t["entry_date"],
-                    "Exit Date": t.get("exit_date", ""),
-                })
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
-            # Edit buttons for closed trades
-            for t in closed_trades:
-                tid = t["id"]
-                col_label, col_btn = st.columns([5, 1])
-                with col_label:
-                    st.markdown(
-                        f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{t["ticker"]}</span>'
-                        f' <span style="color:{COLORS["text_dim"]};font-size:12px;">'
-                        f'{t["direction"]} · {t["entry_date"]} → {t.get("exit_date", "")}</span>',
-                        unsafe_allow_html=True,
-                    )
-                with col_btn:
-                    if st.button("EDIT", key=f"cedit_{tid}"):
-                        st.session_state[f"cediting_{tid}"] = True
-                        st.rerun()
-
-                if st.session_state.get(f"cediting_{tid}"):
-                    with st.expander(f"EDITING {t['ticker']}", expanded=True):
-                        with st.form(key=f"ceditform_{tid}"):
-                            ec1, ec2 = st.columns(2)
-                            with ec1:
-                                ed_ticker = st.text_input("Ticker", value=t["ticker"], key=f"ced_tk_{tid}")
-                                ed_dir = st.selectbox("Direction", ["Long", "Short"],
-                                                      index=0 if t["direction"] == "Long" else 1,
-                                                      key=f"ced_dir_{tid}")
-                                sig_idx = _SIGNAL_SOURCES.index(t["signal_source"]) if t["signal_source"] in _SIGNAL_SOURCES else 0
-                                ed_signal = st.selectbox("Signal Source", _SIGNAL_SOURCES,
-                                                         index=sig_idx, key=f"ced_sig_{tid}")
-                                ed_notes = st.text_input("Notes", value=t.get("notes", ""), key=f"ced_nt_{tid}")
-                            with ec2:
-                                ed_entry_px = st.number_input("Entry Price", value=float(t["entry_price"]),
-                                                              min_value=0.0, step=0.01, key=f"ced_epx_{tid}")
-                                ed_exit_px = st.number_input("Exit Price", value=float(t["exit_price"] or 0),
-                                                             min_value=0.0, step=0.01, key=f"ced_xpx_{tid}")
-                                ed_size = st.number_input("Shares", value=int(t["position_size"]),
-                                                          min_value=1, step=1, key=f"ced_sz_{tid}")
-                                ed_entry_dt = st.date_input("Entry Date",
-                                                            value=date.fromisoformat(t["entry_date"]),
-                                                            key=f"ced_edt_{tid}")
-                                exit_dt_val = date.fromisoformat(t["exit_date"]) if t.get("exit_date") else date.today()
-                                ed_exit_dt = st.date_input("Exit Date", value=exit_dt_val,
-                                                           key=f"ced_xdt_{tid}")
-                            ed_thesis = st.text_area("Thesis", value=t.get("thesis", ""),
-                                                     height=80, key=f"ced_th_{tid}")
-                            ed_reopen = st.checkbox("Re-open this trade (clear exit data)",
-                                                    key=f"ced_reopen_{tid}")
-                            sb1, sb2 = st.columns(2)
-                            with sb1:
-                                save_clicked = st.form_submit_button("SAVE", type="primary")
-                            with sb2:
-                                cancel_clicked = st.form_submit_button("CANCEL")
-                        if save_clicked:
-                            updates = dict(
-                                ticker=ed_ticker.upper().strip(),
-                                direction=ed_dir,
-                                entry_price=ed_entry_px,
-                                exit_price=ed_exit_px,
-                                position_size=ed_size,
-                                entry_date=str(ed_entry_dt),
-                                exit_date=str(ed_exit_dt),
-                                signal_source=ed_signal,
-                                notes=ed_notes,
-                                thesis=ed_thesis,
-                            )
-                            if ed_reopen:
-                                updates.update(status="open", exit_price=None, exit_date=None)
-                            update_trade(tid, **updates)
-                            st.session_state.pop(f"cediting_{tid}", None)
-                            st.rerun()
-                        if cancel_clicked:
-                            st.session_state.pop(f"cediting_{tid}", None)
-                            st.rerun()
-
-            # Show thesis details for trades that have one
-            trades_with_thesis = [t for t in closed_trades if t.get("thesis")]
-            if trades_with_thesis:
-                with st.expander("Trade Theses"):
-                    for t in trades_with_thesis:
-                        st.markdown(
-                            f'**{t["ticker"]}** ({t["entry_date"]}) — {t["thesis"]}',
-                        )
-
-    # --- Analytics ---
-    with tab_analytics:
+    # --- Trade Record ---
+    with tab_record:
         if not closed_trades and not open_trades:
             st.info("Close some trades to see analytics.")
 
@@ -2659,13 +2746,14 @@ def render():
             </style>""",
             unsafe_allow_html=True,
         )
-        m0, m1, m2, m3, m4, m5 = st.columns(6)
+        m0, m1, m2 = st.columns(3)
         m0.metric("Portfolio Value (CAD)", f"C${_port_value_cad:,.2f}")
-        m1.metric("Total P&L (realized, CAD)", f"C${total_pnl:+,.2f}")
+        m1.metric("Realized P&L (CAD)", f"C${total_pnl:+,.2f}")
         m2.metric("Unrealized P&L (CAD)", f"C${unrealized_total:+,.2f}")
-        m3.metric("YTD P&L (incl. open, CAD)", f"C${ytd_pnl:+,.2f}")
+        m3, m4, m5 = st.columns(3)
+        m3.metric("YTD P&L (CAD)", f"C${ytd_pnl:+,.2f}")
         m4.metric("Win Rate", f"{win_rate:.0f}%")
-        m5.metric("Avg Win / Loss", f"C${avg_win:+,.2f} / C${avg_loss:+,.2f}")
+        m5.metric("Avg Win / Avg Loss", f"C${avg_win:,.2f} / C${avg_loss:,.2f}")
 
         # ── Unrealized P&L Since Entry (open positions history) ───────────────
         if open_trades:
@@ -2898,6 +2986,39 @@ def render():
             apply_dark_layout(fig2, title="P&L by Signal Source", yaxis_title="Total P&L ($)")
             st.plotly_chart(fig2, use_container_width=True)
 
+        # ── Closed Trades ─────────────────────────────────────────────────────
+        if closed_trades:
+            st.markdown(
+                f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'letter-spacing:0.08em;margin:20px 0 8px 0;">CLOSED TRADES</div>',
+                unsafe_allow_html=True,
+            )
+            _ct_rows = []
+            for t in closed_trades:
+                _entry = t["entry_price"]
+                _exit_p = t["exit_price"] or 0
+                _size = t["position_size"]
+                if t["direction"] == "Long":
+                    _pnl = (_exit_p - _entry) * _size
+                    _pnl_pct = (_exit_p / _entry - 1) * 100 if _entry > 0 else 0
+                else:
+                    _pnl = (_entry - _exit_p) * _size
+                    _pnl_pct = (_entry / _exit_p - 1) * 100 if _exit_p > 0 else 0
+                _ct_rows.append({
+                    "Ticker": t["ticker"],
+                    "Dir": t["direction"],
+                    "Entry": f"${_entry:.2f}",
+                    "Exit": f"${_exit_p:.2f}",
+                    "Shares": _size,
+                    "P&L": f"${_pnl:+,.2f}",
+                    "Return": f"{_pnl_pct:+.1f}%",
+                    "Signal": t["signal_source"],
+                    "Regime": t.get("regime_at_entry", ""),
+                    "Entry Date": t["entry_date"],
+                    "Exit Date": t.get("exit_date", ""),
+                })
+            st.dataframe(pd.DataFrame(_ct_rows), use_container_width=True, hide_index=True)
+
     # --- Performance ---
     with tab_perf:
         try:
@@ -2908,113 +3029,3 @@ def render():
             import traceback
             st.code(traceback.format_exc())
 
-    # --- AI Play Log ---
-    with tab_playlog:
-        from services.play_log import load_plays, clear_plays
-
-        _all_plays = load_plays()  # newest first
-
-        if not _all_plays:
-            st.info("No AI plays logged yet. Generate plays in Risk Regime, Discovery, or Stress Signals to start building history.")
-        else:
-            # Stats row
-            _features = sorted({p["feature"] for p in _all_plays})
-            _engines  = sorted({p["engine"]  for p in _all_plays})
-            _s1, _s2, _s3, _s4 = st.columns(4)
-            _s1.metric("Total Entries", len(_all_plays))
-            _s2.metric("Features Logged", len(_features))
-            _s3.metric("Engines Used", len(_engines))
-            from datetime import datetime as _dt
-            _last_ts = _all_plays[0].get("timestamp", "")
-            try:
-                _last_label = _dt.fromisoformat(_last_ts).strftime("%b %d %H:%M")
-            except Exception:
-                _last_label = _last_ts[:16]
-            _s4.metric("Last Entry", _last_label)
-
-            st.markdown("---")
-
-            # Filters
-            _fc1, _fc2 = st.columns(2)
-            with _fc1:
-                _feat_filter = st.selectbox("Filter by Feature", ["All"] + _features, key="playlog_feat_filter")
-            with _fc2:
-                _eng_filter = st.selectbox("Filter by Engine", ["All"] + _engines, key="playlog_eng_filter")
-
-            _filtered = [
-                p for p in _all_plays
-                if (_feat_filter == "All" or p["feature"] == _feat_filter)
-                and (_eng_filter == "All" or p["engine"] == _eng_filter)
-            ]
-
-            st.caption(f"Showing {len(_filtered)} of {len(_all_plays)} entries")
-
-            # Table
-            for _entry in _filtered:
-                _ts = _entry.get("timestamp", "")[:16].replace("T", " ")
-                _feat = _entry.get("feature", "")
-                _eng  = _entry.get("engine", "")
-                _eng_color = "#FF8811" if "👑" in _eng else ("#22c55e" if "🧠" in _eng else "#64748b")
-                _data = _entry.get("data", {})
-                _meta = _entry.get("meta", {})
-
-                # Summary line — varies by feature
-                if isinstance(_data, dict):
-                    _sectors = ", ".join(s.get("name","") for s in _data.get("sectors",[])[:3])
-                    _stocks  = ", ".join(s.get("ticker","") for s in _data.get("stocks",[])[:4])
-                    _rationale = (_data.get("rationale","") or "")[:120]
-                    _narration = (_data.get("narration","") or "")[:120]
-                    _briefing  = (_data.get("briefing","") or "")[:120]
-                    if _sectors:
-                        _summary = f"Sectors: {_sectors}" + (f" | Stocks: {_stocks}" if _stocks else "")
-                    elif _narration:
-                        _summary = _narration
-                    elif _briefing:
-                        _summary = _briefing
-                    elif "rate_path_probs" in _data:
-                        _dom = _data.get("dominant", {})
-                        _summary = f"Dominant: {_dom.get('scenario','')} {_dom.get('prob_pct',0):.0f}%"
-                    else:
-                        _summary = str(_data)[:100]
-                else:
-                    _summary = str(_data)[:100]
-
-                with st.expander(
-                    f"{_ts} &nbsp; **{_feat}** &nbsp; `{_eng}` — {_summary[:80]}{'…' if len(_summary) > 80 else ''}",
-                    expanded=False,
-                ):
-                    _col_a, _col_b = st.columns([1, 2])
-                    with _col_a:
-                        st.markdown(
-                            f'<div style="font-size:11px;color:#94a3b8;">Feature</div>'
-                            f'<div style="font-weight:700;">{_feat}</div>'
-                            f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Engine</div>'
-                            f'<div style="color:{_eng_color};font-weight:700;">{_eng}</div>'
-                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Regime</div>'
-                               f'<div>{_meta.get("regime","—")}</div>' if _meta.get("regime") else "")
-                            + (f'<div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fed Rate</div>'
-                               f'<div>{_meta.get("fed_funds_rate","—")}</div>' if _meta.get("fed_funds_rate") else ""),
-                            unsafe_allow_html=True,
-                        )
-                    with _col_b:
-                        if _rationale:
-                            st.markdown(f"**Rationale:** {_data.get('rationale','')}")
-                        if _sectors:
-                            st.markdown(f"**Sectors:** {_sectors}")
-                        if _stocks:
-                            st.markdown(f"**Stocks:** {_stocks}")
-                        _bonds = ", ".join(s.get("ticker","") for s in _data.get("bonds",[])[:3])
-                        if _bonds:
-                            st.markdown(f"**Bonds:** {_bonds}")
-                        if _narration:
-                            st.markdown(f"**Narration:** {_data.get('narration','')}")
-                        if _briefing:
-                            st.markdown(f"**Briefing:** {_data.get('briefing','')[:600]}")
-                    with st.expander("Raw JSON", expanded=False):
-                        st.json(_entry)
-
-            st.markdown("---")
-            if st.button("🗑 Clear Play Log", key="clear_playlog"):
-                clear_plays()
-                st.success("Play log cleared.")
-                st.rerun()

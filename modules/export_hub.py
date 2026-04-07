@@ -777,7 +777,7 @@ def _build_coengine_export() -> str:
         "AI models:    Groq (fast/cheap for synthesis) + Claude (deep reasoning for valuation/debate)",
         "Persistence:  GitHub Gist (survives Streamlit Cloud redeploys) + local JSON fallback",
         "Fingerprinting: MD5 hash of signal inputs → skip AI if inputs unchanged (signals_cache.py)",
-        "Adversarial:  3-agent debate: Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️",
+        "Adversarial:  3-agent debate: Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️",
         "              Verdict + confidence stored in _adversarial_debate, logged to data/debate_record.db",
         "",
         "---",

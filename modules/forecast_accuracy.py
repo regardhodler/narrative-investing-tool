@@ -721,8 +721,12 @@ def _render_history_tab():
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Log:</span> <span style="color:{COLORS["text"]}">{price_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Eval:</span> <span style="color:{COLORS["text"]}">{price_eval_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">{"Days Open" if is_atr_signal else "Eval Due"}:</span> <span style="color:{COLORS["text"]}">{days_open_str if is_atr_signal else eval_due_str}</span></div>'
-                    f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
-                    f'</div>'
+                    + (
+                        f'<div><span style="color:{COLORS["text_dim"]}">Return:</span> <span style="color:{COLORS["positive"] if (entry.get("return_pct") or 0) > 0 else COLORS["negative"] if (entry.get("return_pct") or 0) < 0 else COLORS["text_dim"]}">{f"{entry["return_pct"]:+.2f}%" if entry.get("return_pct") is not None else "—"}</span></div>'
+                        if (entry.get("ticker") or "").upper() == "SPY" else
+                        f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
+                    )
+                    + f'</div>'
                     + (
                         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px;">'
                         f'<div><span style="color:{COLORS["text_dim"]}">ATR@Log:</span> <span style="color:{COLORS["text"]}">{f"${entry["atr_at_log"]:.2f}" if entry.get("atr_at_log") else "—"}</span></div>'
