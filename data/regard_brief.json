@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-06T14:47:36",
+  "generated_at": "2026-04-07T15:07:33",
   "regime": {
-    "label": "True Neutral",
-    "score": -0.04,
+    "label": "Neutral — Leaning Risk-Off",
+    "score": -0.1,
     "quadrant": "Stagflation",
-    "signal_summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Market Breadth (RSP/SPY): z=+0.61 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.59 ()\n- VIX (Equity Volatility): z=-0.58 ()\n- Fear & Greed Index: 13/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.95 ()\n- VIX (Equity Volatility): z=-0.86 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.74 ()\n- Market Breadth (RSP/SPY): z=+0.73 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 11/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 55,
-    "label": "Neutral / Hold",
-    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
+    "score": 50,
+    "label": "Caution / Reduce",
+    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
@@ -23,7 +23,7 @@
     "top_prob": 0.665,
     "source": "yfinance"
   },
-  "current_events_digest": "The current macro regime of True Neutral with a Stagflation quadrant is being tested by recent events, particularly the collapse of Qatar's helium production, which has led to AirGas declaring force majeure on helium shipments. This development, combined with rising bond yields in Japan and concerns over oil-driven crises, suggests that inflation and supply chain disruptions may become more pronounced, contradicting the neutral regime. The Polymarket prediction of a 35% chance of inflation reaching over 5% in 2026 and Jamie Dimon's warning of a potential recession due to rising oil prices further support this narrative. Meanwhile, the USDJPY reaching 160 and potential BOJ intervention add to the uncertainty.",
+  "current_events_digest": "The current macro regime of Neutral - Leaning Risk-Off, with a score of -0.10 and situated in the Stagflation quadrant, is reinforced by recent events. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, alongside rising yields in Japan's bond market and concerns over jet fuel supply, all point towards increased uncertainty and potential disruptions in global supply chains. Furthermore, the Polymarket Prediction Markets indicate a high likelihood of Iran leadership change and Israel conducting military action in Greater Beirut, which could exacerbate geopolitical tensions and contribute to the stagflationary environment. The combination of these factors suggests that investors should be cautious and prepared for potential risks, particularly those related to energy and geopolitical instability.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
