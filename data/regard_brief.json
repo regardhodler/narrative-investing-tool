@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-07T15:07:33",
+  "generated_at": "2026-04-08T15:08:50",
   "regime": {
-    "label": "Neutral — Leaning Risk-Off",
-    "score": -0.1,
-    "quadrant": "Stagflation",
-    "signal_summary": "- Term Premium: z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.95 ()\n- VIX (Equity Volatility): z=-0.86 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.74 ()\n- Market Breadth (RSP/SPY): z=+0.73 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 11/100 — Extreme Fear (contrarian)"
+    "label": "True Neutral",
+    "score": 0.02,
+    "quadrant": "Transition",
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Market Breadth (RSP/SPY): z=+0.52 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Core Inflation (PCE): z=-0.40 ()\n- Initial Jobless Claims: z=+0.37 ()\n- Fear & Greed Index: 17/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 50,
-    "label": "Caution / Reduce",
-    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
+    "score": 61,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
     "name": "GENUINE_UNCERTAINTY",
@@ -23,7 +23,7 @@
     "top_prob": 0.665,
     "source": "yfinance"
   },
-  "current_events_digest": "The current macro regime of Neutral - Leaning Risk-Off, with a score of -0.10 and situated in the Stagflation quadrant, is reinforced by recent events. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, alongside rising yields in Japan's bond market and concerns over jet fuel supply, all point towards increased uncertainty and potential disruptions in global supply chains. Furthermore, the Polymarket Prediction Markets indicate a high likelihood of Iran leadership change and Israel conducting military action in Greater Beirut, which could exacerbate geopolitical tensions and contribute to the stagflationary environment. The combination of these factors suggests that investors should be cautious and prepared for potential risks, particularly those related to energy and geopolitical instability.",
+  "current_events_digest": "In the current True Neutral macro regime, recent events have introduced new risks and opportunities, particularly in the energy and technology sectors. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, combined with rising yields in Japan's bond market, suggests potential disruptions in global supply chains. Meanwhile, the Strait of Hormuz's status and its impact on oil prices and shipping lanes remains a key concern, with Polymarket prediction markets indicating a 17% chance of an Iran leadership change by May 31. These developments confirm the Geopolitical Oil Risks narrative, which has medium conviction, and highlight the need for close monitoring of the situation.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
