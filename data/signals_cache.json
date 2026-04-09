@@ -2,80 +2,94 @@
   "_regime_context": {
     "regime": "True Neutral",
     "score": 0.02,
-    "signal_summary": "- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Market Breadth (RSP/SPY): z=+0.52 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Core Inflation (PCE): z=-0.40 ()\n- Initial Jobless Claims: z=+0.37 ()\n- Fear & Greed Index: 17/100 \u2014 Extreme Fear (contrarian)",
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Commodity Trend (Oil + Copper): z=+0.72 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Market Breadth (RSP/SPY): z=+0.43 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Core Inflation (PCE): z=-0.40 ()\n- Fear & Greed Index: 14/100 \u2014 Extreme Fear (contrarian)",
     "quadrant": "Transition",
     "macro_score": 51,
-    "leading_score": 52,
-    "leading_divergence": 1,
+    "leading_score": 53,
+    "leading_divergence": 2,
     "leading_label": "Aligned",
-    "score_5d_trend": -5,
-    "leading_5d_trend": -2,
+    "score_5d_trend": 2,
+    "leading_5d_trend": -1,
     "pts_to_risk_on": 9,
     "pts_to_risk_off": 11,
-    "velocity_label": "\u2191 Strengthening (+4 pts vs 2026-04-07)"
+    "velocity_label": "\u2192 Stable (-2 pts vs 2026-04-08)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-08T15:08:31.259646"
+    "__datetime__": "2026-04-09T15:20:33.818355"
   },
   "_rp_plays_result": {
     "sectors": [
       {
-        "name": "Technology",
+        "name": "Energy",
         "conviction": 2
       },
       {
-        "name": "Healthcare",
+        "name": "Materials",
+        "conviction": 2
+      },
+      {
+        "name": "Technology",
+        "conviction": 1
+      },
+      {
+        "name": "Industrials",
         "conviction": 1
       },
       {
         "name": "Financials",
         "conviction": 1
-      },
-      {
-        "name": "Consumer Staples",
-        "conviction": 1
       }
     ],
     "stocks": [
       {
+        "ticker": "XOM",
+        "reason": "Oil prices are expected to rise due to the commodity trend signal",
+        "conviction": 2
+      },
+      {
+        "ticker": "FCX",
+        "reason": "Copper prices are expected to rise due to the commodity trend signal",
+        "conviction": 2
+      },
+      {
+        "ticker": "AAPL",
+        "reason": "Technology sector is expected to perform well due to the current risk regime",
+        "conviction": 1
+      },
+      {
+        "ticker": "UNP",
+        "reason": "Industrial sector is expected to perform well due to the current risk regime",
+        "conviction": 1
+      },
+      {
+        "ticker": "JPM",
+        "reason": "Financial sector is expected to perform well due to the current risk regime",
+        "conviction": 1
+      },
+      {
         "ticker": "MSFT",
-        "reason": "Microsoft's strong balance sheet and diversified revenue streams make it a stable pick in a neutral market regime",
-        "conviction": 2
-      },
-      {
-        "ticker": "JNJ",
-        "reason": "Johnson & Johnson's history of steady dividend payments and low volatility make it an attractive choice in a risk-neutral environment",
+        "reason": "Technology sector is expected to perform well due to the current risk regime",
         "conviction": 1
-      },
-      {
-        "ticker": "V",
-        "reason": "Visa's continued growth in digital payments and strong brand recognition make it a moderate buy in the current regime",
-        "conviction": 2
-      },
-      {
-        "ticker": "PG",
-        "reason": "Procter & Gamble's stable consumer staples business and dividend yield make it a buy in a neutral market",
-        "conviction": 1
-      },
-      {
-        "ticker": "MA",
-        "reason": "Mastercard's growth in emerging markets and increasing adoption of digital payments make it a moderate buy",
-        "conviction": 2
       }
     ],
     "bonds": [
       {
         "ticker": "TLT",
-        "reason": "The 20-year Treasury bond offers a relatively stable source of income in a neutral market regime",
+        "reason": "Long-term bonds are expected to perform well due to the current yield curve signal",
         "conviction": 1
       },
       {
         "ticker": "IEF",
-        "reason": "The 7-10 year Treasury bond provides a moderate yield and relatively low risk in the current environment",
+        "reason": "Intermediate-term bonds are expected to perform well due to the current yield curve signal",
+        "conviction": 1
+      },
+      {
+        "ticker": "SHY",
+        "reason": "Short-term bonds are expected to perform well due to the current risk regime",
         "conviction": 1
       }
     ],
-    "rationale": "The current True Neutral market risk regime, with an aggregate score of +0.02, suggests a balanced approach to investing. The imminent CPI release and upcoming FOMC meeting may introduce some volatility, but the overall signals point to a stable market. The Term Premium and Yield Curve signals indicate a moderate risk-on tone, while Consumer Sentiment and Core Inflation signals suggest some caution. As a result, a mix of stable sectors and stocks with strong balance sheets and diversified revenue streams is recommended, along with a moderate allocation to bonds with relatively low risk."
+    "rationale": "The current True Neutral regime with an aggregate score of +0.02 suggests a moderate risk-on environment, which favors sectors such as Energy and Materials. The commodity trend signal also supports this view, with oil and copper prices expected to rise. The yield curve signal suggests that long-term bonds may perform well, but the current risk regime suggests that short-term bonds may be a safer bet."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
@@ -104,62 +118,62 @@
       "source": "yfinance"
     }
   ],
-  "_current_events_digest": "In the current True Neutral macro regime, recent events have introduced new risks and opportunities, particularly in the energy and technology sectors. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, combined with rising yields in Japan's bond market, suggests potential disruptions in global supply chains. Meanwhile, the Strait of Hormuz's status and its impact on oil prices and shipping lanes remains a key concern, with Polymarket prediction markets indicating a 17% chance of an Iran leadership change by May 31. These developments confirm the Geopolitical Oil Risks narrative, which has medium conviction, and highlight the need for close monitoring of the situation.",
+  "_current_events_digest": "In the current True Neutral macro regime, recent events confirm the transitionary nature of the market, with a focus on supply chain disruptions and geopolitical tensions. The declaration of force majeure by AirGas on helium shipments due to Qatar production collapse, alongside rising Japanese bond yields and concerns over Taiwan's chip empire, highlight potential risks to the global economy. Furthermore, the Polymarket Prediction Markets indicate a low probability of the Fed's lower bound reaching 0% or lower before 2027, while inflation expectations remain relatively stable, with a 30% chance of inflation reaching more than 5% in 2026. The USDJPY exchange rate exceeding 160 and potential BOJ intervention also warrant attention.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-04-08T15:08:34.345526"
+    "__datetime__": "2026-04-09T15:20:36.779553"
   },
   "_current_events_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 61,
-    "label": "Neutral / Hold",
-    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup.",
+    "tactical_score": 63,
+    "label": "Favorable Entry",
+    "action_bias": "Conditions support initiating or adding to risk positions on pullbacks.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "21.6 (-3.6 5d)",
-        "Score": 0.232,
+        "Value": "20.7 (-3.8 5d)",
+        "Score": 0.302,
         "Direction": "Risk-On"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.938",
-        "Score": 0.413,
+        "Value": "0.920",
+        "Score": 0.533,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+2.6%/20d  -0.0%/50d",
-        "Score": 0.281,
-        "Direction": "Risk-On"
+        "Value": "+2.8%/20d  +0.3%/50d",
+        "Score": -0.022,
+        "Direction": "True Neutral"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +3.5%  20d -0.3%",
+        "Value": "5d +3.1%  20d +0.1%",
         "Score": 1.0,
         "Direction": "Risk-On"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "-0.70% 5d",
-        "Score": -0.698,
+        "Value": "-0.67% 5d",
+        "Score": -0.669,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:20.2 VIX:21.6 3M:23.1 6M:24.2",
-        "Score": 0.396,
+        "Value": "9D:18.3 VIX:20.7 3M:22.5 6M:24.5",
+        "Score": 0.614,
         "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "148.4 (+3.0 5d)",
+        "Value": "150.4 (+6.6 5d)",
         "Score": -1.0,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Fear & Greed (Contrarian)",
-        "Value": "17 \u2014 Extreme Fear (+9 7d)",
-        "Score": 0.66,
+        "Value": "14 \u2014 Extreme Fear (+2 7d)",
+        "Score": 0.72,
         "Direction": "Risk-On"
       },
       {
@@ -171,11 +185,11 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-08T15:08:31.259651"
+    "__datetime__": "2026-04-09T15:20:33.818360"
   },
-  "_tactical_analysis": "The combined signal picture suggests a Neutral/Hold stance with a score of 61/100, indicating a mixed short-term risk appetite. The VIX level and trend, VIX term structure, SPY vs 20d/50d MA, and SPY momentum signals all point to a Risk-On environment, with scores ranging from +0.232 to +1.000. However, the Breadth Trend and CBOE SKEW signals are flashing Risk-Off warnings, with scores of -0.698 and -1.000, respectively. This dichotomy suggests that while there are pockets of strength in the market, there are also underlying concerns that warrant caution.\n\nThe most dominant signals right now are the SPY Momentum (+1.000) and CBOE SKEW (-1.000) indicators. The SPY Momentum signal is particularly notable, with the 5-day rate of change (ROC) at +3.5% and the 20-day ROC at -0.3%, indicating a strong short-term uptrend. On the other hand, the CBOE SKEW index at 148.4, with a 5-day change of +3.0, suggests a high level of tail risk, which is a significant concern. The Fear & Greed index, currently at 17 (Extreme Fear), also supports a Risk-On view, with a score of +0.660. These conflicting signals highlight the need for a balanced approach.\n\nGiven this setup, a trader should maintain a Hold position, as the Neutral/Hold tactical regime suggests. With the SPY Momentum and Fear & Greed indicators supporting a Risk-On view, but the Breadth Trend and CBOE SKEW signals warning of potential risks, it's essential to avoid over-leveraging or adding to positions. Instead, traders should focus on managing existing exposures and maintaining a balanced portfolio. Reducing or hedging positions may be premature, as the overall signal picture is not overwhelmingly bearish. However, traders should remain vigilant and be prepared to adjust their strategies if the signal picture shifts, particularly if the CBOE SKEW index continues to rise or the Breadth Trend signal deteriorates further.",
+  "_tactical_analysis": "The combined signal picture suggests a favorable entry condition with a score of 63/100, indicating a slightly positive bias towards risk-on appetite in the short term. The macro backdrop is characterized as True Neutral/Transition, implying a lack of strong directional conviction. The tactical signals are mixed, but the overall tone is supportive of a cautious long entry. The VIX level and trend, at 20.7 (-3.8 5d), and the VIX term structure (VIX/VIX3M) at 0.920, both score positively (+0.302 and +0.533, respectively), indicating a risk-on tone.\n\nThe most dominant signals right now are the SPY Momentum (5d vs 20d ROC) with a score of +1.000, and the Fear & Greed index at 14, indicating Extreme Fear (+2 7d), which scores +0.720. These signals suggest strong short-term momentum and a contrarian buy signal, as extreme fear often precedes a market bounce. However, the CBOE SKEW (Tail Risk) at 150.4 (+6.6 5d) scores -1.000, indicating increased tail risk, which is a cautionary signal. The Breadth Trend (RSP/SPY 5d) at -0.67% also scores -0.669, suggesting some underlying weakness in market breadth.\n\nGiven this setup, a trader should consider adding to long positions or holding existing ones, as the favorable entry condition and strong momentum signals suggest a positive short-term outlook. However, the increased tail risk and weak breadth trend warrant caution, and it may be prudent to hedge some of this exposure or maintain a slightly reduced position size. Specifically, a trader could consider adding 20-30% to their long positions, while maintaining a hedge of 10-20% to mitigate potential downside risk. Close monitoring of the VIX and breadth trends will be essential to adjust this positioning as the market evolves.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-08T15:08:31.259652"
+    "__datetime__": "2026-04-09T15:20:33.818361"
   },
   "_data_quality": {
     "score": 70,
@@ -191,16 +205,16 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-08T15:08:31.259653"
+    "__datetime__": "2026-04-09T15:20:33.818361"
   },
   "_events_sentiment_score": {
     "sentiment": 0.2,
     "uncertainty": 0.6,
     "dominant_theme": "Geopolitical Risks",
     "risk_events": [
-      "Strait of Hormuz closure",
-      "Iran leadership change",
-      "Helium shortage"
+      "Helium shortage",
+      "Iran conflict escalation",
+      "BOJ intervention"
     ],
     "label": "Risk-On Tone",
     "source": "ai"
