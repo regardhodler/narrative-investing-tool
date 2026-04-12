@@ -1078,6 +1078,211 @@ def run_crash_simulation(crash_key: str) -> dict:
     }
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def _build_hmm_historical_inference() -> dict | None:
+    """Build HMM feature matrix and run inference over full history.
+
+    Returns dict with:
+        dates:       list of date strings
+        states:      list of state_label per date
+        state_idxs:  list of state_idx per date
+        probs:       list of probability vectors per date
+        labels:      state label list from brain
+        transmat:    transition matrix
+        ll_per_obs:  list of per-date log-likelihood
+        ll_baseline_mean/std: from brain
+        n_states:    int
+    Or None if HMM brain not available.
+    """
+    try:
+        from services.hmm_regime import load_hmm_brain, _build_feature_matrix
+        from hmmlearn.hmm import GaussianHMM
+
+        brain = load_hmm_brain()
+        if brain is None:
+            return None
+
+        n = brain.n_states
+        model = GaussianHMM(n_components=n, covariance_type="full")
+        model.n_features = len(brain.feature_names)
+        model.startprob_ = np.ones(n) / n
+        model.transmat_ = np.array(brain.transmat)
+        model.means_ = np.array(brain.means)
+        model.covars_ = np.array(brain.covars)
+
+        df = _build_feature_matrix(lookback_years=15)
+        for col in brain.feature_names:
+            if col not in df.columns:
+                df[col] = 0.0
+        df = df.dropna()
+        X = df[brain.feature_names].values.astype(np.float64)
+
+        posteriors = model.predict_proba(X)
+        state_idxs = np.argmax(posteriors, axis=1).tolist()
+
+        # Per-observation log-likelihood (windowed)
+        ll_total = float(model.score(X))
+        ll_per_obs_val = ll_total / len(X)
+
+        dates = [str(d)[:10] for d in df.index]
+
+        return {
+            "dates": dates,
+            "states": [brain.state_labels[i] for i in state_idxs],
+            "state_idxs": state_idxs,
+            "probs": [posteriors[i].tolist() for i in range(len(posteriors))],
+            "labels": brain.state_labels,
+            "transmat": brain.transmat,
+            "ll_per_obs": ll_per_obs_val,
+            "ll_baseline_mean": brain.ll_baseline_mean,
+            "ll_baseline_std": brain.ll_baseline_std,
+            "n_states": n,
+        }
+    except Exception:
+        return None
+
+
+def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
+    """Extract HMM state at a specific date from pre-computed inference.
+
+    Returns dict with state_label, confidence, entropy, persistence,
+    forecast_1m, forecast_2m, transition_risk_1m/2m, ll_zscore, probs.
+    """
+    if hmm_data is None:
+        return None
+
+    dates = hmm_data["dates"]
+    # Find closest date <= target
+    target = date
+    idx = None
+    for i, d in enumerate(dates):
+        if d <= target:
+            idx = i
+        elif d > target:
+            break
+    if idx is None:
+        return None
+
+    probs = hmm_data["probs"][idx]
+    state_idx = hmm_data["state_idxs"][idx]
+    state_label = hmm_data["states"][idx]
+    confidence = round(max(probs), 3)
+
+    # Persistence
+    persistence = 1
+    for j in range(idx - 1, -1, -1):
+        if hmm_data["state_idxs"][j] == state_idx:
+            persistence += 1
+        else:
+            break
+
+    # Entropy
+    from scipy.stats import entropy as _shannon_entropy
+    raw_entropy = float(_shannon_entropy(probs))
+    max_entropy = float(np.log(hmm_data["n_states"]))
+    normalized_entropy = round(raw_entropy / max_entropy, 4) if max_entropy > 0 else 0.0
+
+    # LL z-score
+    ll_zscore = round(
+        (hmm_data["ll_per_obs"] - hmm_data["ll_baseline_mean"]) /
+        max(hmm_data["ll_baseline_std"], 1e-6), 3
+    )
+
+    # Transition forecasts
+    transmat = np.array(hmm_data["transmat"])
+    prob_vec = np.array(probs)
+    forecast_1m = (prob_vec @ np.linalg.matrix_power(transmat, 21)).tolist()
+    forecast_2m = (prob_vec @ np.linalg.matrix_power(transmat, 42)).tolist()
+    transition_risk_1m = round(1.0 - forecast_1m[state_idx], 4)
+    transition_risk_2m = round(1.0 - forecast_2m[state_idx], 4)
+
+    return {
+        "state_label": state_label,
+        "state_idx": state_idx,
+        "confidence": confidence,
+        "persistence": persistence,
+        "entropy": normalized_entropy,
+        "ll_zscore": ll_zscore,
+        "probs": [round(p, 4) for p in probs],
+        "labels": hmm_data["labels"],
+        "forecast_1m": [round(p, 4) for p in forecast_1m],
+        "forecast_2m": [round(p, 4) for p in forecast_2m],
+        "transition_risk_1m": transition_risk_1m,
+        "transition_risk_2m": transition_risk_2m,
+    }
+
+
+def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None) -> dict:
+    """Build a full simulated QIR snapshot for a specific date.
+
+    Combines regime reconstruction + HMM + entry signal into a dict
+    matching the QIR dashboard's display fields.
+    """
+    regime = reconstruct_regime_at_date(date, data)
+    hmm = reconstruct_hmm_at_date(date, hmm_data)
+
+    # Domain scores (historical mode — only macro + tech available)
+    macro_score = regime.get("macro_score", 50)
+    # Technical = SPY trend mapped to 0-100
+    spy_trend_z = 0.0
+    for d in regime.get("signal_details", []):
+        if d["name"] == "spy_trend":
+            spy_trend_z = d["z_score"]
+    tech_score = round((spy_trend_z + 1) / 2 * 100, 1)
+
+    # Entry signal (use macro + tech, options/sentiment default to 50)
+    from modules.quick_run import _classify_entry_recommendation
+    try:
+        entry = _classify_entry_recommendation(
+            leading_score=int(macro_score),  # best proxy in historical mode
+            macro_score=int(macro_score),
+            tactical_score=int(tech_score),
+            options_score=50,  # unavailable historically
+            divergence_label="Aligned",
+            divergence_pts=0,
+        )
+    except Exception:
+        entry = {"verdict": "N/A"}
+
+    # Lean direction
+    if macro_score >= 55 and tech_score >= 50:
+        lean = "BULLISH"
+        lean_pct = round((macro_score + tech_score) / 2, 0)
+    elif macro_score <= 45 and tech_score <= 50:
+        lean = "BEARISH"
+        lean_pct = round(100 - (macro_score + tech_score) / 2, 0)
+    else:
+        lean = "BEARISH" if macro_score < 50 else "BULLISH"
+        lean_pct = 52
+
+    # Conviction score (simplified)
+    conviction = round(abs(macro_score - 50) * 2, 0)
+    conviction = min(100, max(0, conviction))
+
+    # Kelly multiplier from HMM
+    _KELLY_MULT = {"Bull": 1.10, "Neutral": 1.00, "Early Stress": 0.90,
+                   "Stress": 0.85, "Late Cycle": 0.75, "Crisis": 0.60}
+    hmm_mult = _KELLY_MULT.get(hmm["state_label"], 1.0) if hmm else 1.0
+
+    return {
+        "date": date,
+        "regime": regime,
+        "hmm": hmm,
+        "entry_signal": entry.get("verdict", "N/A"),
+        "lean": lean,
+        "lean_pct": lean_pct,
+        "macro_score": macro_score,
+        "tech_score": tech_score,
+        "opts_score": "N/A",
+        "sent_score": "N/A",
+        "event_score": "N/A",
+        "conviction": conviction,
+        "hmm_kelly_mult": hmm_mult,
+        "spy_price": regime.get("spy_price"),
+        "vix": regime.get("vix"),
+    }
+
+
 @st.cache_data(ttl=3600, show_spinner="Running all crash simulations...")
 def run_all_crash_simulations() -> list[dict]:
     """Run all crash simulations and return comparison data."""

@@ -901,6 +901,159 @@ def _render_crash_stress_test():
             unsafe_allow_html=True,
         )
 
+    # ── Simulated QIR Snapshots at Key Dates ─────────────────────────────────
+    from services.backtest_engine import build_qir_snapshot, _build_hmm_historical_inference, _load_all_historical_data as _load_hist
+
+    _hist_data = _load_hist()
+    _hmm_data = _build_hmm_historical_inference()
+
+    key_dates = []
+    if result.get("warning_date"):
+        key_dates.append(("WARNING", result["warning_date"]))
+    key_dates.append(("PEAK", result["peak_date"]))
+    key_dates.append(("TROUGH", result["trough_date"]))
+    if result.get("dip_buy_date"):
+        key_dates.append(("DIP BUY", result["dip_buy_date"]))
+
+    if key_dates:
+        st.markdown(
+            f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+            f'letter-spacing:0.1em;margin:16px 0 8px 0;">SIMULATED QIR SNAPSHOTS</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "What REGARD's QIR dashboard would have shown at each key moment. "
+            "Options, sentiment, and events scores are unavailable in historical mode."
+        )
+
+        for label, date in key_dates:
+            snap = build_qir_snapshot(date, _hist_data, _hmm_data)
+            _r = snap["regime"]
+            _h = snap["hmm"]
+
+            # Label color
+            _lc = {
+                "WARNING": COLORS["yellow"],
+                "PEAK": COLORS["bloomberg_orange"],
+                "TROUGH": COLORS["negative"],
+                "DIP BUY": COLORS["positive"],
+            }.get(label, COLORS["text"])
+
+            # Entry signal color
+            _ec = COLORS["positive"] if "BUY" in snap["entry_signal"] else (
+                COLORS["negative"] if "SELL" in snap["entry_signal"] else COLORS["yellow"]
+            )
+
+            # Lean color
+            _lean_c = COLORS["positive"] if snap["lean"] == "BULLISH" else COLORS["negative"]
+
+            # HMM block
+            _hmm_html = ""
+            if _h:
+                _hc = {"Bull": COLORS["positive"], "Neutral": COLORS["yellow"],
+                       "Early Stress": COLORS["orange"], "Stress": COLORS["negative"],
+                       "Late Cycle": COLORS["red"], "Crisis": "#FF0040"}.get(_h["state_label"], COLORS["text"])
+
+                # Forecast table
+                _fc_rows = ""
+                if _h.get("labels") and _h.get("forecast_1m") and _h.get("forecast_2m"):
+                    for i, lbl in enumerate(_h["labels"]):
+                        _now_p = _h["probs"][i] * 100 if i < len(_h["probs"]) else 0
+                        _1m_p = _h["forecast_1m"][i] * 100 if i < len(_h["forecast_1m"]) else 0
+                        _2m_p = _h["forecast_2m"][i] * 100 if i < len(_h["forecast_2m"]) else 0
+                        _bold = "font-weight:700;" if i == _h["state_idx"] else ""
+                        _fc_rows += (
+                            f'<div style="display:flex;justify-content:space-between;{_bold}font-size:9px;padding:1px 0;">'
+                            f'<span style="width:80px;">{lbl}</span>'
+                            f'<span style="width:50px;text-align:right;">{_now_p:.0f}%</span>'
+                            f'<span style="width:50px;text-align:right;">{_1m_p:.0f}%</span>'
+                            f'<span style="width:50px;text-align:right;">{_2m_p:.0f}%</span>'
+                            f'</div>'
+                        )
+
+                _hmm_html = (
+                    f'<div style="margin-top:6px;padding:8px;background:#0d1117;border:1px solid {COLORS["border"]};border-radius:4px;">'
+                    f'<div style="font-size:9px;color:{COLORS["text_dim"]};font-weight:700;letter-spacing:0.08em;margin-bottom:4px;">HMM BRAIN STATE</div>'
+                    f'<div style="font-size:14px;color:{_hc};font-weight:700;">{_h["state_label"]}</div>'
+                    f'<div style="font-size:10px;color:{COLORS["text_dim"]};margin-top:2px;">'
+                    f'Confidence: {_h["confidence"]:.1%} &nbsp;|&nbsp; '
+                    f'Persistence: {_h["persistence"]}d &nbsp;|&nbsp; '
+                    f'Entropy: {_h["entropy"]:.2f} &nbsp;|&nbsp; '
+                    f'LL z: {_h["ll_zscore"]:+.1f}</div>'
+                    f'<div style="margin-top:6px;font-size:9px;color:{COLORS["text_dim"]};">'
+                    f'<div style="display:flex;justify-content:space-between;font-weight:700;padding:1px 0;border-bottom:1px solid {COLORS["border"]};">'
+                    f'<span style="width:80px;">State</span>'
+                    f'<span style="width:50px;text-align:right;">Now</span>'
+                    f'<span style="width:50px;text-align:right;">1M</span>'
+                    f'<span style="width:50px;text-align:right;">2M</span></div>'
+                    f'{_fc_rows}</div>'
+                    f'<div style="font-size:9px;color:{COLORS["text_dim"]};margin-top:4px;">'
+                    f'Transition risk: 1M={_h["transition_risk_1m"]:.0%} | 2M={_h["transition_risk_2m"]:.0%} &nbsp;|&nbsp; '
+                    f'Kelly mult: {snap["hmm_kelly_mult"]:.2f}x</div>'
+                    f'</div>'
+                )
+
+            # Setup block
+            _setup_html = ""
+            if snap["lean"] == "BULLISH":
+                _setup_html = (
+                    f'<span style="background:#0a2010;color:{COLORS["positive"]};padding:2px 8px;border-radius:3px;'
+                    f'font-size:10px;font-weight:700;">BUY SETUP</span>'
+                )
+            else:
+                _setup_html = (
+                    f'<span style="background:#200a0a;color:{COLORS["negative"]};padding:2px 8px;border-radius:3px;'
+                    f'font-size:10px;font-weight:700;">SHORT SETUP</span>'
+                )
+
+            st.markdown(
+                f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                f'border-radius:6px;padding:12px;margin:6px 0;">'
+                # Header row
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                f'<div>'
+                f'<span style="color:{_lc};font-weight:700;font-size:12px;">{label}</span>'
+                f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{date}</span>'
+                f' &nbsp; {_setup_html}'
+                f'</div>'
+                f'<div style="font-size:11px;">'
+                f'<span style="color:{COLORS["text_dim"]};">SPY</span> '
+                f'<span style="color:{COLORS["text"]};font-weight:700;">${snap["spy_price"]:,.2f}</span>'
+                f' &nbsp;|&nbsp; '
+                f'<span style="color:{COLORS["text_dim"]};">VIX</span> '
+                f'<span style="color:{COLORS["text"]};font-weight:700;">{snap["vix"]:.1f}</span>'
+                f'</div></div>'
+                # Score row
+                f'<div style="display:flex;gap:12px;font-size:10px;margin-bottom:4px;">'
+                f'<div><span style="color:{COLORS["text_dim"]};">Regime:</span> '
+                f'<span style="color:{COLORS["text"]};font-weight:700;">{_r["regime_label"]}</span> '
+                f'<span style="color:{COLORS["text_dim"]};">({_r["regime_score"]:+.3f})</span></div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Macro:</span> '
+                f'<b>{snap["macro_score"]:.0f}</b>/100</div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Tech:</span> '
+                f'<b>{snap["tech_score"]:.0f}</b>/100</div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Opts:</span> '
+                f'<span style="color:{COLORS["text_dim"]};">N/A</span></div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Sent:</span> '
+                f'<span style="color:{COLORS["text_dim"]};">N/A</span></div>'
+                f'</div>'
+                # Entry + Lean
+                f'<div style="display:flex;gap:12px;font-size:10px;margin-bottom:2px;">'
+                f'<div><span style="color:{COLORS["text_dim"]};">Entry Signal:</span> '
+                f'<span style="color:{_ec};font-weight:700;">{snap["entry_signal"]}</span></div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Lean:</span> '
+                f'<span style="color:{_lean_c};font-weight:700;">{snap["lean"]} ({snap["lean_pct"]:.0f}%)</span></div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">Conviction:</span> '
+                f'<b>{snap["conviction"]:.0f}</b>/100</div>'
+                f'<div><span style="color:{COLORS["text_dim"]};">GEX:</span> '
+                f'<span style="color:{COLORS["text_dim"]};">N/A (no hist options)</span></div>'
+                f'</div>'
+                # HMM
+                f'{_hmm_html}'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
     # ── Disclaimer ────────────────────────────────────────────────────────────
     st.markdown(
         f'<div style="font-size:9px;color:{COLORS["text_dim"]};margin-top:12px;">'
