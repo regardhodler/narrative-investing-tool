@@ -1304,6 +1304,12 @@ def _render_qir_dashboard() -> None:
                             "FLIPPING" if _v_abs > 8 else
                             "DRIFTING" if _v_abs > 3 else "STABLE")
                 _v_bar_w = min(100, int(_v_abs * 3))  # scale for visual
+                _v_note = {
+                    "ACCELERATING": "Regime moving fast (>15pts/wk) — major shift underway, high conviction directional move",
+                    "FLIPPING": "Regime changing direction (8-15pts/wk) — transition zone, watch for regime flip confirmation",
+                    "DRIFTING": "Slow trend (3-8pts/wk) — gradual deterioration or improvement, stay alert",
+                    "STABLE": "No meaningful change (<3pts/wk) — current regime holding steady",
+                }[_v_label]
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:8px 12px;margin-bottom:8px;">'
@@ -1315,7 +1321,7 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
                     f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
                     f'</div>'
-                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">Macro score change over ~5 trading days</div>'
+                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_note}</div>'
                     f'</div>'
                 )
         except Exception:
@@ -1330,6 +1336,23 @@ def _render_qir_dashboard() -> None:
         _sig_items = [(k, v) for k, v in _raw_sigs.items()
                       if k not in _meta_keys and isinstance(v, (int, float))]
         if _sig_items:
+            # Historical pre-peak fire rate from crash stress test (8 crashes)
+            _SIG_PROB = {
+                "vix": ("75%", "Best early warning — fired before 6/8 peaks"),
+                "real_yield": ("62%", "Very early signal — avg 212d lead time"),
+                "fedfunds": ("50%", "Policy-driven crashes — 69d avg lead"),
+                "credit_ig": ("50%", "Credit stress detector — 64d avg lead"),
+                "credit_hy": ("50%", "Risk appetite gauge — 38d avg lead"),
+                "yield_curve": ("50%", "Recession predictor — 105d avg lead"),
+                "credit_impulse": ("50%", "Credit cycle turn — 166d avg lead"),
+                "umcsent": ("50%", "Slow burn detector — 145d avg lead"),
+                "spy_trend": ("38%", "Confirms, doesn't lead — 25d avg lead"),
+                "fci": ("25%", "Late confirmer — fires after peak"),
+                "yield_curve_3m": ("25%", "Late confirmer — fires after peak"),
+                "permit": ("25%", "Niche — only fired in GFC + EU Debt"),
+                "icsa": ("0%", "Lagging — always fires after peak"),
+                "indpro": ("0%", "Lagging — always fires after peak"),
+            }
             _sig_items.sort(key=lambda x: x[1])  # worst (most negative) first
             _sb_rows = ""
             for _sk, _sv in _sig_items:
@@ -1337,7 +1360,13 @@ def _render_qir_dashboard() -> None:
                 _s_color = "#22c55e" if _sv > 0.3 else ("#ef4444" if _sv < -0.3 else "#f59e0b")
                 _s_arrow = "▲" if _sv > 0.3 else ("▼" if _sv < -0.3 else "►")
                 _s_bar_w = min(100, int(abs(_sv) * 50))
-                _s_dir = "right" if _sv >= 0 else "left"
+                _prob_info = _SIG_PROB.get(_sk)
+                _prob_html = ""
+                if _prob_info and _sv < -0.3:
+                    _prob_html = (
+                        f'<div style="font-size:7px;color:#64748b;padding-left:16px;">'
+                        f'Pre-peak probability: {_prob_info[0]} · {_prob_info[1]}</div>'
+                    )
                 _sb_rows += (
                     f'<div style="display:flex;align-items:center;gap:6px;padding:2px 0;'
                     f'border-bottom:1px solid #1e293b22;">'
@@ -1350,6 +1379,7 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:{_s_color};width:{_s_bar_w}%;height:3px;border-radius:2px;'
                     f'margin-{"left:auto" if _sv >= 0 else "right:auto"};"></div></div>'
                     f'</div>'
+                    f'{_prob_html}'
                 )
             _signal_breakdown_block = (
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
@@ -1358,7 +1388,8 @@ def _render_qir_dashboard() -> None:
                 f'margin-bottom:6px;">SIGNAL HEALTH MONITOR</div>'
                 f'{_sb_rows}'
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
-                f'Z-scores sorted worst-first · Green &gt;0.3 · Red &lt;-0.3</div>'
+                f'Z-scores sorted worst-first · Green &gt;0.3 · Red &lt;-0.3 · '
+                f'Pre-peak % = how often this signal fired before the peak across 8 historical crashes</div>'
                 f'</div>'
             )
 
