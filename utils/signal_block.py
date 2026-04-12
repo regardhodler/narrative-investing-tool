@@ -207,10 +207,10 @@ def build_macro_block() -> str:
     else:
         lines.append("Upcoming macro events: unavailable (fed_forecaster import failed)")
 
-    # ── QIR macro debate verdict (Judge Judy ruling) ──────────────────────────
+    # ── QIR macro debate verdict (Commander Wincyl ruling) ──────────────────────────
     # Downstream debates (valuation, discovery) inherit this ruling so they don't
     # re-litigate macro — they argue their narrower question on top of it.
-    # CONFLICT DETECTION: if the math direction contradicts Judge Judy's ruling,
+    # CONFLICT DETECTION: if the math direction contradicts Commander Wincyl's ruling,
     # the math wins — the verdict is flagged as advisory only, not settled.
     _dbt = st.session_state.get("_adversarial_debate") or {}
     if _dbt.get("verdict"):
@@ -243,7 +243,7 @@ def build_macro_block() -> str:
         )
 
         lines.append(
-            f"Judge Judy macro verdict (QIR debate): {_dbt_verdict} "
+            f"Commander Wincyl macro verdict (QIR debate): {_dbt_verdict} "
             f"(confidence {_dbt_conf}/10)"
         )
         if _dbt_bull_best:
@@ -256,7 +256,7 @@ def build_macro_block() -> str:
         if _conflict:
             lines.append(
                 f"  ⚠ MATH vs AI CONFLICT: Composite score ({_math_score}/100) and leading "
-                f"divergence ({_lead_div:+d}) signal {_math_dir} but Judge Judy ruled {_judy_dir}. "
+                f"divergence ({_lead_div:+d}) signal {_math_dir} but Commander Wincyl ruled {_judy_dir}. "
                 f"THE MATH IS OBJECTIVE — treat debate verdict as advisory only. "
                 f"Do not treat as settled. Weight the numeric signals over the AI interpretation."
             )

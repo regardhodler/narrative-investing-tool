@@ -137,6 +137,9 @@ _SIGNAL_KEYS = [
     "_events_sentiment_score",
     "_canary_score",
     "_fear_composite",
+    # GEX Dealer Positioning (SPY/SPX structural gamma)
+    "_gex_dealer_context",
+    "_gex_dealer_context_ts",
 ]
 
 

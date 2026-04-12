@@ -12,3 +12,4 @@ httpx==0.28.1
 ib-insync==0.9.86
 pytrends==4.9.2
 feedparser>=6.0.0
+hmmlearn>=0.3.0

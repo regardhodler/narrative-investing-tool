@@ -13168,5 +13168,856 @@
     "meta": {
       "fed_funds_rate": 3.64
     }
+  },
+  {
+    "id": "20260404_192852_59",
+    "timestamp": "2026-04-04T19:28:52.598275",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 3
+        },
+        {
+          "name": "Financials",
+          "conviction": 2
+        },
+        {
+          "name": "Utilities",
+          "conviction": 2
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "XOM",
+          "reason": "Strong commodity trend z-score of +1.00 driven by oil supply shocks positions XOM as a leading stagflation hedge with explosive sector momentum.",
+          "conviction": 3
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Copper trend maxed at +1.00 z-score amid commodity supercycle supports FCX as a high-conviction materials play.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Yield curve steepness (+0.83 z) and term premium (+1.00 z) favor large banks like JPM in a hold-rate environment.",
+          "conviction": 2
+        },
+        {
+          "ticker": "KRE",
+          "reason": "Regional banks benefit from term premium expansion and breadth rotation away from mega-caps.",
+          "conviction": 2
+        },
+        {
+          "ticker": "NEE",
+          "reason": "Utilities provide defensive stability in stagflation with low growth and rising inflation pressures.",
+          "conviction": 2
+        },
+        {
+          "ticker": "PG",
+          "reason": "Consumer staples like PG offer resilience amid cratering sentiment (-0.82 z) and extreme fear (12/100).",
+          "conviction": 1
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "TIP",
+          "reason": "TIPS hedge sticky core inflation (-0.40 z but commodities maxed) ahead of CPI release.",
+          "conviction": 3
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-duration treasuries suit neutral tactical regime with hold-dominant Fed path (68%).",
+          "conviction": 2
+        },
+        {
+          "ticker": "IEF",
+          "reason": "Intermediate treasuries capture yield curve steepness without excessive duration risk.",
+          "conviction": 2
+        }
+      ],
+      "rationale": "True Neutral stagflation regime (+0.02 score) with maxed commodity trend and term premium signals amid extreme fear (12/100) favors contrarian real asset rotation into energy and materials. Financials and utilities gain from yield curve dynamics and defensiveness against weak sentiment/equity trends. Upcoming CPI and hold-rate path (68%) supports inflation-hedged and short-duration bonds over risk assets."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Neutral"
+    }
+  },
+  {
+    "id": "20260404_194351_12",
+    "timestamp": "2026-04-04T19:43:51.128550",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "HOLD_ALL",
+      "risk_score": 4,
+      "narrative": "Portfolio heavily tilted to inflation hedges and commodities aligns with +1.000 z-scores in Commodity Trend/Term Premium amid stagflation. Defensives provide balance in Extreme Fear (12/100), low beta (0.37) limits downside. Correlation spikes in UNH.TO pairs signal mild stress but no major de-risk needed.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits USDJPY>160 and risk-off stagflation tensions.",
+          "risk_factors": [
+            "Geopolitical escalation",
+            "Carry trade reversal"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper play matches +1.000 Commodity Trend z-score and shortages.",
+          "risk_factors": [
+            "Copper demand slowdown",
+            "China manufacturing weakness"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage hedge supports inflation protection in stagflation.",
+          "risk_factors": [
+            "High corr to PHYS.TO (0.83)",
+            "Gold downside in oil shocks"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis viable but lower regime fit (45); corr spike with UNH.TO.",
+          "risk_factors": [
+            "Correlation spike \u0394+0.42",
+            "Rate hold sensitivity"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive ok, but multiple corr spikes (SPY \u0394+0.49, FMKT \u0394+0.42, ZUT \u0394+0.32).",
+          "risk_factors": [
+            "Correlation spikes",
+            "Equity trend weakness"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge vs debt/inflation; largest position (20.9%) fits stagflation.",
+          "risk_factors": [
+            "High corr to PSLV.TO (0.83)",
+            "Opportunity cost in commodities"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Materials value play benefits from commodity strength; negative corrs provide diversification.",
+          "risk_factors": [
+            "Venezuela geopolitical",
+            "Global manuf -0.440"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities defensive strong in stagflation; largest non-metal at 16%.",
+          "risk_factors": [
+            "Corr spike with UNH.TO \u0394+0.32",
+            "Rate path hikes"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Monitor CPI Apr 10 for inflation pivot",
+        "Trim UNH.TO on corr spikes",
+        "Hold commodity core amid +9pt momentum"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "HOLD_ALL"
+    }
+  },
+  {
+    "id": "20260405_114105_61",
+    "timestamp": "2026-04-05T11:41:05.616071",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "DEFENSIVE",
+      "risk_score": 7,
+      "narrative": "Portfolio is defensively skewed with gold, silver, and utilities dominating, appropriate for stagflation. However, FCX and FMKT face direct headwinds from breadth collapse and deregulation thesis stalling in risk-off. CPI in 5 days is the immediate binary risk.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind risk elevated with USDJPY >160 and BOJ intervention watch. Regime supports this hedge.",
+          "risk_factors": [
+            "BOJ surprise reversal",
+            "correlation spike with risk-off unwind"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Commodity trend z+1.0 supports copper thesis but canary breadth 7.1% and stagflation demand destruction offset. Hormuz closure adds supply complexity.",
+          "risk_factors": [
+            "demand destruction in stagflation",
+            "breadth collapse 7.1%"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage thesis intact; inflation z-scores positive and supply shock narrative active. Dual entries create concentration \u2014 monitor.",
+          "risk_factors": [
+            "high correlation with PHYS.TO 0.83",
+            "silver liquidity in flash crash"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis is a risk-on narrative; stagflation quadrant, Fear 12/100, and correlation spike with UNH.TO undermine the thesis. Two entries amplify exposure.",
+          "risk_factors": [
+            "risk-on thesis in risk-off regime",
+            "correlation spike \u0394+0.42 with UNH.TO"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive rationale is sound but correlation spike with SPY \u0394+0.49 and FMKT \u0394+0.42 reduces diversification benefit materially.",
+          "risk_factors": [
+            "correlation spike losing defensive character",
+            "two entries at different cost basis"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Largest portfolio position; gold hedge is best-fit for stagflation, $39T debt, and supply shock inflation. Three entries create 20.9% concentration risk.",
+          "risk_factors": [
+            "historical gold weakness in oil shocks",
+            "20.9% concentration \u2014 largest single position"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Iran tension and oil >$100 directly support energy value play. Negative correlation with PHYS.TO and FCX provides rare diversification benefit \u2014 preserve.",
+          "risk_factors": [
+            "Venezuela geopolitical risk",
+            "oil demand destruction if recession deepens"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Utilities at 16% weight are appropriate defensive anchor in stagflation. Correlation spike with UNH.TO \u0394+0.32 warrants monitoring but thesis intact.",
+          "risk_factors": [
+            "rate sensitivity if hike odds rise post-CPI",
+            "correlation creep with UNH.TO"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "REDUCE FMKT: deregulation is risk-on thesis misaligned with stagflation regime and correlation spike \u2014 trim both entries before CPI in 5 days",
+        "REDUCE FCX: partial trim to manage stagflation demand destruction risk; retain small position for commodity trend z+1.0 and Hormuz supply shock optionality",
+        "MONITOR PHYS.TO concentration at 20.9% \u2014 do not add; gold historically weakens in acute oil shocks per current events briefing"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "DEFENSIVE"
+    }
+  },
+  {
+    "id": "20260405_131034_99",
+    "timestamp": "2026-04-05T13:10:34.993343",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "DEFENSIVE",
+      "risk_score": 5,
+      "narrative": "Portfolio is defensively positioned with heavy PM and utilities exposure suiting stagflation and risk-off regime. Correlation spikes in UNH.TO pairs signal stress; imminent CPI and Iran risks warrant caution. Low beta mitigates drawdowns but concentration in PHYS.TO limits diversification.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits risk-off and stagflation. Low rate sensitivity.",
+          "risk_factors": [
+            "Geopolitical escalation",
+            "Carry trade reversal"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Copper benefits from supply shocks but equity canary weakness pressures materials.",
+          "risk_factors": [
+            "Commodity volatility",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Silver shortage play aligns with inflation hedge in stagflation.",
+          "risk_factors": [
+            "High corr to PHYS.TO",
+            "Gold-silver ratio"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis vulnerable in risk-off; corr spike with UNH.TO indicates stress.",
+          "risk_factors": [
+            "Correlation spike",
+            "Regime mismatch"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive but multiple corr spikes (SPY, FMKT, ZUT) flag de-risking need.",
+          "risk_factors": [
+            "Corr spikes",
+            "Breadth weakness"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Gold hedge excels in debt/inflation stagflation; largest position but regime fit.",
+          "risk_factors": [
+            "Concentration 20.9%",
+            "PM rotation"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Value play with negative corrs to PMs aids diversification in risk-off.",
+          "risk_factors": [
+            "Venezuela geopolitics",
+            "Oil shock divergence"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities suit stagflation; corr spike with UNH.TO but hold weight justifies.",
+          "risk_factors": [
+            "Corr spike",
+            "Rate hold sensitivity"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce FMKT and UNH.TO due to corr spikes",
+        "Monitor CPI Apr 10 for rate path shift",
+        "Trim PHYS.TO if exceeds 25% weight"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "DEFENSIVE"
+    }
+  },
+  {
+    "id": "20260405_183539_69",
+    "timestamp": "2026-04-05T18:35:39.691078",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 6,
+      "narrative": "Portfolio's metals and defensives align with stagflation commodities strength and risk-off fear, but high PHYS.TO concentration (20.9%) and PSLV corr (0.83) limit diversification. UNH.TO correlation spikes signal stress; imminent CPI heightens volatility amid Hormuz tensions.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Yen carry unwind hedge fits USDJPY>160 and BOJ intervention risks in risk-off regime.",
+          "risk_factors": [
+            "Carry persistence",
+            "FX intervention"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper benefits from +1.0 commodity trend and materials favoritism in stagflation.",
+          "risk_factors": [
+            "Supply disruptions",
+            "China demand"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Silver hedge ok in inflation but high 0.83 corr with PHYS.TO reduces diversification.",
+          "risk_factors": [
+            "Metals correlation",
+            "Opportunity cost"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Deregulation thesis neutral; FMKT-UNH.TO corr spike \u0394+0.42 flags stress.",
+          "risk_factors": [
+            "Corr spike",
+            "Regime uncertainty"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive fits stagflation, but multiple corr spikes (SPY \u0394+0.49, FMKT \u0394+0.42, ZUT \u0394+0.32) indicate rising stress.",
+          "risk_factors": [
+            "Correlation spikes",
+            "Healthcare vol"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Gold inflation/debt hedge strong, but 20.9% weight and 0.83 corr with PSLV.TO demand trimming.",
+          "risk_factors": [
+            "Concentration risk",
+            "PSLV correlation"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Value/energy play benefits from Hormuz tensions and negative corrs provide diversification.",
+          "risk_factors": [
+            "Geopolitical escalation",
+            "Venezuela policy"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities suit stagflation; minor corr spike with UNH.TO but low weight.",
+          "risk_factors": [
+            "Rate hold sensitivity",
+            "Corr with UNH"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Trim PHYS.TO/PSLV.TO to cut correlation risk",
+        "Reduce UNH.TO/FMKT amid corr spikes",
+        "Hold defensives; monitor CPI (Apr 10)"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260407_193815_82",
+    "timestamp": "2026-04-07T19:38:15.822849",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 6,
+      "narrative": "Defensive portfolio aligns with caution regime and extreme fear, supported by positive commodity/term premium signals. Correlation spikes in metals/utilities and imminent CPI flag de-risking. Low beta but concentration in PHYS.TO (20.9%) adds vulnerability.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Yen carry hedge fits risk-off tone; regime fit low at 37.",
+          "risk_factors": [
+            "Correlation spike with PSLV",
+            "Geopolitical uncertainty"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper benefits from +0.62 commodity trend and energy shocks.",
+          "risk_factors": [
+            "Equity trend weakness",
+            "Stagflation risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Silver hedge ok in neutral; high corr with PHYS (0.82) and spikes to ZUT/XTLH.",
+          "risk_factors": [
+            "Correlation spikes",
+            "Limited diversification"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "misaligned",
+          "rationale": "Deregulation thesis weak in caution; negative corrs provide diversification.",
+          "risk_factors": [
+            "Regime fit 47",
+            "Rate hold sensitivity"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive trending high; fits extreme fear.",
+          "risk_factors": [
+            "Consumer sentiment -0.82",
+            "Credit exposure"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Gold hedge for debt/inflation; largest position 20.9%, corr spikes with ZUT.",
+          "risk_factors": [
+            "High concentration",
+            "Correlation spike with PSLV/ZUT"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Value/energy play fits commodities and shocks; negative corrs beneficial.",
+          "risk_factors": [
+            "Venezuela exposure",
+            "Oil shock dependency"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities AI-favored but large 15.9% with metal corr spikes.",
+          "risk_factors": [
+            "Correlation spikes with PSLV/PHYS",
+            "Size concentration"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce ZUT.TO exposure",
+        "Trim PHYS.TO/PSLV.TO to cut correlations",
+        "Monitor CPI tomorrow"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
+  },
+  {
+    "id": "20260409_192446_57",
+    "timestamp": "2026-04-09T19:24:46.576227",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Financials",
+          "conviction": 3
+        },
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Industrials",
+          "conviction": 2
+        },
+        {
+          "name": "Materials",
+          "conviction": 2
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "JPM",
+          "reason": "JPMorgan benefits from steepening yield curve and elevated term premium in a neutral leaning risk-on regime.",
+          "conviction": 3
+        },
+        {
+          "ticker": "GS",
+          "reason": "Goldman Sachs positioned for gains from corporate capex strength and favorable rate expectations.",
+          "conviction": 2
+        },
+        {
+          "ticker": "XOM",
+          "reason": "ExxonMobil gains from positive commodity trends in oil and copper amid reflationary signals.",
+          "conviction": 3
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Caterpillar supported by corporate capex vs liquidity and leading economic index positives.",
+          "conviction": 2
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Freeport-McMoRan captures upside from commodity trend strength in copper.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "HYG",
+          "reason": "High-yield spreads tight in low stress environment with Fed hold dominance.",
+          "conviction": 2
+        },
+        {
+          "ticker": "LQD",
+          "reason": "Investment-grade credit offers carry amid contained spreads and risk-on lean.",
+          "conviction": 2
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term treasuries provide safety amid imminent CPI volatility.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "The Neutral Leaning Risk-On regime (+0.10 score) amid Extreme Fear (16/100, contrarian buy) features dominant positives in term premium (+1.00), yield curve (+0.75), commodities (+0.59), and capex (+0.60), favoring cyclicals like financials and energy over defensives. Fed hold at 66.6% probability supports credit bonds with tight spreads and low system stress. Tactical favorable entry (62/100) and diverging trends signal upside potential despite consumer sentiment weakness."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-On"
+    }
+  },
+  {
+    "id": "20260410_175304_38",
+    "timestamp": "2026-04-10T17:53:04.384815",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Financials",
+          "conviction": 3
+        },
+        {
+          "name": "Materials",
+          "conviction": 3
+        },
+        {
+          "name": "Industrials",
+          "conviction": 2
+        },
+        {
+          "name": "Energy",
+          "conviction": 2
+        },
+        {
+          "name": "Technology",
+          "conviction": 2
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "JPM",
+          "reason": "Banks gain from steepening 3M-10Y yield curve (z=+0.75) and elevated term premium (z=+1.00) in hold-dominant Fed path.",
+          "conviction": 3
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Corporate capex strength (z=+0.60) and rising LEI (z=+0.36) support industrials amid favorable tactical entry.",
+          "conviction": 2
+        },
+        {
+          "ticker": "UNP",
+          "reason": "Infrastructure-linked industrials benefit from leading economic positives and high-conviction rising macro trends (+4 pts).",
+          "conviction": 2
+        },
+        {
+          "ticker": "NVDA",
+          "reason": "Whale accumulation in AI semis aligns with mega-cap tech resilience despite extreme fear contrarian setup.",
+          "conviction": 2
+        },
+        {
+          "ticker": "XOM",
+          "reason": "Hormuz tensions and Iran-driven energy inflation favor oil majors in reflationary quadrant.",
+          "conviction": 2
+        },
+        {
+          "ticker": "FCX",
+          "reason": "Materials lead sector momentum (XLB +6.1% 4W) fitting CPI surge and commodity reflation.",
+          "conviction": 3
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "HYG",
+          "reason": "Tight HY spreads and low system stress in risk-on leaning regime support high-yield credit.",
+          "conviction": 3
+        },
+        {
+          "ticker": "LQD",
+          "reason": "Investment-grade corporates thrive on capex positives and stable Fed hold path.",
+          "conviction": 2
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term treasuries offer safety amid imminent CPI and elevated events uncertainty.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "The Neutral leaning Risk-On regime (+0.08 score) features high-conviction rising composite and leading trends (+4 pts both), crushing consumer sentiment noise (-0.82 z) for a settled bull verdict with favorable entry (63/100). Extreme Fear (16/100) signals capitulation buy into term premium (+1.00 z), steepening curve (+0.75 z), and capex/LEI positives favoring cyclicals, financials, and reflation trades. Geopolitical inflation shocks amplify commodities/energy while whale flows bolster AI tech, with credit bonds aided by low stress and Fed hold dominance (67%)."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-On"
+    }
+  },
+  {
+    "id": "20260411_173252_85",
+    "timestamp": "2026-04-11T17:32:52.858064",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 5,
+      "narrative": "Defensive portfolio with gold/silver hedges suits moderate stress but misaligns slightly with risk-on momentum. Correlation spikes in PSLV.TO, XTLH.TO, ZUT.TO signal clustering risk. Low beta/VaR supports core holds amid bullish macro conviction.",
+      "positions": [
+        {
+          "ticker": "XTLH.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "Risk-off yen carry hedge unfit for risk-on regime. Correlation spikes with PSLV.TO (+0.40\u0394), ZUT.TO.",
+          "risk_factors": [
+            "Corr spike",
+            "Regime mismatch"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper play fits industrials/energy cross-signals and whale accumulation.",
+          "risk_factors": [
+            "Commodity vol",
+            "Iran oil risk"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Silver hedge ok for inflation but corr spikes with ZUT.TO (+0.40\u0394), XTLH.TO (+0.35\u0394), PHYS.TO (0.82).",
+          "risk_factors": [
+            "Corr spike",
+            "Concentration"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Deregulation thesis aligns with financials favored sectors.",
+          "risk_factors": [
+            "Event uncertainty",
+            "Neg corr diversification"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Healthcare defensive fits favored AI sectors and neg corrs aid diversification.",
+          "risk_factors": [
+            "Sector rotation",
+            "Neg corr benefit"
+          ]
+        },
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "Debt/inflation hedge viable but 20.7% concentration and high corr with PSLV.TO (0.82).",
+          "risk_factors": [
+            "Concentration 20.7%",
+            "High corr PSLV"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Value play with negative corrs to PHYS.TO, FCX provides diversification.",
+          "risk_factors": [
+            "Geopolitical (Venezuela)",
+            "Neg corr benefit"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "REDUCE",
+          "alignment": "aligned",
+          "rationale": "Defensive utilities fit transition but corr spike with PSLV.TO (+0.40\u0394).",
+          "risk_factors": [
+            "Corr spike",
+            "SPY corr rise"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Reduce PSLV.TO, XTLH.TO, ZUT.TO on corr spikes",
+        "Trim PHYS.TO concentration below 15%",
+        "Monitor Iran ceasefire for commodity impact"
+      ]
+    },
+    "meta": {
+      "n_positions": 14,
+      "verdict": "REDUCE_RISK"
+    }
   }
 ]

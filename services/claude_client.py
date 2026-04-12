@@ -2638,17 +2638,17 @@ def generate_adversarial_debate(
     Agents:
       🐻 Dr. Doomburger — bear case maximalist
       🐂 Sir Fukyerputs — bull case maximalist
-      ⚖️  Judge Judy — neutral synthesis + asymmetric risk verdict
+      ⚖️  Commander Wincyl — neutral synthesis + asymmetric risk verdict
 
     Returns dict with keys:
       bear_argument: str (Dr. Doomburger's full argument, 3-5 sentences)
       bull_argument: str (Sir Fukyerputs's full argument, 3-5 sentences)
-      bear_strongest: str (Judge Judy's pick: strongest bear point)
-      bull_strongest: str (Judge Judy's pick: strongest bull point)
-      verdict: "BULL WINS" | "BEAR WINS" | "CONTESTED" (Judge Judy's ruling)
+      bear_strongest: str (Commander Wincyl's pick: strongest bear point)
+      bull_strongest: str (Commander Wincyl's pick: strongest bull point)
+      verdict: "BULL WINS" | "BEAR WINS" | "CONTESTED" (Commander Wincyl's ruling)
       asymmetry: str (which side has better risk/reward asymmetry and why)
       key_disagreement: str (the single most important point of contention)
-      confidence: int (1-10, Judge Judy's confidence in verdict, low = truly contested)
+      confidence: int (1-10, Commander Wincyl's confidence in verdict, low = truly contested)
     contested_bias: str (optional tie-break lean when verdict is CONTESTED)
     contested_bias_reason: str (short rationale for the lean)
     """
@@ -2678,7 +2678,7 @@ def generate_adversarial_debate(
         _raw_blk = ""
     _raw_header = f"RAW NUMERIC GROUND TRUTH (cite these numbers — do not invent others):\n{_raw_blk}\n\n" if _raw_blk else ""
 
-    # ── Judge Judy's court record — informs her of past accuracy ─────────────
+    # ── Commander Wincyl's court record — informs her of past accuracy ─────────────
     try:
         from utils.debate_record import get_record_summary as _get_record
         _court_record = _get_record()
@@ -2753,15 +2753,15 @@ def generate_adversarial_debate(
         except Exception:
             return ""
 
-    # Agents argue at 0.5 (creative), Judge Judy rules at 0.1 (decisive)
+    # Agents argue at 0.5 (creative), Commander Wincyl rules at 0.1 (decisive)
     bear_arg = _call_llm(bear_prompt, 400, temperature=0.5)
     bull_arg = _call_llm(bull_prompt, 400, temperature=0.5)
 
-    # ── Judge Judy ────────────────────────────────────────────────────────────
+    # ── Commander Wincyl ────────────────────────────────────────────────────────────
     _record_line = f"YOUR COURT RECORD: {_court_record}\n" if _court_record else ""
     _topic_verdict_line = f"DEBATE QUESTION BEFORE THE COURT: {topic}\n\n" if topic else ""
     mod_prompt = (
-        "You are Judge Judy, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
+        "You are Commander Wincyl, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
         "You have heard the bear case from Dr. Doomburger and the bull case from Sir Fukyerputs. "
         "Your job is to deliver a structured verdict. Be blunt, be decisive, take no prisoners. "
         "Your confidence score should reflect how one-sided the evidence is — high = decisive, low = genuinely contested.\n\n"
@@ -2778,7 +2778,7 @@ def generate_adversarial_debate(
         '"confidence": <1-10 integer>}'
     )
 
-    mod_raw = _call_llm(mod_prompt, 500, temperature=0.1)  # Judge Judy rules decisively
+    mod_raw = _call_llm(mod_prompt, 500, temperature=0.1)  # Commander Wincyl rules decisively
 
     import json as _json, re as _re
     try:
@@ -2790,7 +2790,7 @@ def generate_adversarial_debate(
             "bear_strongest": "Parse error",
             "bull_strongest": "Parse error",
             "verdict": "CONTESTED",
-            "asymmetry": "Judge Judy unavailable",
+            "asymmetry": "Commander Wincyl unavailable",
             "key_disagreement": "",
             "confidence": 5,
         }

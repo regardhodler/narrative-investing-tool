@@ -1,0 +1,21 @@
+[
+  {
+    "date": "2026-04-11",
+    "lean": "BEARISH",
+    "lean_pct": 51,
+    "domain_avg": 49.6,
+    "macro_score": 35,
+    "tech_score": 66,
+    "opts_score": 64,
+    "sent_score": 33,
+    "event_score": 50,
+    "regime": "Neutral \u2014 Leaning Risk-On",
+    "hmm_state": "Bull",
+    "hmm_entropy": 0.0,
+    "gex_composite": 0.0,
+    "conviction_score": null,
+    "pattern": "GENUINE_UNCERTAINTY",
+    "fwd_5d_spy_return": null,
+    "fwd_20d_spy_return": null
+  }
+]

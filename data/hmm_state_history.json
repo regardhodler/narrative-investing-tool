@@ -1,0 +1,117 @@
+[
+  {
+    "date": "2026-04-08",
+    "state_idx": 3,
+    "state_label": "Crash",
+    "state_probabilities": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ],
+    "confidence": 1.0,
+    "persistence": 343
+  },
+  {
+    "date": "2026-04-09",
+    "state_idx": 2,
+    "state_label": "Bull",
+    "state_probabilities": [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "confidence": 1.0,
+    "persistence": 619
+  },
+  {
+    "date": "2026-04-10",
+    "state_idx": 2,
+    "state_label": "Bull",
+    "state_probabilities": [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "confidence": 1.0,
+    "persistence": 620
+  },
+  {
+    "date": "2026-04-11",
+    "state_idx": 1,
+    "state_label": "Bull",
+    "state_probabilities": [
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "confidence": 1.0,
+    "persistence": 392,
+    "log_likelihood": -5.407295,
+    "ll_zscore": -1.058,
+    "entropy": 0.0,
+    "transition_risk_1m": 0.0574,
+    "transition_risk_2m": 0.1108,
+    "forecast_1m": [
+      0.0003,
+      0.9426,
+      0.0286,
+      0.0,
+      0.0285,
+      0.0
+    ],
+    "forecast_2m": [
+      0.0013,
+      0.8892,
+      0.0549,
+      0.0,
+      0.0547,
+      0.0
+    ]
+  },
+  {
+    "date": "2026-04-12",
+    "state_idx": 1,
+    "state_label": "Bull",
+    "state_probabilities": [
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "confidence": 1.0,
+    "persistence": 392,
+    "log_likelihood": -5.407295,
+    "ll_zscore": -1.058,
+    "entropy": 0.0,
+    "transition_risk_1m": 0.0574,
+    "transition_risk_2m": 0.1108,
+    "forecast_1m": [
+      0.0003,
+      0.9426,
+      0.0286,
+      0.0,
+      0.0285,
+      0.0
+    ],
+    "forecast_2m": [
+      0.0013,
+      0.8892,
+      0.0549,
+      0.0,
+      0.0547,
+      0.0
+    ]
+  }
+]

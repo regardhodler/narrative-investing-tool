@@ -598,3 +598,346 @@ def simulate_add(
         "corr_to_portfolio":   corr_avg,
         "warnings":            warnings,
     }
+
+
+# ── Dynamic Kelly Criterion ───────────────────────────────────────────────────
+
+_REGIME_B_IMPLIED: dict[str, float] = {
+    "Goldilocks":  1.8,
+    "Reflation":   1.4,
+    "Stagflation": 0.8,
+    "Deflation":   0.6,
+}
+
+
+def get_trade_kelly_stats() -> dict:
+    """Read trade_journal.json and compute win/loss stats for Kelly calculation.
+
+    Returns:
+        n_closed    — number of closed trades with both entry and exit price
+        n_wins      — count of profitable closed trades
+        n_losses    — count of losing closed trades
+        avg_win_pct — average return % of winning trades (positive float)
+        avg_loss_pct— average return % of losing trades (negative float, or 0)
+    """
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "trade_journal.json")
+    try:
+        with open(path) as f:
+            trades = json.load(f)
+    except Exception:
+        return {"n_closed": 0, "n_wins": 0, "n_losses": 0, "avg_win_pct": 0.0, "avg_loss_pct": 0.0}
+
+    win_pcts, loss_pcts = [], []
+    for t in trades:
+        if t.get("status") != "closed":
+            continue
+        ep = t.get("entry_price") or 0
+        xp = t.get("exit_price") or 0
+        if not ep or not xp:
+            continue
+        direction = (t.get("direction") or "Long").lower()
+        if direction == "long":
+            ret_pct = (xp - ep) / ep * 100
+        else:
+            ret_pct = (ep - xp) / ep * 100
+        if ret_pct > 0:
+            win_pcts.append(ret_pct)
+        else:
+            loss_pcts.append(ret_pct)
+
+    n_closed = len(win_pcts) + len(loss_pcts)
+    return {
+        "n_closed":     n_closed,
+        "n_wins":       len(win_pcts),
+        "n_losses":     len(loss_pcts),
+        "avg_win_pct":  sum(win_pcts) / len(win_pcts) if win_pcts else 0.0,
+        "avg_loss_pct": sum(loss_pcts) / len(loss_pcts) if loss_pcts else 0.0,
+    }
+
+
+def compute_qir_kelly(
+    conviction_score: int,
+    fear_composite: dict,
+    regime_ctx: dict,
+    options_score: int | None = None,
+    tactical_score: int | None = None,
+    hmm_state_label: str | None = None,
+) -> dict:
+    """Compute dynamic half-Kelly position size for the QIR dashboard.
+
+    p (win probability): Bayesian shrinkage blend of historical win rate and
+    current conviction score. With few trades, heavily conviction-weighted;
+    converges to historical rate at ~20 closed trades (max 60% weight).
+
+    b (win/loss ratio): From realized avg_win_pct / abs(avg_loss_pct) when
+    both wins and losses exist in trade history. Otherwise regime-implied.
+
+    stress discount: fear_composite.score / 100 * 0.30 (up to 30% reduction).
+
+    alignment multiplier: fraction of 4 signals agreeing with verdict direction.
+    0/4=×0.25, 1/4=×0.50, 2/4=×0.75, 3/4=×0.90, 4/4=×1.00.
+
+    hmm multiplier: Bull=×1.10, Neutral=×1.00, Stress=×0.85, Late Cycle=×0.75, Crisis=×0.60.
+
+    Returns dict with keys:
+        kelly_half_pct, kelly_full_pct, p, b, p_source, b_source,
+        n_closed, stress_discount_pct, capped, viable,
+        alignment_score, n_signals_agree, n_signals_total,
+        align_multiplier, hmm_multiplier, signal_dirs
+    """
+    stats = get_trade_kelly_stats()
+    n_closed = stats["n_closed"]
+    n_wins   = stats["n_wins"]
+    n_losses = stats["n_losses"]
+
+    # ── p: Bayesian shrinkage ─────────────────────────────────────────────────
+    shrink_weight  = 5.0
+    p_hist_shrunk  = (n_wins + shrink_weight * 0.5) / (n_closed + shrink_weight)
+    history_weight = min(n_closed / 20.0, 0.6)
+    p_conviction   = max(0.01, min(0.99, (conviction_score if conviction_score is not None else 50) / 100.0))
+    p = p_hist_shrunk * history_weight + p_conviction * (1.0 - history_weight)
+
+    if n_closed == 0:
+        p_source = "Conviction only"
+    else:
+        p_source = f"Historical (n={n_closed}) + Conviction"
+
+    # ── b: win/loss ratio ─────────────────────────────────────────────────────
+    quadrant = (regime_ctx or {}).get("quadrant", "")
+    b_implied = _REGIME_B_IMPLIED.get(quadrant, 1.2)
+
+    # Verdict direction from p for b-flip (before alignment computation)
+    _p_dir = 1 if p > 0.55 else (-1 if p < 0.45 else 0)
+
+    # For bearish verdicts, flip the regime-implied b:
+    # Best shorting envs (Stagflation/Deflation) get high b; worst (Goldilocks) get low b.
+    # Mirrors the long-side logic: short in Stagflation = long in Goldilocks.
+    _SHORT_B_IMPLIED: dict[str, float] = {
+        "Stagflation": 1.8,   # best short env — mirror of Goldilocks long
+        "Deflation":   1.4,   # good short env — mirror of Reflation long
+        "Reflation":   0.8,   # poor short env — mirror of Stagflation long
+        "Goldilocks":  0.6,   # worst short env — mirror of Deflation long
+    }
+    if _p_dir == -1:
+        b_implied = _SHORT_B_IMPLIED.get(quadrant, 1.2)
+
+    avg_win  = stats["avg_win_pct"]
+    avg_loss = abs(stats["avg_loss_pct"])
+    if n_wins >= 1 and n_losses >= 1 and avg_loss > 0:
+        b = avg_win / avg_loss
+        b_source = "Historical"
+    else:
+        b = b_implied
+        b_source = f"Regime-implied ({quadrant or 'Neutral'}, {'short' if _p_dir == -1 else 'long'})"
+
+    # ── Kelly formula ─────────────────────────────────────────────────────────
+    q = 1.0 - p
+    kelly_full = (b * p - q) / b if b > 0 else 0.0
+    kelly_half = max(kelly_full * 0.5, 0.0)
+
+    # ── Stress discount ───────────────────────────────────────────────────────
+    fear_score       = float((fear_composite or {}).get("score", 50))
+    stress_discount  = (fear_score / 100.0) * 0.30
+    kelly_half       = max(kelly_half - stress_discount * kelly_half, 0.0)
+
+    # Save base kelly (after stress, before alignment/HMM) for reference table
+    kelly_half_base = kelly_half
+
+    # ── Cross-timeframe alignment ─────────────────────────────────────────────
+    # Verdict direction from p: bull if p > 0.55, bear if p < 0.45, neutral otherwise
+    _verdict_dir = 1 if p > 0.55 else (-1 if p < 0.45 else 0)
+
+    def _to_dir(score: int | None, neutral_band: int = 10) -> int | None:
+        if score is None:
+            return None
+        if score >= 50 + neutral_band:
+            return 1
+        if score <= 50 - neutral_band:
+            return -1
+        return 0
+
+    # regime score: macro_score is already 0-100 if present, else use score (0-1)
+    _rc = regime_ctx or {}
+    _macro_raw = _rc.get("macro_score")
+    if _macro_raw is None:
+        _macro_raw = float(_rc.get("score", 0.5)) * 100.0
+    _regime_dir = _to_dir(int(_macro_raw))
+
+    _signal_dirs: dict[str, int | None] = {
+        "options":   _to_dir(options_score),
+        "tactical":  _to_dir(tactical_score),
+        "regime":    _regime_dir,
+        "conviction": _verdict_dir,
+    }
+
+    _n_total = sum(1 for v in _signal_dirs.values() if v is not None)
+    _n_agree = sum(1 for v in _signal_dirs.values() if v is not None and v == _verdict_dir)
+
+    _alignment = _n_agree / _n_total if _n_total > 0 else 0.5
+
+    # Alignment multiplier — neutral verdict skips alignment penalty
+    if _verdict_dir == 0:
+        _align_mult = 0.75
+    else:
+        _align_mult = {0: 0.25, 1: 0.50, 2: 0.75, 3: 0.90}.get(_n_agree, 1.00)
+
+    kelly_half = kelly_half * _align_mult
+
+    # ── HMM state multiplier (final gate) ────────────────────────────────────
+    _HMM_MULT = {
+        "Bull":         1.10,
+        "Neutral":      1.00,
+        "Early Stress": 0.90,
+        "Stress":       0.85,
+        "Late Cycle":   0.75,
+        "Crisis":       0.60,
+    }
+    _hmm_mult = 1.00
+    if hmm_state_label:
+        for key, mult in _HMM_MULT.items():
+            if key.lower() in hmm_state_label.lower():
+                _hmm_mult = mult
+                break
+    kelly_half = kelly_half * _hmm_mult
+
+    # ── Cap at 15% ────────────────────────────────────────────────────────────
+    capped = kelly_half > 0.15
+    kelly_half = min(kelly_half, 0.15)
+
+    return {
+        "kelly_half_pct":      round(kelly_half * 100, 1),
+        "kelly_full_pct":      round(max(kelly_full, 0.0) * 100, 1),
+        "p":                   round(p, 3),
+        "b":                   round(b, 2),
+        "p_source":            p_source,
+        "b_source":            b_source,
+        "n_closed":            n_closed,
+        "stress_discount_pct": round(stress_discount * 100, 1),
+        "capped":              capped,
+        "viable":              kelly_full > 0,
+        "alignment_score":     round(_alignment * 100),
+        "n_signals_agree":     _n_agree,
+        "n_signals_total":     _n_total,
+        "align_multiplier":    round(_align_mult, 2),
+        "hmm_multiplier":      round(_hmm_mult, 2),
+        "signal_dirs":         _signal_dirs,
+        "kelly_half_base_pct": round(kelly_half_base * 100, 1),
+    }
+
+
+_SHORT_B_IMPLIED: dict[str, float] = {
+    "Stagflation": 1.8,
+    "Deflation":   1.4,
+    "Reflation":   0.8,
+    "Goldilocks":  0.6,
+}
+
+_HMM_MULT_MAP: dict[str, float] = {
+    "Bull":         1.10,
+    "Neutral":      1.00,
+    "Early Stress": 0.90,
+    "Stress":       0.85,
+    "Late Cycle":   0.75,
+    "Crisis":       0.60,
+}
+
+
+def compute_triple_kelly(
+    fear_composite: dict,
+    regime_ctx: dict,
+    hmm_state_label: str | None,
+    forced_lean: str,       # "BULLISH" or "BEARISH"
+    lean_pct: float,        # e.g. 53.0
+    uncertainty_score: int, # 0-100
+    macro_score: int = 50,
+    leading_score: int = 50,
+) -> dict:
+    """Triple Kelly for GENUINE_UNCERTAINTY — bimodal sizing across 3 horizons.
+
+    1. Structural Long  — HMM regime persistence + macro. Weeks/months.
+    2. Tactical Short   — Forced bearish lean + fear. Days/weeks.
+    3. Tactical Long    — Momentum scalp, penalised by uncertainty. 1-3 days.
+
+    Returns dict with keys: structural, tactical_short, tactical_long.
+    Each sub-dict: half_pct, full_pct, p, b, label, timeframe, color.
+    """
+    quadrant   = (regime_ctx or {}).get("quadrant", "")
+    fear_score = float((fear_composite or {}).get("score", 50))
+
+    # HMM multiplier
+    _hmm_mult = 1.00
+    if hmm_state_label:
+        for key, mult in _HMM_MULT_MAP.items():
+            if key.lower() in hmm_state_label.lower():
+                _hmm_mult = mult
+                break
+
+    def _kelly(p, b):
+        q = 1.0 - p
+        full = (b * p - q) / b if b > 0 else 0.0
+        return max(full, 0.0), max(full * 0.5, 0.0)
+
+    # ── 1. Structural Long ────────────────────────────────────────────────────
+    # p: macro_score (long-term regime confidence)
+    # b: always long-side regime-implied — structural is a regime trade, not a lean trade
+    # Direction is determined by macro/HMM, NOT the short-term forced lean
+    # HMM multiplier applies — this IS the regime trade
+    p_struct = max(0.01, min(0.99, macro_score / 100))
+    b_struct  = _REGIME_B_IMPLIED.get(quadrant, 1.2)
+    kf_s, kh_s = _kelly(p_struct, b_struct)
+    kh_s = kh_s * _hmm_mult
+    kh_s = min(kh_s, 0.15)
+
+    # ── 2. Tactical Short ─────────────────────────────────────────────────────
+    # p: lean confidence (how bearish is the lean)
+    # b: short-calibrated (inverted regime)
+    # Fear AMPLIFIES short edge (high fear = better short environment)
+    # No HMM mult — this is a short-term hedge, not a regime trade
+    p_short = max(0.01, min(0.99, lean_pct / 100))
+    b_short  = _SHORT_B_IMPLIED.get(quadrant, 1.2)
+    kf_sh, kh_sh = _kelly(p_short, b_short)
+    fear_boost = 1.0 + (fear_score / 100) * 0.20   # fear helps shorts, up to +20%
+    kh_sh = kh_sh * fear_boost
+    kh_sh = min(kh_sh, 0.15)
+
+    # ── 3. Tactical Long (scalp) ──────────────────────────────────────────────
+    # p: leading momentum score, heavily penalised by uncertainty
+    # b: tight (momentum scalps have narrow edge)
+    # Uncertainty penalty shrinks size — high uncertainty = tiny scalp only
+    _uncert_penalty = 1.0 - (uncertainty_score / 200)   # 0-100 → 0.50-1.00 penalty range
+    p_scalp = max(0.01, min(0.99, (leading_score / 100) * _uncert_penalty))
+    b_scalp  = 1.1
+    kf_sc, kh_sc = _kelly(p_scalp, b_scalp)
+    kh_sc = kh_sc * _uncert_penalty   # double penalty — momentum scalp in uncertainty is risky
+    kh_sc = min(kh_sc, 0.08)          # hard cap 8% — scalps never go large
+
+    return {
+        "structural": {
+            "half_pct":  round(kh_s  * 100, 1),
+            "full_pct":  round(kf_s  * 100, 1),
+            "p": round(p_struct, 3), "b": round(b_struct, 2),
+            "label":     "Structural Long",
+            "timeframe": "weeks/months",
+            "color":     "#22c55e",
+            "note":      f"HMM {hmm_state_label or 'N/A'} ×{_hmm_mult:.2f} · macro {macro_score}/100",
+        },
+        "tactical_short": {
+            "half_pct":  round(kh_sh * 100, 1),
+            "full_pct":  round(kf_sh * 100, 1),
+            "p": round(p_short, 3), "b": round(b_short, 2),
+            "label":     "Tactical Short",
+            "timeframe": "days/weeks",
+            "color":     "#ef4444",
+            "note":      f"Lean {lean_pct:.0f}% bearish · fear {fear_score:.0f}/100 boost",
+        },
+        "tactical_long": {
+            "half_pct":  round(kh_sc * 100, 1),
+            "full_pct":  round(kf_sc * 100, 1),
+            "p": round(p_scalp, 3), "b": round(b_scalp, 2),
+            "label":     "Tactical Long",
+            "timeframe": "1-3 days",
+            "color":     "#f59e0b",
+            "note":      f"Momentum {leading_score}/100 · uncertainty penalty ×{_uncert_penalty:.2f}",
+        },
+    }

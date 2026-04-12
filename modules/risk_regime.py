@@ -566,7 +566,7 @@ def _tactical_opportunities(macro: dict, snaps: dict[str, AssetSnapshot]) -> lis
     dxy_score = score_map.get("US Dollar Index (DXY proxy)", 0)
     commodity_score = score_map.get("Commodity Trend (Oil + Copper)", 0)
     infl_score = score_map.get("Core Inflation (PCE)", 0)
-    liquidity_score = score_map.get("Global Liquidity (M2 proxy)", 0)
+    liquidity_score = score_map.get("Net Liquidity (M2 − Drains)", 0)
 
     # Gold check
     gld_snap = snaps.get("GLD")
@@ -596,7 +596,7 @@ def _tactical_opportunities(macro: dict, snaps: dict[str, AssetSnapshot]) -> lis
         opps.append({"signal": "Gold rallying + equities declining", "opportunity": "Classic risk-off rotation underway — favor gold and Treasuries", "tickers": ["GLD", "TLT"]})
 
     if liquidity_score > 0.2:
-        opps.append({"signal": "M2 liquidity expanding", "opportunity": "Bullish for risk assets with lag — accumulate on dips", "tickers": ["SPY", "QQQ", "IBIT"]})
+        opps.append({"signal": "Net liquidity expanding", "opportunity": "Bullish for risk assets with lag — accumulate on dips", "tickers": ["SPY", "QQQ", "IBIT"]})
 
     return opps
 
@@ -735,19 +735,27 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "totbkcr": "TOTBKCR", "dgs2": "DGS2",
     }
 
-    with ThreadPoolExecutor(max_workers=3) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         fred_fut = ex.submit(warm_fred_cache, _FRED_IDS)
         core_fut = ex.submit(fetch_core_data)
         gamma_fut = ex.submit(_compute_spy_gamma_mode_with_retry, 1)
+        from services.market_data import fetch_gex_profile as _fetch_gex
+        _fetch_gex_unwrap = getattr(_fetch_gex, "__wrapped__", _fetch_gex)
+        gex_fut = ex.submit(_fetch_gex_unwrap, "SPY", 3)
         fred_fut.result()
         core_snaps = core_fut.result()
         gamma = gamma_fut.result()
+        _gex_profile = None
+        try:
+            _gex_profile = gex_fut.result()
+        except Exception:
+            pass
 
     fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_key_map.items()}
     from services.market_data import compute_data_quality_score
     _dq = compute_data_quality_score(core_snaps, fred_data)
     _score_mode = st.session_state.get("_rr_score_mode", "normal")
-    macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode)
+    macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode, gex_profile=_gex_profile)
     macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], core_snaps)
     macro["tactical_opps"] = _tactical_opportunities(macro, core_snaps)
     macro["snaps"] = core_snaps
@@ -812,6 +820,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "pts_to_risk_on": macro.get("pts_to_risk_on"),
         "pts_to_risk_off": macro.get("pts_to_risk_off"),
         "velocity_label": macro.get("velocity_label", ""),
+        "gex_profile": macro.get("gex_profile"),
     }
 
     # Build structured raw signal dict so downstream prompts can ground to numbers
@@ -1006,6 +1015,7 @@ def _build_macro_dashboard(
     gamma_data: dict | None = None,
     fred_data: dict | None = None,
     score_mode: str = "normal",
+    gex_profile: dict | None = None,
 ) -> dict:
     fred_ids = {
         "yield_curve": "T10Y2Y",
@@ -1158,10 +1168,30 @@ def _build_macro_dashboard(
         dxy_score = 0.0
     indicators.append(("US Dollar Index (DXY proxy)", dxy, "% blend", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
+    # ── Net Liquidity Composite ─────────────────────────────────────────────
+    # Formula: Net_Liq_z = M2_z - (RealYield_z + USD_z + HYSpread_z)
+    # M2 = monetary fuel (+), Real Yields = cost of capital (-),
+    # USD = global dollar scarcity (-), HY Spreads = lending friction (-).
+    # This replaces the old simple M2 YoY% score.
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
     m2_yoy_full = _yoy_series(fred["m2"], periods=12)
-    liquidity_score = _zscore_score(m2_yoy_full) if m2_yoy_full is not None else _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
-    indicators.append(("Global Liquidity (M2 proxy)", m2_yoy, "% YoY", liquidity_score, _confidence_from_age(fred["m2"], expected_days=45)))
+    _m2_z = _zscore_score(m2_yoy_full) if m2_yoy_full is not None else 0.0
+    # Drains: positive z = tighter conditions = liquidity drag
+    _ry_z_drain = _zscore_score(fred.get("real_yield"))    # high real yields = expensive capital
+    _hy_z_drain = _zscore_score(fred.get("credit_spread")) # wide spreads = lending friction
+    _usd_z_drain = dxy_score if dxy is not None and dxy > 0 else (-dxy_score if dxy is not None else 0.0)  # strong dollar = global scarcity
+    _net_liq_raw = _m2_z - (_ry_z_drain + _usd_z_drain + _hy_z_drain)
+    # Rescale: with 4 components, raw range is roughly [-4, 4] → clamp to [-1, 1]
+    liquidity_score = _clamp(_net_liq_raw / 3.0)
+    _net_liq_display = round(_net_liq_raw, 2)
+    # Confidence: worst of the input series
+    _liq_conf = int(round(np.mean([
+        _confidence_from_age(fred["m2"], expected_days=45),
+        _confidence_from_age(fred.get("real_yield"), expected_days=7),
+        _confidence_from_age(fred.get("credit_spread"), expected_days=7),
+        _confidence_from_snap("UUP", snaps=snaps),
+    ])))
+    indicators.append(("Net Liquidity (M2 − Drains)", _net_liq_display, "z-composite", liquidity_score, _liq_conf))
 
     sahm = _safe_latest(fred["sahm"])
     if sahm is None:
@@ -1202,12 +1232,44 @@ def _build_macro_dashboard(
         _confidence_from_age(fred["m2"], expected_days=45),
     ])))))
 
+    # ── GEX Structural Score ─────────────────────────────────────────────────
+    # Multi-factor score from dealer positioning (zone, delta, flip distance, wall width).
+    # Separates structural dealer flow from price momentum in the tactical score.
     gamma_score = 0.0
-    if gamma_data and len(gamma_data["net_gamma"]) > 0:
-        nearest = int(np.argmin(np.abs(gamma_data["strikes"] - gamma_data["price"])))
+    _gex_detail = "N/A"
+    _gex_profile = gex_profile
+    if _gex_profile:
+        # Factor 1: Zone — continuous via tanh(total_gex / 2000) instead of binary
+        # Smooth S-curve: ±1500M GEX → ±0.63, ±3000M → ±0.90, near zero → near zero
+        _total_gex = _gex_profile.get("total_gex") or 0.0
+        _zone_score = float(np.tanh(_total_gex / 2000.0))
+        # Factor 2: Dealer net delta [-1, +1] → dealers long delta = bullish cushion
+        _delta_score = _clamp((_gex_profile.get("dealer_net_delta") or 0.0))
+        # Factor 3: Gamma flip distance — spot above flip = positive gamma, below = negative
+        _spot = _gex_profile.get("spot") or 0
+        _flip = _gex_profile.get("gamma_flip") or _spot
+        _flip_pct = ((_spot - _flip) / max(_spot, 1)) * 100 if _spot > 0 else 0
+        _flip_score = _clamp(_flip_pct / 3.0)  # ±3% from flip = ±1
+        # Factor 4: Wall width — wider = more defined range, more dealer control
+        _cw = _gex_profile.get("call_wall") or _spot
+        _pw = _gex_profile.get("put_wall") or _spot
+        _wall_width_pct = ((_cw - _pw) / max(_spot, 1)) * 100 if _spot > 0 else 0
+        _width_score = _clamp((_wall_width_pct - 5) / 5.0)  # 5-10% width is normal range
+        # Composite: zone and flip are most important, delta and width are secondary
+        gamma_score = _clamp(
+            0.35 * _zone_score + 0.25 * _flip_score + 0.25 * _delta_score + 0.15 * _width_score
+        )
+        _gex_detail = f"gex={_total_gex:+.0f}M flip={_flip_pct:+.1f}% delta={_delta_score:+.2f}"
+        gamma_conf = 85
+    elif gamma_data and len(gamma_data.get("net_gamma", [])) > 0:
+        # Fallback: old gamma_data from fetch_options_chain_snapshot
+        nearest = int(np.argmin(np.abs(np.array(gamma_data["strikes"]) - gamma_data["price"])))
         gamma_score = _clamp_score(float(gamma_data["net_gamma"][nearest]), 10000.0)
-    gamma_conf = 85 if gamma_data else 35
-    indicators.append(("Gamma Exposure (Dealer Positioning)", gamma_score, "score", gamma_score, gamma_conf))
+        _gex_detail = "legacy"
+        gamma_conf = 70
+    else:
+        gamma_conf = 35
+    indicators.append(("Gamma Exposure (Dealer Positioning)", _gex_detail, "struct", gamma_score, gamma_conf))
 
     term = _safe_latest(fred["term_premium"])
     term_score = _zscore_score(fred["term_premium"])
@@ -1351,7 +1413,7 @@ def _build_macro_dashboard(
         "VIX (Equity Volatility)": "Volatility",
         "Commodity Trend (Oil + Copper)": "Commodities",
         "US Dollar Index (DXY proxy)": "FX",
-        "Global Liquidity (M2 proxy)": "Liquidity",
+        "Net Liquidity (M2 − Drains)": "Liquidity",
         "Unemployment Trend (Sahm context)": "Labor",
         "Core Inflation (PCE)": "Inflation",
         "Equity Trend (S&P, Nasdaq, Dow)": "Equities",
@@ -1383,7 +1445,7 @@ def _build_macro_dashboard(
         # Tier 2 — Strong regime signals
         "Equity Trend (S&P, Nasdaq, Dow)": 1.5,
         "Unemployment Trend (Sahm context)": 1.5,
-        "Global Liquidity (M2 proxy)": 1.5,
+        "Net Liquidity (M2 − Drains)": 1.5,
         "Initial Jobless Claims": 1.5,
         # Tier 3 — Standard
         "Commodity Trend (Oil + Copper)": 1.0,
@@ -1420,7 +1482,7 @@ def _build_macro_dashboard(
         emoji, verdict = _score_to_bucket(score)
         scores.append(score)
         confidence_scores.append(confidence)
-        display_value = "N/A" if value is None else f"{value:.2f} {unit}".strip()
+        display_value = "N/A" if value is None else (f"{value:.2f} {unit}".strip() if isinstance(value, (int, float)) else f"{value} {unit}".strip())
         signal_rows.append({
             "Category": SIGNAL_CATEGORIES.get(name, "Other"),
             "Indicator": name,
@@ -1675,6 +1737,7 @@ def _build_macro_dashboard(
         "summary": summary[:5],
         "portfolio_bias": _portfolio_bias(macro_regime),
         "gamma": gamma_data,
+        "gex_profile": gex_profile,
         # Yield curve & credit deep-dive values (for UI panel).
         # FRED T10Y2Y / T10Y3M are in pct pts (0.45 = 45 bps) → multiply by 100.
         # FRED BAMLH0A0HYM2 / BAMLC0A0CM are in pct (3.25 = 325 bps) → multiply by 100.
@@ -3096,25 +3159,38 @@ def render():
     load_start = datetime.now()
     with st.status("MACRO DASHBOARD · INITIALIZING...", expanded=True) as status:
         t0 = datetime.now()
-        with ThreadPoolExecutor(max_workers=3) as executor:
+        with ThreadPoolExecutor(max_workers=4) as executor:
             fred_future = executor.submit(warm_fred_cache, _FRED_SERIES_IDS)
             core_future = executor.submit(fetch_core_data)
             gamma_future = executor.submit(_compute_spy_gamma_mode_with_retry, 1)
+            from services.market_data import fetch_gex_profile as _fetch_gex_render
+            _fetch_gex_render_unwrap = getattr(_fetch_gex_render, "__wrapped__", _fetch_gex_render)
+            gex_future = executor.submit(_fetch_gex_render_unwrap, "SPY", 3)
 
             future_labels = {
                 fred_future: "Federal Reserve (FRED) — 15 series",
                 core_future: "Market prices — 13 tickers",
                 gamma_future: "SPY options chain — gamma exposure",
+                gex_future: "SPY GEX dealer positioning",
             }
 
             st.write("⏳ Connecting to data sources...")
             for future in as_completed(future_labels):
                 label = future_labels[future]
-                future.result()  # raise if failed
+                try:
+                    future.result()
+                except Exception:
+                    st.write(f"⚠ {label} (failed, using fallback)")
+                    continue
                 st.write(f"✓ {label}")
 
             core_snaps = core_future.result()
             gamma = gamma_future.result()
+            _gex_render = None
+            try:
+                _gex_render = gex_future.result()
+            except Exception:
+                pass
         t_fetch = (datetime.now() - t0).total_seconds()
 
         t1 = datetime.now()
@@ -3145,7 +3221,7 @@ def render():
             "dgs2": "DGS2",
         }
         fred_data = {k: fetch_fred_series_safe(v) for k, v in fred_ids.items()}
-        macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode)
+        macro = _build_macro_dashboard(core_snaps, gamma_data=gamma, fred_data=fred_data, score_mode=_score_mode, gex_profile=_gex_render)
         snaps = core_snaps
         macro["sector_rotation"] = _sector_rotation_recs(macro["quadrant"], macro["macro_regime"], snaps)
         macro["tactical_opps"] = _tactical_opportunities(macro, snaps)
@@ -3599,7 +3675,7 @@ def render():
                 "Equity Trend (S&P, Nasdaq, Dow)": 1, "Commodity Trend (Oil + Copper)": 1,
                 "US Dollar Index (DXY proxy)": 1, "Initial Jobless Claims": 7,
                 "Copper/Gold Ratio (Growth vs Safety)": 1,
-                "Global Liquidity (M2 proxy)": 30, "Unemployment Trend (Sahm context)": 30,
+                "Net Liquidity (M2 − Drains)": 30, "Unemployment Trend (Sahm context)": 30,
                 "Core Inflation (PCE)": 30, "Industrial Production": 30,
                 "Term Premium": 7, "S&P 500 P/E (CAPE proxy)": 1,
                 "Corporate CAPEX vs Liquidity": 90, "Leading Economic Index": 30,
@@ -3840,10 +3916,99 @@ def render():
                 except Exception:
                     pass
 
-            st.markdown(f"- Current market price: {gamma['price']:.2f}")
-            st.markdown(f"- Current market sentiment: {gamma['zone']}")
-            st.markdown(f"- Call Wall price: {gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "- Call Wall price: N/A")
-            st.markdown(f"- Put Wall price: {gamma['put_wall']:.2f}" if gamma["put_wall"] is not None else "- Put Wall price: N/A")
+            # ── GEX Structural Card (new 4-factor) ──
+            _gex_p = macro.get("gex_profile")
+            if _gex_p:
+                import numpy as _np_gex_r
+                _gx_spot = _gex_p.get("spot", 0)
+                _gx_flip = _gex_p.get("gamma_flip", _gx_spot)
+                _gx_cw = _gex_p.get("call_wall", _gx_spot)
+                _gx_pw = _gex_p.get("put_wall", _gx_spot)
+                _gx_total = _gex_p.get("total_gex", 0)
+                _gx_delta = _gex_p.get("dealer_net_delta", 0)
+                _gx_zone = _gex_p.get("zone", "")
+                _gx_zone_detail = _gex_p.get("zone_detail", "")
+
+                _gx_zone_s = float(_np_gex_r.tanh(_gx_total / 2000.0))
+                _gx_flip_pct = ((_gx_spot - _gx_flip) / max(_gx_spot, 1)) * 100
+                _gx_flip_s = max(-1, min(1, _gx_flip_pct / 3.0))
+                _gx_delta_s = max(-1, min(1, _gx_delta))
+                _gx_wall_pct = ((_gx_cw - _gx_pw) / max(_gx_spot, 1)) * 100
+                _gx_width_s = max(-1, min(1, (_gx_wall_pct - 5) / 5.0))
+                _gx_composite = max(-1, min(1,
+                    0.35 * _gx_zone_s + 0.25 * _gx_flip_s + 0.25 * _gx_delta_s + 0.15 * _gx_width_s
+                ))
+
+                _gx_comp_col = "#22c55e" if _gx_composite > 0.1 else ("#ef4444" if _gx_composite < -0.1 else "#f59e0b")
+                _gx_zone_col = "#22c55e" if "Positive" in _gx_zone else "#ef4444"
+                _gx_delta_col = "#22c55e" if _gx_delta >= 0 else "#ef4444"
+                _gx_flip_col = "#22c55e" if _gx_flip_pct > 0.5 else ("#ef4444" if _gx_flip_pct < -0.5 else "#f59e0b")
+
+                def _gex_bar_r(label, value, color, detail):
+                    bar_w = int(min(abs(value) * 100, 100))
+                    bar_dir = "right" if value >= 0 else "left"
+                    return (
+                        f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
+                        f'<span style="font-size:9px;color:#64748b;width:50px;text-align:right;">{label}</span>'
+                        f'<div style="background:#1e293b;border-radius:2px;flex:1;height:10px;position:relative;">'
+                        f'<div style="background:{color};width:{bar_w}%;height:100%;border-radius:2px;'
+                        f'float:{bar_dir};"></div>'
+                        f'</div>'
+                        f'<span style="font-size:9px;color:#94a3b8;width:55px;">{detail}</span>'
+                        f'</div>'
+                    )
+
+                st.markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-left:3px solid {_gx_comp_col};border-radius:5px;'
+                    f'padding:10px 14px;margin-bottom:12px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                    f'<div style="font-size:14px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;">GEX DEALER POSITIONING</div>'
+                    f'<div style="text-align:right;">'
+                    f'<div style="font-size:20px;font-weight:900;color:{_gx_comp_col};">'
+                    f'{_gx_composite:+.2f}</div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">COMPOSITE</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;margin-bottom:10px;">'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">SPOT</div>'
+                    f'<div style="font-size:14px;font-weight:800;color:#94a3b8;">${_gx_spot:,.2f}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">FLIP</div>'
+                    f'<div style="font-size:14px;font-weight:800;color:{_gx_flip_col};">${_gx_flip:,.2f}</div>'
+                    f'<div style="font-size:8px;color:{_gx_flip_col};">{_gx_flip_pct:+.1f}%</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">DELTA</div>'
+                    f'<div style="font-size:14px;font-weight:800;color:{_gx_delta_col};">{_gx_delta:+.3f}</div>'
+                    f'<div style="font-size:7px;color:#3b5998;">call/put OI ratio</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">PUT WALL</div>'
+                    f'<div style="font-size:14px;font-weight:800;color:#ef4444;">${_gx_pw:,.2f}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">CALL WALL</div>'
+                    f'<div style="font-size:14px;font-weight:800;color:#22c55e;">${_gx_cw:,.2f}</div></div>'
+                    f'</div>'
+                    f'{_gex_bar_r("Zone", _gx_zone_s, _gx_zone_col, f"{_gx_total:+.0f}M")}'
+                    f'{_gex_bar_r("Flip", _gx_flip_s, _gx_flip_col, f"{_gx_flip_pct:+.1f}%")}'
+                    f'{_gex_bar_r("Delta", _gx_delta_s, _gx_delta_col, f"{_gx_delta:+.3f}")}'
+                    f'{_gex_bar_r("Width", _gx_width_s, "#94a3b8", f"{_gx_wall_pct:.1f}%")}'
+                    f'<div style="margin-top:6px;font-size:10px;color:{_gx_zone_col};font-weight:600;">'
+                    f'{_gx_zone}</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">{_gx_zone_detail}</div>'
+                    f'<div style="margin-top:8px;padding:6px 10px;background:#0a0f1a;'
+                    f'border-radius:3px;border:1px solid #1e293b;'
+                    f'font-size:9px;color:#3b5998;line-height:1.7;">'
+                    f'<b style="color:#4a6fa5;">Zone</b> = gamma at spot strike (do dealers dampen or amplify moves <i>here</i>). '
+                    f'<b style="color:#4a6fa5;">Delta</b> = net directional lean across ALL strikes (are dealers long or short the market). '
+                    f'<b style="color:#4a6fa5;">Flip</b> = distance to gamma sign change — how far price must move before dealers switch behavior. '
+                    f'<b style="color:#4a6fa5;">Width</b> = call wall minus put wall — wider = more dealer control, tighter = breakout risk.<br>'
+                    f'Zone and Delta can disagree: positive gamma at spot (dealers absorb small moves) '
+                    f'with negative delta (dealers are net short overall) means calm near spot but directional pressure building underneath.'
+                    f'</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                # Fallback to old display
+                st.markdown(f"- Current market price: {gamma['price']:.2f}")
+                st.markdown(f"- Current market sentiment: {gamma['zone']}")
 
             m1, m2 = st.columns(2)
             m1.markdown(bloomberg_metric("Call Wall", f"{gamma['call_wall']:.2f}" if gamma["call_wall"] is not None else "N/A", COLORS["green"]), unsafe_allow_html=True)

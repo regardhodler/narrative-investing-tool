@@ -114,7 +114,7 @@ def render_regime_strip() -> None:
             return
         _recent = sorted(_hist, key=lambda x: x["date"])[-30:]
         _dots = ""
-        for _h in _recent:
+        for _i, _h in enumerate(_recent):
             _s = _h.get("macro_score", 50)
             _r = _h.get("regime", "")
             if _s >= 60 or "Risk-On" in _r:
@@ -123,9 +123,12 @@ def render_regime_strip() -> None:
                 _dc = "#ef4444"
             else:
                 _dc = "#f59e0b"
+            _is_today = _i == len(_recent) - 1
+            _glow = f"box-shadow:0 0 6px 2px {_dc};border:1px solid {_dc};" if _is_today else ""
+            _sz = "8px" if _is_today else "6px"
             _dots += (
-                f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                f'background:{_dc};margin:1px;" title="{_h["date"]}"></span>'
+                f'<span style="display:inline-block;width:{_sz};height:{_sz};border-radius:50%;'
+                f'background:{_dc};margin:1px;{_glow}" title="{_h["date"]}"></span>'
             )
         _last = _recent[-1]
         _last_score = _last.get("macro_score", 50)

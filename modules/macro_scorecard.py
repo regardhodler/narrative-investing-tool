@@ -173,7 +173,7 @@ def _score_inflation(regime_ctx: dict, fred_data: dict | None) -> tuple[int, str
 def _score_liquidity(regime_ctx: dict) -> tuple[int, str]:
     """Liquidity: easing=+1, neutral=0, tightening=-1."""
     signals = regime_ctx.get("signals_summary", {})
-    m2_score  = signals.get("Global Liquidity (M2 proxy)", 0.0)
+    m2_score  = signals.get("Net Liquidity (M2 − Drains)", signals.get("Global Liquidity (M2 proxy)", 0.0))
     fci_score = signals.get("Financial Conditions Index", 0.0)
 
     composite = (m2_score + fci_score) / 2

@@ -325,9 +325,12 @@ def _capture_market_context() -> dict:
     ctx: dict = {}
     regime = st.session_state.get("_regime_context")
     if isinstance(regime, dict):
-        ctx["regime"] = regime.get("regime", "")
-        ctx["quadrant"] = regime.get("quadrant", "")
-        ctx["regime_score"] = regime.get("score", None)
+        ctx["regime"]            = regime.get("regime", "")
+        ctx["quadrant"]          = regime.get("quadrant", "")
+        ctx["regime_score"]      = regime.get("score", None)
+        ctx["macro_score"]       = regime.get("macro_score")
+        ctx["leading_score"]     = regime.get("leading_score")
+        ctx["leading_divergence"]= regime.get("leading_divergence")
 
     fg = st.session_state.get("_fear_greed")
     if isinstance(fg, dict):
@@ -336,13 +339,51 @@ def _capture_market_context() -> dict:
 
     vix = st.session_state.get("_vix_curve")
     if isinstance(vix, dict):
-        ctx["vix_spot"] = vix.get("vix_spot")
+        ctx["vix_spot"]      = vix.get("vix_spot")
         ctx["vix_structure"] = vix.get("structure")
 
     rp = st.session_state.get("_dominant_rate_path")
     if isinstance(rp, dict):
-        ctx["fed_path"] = rp.get("scenario")
+        ctx["fed_path"]      = rp.get("scenario")
         ctx["fed_path_prob"] = rp.get("prob_pct")
+    elif isinstance(rp, str):
+        ctx["fed_path"] = rp
+
+    # ── Full signal vector for future regression/calibration ─────────────────
+    tac = st.session_state.get("_tactical_context") or {}
+    ctx["tactical_score"] = tac.get("tactical_score")
+
+    of = st.session_state.get("_options_flow_context") or {}
+    ctx["options_score"] = of.get("options_score")
+
+    wf = st.session_state.get("_whale_flow_score") or {}
+    ctx["whale_bull_pct"]  = wf.get("bull_pct")
+    ctx["whale_leading"]   = wf.get("leading_signal")
+    ctx["whale_conviction"]= wf.get("conviction")
+
+    fc = st.session_state.get("_fear_composite") or {}
+    ctx["fear_composite_score"] = fc.get("score")
+    ctx["fear_composite_label"] = fc.get("label")
+
+    sz = st.session_state.get("_stress_zscore") or {}
+    ctx["stress_z"]     = sz.get("z")
+    ctx["stress_z_pct"] = sz.get("pct")
+
+    # QIR conviction score (stored by quick_run before log button renders)
+    cv = st.session_state.get("_qir_conviction_score")
+    if cv is not None:
+        ctx["conviction_score"] = cv
+
+    # HMM regime brain state
+    try:
+        from services.hmm_regime import load_current_hmm_state as _hmm_load
+        _hmm_s = _hmm_load()
+        if _hmm_s is not None:
+            ctx["hmm_state"] = _hmm_s.state_label
+            ctx["hmm_confidence"] = _hmm_s.confidence
+            ctx["hmm_persistence"] = _hmm_s.persistence
+    except Exception:
+        pass
 
     return ctx
 
@@ -357,8 +398,14 @@ def log_forecast(
     target_price: Optional[float] = None,
     horizon_days: int = 30,
     notes: str = "",
+    use_weekly_atr: bool = False,
 ) -> str:
-    """Log a new forecast. Returns the forecast ID."""
+    """Log a new forecast. Returns the forecast ID.
+
+    use_weekly_atr: when True, computes ATR on weekly bars instead of daily.
+    Use for macro/regime signals where stops need to breathe over weeks, not days.
+    Weekly ATR(14) ≈ 5× daily ATR — stops land ~10-14% from entry on SPY.
+    """
     price_at = _fetch_price(ticker) if ticker else None
     spy_price_at = _fetch_spy_price()
 
@@ -369,7 +416,9 @@ def log_forecast(
     if ticker and price_at:
         try:
             import yfinance as yf, pandas as pd
-            _h = yf.Ticker(ticker).history(period=f"{_ATR_PERIOD * 2 + 10}d", auto_adjust=True)
+            _interval = "1wk" if use_weekly_atr else "1d"
+            _period   = "2y"  if use_weekly_atr else f"{_ATR_PERIOD * 2 + 10}d"
+            _h = yf.Ticker(ticker).history(period=_period, interval=_interval, auto_adjust=True)
             if _h is not None and len(_h) >= _ATR_PERIOD + 2:
                 _tr = pd.concat([
                     _h["High"] - _h["Low"],
@@ -631,6 +680,23 @@ def get_stats() -> dict:
     price_accuracy  = round(price_correct / len(price_resolved) * 100, 1) if price_resolved else None
     macro_accuracy  = round(macro_correct / len(macro_resolved) * 100, 1) if macro_resolved else None
 
+    def _streak(entries: list) -> tuple[int, str | None]:
+        """Return (current_streak_length, streak_type) for a resolved entry list."""
+        seq = [e["outcome"] for e in sorted(entries, key=lambda e: e.get("timestamp") or "")]
+        if not seq:
+            return 0, None
+        stype = seq[-1]
+        n = 0
+        for o in reversed(seq):
+            if o == stype:
+                n += 1
+            else:
+                break
+        return n, stype
+
+    price_streak_n, price_streak_type = _streak(price_resolved)
+    macro_streak_n, macro_streak_type = _streak(macro_resolved)
+
     # Alpha vs SPY — price-based only
     alphas = [e["alpha_pct"] for e in price_resolved if e.get("alpha_pct") is not None]
     avg_alpha = round(sum(alphas) / len(alphas), 2) if alphas else None
@@ -688,5 +754,10 @@ def get_stats() -> dict:
         "current_streak_type":     current_streak_type,
         "best_correct_streak":     best_correct,
         "worst_incorrect_streak":  worst_incorrect,
+        # Separate streaks by category
+        "price_streak":            price_streak_n,
+        "price_streak_type":       price_streak_type,
+        "macro_streak":            macro_streak_n,
+        "macro_streak_type":       macro_streak_type,
         "log": log,
     }

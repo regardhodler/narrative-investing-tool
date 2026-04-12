@@ -1,9 +1,9 @@
-"""Judge Judy's Court Record — debate verdict ledger with outcome tracking.
+"""Commander Wincyl's Court Record — debate verdict ledger with outcome tracking.
 
 Stores every debate verdict in SQLite. Auto-resolves verdicts after 5 days
 by comparing SPX price at verdict time vs current price.
 
-This is how Judge Judy learns (or doesn't) — the record is injected into
+This is how Commander Wincyl learns (or doesn't) — the record is injected into
 every future debate prompt so the AI knows its track record.
 """
 
@@ -132,7 +132,7 @@ def get_recent_verdicts(n: int = 10) -> list[dict]:
 
 
 def get_stats() -> dict:
-    """Return Judge Judy's win/loss/accuracy record."""
+    """Return Commander Wincyl's win/loss/accuracy record."""
     try:
         conn = _conn()
         rows = conn.execute(
@@ -163,6 +163,6 @@ def get_record_summary() -> str:
         return "No prior verdicts on record."
     acc = f"{s['accuracy_pct']}% accuracy" if s["accuracy_pct"] is not None else "unresolved"
     return (
-        f"Judge Judy court record: {s['correct']}W-{s['wrong']}L "
+        f"Commander Wincyl court record: {s['correct']}W-{s['wrong']}L "
         f"({acc}, {s['pending']} pending resolution)"
     )

@@ -721,7 +721,7 @@ def _render_debate_panel(debate: dict) -> None:
         f'<div style="background:#0a0a0a;border-left:3px solid {_vc};border-radius:4px;'
         f'padding:7px 12px;margin-bottom:10px;font-size:11px;color:#e2e8f0;font-style:italic;">'
         f'"{_sentences.get(_db_verdict, _sentences["CONTESTED"])}"</div>'
-        f'<div style="text-align:right;color:#475569;font-size:9px;">AI confidence: <b style="color:{_vc};">{_db_conf_adj}/10</b> (Judge Judy self-rated)</div>'
+        f'<div style="text-align:right;color:#475569;font-size:9px;">AI confidence: <b style="color:{_vc};">{_db_conf_adj}/10</b> (Commander Wincyl self-rated)</div>'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -760,7 +760,7 @@ def _render_debate_panel(debate: dict) -> None:
         st.markdown(
             f'<div style="background:#0a0a1a;border:1px solid #475569;border-radius:6px;'
             f'padding:10px 14px;margin-top:8px;">'
-            f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">⚖️ JUDGE JUDY — RULING</div>'
+            f'<div style="color:#94a3b8;font-size:9px;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">⚖️ COMMANDER WINCYL — RULING</div>'
             f'<div style="color:#e2e8f0;font-size:11px;margin-bottom:4px;">{debate.get("asymmetry","")}</div>'
             f'<div style="color:#64748b;font-size:10px;"><b>Key disagreement:</b> {debate.get("key_disagreement","")}</div>'
             f'</div>',
@@ -1538,7 +1538,7 @@ def render():
             with _rs_col1:
                 st.markdown(
                     '<span style="color:#64748b;font-size:11px;">⚠ Quadrant analysis: beta, VaR95, stress scenarios, correlation — '
-                    'also feeds Judge Judy with richer context.</span>',
+                    'also feeds Commander Wincyl with richer context.</span>',
                     unsafe_allow_html=True,
                 )
             with _rs_col2:
@@ -1716,7 +1716,7 @@ def render():
             with _db_col1:
                 st.markdown(
                     '<span style="color:#64748b;font-size:11px;">⚔️ Adversarial debate on your portfolio — '
-                    'Dr. Doomburger vs Sir Fukyerputs, judged by Judge Judy. '
+                    'Dr. Doomburger vs Sir Fukyerputs, judged by Commander Wincyl. '
                     '<span style="color:#475569;">3 LLM calls</span></span>'
                     '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run 🧠 Portfolio Analysis first — debate cites per-position actions &amp; stress tests by name</div>',
                     unsafe_allow_html=True,
