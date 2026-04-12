@@ -1524,6 +1524,44 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
             )
 
+            # Auto-log proximity scores to history file
+            try:
+                import json as _al_json, os as _al_os
+                from datetime import date as _al_date
+                _al_path = _al_os.path.join(_al_os.path.dirname(_al_os.path.dirname(__file__)), "data", "top_bottom_history.json")
+                _al_today = str(_al_date.today())
+                _al_hist = []
+                if _al_os.path.exists(_al_path):
+                    with open(_al_path, "r") as _al_f:
+                        _al_hist = _al_json.load(_al_f)
+                # Only log once per day
+                if not any(h.get("date") == _al_today for h in _al_hist):
+                    _al_hist.append({
+                        "date": _al_today,
+                        "top_pct": _top_score,
+                        "bottom_pct": _bot_score,
+                        "regime_score": round(_tb_regime, 3),
+                        "velocity": round(_tb_vel, 1),
+                        "entropy": round(_tb_entropy, 3),
+                        "ll_z": round(_tb_ll_z, 2),
+                        "conviction": round(_tb_conv, 0),
+                        "hmm_state": _tb_hmm_label,
+                        "top_signals": [s[0] for s in _top_signals],
+                        "bottom_signals": [s[0] for s in _bottom_signals],
+                    })
+                    # Keep last 365 entries
+                    _al_hist = _al_hist[-365:]
+                    with open(_al_path, "w") as _al_f:
+                        _al_json.dump(_al_hist, _al_f, indent=1)
+                # Store in session for forecast logging button
+                st.session_state["_top_bottom_proximity"] = {
+                    "top_pct": _top_score, "bottom_pct": _bot_score,
+                    "top_signals": [s[0] for s in _top_signals],
+                    "bottom_signals": [s[0] for s in _bottom_signals],
+                }
+            except Exception:
+                pass
+
         # ── Kelly Criterion card ──────────────────────────────────────────────
         def _build_kelly_ref_table(base_pct: float) -> str:
             """Compact scenario reference grid: alignment × HMM state → half-Kelly %."""
@@ -2720,6 +2758,59 @@ def _render_qir_dashboard() -> None:
             else:
                 st.button("🚫 No SPY Trade", key=f"qir_spy_none_{_tac_score}", use_container_width=True,
                           disabled=True, help=f"{_verdict_label} — no clear directional edge for SPY")
+
+    # ── Call Top / Call Bottom manual log buttons ─────────────────────────
+    _tb_prox = st.session_state.get("_top_bottom_proximity")
+    if _populated and _tb_prox:
+        _tb_col1, _tb_col2 = st.columns(2)
+        with _tb_col1:
+            if _tb_prox["top_pct"] >= 20:
+                with st.popover(f"📉 Call Market Top ({_tb_prox['top_pct']}%)", use_container_width=True):
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#ef4444;font-weight:700;">CALLING MARKET TOP</div>'
+                        f'<div style="font-size:10px;color:#94a3b8;margin:4px 0;">Top proximity: {_tb_prox["top_pct"]}%</div>'
+                        f'<div style="font-size:9px;color:#64748b;">Signals: {" · ".join(_tb_prox["top_signals"])}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _tb_top_conf = st.slider("Confidence", 30, 95, min(80, _tb_prox["top_pct"]), key="tb_top_conf")
+                    _tb_top_notes = st.text_input("Notes", key="tb_top_notes", placeholder="Why I think this is a top...")
+                    if st.button("Confirm Call Top", key="tb_top_confirm", type="primary", use_container_width=True):
+                        from services.forecast_tracker import log_forecast as _tb_log
+                        _tb_log(
+                            signal_type="valuation",
+                            prediction="Sell",
+                            confidence=_tb_top_conf,
+                            summary=f"MARKET TOP CALL | Top proximity: {_tb_prox['top_pct']}% | "
+                                    f"Signals: {', '.join(_tb_prox['top_signals'])} | {_tb_top_notes}",
+                            model="Top/Bottom Proximity",
+                            ticker="SPY",
+                            horizon_days=60,
+                        )
+                        st.toast(f"Market Top call logged at {_tb_prox['top_pct']}% proximity!", icon="📉")
+        with _tb_col2:
+            if _tb_prox["bottom_pct"] >= 20:
+                with st.popover(f"📈 Call Market Bottom ({_tb_prox['bottom_pct']}%)", use_container_width=True):
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#22c55e;font-weight:700;">CALLING MARKET BOTTOM</div>'
+                        f'<div style="font-size:10px;color:#94a3b8;margin:4px 0;">Bottom proximity: {_tb_prox["bottom_pct"]}%</div>'
+                        f'<div style="font-size:9px;color:#64748b;">Signals: {" · ".join(_tb_prox["bottom_signals"])}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _tb_bot_conf = st.slider("Confidence", 30, 95, min(80, _tb_prox["bottom_pct"]), key="tb_bot_conf")
+                    _tb_bot_notes = st.text_input("Notes", key="tb_bot_notes", placeholder="Why I think this is a bottom...")
+                    if st.button("Confirm Call Bottom", key="tb_bot_confirm", type="primary", use_container_width=True):
+                        from services.forecast_tracker import log_forecast as _tb_log2
+                        _tb_log2(
+                            signal_type="valuation",
+                            prediction="Buy",
+                            confidence=_tb_bot_conf,
+                            summary=f"MARKET BOTTOM CALL | Bottom proximity: {_tb_prox['bottom_pct']}% | "
+                                    f"Signals: {', '.join(_tb_prox['bottom_signals'])} | {_tb_bot_notes}",
+                            model="Top/Bottom Proximity",
+                            ticker="SPY",
+                            horizon_days=60,
+                        )
+                        st.toast(f"Market Bottom call logged at {_tb_prox['bottom_pct']}% proximity!", icon="📈")
 
 
 def render():
