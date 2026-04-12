@@ -926,8 +926,20 @@ def _render_crash_stress_test():
             "Options, sentiment, and events scores are unavailable in historical mode."
         )
 
+        # Pre-compute regime scores ~10 trading days before each key date for velocity
+        _prev_scores = {}
         for label, date in key_dates:
-            snap = build_qir_snapshot(date, _hist_data, _hmm_data)
+            _dt = pd.Timestamp(date)
+            # Look back ~10 trading days in snapshots
+            _prev_snap = None
+            for s in result.get("snapshots", []):
+                s_dt = pd.Timestamp(s["date"])
+                if s_dt < _dt and (_dt - s_dt).days <= 15:
+                    _prev_snap = s
+            _prev_scores[date] = _prev_snap["regime_score"] if _prev_snap else None
+
+        for label, date in key_dates:
+            snap = build_qir_snapshot(date, _hist_data, _hmm_data, prev_regime_score=_prev_scores.get(date))
             _r = snap["regime"]
             _h = snap["hmm"]
 
@@ -946,6 +958,22 @@ def _render_crash_stress_test():
 
             # Lean color
             _lean_c = COLORS["positive"] if snap["lean"] == "BULLISH" else COLORS["negative"]
+
+            # Regime velocity indicator
+            _vel = snap.get("regime_velocity")
+            _vel_html = ""
+            if _vel is not None:
+                _vel_color = COLORS["positive"] if _vel > 0.02 else (COLORS["negative"] if _vel < -0.02 else COLORS["yellow"])
+                _vel_arrow = "▲" if _vel > 0.02 else ("▼" if _vel < -0.02 else "►")
+                _vel_label = "ACCELERATING" if abs(_vel) > 0.10 else ("FLIPPING" if abs(_vel) > 0.05 else "DRIFTING" if abs(_vel) > 0.02 else "STABLE")
+                _vel_html = (
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 8px;'
+                    f'background:#0d1117;border:1px solid {_vel_color}40;border-radius:4px;">'
+                    f'<span style="color:{_vel_color};font-size:14px;font-weight:700;">{_vel_arrow}</span>'
+                    f'<span style="color:{_vel_color};font-size:10px;font-weight:700;">REGIME VELOCITY: {_vel:+.3f}/period</span>'
+                    f'<span style="color:{COLORS["text_dim"]};font-size:9px;">({_vel_label})</span>'
+                    f'</div>'
+                )
 
             # HMM block
             _hmm_html = ""
@@ -1023,6 +1051,8 @@ def _render_crash_stress_test():
                 f'<span style="color:{COLORS["text_dim"]};">VIX</span> '
                 f'<span style="color:{COLORS["text"]};font-weight:700;">{snap["vix"]:.1f}</span>'
                 f'</div></div>'
+                # Velocity
+                f'{_vel_html}'
                 # Score row
                 f'<div style="display:flex;gap:12px;font-size:10px;margin-bottom:4px;">'
                 f'<div><span style="color:{COLORS["text_dim"]};">Regime:</span> '

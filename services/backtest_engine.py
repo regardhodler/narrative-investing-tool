@@ -1212,11 +1212,13 @@ def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
     }
 
 
-def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None) -> dict:
+def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime_score: float | None = None) -> dict:
     """Build a full simulated QIR snapshot for a specific date.
 
     Combines regime reconstruction + HMM + entry signal into a dict
     matching the QIR dashboard's display fields.
+
+    prev_regime_score: regime score from ~5-10 days prior, used to compute velocity.
     """
     regime = reconstruct_regime_at_date(date, data)
     hmm = reconstruct_hmm_at_date(date, hmm_data)
@@ -1264,6 +1266,11 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None) -> dict:
                    "Stress": 0.85, "Late Cycle": 0.75, "Crisis": 0.60}
     hmm_mult = _KELLY_MULT.get(hmm["state_label"], 1.0) if hmm else 1.0
 
+    # Regime velocity: change in regime score vs prior snapshot
+    regime_velocity = None
+    if prev_regime_score is not None:
+        regime_velocity = round(regime["regime_score"] - prev_regime_score, 4)
+
     return {
         "date": date,
         "regime": regime,
@@ -1277,6 +1284,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None) -> dict:
         "sent_score": "N/A",
         "event_score": "N/A",
         "conviction": conviction,
+        "regime_velocity": regime_velocity,
         "hmm_kelly_mult": hmm_mult,
         "spy_price": regime.get("spy_price"),
         "vix": regime.get("vix"),
