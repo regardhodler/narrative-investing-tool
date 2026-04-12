@@ -914,6 +914,7 @@ def _render_crash_stress_test():
     key_dates.append(("TROUGH", result["trough_date"]))
     if result.get("dip_buy_date"):
         key_dates.append(("DIP BUY", result["dip_buy_date"]))
+    key_dates.sort(key=lambda x: x[1])  # chronological order
 
     if key_dates:
         st.markdown(
