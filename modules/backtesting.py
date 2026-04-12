@@ -927,17 +927,25 @@ def _render_crash_stress_test():
             "Options, sentiment, and events scores are unavailable in historical mode."
         )
 
-        # Pre-compute regime scores ~10 trading days before each key date for velocity
+        # Compute regime velocity: reconstruct regime 7 calendar days before each key date
+        # This gives a consistent "weekly velocity" regardless of snapshot sampling rate
+        from services.backtest_engine import reconstruct_regime_at_date
         _prev_scores = {}
         for label, date in key_dates:
             _dt = pd.Timestamp(date)
-            # Look back ~10 trading days in snapshots
-            _prev_snap = None
-            for s in result.get("snapshots", []):
-                s_dt = pd.Timestamp(s["date"])
-                if s_dt < _dt and (_dt - s_dt).days <= 15:
-                    _prev_snap = s
-            _prev_scores[date] = _prev_snap["regime_score"] if _prev_snap else None
+            _prior_dt = _dt - pd.Timedelta(days=7)
+            # Find nearest trading day at or before _prior_dt in SPY data
+            _spy = _hist_data.get("spy")
+            if _spy is not None and not _spy.empty:
+                _candidates = _spy[_spy.index <= _prior_dt]
+                if len(_candidates) > 0:
+                    _prior_date_str = str(_candidates.index[-1])[:10]
+                    _prior_regime = reconstruct_regime_at_date(_prior_date_str, _hist_data)
+                    _prev_scores[date] = _prior_regime["regime_score"]
+                else:
+                    _prev_scores[date] = None
+            else:
+                _prev_scores[date] = None
 
         for label, date in key_dates:
             snap = build_qir_snapshot(date, _hist_data, _hmm_data, prev_regime_score=_prev_scores.get(date))
@@ -971,7 +979,7 @@ def _render_crash_stress_test():
                     f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;padding:4px 8px;'
                     f'background:#0d1117;border:1px solid {_vel_color}40;border-radius:4px;">'
                     f'<span style="color:{_vel_color};font-size:14px;font-weight:700;">{_vel_arrow}</span>'
-                    f'<span style="color:{_vel_color};font-size:10px;font-weight:700;">REGIME VELOCITY: {_vel:+.3f}/period</span>'
+                    f'<span style="color:{_vel_color};font-size:10px;font-weight:700;">REGIME VELOCITY: {_vel:+.3f}/week</span>'
                     f'<span style="color:{COLORS["text_dim"]};font-size:9px;">({_vel_label})</span>'
                     f'</div>'
                 )
