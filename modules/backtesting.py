@@ -836,10 +836,25 @@ def _render_crash_stress_test():
                     showlegend=False,
                 ))
 
+        # Event markers: PEAK, WARNING, TROUGH, DIP BUY as vertical lines on chart
+        _event_markers = [("PEAK", result["peak_date"], COLORS["bloomberg_orange"])]
+        if result.get("warning_date"):
+            _event_markers.append(("WARNING", result["warning_date"], COLORS["yellow"]))
+        _event_markers.append(("TROUGH", result["trough_date"], COLORS["negative"]))
+        if result.get("dip_buy_date"):
+            _event_markers.append(("DIP BUY", result["dip_buy_date"], COLORS["positive"]))
+
+        for _em_label, _em_date, _em_color in _event_markers:
+            fig.add_vline(
+                x=_em_date, line_dash="dash", line_color=_em_color, line_width=1,
+                annotation_text=_em_label, annotation_position="top",
+                annotation=dict(font_size=8, font_color=_em_color),
+            )
+
         apply_dark_layout(fig, title=f"REGARD Signal Timeline — {result['crash_name']}", height=420)
         fig.update_layout(
             yaxis=dict(title="Regime Score", range=[-1.1, 1.1]),
-            yaxis2=dict(title="SPY Price ($)", overlaying="y", side="right"),
+            yaxis2=dict(title="SPY Price ($)", overlaying="y", side="right", type="log"),
             legend=dict(x=0.01, y=0.99, bgcolor="rgba(0,0,0,0)"),
             margin=dict(l=60, r=60, t=40, b=40),
         )
@@ -908,6 +923,12 @@ def _render_crash_stress_test():
     _hmm_data = _build_hmm_historical_inference()
 
     key_dates = []
+    # Add 6M and 3M before peak to show bull→bear transition
+    _peak_dt = pd.Timestamp(result["peak_date"])
+    _6m_before = str((_peak_dt - pd.Timedelta(days=180)).date())
+    _3m_before = str((_peak_dt - pd.Timedelta(days=90)).date())
+    key_dates.append(("6M BEFORE", _6m_before))
+    key_dates.append(("3M BEFORE", _3m_before))
     if result.get("warning_date"):
         key_dates.append(("WARNING", result["warning_date"]))
     key_dates.append(("PEAK", result["peak_date"]))
@@ -924,7 +945,8 @@ def _render_crash_stress_test():
         )
         st.caption(
             "What REGARD's QIR dashboard would have shown at each key moment. "
-            "Options, sentiment, and events scores are unavailable in historical mode."
+            "Options, sentiment, and events scores are unavailable in historical mode. "
+            "Regime velocity = regime score change over prior 7 calendar days (not between displayed snapshots)."
         )
 
         # Compute regime velocity: reconstruct regime 7 calendar days before each key date
@@ -954,6 +976,8 @@ def _render_crash_stress_test():
 
             # Label color
             _lc = {
+                "6M BEFORE": COLORS["text_dim"],
+                "3M BEFORE": COLORS["text"],
                 "WARNING": COLORS["yellow"],
                 "PEAK": COLORS["bloomberg_orange"],
                 "TROUGH": COLORS["negative"],

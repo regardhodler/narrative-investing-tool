@@ -383,13 +383,13 @@ def _classify_entry_recommendation(
 
     Returns one of: BUY THE DIP | HOLD | WAIT | SELL THE RIP
     """
-    leading_bull  = leading_score  >= 58
-    leading_bear  = leading_score  <  42
+    leading_bull  = leading_score  >= 55
+    leading_bear  = leading_score  <  44
     macro_bear    = macro_score    <  40
-    tac_dip       = tactical_score <  45
-    tac_rip       = tactical_score >= 65
+    tac_dip       = tactical_score <  48
+    tac_rip       = tactical_score >= 62
     opts_bearish  = options_score  <  40
-    opts_bullish  = options_score  >= 62
+    opts_bullish  = options_score  >= 60
     early_risk_on  = divergence_label == "Early Risk-On Setup"
     early_risk_off = divergence_label == "Early Risk-Off Warning"
     large_div      = abs(divergence_pts) >= 8
@@ -1072,6 +1072,8 @@ def _render_qir_dashboard() -> None:
     _setup_block      = ""
     _caveats_block    = ""
     _entry_rec_html   = ""
+    _velocity_block   = ""
+    _signal_breakdown_block = ""
     if _populated:
         _verdict_color = _cls["color"]
         _verdict_label = _cls["label"]
@@ -1282,6 +1284,81 @@ def _render_qir_dashboard() -> None:
                 f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
                 f'<div style="background:{_cv_color};width:{_cv_bar_w}%;height:4px;border-radius:3px;"></div>'
                 f'</div>'
+                f'</div>'
+            )
+
+        # ── Regime Velocity card ─────────────────────────────────────────────
+        import json as _vjson, os as _vos
+        try:
+            _vpath = _vos.path.join(_vos.path.dirname(_vos.path.dirname(__file__)), "data", "tactical_score_history.json")
+            with open(_vpath) as _vf:
+                _vhist = _vjson.load(_vf)
+            if _vhist and len(_vhist) >= 6:
+                _v_now = float(_rc.get("macro_score") or 50)
+                _v_old = float(_vhist[-6].get("score", 50))
+                _v_delta = round(_v_now - _v_old, 1)
+                _v_abs = abs(_v_delta)
+                _v_color = "#22c55e" if _v_delta > 3 else ("#ef4444" if _v_delta < -3 else "#f59e0b")
+                _v_arrow = "▲" if _v_delta > 3 else ("▼" if _v_delta < -3 else "►")
+                _v_label = ("ACCELERATING" if _v_abs > 15 else
+                            "FLIPPING" if _v_abs > 8 else
+                            "DRIFTING" if _v_abs > 3 else "STABLE")
+                _v_bar_w = min(100, int(_v_abs * 3))  # scale for visual
+                _velocity_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                    f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
+                    f'{_v_arrow} {_v_delta:+.1f}/wk · {_v_label}</span>'
+                    f'</div>'
+                    f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
+                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
+                    f'</div>'
+                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">Macro score change over ~5 trading days</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
+        # ── Signal Breakdown card ────────────────────────────────────────────
+        _raw_sigs = st.session_state.get("_regime_raw_signals") or {}
+        # Filter to z-score signal keys (exclude metadata keys)
+        _meta_keys = {"macro_score_norm", "macro_regime", "quadrant", "leading_score",
+                       "leading_divergence", "leading_label", "score_5d_trend",
+                       "fear_greed", "fear_greed_label", "tactical_score"}
+        _sig_items = [(k, v) for k, v in _raw_sigs.items()
+                      if k not in _meta_keys and isinstance(v, (int, float))]
+        if _sig_items:
+            _sig_items.sort(key=lambda x: x[1])  # worst (most negative) first
+            _sb_rows = ""
+            for _sk, _sv in _sig_items:
+                _s_name = _sk.replace("_", " ").title()
+                _s_color = "#22c55e" if _sv > 0.3 else ("#ef4444" if _sv < -0.3 else "#f59e0b")
+                _s_arrow = "▲" if _sv > 0.3 else ("▼" if _sv < -0.3 else "►")
+                _s_bar_w = min(100, int(abs(_sv) * 50))
+                _s_dir = "right" if _sv >= 0 else "left"
+                _sb_rows += (
+                    f'<div style="display:flex;align-items:center;gap:6px;padding:2px 0;'
+                    f'border-bottom:1px solid #1e293b22;">'
+                    f'<span style="color:{_s_color};font-size:9px;width:10px;">{_s_arrow}</span>'
+                    f'<span style="color:#94a3b8;font-size:9px;width:120px;white-space:nowrap;'
+                    f'overflow:hidden;text-overflow:ellipsis;">{_s_name}</span>'
+                    f'<span style="color:{_s_color};font-size:10px;font-weight:700;width:45px;'
+                    f'text-align:right;font-family:monospace;">{_sv:+.2f}</span>'
+                    f'<div style="flex:1;background:#1e293b;border-radius:2px;height:3px;">'
+                    f'<div style="background:{_s_color};width:{_s_bar_w}%;height:3px;border-radius:2px;'
+                    f'margin-{"left:auto" if _sv >= 0 else "right:auto"};"></div></div>'
+                    f'</div>'
+                )
+            _signal_breakdown_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;'
+                f'margin-bottom:6px;">SIGNAL HEALTH MONITOR</div>'
+                f'{_sb_rows}'
+                f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
+                f'Z-scores sorted worst-first · Green &gt;0.3 · Red &lt;-0.3</div>'
                 f'</div>'
             )
 
@@ -2278,16 +2355,16 @@ def _render_qir_dashboard() -> None:
 
     # ── Compose zone 2: top row = Conviction | Kelly, bottom row = HMM + GEX full width ──
     _zone2_html = ""
-    if _conviction_block or _kelly_block or _hmm_block or _gex_block or _lean_card:
+    if _conviction_block or _kelly_block or _hmm_block or _gex_block or _lean_card or _velocity_block or _signal_breakdown_block:
         _top_row = ""
-        if _conviction_block or _kelly_block:
+        if _conviction_block or _kelly_block or _velocity_block:
             _top_row = (
-                f'<div style="display:grid;grid-template-columns:120px 1fr;'
+                f'<div style="display:grid;grid-template-columns:120px 120px 1fr;'
                 f'gap:10px;margin-bottom:10px;">'
-                f'{_conviction_block}{_kelly_block}'
+                f'{_conviction_block}{_velocity_block}{_kelly_block}'
                 f'</div>'
             )
-        _bot_row = _hmm_block + _gex_block + _lean_card  # full width, stacked
+        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block
         _zone2_html = _top_row + _bot_row
 
     # ── Render the full dashboard ─────────────────────────────────────────
