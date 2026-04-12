@@ -737,6 +737,95 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
     )
 
 
+# ── Crash Pattern Fingerprints ────────────────────────────────────────────────
+# Each fingerprint defines the signal conditions observed at the WARNING date
+# of major historical crashes.  Conditions use session_state keys.
+# match_count / total conditions → similarity %.  Alert if >= 60%.
+
+_CRASH_FINGERPRINTS = [
+    {
+        "name": "GFC 2008",
+        "lead_days": 481,
+        "max_drawdown": -56.8,
+        "conditions": [
+            ("credit_hy_widening", lambda rc: (rc.get("score", 0) < -0.10), "Regime score turning negative"),
+            ("vix_elevated", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 22, "VIX elevated above 22"),
+            ("hmm_stress", lambda _: (st.session_state.get("_hmm_state") or {}).get("state_label", "") in ("Early Stress", "Stress", "Late Cycle", "Crisis"), "HMM detecting stress regime"),
+            ("fear_high", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 30, "Fear composite in extreme fear"),
+            ("tactical_weak", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 40, "Tactical score bearish"),
+            ("stress_z_high", lambda _: (st.session_state.get("_stress_zscore") or {}).get("z", 0) > 1.0, "Stress z-score elevated >1σ"),
+        ],
+    },
+    {
+        "name": "COVID 2020",
+        "lead_days": 33,
+        "max_drawdown": -33.9,
+        "conditions": [
+            ("vix_spike", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 30, "VIX spiking above 30"),
+            ("regime_risk_off", lambda rc: rc.get("score", 0) < -0.25, "Regime deep Risk-Off"),
+            ("fear_extreme", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 20, "Fear composite extreme"),
+            ("tactical_crash", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 30, "Tactical score collapsed"),
+            ("options_bearish", lambda _: (st.session_state.get("_options_flow_context") or {}).get("options_score", 50) < 35, "Options flow bearish"),
+        ],
+    },
+    {
+        "name": "Rate Shock 2022",
+        "lead_days": 282,
+        "max_drawdown": -25.4,
+        "conditions": [
+            ("regime_negative", lambda rc: rc.get("score", 0) < -0.15, "Regime turning Risk-Off"),
+            ("hmm_late_cycle", lambda _: (st.session_state.get("_hmm_state") or {}).get("state_label", "") in ("Late Cycle", "Stress", "Early Stress"), "HMM late cycle / stress"),
+            ("fear_elevated", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 35, "Fear composite elevated"),
+            ("whale_bearish", lambda _: (st.session_state.get("_whale_flow_score") or {}).get("bull_pct", 50) < 40, "Whale flow leaning bearish"),
+            ("stress_rising", lambda _: (st.session_state.get("_stress_zscore") or {}).get("z", 0) > 0.5, "Stress z-score rising"),
+        ],
+    },
+    {
+        "name": "Carry Unwind 2024",
+        "lead_days": 20,
+        "max_drawdown": -8.5,
+        "conditions": [
+            ("vix_spike", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 25, "VIX spike above 25"),
+            ("regime_flip", lambda rc: rc.get("score", 0) < -0.10, "Regime flipping negative"),
+            ("gex_negative", lambda _: (st.session_state.get("_gex_dealer_context") or {}).get("composite", 0) < -0.3, "GEX deeply negative (dealers amplify)"),
+            ("tactical_drop", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 40, "Tactical score dropped sharply"),
+        ],
+    },
+]
+
+
+def _check_crash_patterns(rc: dict) -> list[dict]:
+    """Check current signals against historical crash fingerprints.
+
+    Returns list of matched patterns with similarity >= 50%.
+    Each dict: {name, lead_days, max_drawdown, match_pct, matched, total, details}
+    """
+    matches = []
+    for fp in _CRASH_FINGERPRINTS:
+        matched = []
+        total = len(fp["conditions"])
+        for cond_name, check_fn, desc in fp["conditions"]:
+            try:
+                if check_fn(rc):
+                    matched.append(desc)
+            except Exception:
+                pass
+        pct = len(matched) / total * 100 if total > 0 else 0
+        if pct >= 50:
+            matches.append({
+                "name": fp["name"],
+                "lead_days": fp["lead_days"],
+                "max_drawdown": fp["max_drawdown"],
+                "match_pct": round(pct),
+                "matched": len(matched),
+                "total": total,
+                "details": matched,
+            })
+    # Sort by match percentage descending
+    matches.sort(key=lambda m: m["match_pct"], reverse=True)
+    return matches
+
+
 def _render_qir_dashboard() -> None:
     """Render the QIR Intelligence Dashboard.
 
@@ -2202,6 +2291,36 @@ def _render_qir_dashboard() -> None:
         _zone2_html = _top_row + _bot_row
 
     # ── Render the full dashboard ─────────────────────────────────────────
+    # ── Crash pattern alert ──────────────────────────────────────────────
+    _crash_alert_html = ""
+    if _populated:
+        _crash_matches = _check_crash_patterns(_rc)
+        if _crash_matches:
+            _alert_parts = []
+            for _cm in _crash_matches:
+                _sev_color = "#ef4444" if _cm["match_pct"] >= 80 else ("#f59e0b" if _cm["match_pct"] >= 60 else "#f97316")
+                _icon = "🚨" if _cm["match_pct"] >= 80 else "⚠"
+                _detail_str = " · ".join(_cm["details"][:3])
+                _alert_parts.append(
+                    f'<div style="padding:4px 0;">'
+                    f'{_icon} <span style="color:{_sev_color};font-weight:700;">{_cm["match_pct"]}% match → {_cm["name"]}</span>'
+                    f' <span style="color:#64748b;">({_cm["matched"]}/{_cm["total"]} signals)</span>'
+                    f'<br><span style="color:#64748b;font-size:8px;">'
+                    f'Historical: {_cm["lead_days"]}d warning before {_cm["max_drawdown"]:+.1f}% drawdown'
+                    f' · {_detail_str}</span>'
+                    f'</div>'
+                )
+            _crash_alert_html = (
+                f'<div style="background:#1a0a0a;border:1px solid #ef444466;border-radius:4px;'
+                f'padding:8px 10px;margin-bottom:8px;font-size:10px;">'
+                f'<div style="font-size:8px;font-weight:700;letter-spacing:0.1em;color:#ef4444;'
+                f'margin-bottom:4px;">CRASH PATTERN ALERT</div>'
+                + "".join(_alert_parts)
+                + f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
+                f'Based on signal fingerprints from Crash Stress Test historical simulations</div>'
+                f'</div>'
+            )
+
     # Zone order: header → Zone1(verdict+entry) → Zone2(sizing) →
     #             Zone3(signals) → Zone4(playbook) → footer
     st.markdown(
@@ -2211,6 +2330,7 @@ def _render_qir_dashboard() -> None:
         f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
         f'text-transform:uppercase;">QIR Intelligence Dashboard</div>'
         f'</div>'
+        f'{_crash_alert_html}'
         f'{_freshness_html}'
         f'{_verdict_html}'
         f'{_entry_rec_html}'
