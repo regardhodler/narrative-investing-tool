@@ -1110,7 +1110,7 @@ def _build_hmm_historical_inference() -> dict | None:
         model.means_ = np.array(brain.means)
         model.covars_ = np.array(brain.covars)
 
-        df = _build_feature_matrix(lookback_years=15)
+        df = _build_feature_matrix(lookback_years=30)
         for col in brain.feature_names:
             if col not in df.columns:
                 df[col] = 0.0

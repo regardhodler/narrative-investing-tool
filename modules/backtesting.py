@@ -1009,6 +1009,13 @@ def _render_crash_stress_test():
 
             # HMM block
             _hmm_html = ""
+            if not _h:
+                _hmm_html = (
+                    f'<div style="margin-top:6px;padding:6px 8px;background:#0d1117;border:1px solid {COLORS["border"]};'
+                    f'border-radius:4px;font-size:9px;color:{COLORS["text_dim"]};">'
+                    f'HMM BRAIN STATE: N/A — TIPS real yield data (DFII10) starts 2003; '
+                    f'5yr z-score warmup means HMM coverage begins ~2008</div>'
+                )
             if _h:
                 _hc = {"Bull": COLORS["positive"], "Neutral": COLORS["yellow"],
                        "Early Stress": COLORS["orange"], "Stress": COLORS["negative"],
