@@ -845,11 +845,10 @@ def _render_crash_stress_test():
             _event_markers.append(("DIP BUY", result["dip_buy_date"], COLORS["positive"]))
 
         for _em_label, _em_date, _em_color in _event_markers:
-            fig.add_vline(
-                x=_em_date, line_dash="dash", line_color=_em_color, line_width=1,
-                annotation_text=_em_label, annotation_position="top",
-                annotation=dict(font_size=8, font_color=_em_color),
-            )
+            fig.add_shape(type="line", x0=_em_date, x1=_em_date, y0=0, y1=1,
+                          yref="paper", line=dict(color=_em_color, width=1, dash="dash"))
+            fig.add_annotation(x=_em_date, y=1.02, yref="paper", text=_em_label,
+                               showarrow=False, font=dict(size=8, color=_em_color))
 
         apply_dark_layout(fig, title=f"REGARD Signal Timeline — {result['crash_name']}", height=420)
         fig.update_layout(
