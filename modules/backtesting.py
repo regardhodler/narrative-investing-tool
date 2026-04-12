@@ -694,7 +694,7 @@ def _render_crash_stress_test():
             avg_dip = np.mean(dip_returns) if dip_returns else 0
 
             st.markdown(
-                f'<div style="background:{COLORS["card_bg"]};border:1px solid {COLORS["border"]};'
+                f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
                 f'border-radius:6px;padding:12px;margin:8px 0;">'
                 f'<div style="font-size:11px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">VERDICT</div>'
                 f'<div style="font-size:12px;color:{COLORS["text"]};">'
@@ -715,7 +715,7 @@ def _render_crash_stress_test():
         # Show scenario context
         sc = CRASH_SCENARIOS[selected]
         st.markdown(
-            f'<div style="background:{COLORS["card_bg"]};border:1px solid {COLORS["border"]};'
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
             f'border-radius:6px;padding:12px;margin:8px 0;">'
             f'<div style="font-size:12px;color:{COLORS["text"]};">'
             f'<b>{sc["name"]}</b><br>'
@@ -761,7 +761,7 @@ def _render_crash_stress_test():
         )
 
     st.markdown(
-        f'<div style="background:{COLORS["card_bg"]};border:1px solid {COLORS["border"]};'
+        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
         f'border-radius:6px;padding:14px;margin:8px 0;">'
         f'<div style="font-size:12px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">'
         f'{result["crash_name"]}</div>'
@@ -894,7 +894,7 @@ def _render_crash_stress_test():
             )
 
         st.markdown(
-            f'<div style="background:{COLORS["card_bg"]};border:1px solid {COLORS["border"]};'
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
             f'border-radius:6px;padding:10px;font-size:11px;">'
             + "".join(rows_html)
             + '</div>',
