@@ -977,6 +977,7 @@ def _render_qir_dashboard() -> None:
     # Zone blocks — populated inside if _populated, empty string fallback if not
     _conviction_block = ""
     _kelly_block      = ""
+    _kly_half         = None  # populated by Kelly computation; used for forecast logging
     _hmm_block        = ""
     _gex_block        = ""
     _setup_block      = ""
@@ -2339,6 +2340,7 @@ def _render_qir_dashboard() -> None:
                             ticker="SPY",
                             horizon_days=60,
                             use_weekly_atr=True,
+                            kelly_half_pct=_kly_half,
                         )
                         # Log to Trade Journal
                         try:

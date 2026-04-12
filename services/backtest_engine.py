@@ -616,3 +616,473 @@ def walk_forward_vix(
         "ticker":               "SPY",
         "confidence":           _oos_confidence(agg["win_rate"], agg["avg_return"], agg["num_trades"]),
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CRASH STRESS TEST SIMULATOR
+# ══════════════════════════════════════════════════════════════════════════════
+
+CRASH_SCENARIOS = {
+    "dotcom_2000": {
+        "name": "Dot-com Bubble (2000–2002)",
+        "warmup_start": "1999-01-01",
+        "sim_start": "2000-01-01",
+        "peak": "2000-03-24",
+        "trough": "2002-10-09",
+        "recovery_end": "2003-06-01",
+        "context": "Tech mania, P/E >30, Fed hiking, Y2K liquidity drain",
+    },
+    "gfc_2008": {
+        "name": "Global Financial Crisis (2007–2009)",
+        "warmup_start": "2006-01-01",
+        "sim_start": "2007-06-01",
+        "peak": "2007-10-09",
+        "trough": "2009-03-09",
+        "recovery_end": "2009-09-01",
+        "context": "Subprime, credit spreads blew out, yield curve inverted 2006",
+    },
+    "eu_debt_2011": {
+        "name": "EU Debt Crisis (2011)",
+        "warmup_start": "2010-01-01",
+        "sim_start": "2011-03-01",
+        "peak": "2011-04-29",
+        "trough": "2011-10-03",
+        "recovery_end": "2012-03-01",
+        "context": "Greek/EU sovereign debt, S&P US downgrade",
+    },
+    "china_2015": {
+        "name": "China Devaluation (2015–2016)",
+        "warmup_start": "2014-01-01",
+        "sim_start": "2015-05-01",
+        "peak": "2015-07-20",
+        "trough": "2016-02-11",
+        "recovery_end": "2016-07-01",
+        "context": "Yuan devaluation, EM contagion, oil crash, VIX spike",
+    },
+    "volmageddon_2018": {
+        "name": "Volmageddon + Fed Selloff (2018)",
+        "warmup_start": "2017-01-01",
+        "sim_start": "2018-01-01",
+        "peak": "2018-01-26",
+        "trough": "2018-12-24",
+        "recovery_end": "2019-05-01",
+        "context": "Feb VIX explosion, Dec Fed overshoot, trade war",
+    },
+    "covid_2020": {
+        "name": "COVID Crash (2020)",
+        "warmup_start": "2019-01-01",
+        "sim_start": "2020-01-01",
+        "peak": "2020-02-19",
+        "trough": "2020-03-23",
+        "recovery_end": "2020-08-01",
+        "context": "Pandemic, fastest bear market in history (33 days)",
+    },
+    "rate_shock_2022": {
+        "name": "Rate Shock Bear Market (2022)",
+        "warmup_start": "2021-01-01",
+        "sim_start": "2021-11-01",
+        "peak": "2022-01-03",
+        "trough": "2022-10-12",
+        "recovery_end": "2023-03-01",
+        "context": "Inflation surge, aggressive Fed hiking, yield curve inversion",
+    },
+    "carry_unwind_2024": {
+        "name": "Carry Trade Unwind (2024)",
+        "warmup_start": "2023-06-01",
+        "sim_start": "2024-06-01",
+        "peak": "2024-07-16",
+        "trough": "2024-08-05",
+        "recovery_end": "2024-11-01",
+        "context": "Yen carry unwind, AI rotation, VIX spike to 65",
+    },
+}
+
+# FRED series used for historical regime reconstruction
+_HIST_FRED_SERIES = {
+    "yield_curve":    "T10Y2Y",
+    "yield_curve_3m": "T10Y3M",
+    "credit_hy":      "BAMLH0A0HYM2",
+    "credit_ig":      "BAMLC0A0CM",
+    "fci":            "NFCI",
+    "icsa":           "ICSA",
+    "fedfunds":       "FEDFUNDS",
+    "real_yield":     "DFII10",
+    "indpro":         "INDPRO",
+    "umcsent":        "UMCSENT",
+    "permit":         "PERMIT",
+    "totbkcr":        "TOTBKCR",
+}
+
+# Weights mirror the live SIGNAL_WEIGHTS tiers from risk_regime.py
+_HIST_SIGNAL_WEIGHTS = {
+    "yield_curve":    2.0,
+    "yield_curve_3m": 2.0,
+    "credit_hy":      2.0,
+    "credit_ig":      1.5,
+    "fci":            2.0,
+    "icsa":           1.5,
+    "vix":            2.0,
+    "spy_trend":      1.5,
+    "real_yield":     2.0,
+    "indpro":         1.0,
+    "umcsent":        1.0,
+    "permit":         0.5,
+    "credit_impulse": 2.0,
+}
+
+# Which signals are inverted (higher = risk-off)
+_HIST_INVERT = {"credit_hy", "credit_ig", "fci", "icsa", "vix"}
+
+
+def _hist_zscore(series: pd.Series, date: pd.Timestamp, lookback: int = 252, invert: bool = False) -> float:
+    """Compute z-score of a series at a specific historical date, mapped to [-1, +1]."""
+    if series is None or series.empty:
+        return 0.0
+    sliced = series[series.index <= date].dropna()
+    n = min(lookback, len(sliced))
+    if n < 20:
+        return 0.0
+    window = sliced.iloc[-n:]
+    std = float(window.std())
+    if std < 1e-9:
+        return 0.0
+    z = (float(sliced.iloc[-1]) - float(window.mean())) / std
+    if invert:
+        z = -z
+    return max(-1.0, min(1.0, z / 2.0))
+
+
+def _hist_credit_impulse(series: pd.Series, date: pd.Timestamp) -> float:
+    """Credit impulse = YoY acceleration of bank credit, z-scored."""
+    if series is None or series.empty:
+        return 0.0
+    sliced = series[series.index <= date].dropna()
+    if len(sliced) < 60:
+        return 0.0
+    yoy = sliced.pct_change(52).dropna()  # weekly data → 52 = 1 year
+    if len(yoy) < 52:
+        yoy = sliced.pct_change(12).dropna()  # monthly fallback
+    if len(yoy) < 20:
+        return 0.0
+    std = float(yoy.iloc[-252:].std()) if len(yoy) >= 252 else float(yoy.std())
+    if std < 1e-9:
+        return 0.0
+    z = (float(yoy.iloc[-1]) - float(yoy.iloc[-252:].mean() if len(yoy) >= 252 else yoy.mean())) / std
+    return max(-1.0, min(1.0, z / 2.0))
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _load_all_historical_data() -> dict:
+    """Load all FRED series + SPY + VIX for the full available history. Cached 24h."""
+    from services.market_data import fetch_fred_series_safe
+
+    data = {}
+    for key, sid in _HIST_FRED_SERIES.items():
+        data[key] = fetch_fred_series_safe(sid)
+
+    # SPY and VIX from yfinance
+    for ticker, label in [("SPY", "spy"), ("^VIX", "vix")]:
+        try:
+            raw = yf.download(ticker, period="max", interval="1d", progress=False, auto_adjust=True)
+            if raw is not None and not raw.empty:
+                if isinstance(raw.columns, pd.MultiIndex):
+                    raw = raw.droplevel("Ticker", axis=1)
+                data[label] = raw["Close"].dropna()
+                if label == "spy":
+                    data["spy_ohlc"] = raw[["Open", "High", "Low", "Close"]].dropna()
+        except Exception:
+            pass
+
+    return data
+
+
+def reconstruct_regime_at_date(date: str, data: dict) -> dict:
+    """Reconstruct REGARD regime score at a specific historical date.
+
+    Args:
+        date: ISO date string e.g. "2008-09-15"
+        data: pre-loaded historical data dict from _load_all_historical_data()
+
+    Returns dict with regime_score, quadrant, signal_details, spy_price, vix, etc.
+    """
+    dt = pd.Timestamp(date)
+    signals = {}
+    details = []
+
+    # FRED-based z-scores
+    for key in _HIST_FRED_SERIES:
+        series = data.get(key)
+        if series is None:
+            continue
+        invert = key in _HIST_INVERT
+        z = _hist_zscore(series, dt, invert=invert)
+        signals[key] = z
+        # Get the raw value at date
+        sliced = series[series.index <= dt].dropna()
+        raw_val = float(sliced.iloc[-1]) if len(sliced) > 0 else None
+        details.append({"name": key, "z_score": round(z, 3), "value": raw_val, "weight": _HIST_SIGNAL_WEIGHTS.get(key, 1.0)})
+
+    # VIX z-score
+    vix_series = data.get("vix")
+    vix_val = None
+    if vix_series is not None:
+        vix_z = _hist_zscore(vix_series, dt, invert=True)
+        signals["vix"] = vix_z
+        sliced = vix_series[vix_series.index <= dt].dropna()
+        vix_val = float(sliced.iloc[-1]) if len(sliced) > 0 else None
+        # VIX percentile
+        vix_pct = None
+        if len(sliced) >= 252:
+            window = sliced.iloc[-252:]
+            vix_pct = round(float((window < vix_val).sum()) / len(window) * 100, 1)
+        details.append({"name": "vix", "z_score": round(vix_z, 3), "value": vix_val, "weight": 2.0, "percentile": vix_pct})
+
+    # SPY trend (50/200 SMA signal)
+    spy_series = data.get("spy")
+    spy_price = None
+    spy_sma50 = None
+    spy_sma200 = None
+    spy_rsi = None
+    if spy_series is not None:
+        sliced = spy_series[spy_series.index <= dt].dropna()
+        if len(sliced) >= 200:
+            spy_price = float(sliced.iloc[-1])
+            spy_sma50 = float(sliced.iloc[-50:].mean())
+            spy_sma200 = float(sliced.iloc[-200:].mean())
+            # Trend score: above both SMAs = +1, below both = -1, mixed = 0
+            above_50 = spy_price > spy_sma50
+            above_200 = spy_price > spy_sma200
+            if above_50 and above_200:
+                trend_z = 0.5
+            elif not above_50 and not above_200:
+                trend_z = -0.5
+            elif above_200 and not above_50:
+                trend_z = -0.15  # weakening
+            else:
+                trend_z = 0.15  # recovering
+            # RSI(14)
+            delta = sliced.diff()
+            gain = delta.where(delta > 0, 0).rolling(14).mean()
+            loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            rs = gain / loss.replace(0, 1e-9)
+            rsi = 100 - (100 / (1 + rs))
+            spy_rsi = float(rsi.iloc[-1]) if not rsi.empty else None
+            # RSI modifier
+            if spy_rsi is not None:
+                if spy_rsi < 30:
+                    trend_z -= 0.2  # oversold = more bearish regime signal
+                elif spy_rsi > 70:
+                    trend_z += 0.1  # overbought doesn't necessarily mean risk-off
+            signals["spy_trend"] = max(-1.0, min(1.0, trend_z))
+            details.append({"name": "spy_trend", "z_score": round(trend_z, 3), "value": spy_price, "weight": 1.5,
+                            "sma50": round(spy_sma50, 2), "sma200": round(spy_sma200, 2), "rsi": round(spy_rsi, 1) if spy_rsi else None})
+
+    # Credit impulse (bank credit acceleration)
+    totbkcr = data.get("totbkcr")
+    if totbkcr is not None:
+        ci = _hist_credit_impulse(totbkcr, dt)
+        signals["credit_impulse"] = ci
+        details.append({"name": "credit_impulse", "z_score": round(ci, 3), "value": None, "weight": 2.0})
+
+    # Weighted composite score
+    if not signals:
+        return {"date": date, "regime_score": 0.0, "quadrant": "Unknown", "signal_details": [], "spy_price": spy_price, "vix": vix_val}
+
+    weighted_sum = 0.0
+    weight_sum = 0.0
+    for key, z in signals.items():
+        w = _HIST_SIGNAL_WEIGHTS.get(key, 1.0)
+        weighted_sum += z * w
+        weight_sum += w
+
+    regime_score = weighted_sum / weight_sum if weight_sum > 0 else 0.0
+    regime_score = max(-1.0, min(1.0, regime_score))
+
+    # Map to 0-100 macro score
+    macro_score = round((regime_score + 1) / 2 * 100, 1)
+
+    # Quadrant classification (simplified — no inflation axis in historical mode)
+    if regime_score > 0.15:
+        quadrant = "Goldilocks" if regime_score > 0.4 else "Reflation"
+        regime_label = "Risk-On"
+    elif regime_score < -0.15:
+        quadrant = "Stagflation" if regime_score < -0.4 else "Deflation"
+        regime_label = "Risk-Off"
+    else:
+        quadrant = "Neutral"
+        regime_label = "Neutral"
+
+    return {
+        "date": date,
+        "regime_score": round(regime_score, 4),
+        "regime_label": regime_label,
+        "macro_score": macro_score,
+        "quadrant": quadrant,
+        "signal_details": details,
+        "spy_price": spy_price,
+        "spy_sma50": spy_sma50,
+        "spy_sma200": spy_sma200,
+        "spy_rsi": spy_rsi,
+        "vix": vix_val,
+        "vix_percentile": details[-2].get("percentile") if len(details) >= 2 else None,
+    }
+
+
+@st.cache_data(ttl=3600, show_spinner="Running crash simulation...")
+def run_crash_simulation(crash_key: str) -> dict:
+    """Run full historical crash simulation.
+
+    Reconstructs REGARD's regime score for every trading day in the crash window,
+    identifies the early warning date, and measures avoided drawdown + dip buy return.
+    """
+    scenario = CRASH_SCENARIOS.get(crash_key)
+    if not scenario:
+        return {"error": f"Unknown crash: {crash_key}"}
+
+    data = _load_all_historical_data()
+    spy_series = data.get("spy")
+    if spy_series is None or spy_series.empty:
+        return {"error": "Failed to load SPY data"}
+
+    sim_start = pd.Timestamp(scenario["sim_start"])
+    recovery_end = pd.Timestamp(scenario["recovery_end"])
+    peak_date = pd.Timestamp(scenario["peak"])
+    trough_date = pd.Timestamp(scenario["trough"])
+
+    # Get trading days in the simulation window
+    spy_window = spy_series[(spy_series.index >= sim_start) & (spy_series.index <= recovery_end)]
+    if spy_window.empty:
+        return {"error": "No SPY data for this period"}
+
+    trading_days = [str(d)[:10] for d in spy_window.index]
+
+    # Reconstruct regime at each trading day (sample every N days for speed)
+    # Full daily for short crashes, weekly for long ones
+    total_days = len(trading_days)
+    step = 1 if total_days <= 200 else max(1, total_days // 200)
+    sampled_days = trading_days[::step]
+    if trading_days[-1] not in sampled_days:
+        sampled_days.append(trading_days[-1])
+
+    snapshots = []
+    for d in sampled_days:
+        snap = reconstruct_regime_at_date(d, data)
+        snapshots.append(snap)
+
+    # Find actual peak and trough SPY prices
+    spy_at_peak = None
+    spy_at_trough = None
+    peak_slice = spy_series[spy_series.index <= peak_date].dropna()
+    trough_slice = spy_series[spy_series.index <= trough_date].dropna()
+    if len(peak_slice) > 0:
+        spy_at_peak = float(peak_slice.iloc[-1])
+    if len(trough_slice) > 0:
+        spy_at_trough = float(trough_slice.iloc[-1])
+
+    max_drawdown = round((spy_at_trough - spy_at_peak) / spy_at_peak * 100, 2) if spy_at_peak and spy_at_trough else None
+
+    # Find early warning: first date with 3+ consecutive days of regime_score < -0.15
+    warning_date = None
+    warning_spy = None
+    consec_risk_off = 0
+    for snap in snapshots:
+        if snap["regime_score"] < -0.15:
+            consec_risk_off += 1
+            if consec_risk_off >= 3 and warning_date is None:
+                warning_date = snap["date"]
+                warning_spy = snap["spy_price"]
+        else:
+            consec_risk_off = 0
+
+    # Lead time and avoided drawdown
+    warning_lead_days = None
+    avoided_drawdown = None
+    if warning_date and spy_at_trough and warning_spy:
+        warning_lead_days = (trough_date - pd.Timestamp(warning_date)).days
+        avoided_drawdown = round((spy_at_trough - warning_spy) / warning_spy * 100, 2)
+
+    # Find dip buy signal: first date regime_score crosses back above 0 AFTER the trough
+    dip_buy_date = None
+    dip_buy_spy = None
+    dip_buy_return_20d = None
+    dip_buy_return_60d = None
+    for snap in snapshots:
+        snap_dt = pd.Timestamp(snap["date"])
+        if snap_dt > trough_date and snap["regime_score"] > 0.0 and dip_buy_date is None:
+            dip_buy_date = snap["date"]
+            dip_buy_spy = snap["spy_price"]
+            # Compute forward returns
+            if dip_buy_spy:
+                future_20 = spy_series[spy_series.index > snap_dt]
+                if len(future_20) >= 20:
+                    dip_buy_return_20d = round((float(future_20.iloc[19]) - dip_buy_spy) / dip_buy_spy * 100, 2)
+                if len(future_20) >= 60:
+                    dip_buy_return_60d = round((float(future_20.iloc[59]) - dip_buy_spy) / dip_buy_spy * 100, 2)
+            break
+
+    # Signal breakdown: which individual signal went negative first (before peak)
+    signal_first_warnings = {}
+    for snap in snapshots:
+        snap_dt = pd.Timestamp(snap["date"])
+        if snap_dt > peak_date:
+            break  # only care about pre-peak warnings
+        for detail in snap.get("signal_details", []):
+            name = detail["name"]
+            if name in signal_first_warnings:
+                continue
+            if detail["z_score"] < -0.3:  # signal is clearly negative
+                signal_first_warnings[name] = {
+                    "date": snap["date"],
+                    "z_score": detail["z_score"],
+                    "value": detail.get("value"),
+                    "lead_days": (peak_date - snap_dt).days,
+                }
+
+    # Also check post-peak for signals that only fired during the crash
+    for snap in snapshots:
+        snap_dt = pd.Timestamp(snap["date"])
+        if snap_dt <= peak_date:
+            continue
+        for detail in snap.get("signal_details", []):
+            name = detail["name"]
+            if name in signal_first_warnings:
+                continue
+            if detail["z_score"] < -0.3:
+                signal_first_warnings[name] = {
+                    "date": snap["date"],
+                    "z_score": detail["z_score"],
+                    "value": detail.get("value"),
+                    "lead_days": -(snap_dt - peak_date).days,  # negative = after peak
+                }
+
+    return {
+        "crash_key": crash_key,
+        "crash_name": scenario["name"],
+        "context": scenario["context"],
+        "peak_date": scenario["peak"],
+        "trough_date": scenario["trough"],
+        "spy_at_peak": spy_at_peak,
+        "spy_at_trough": spy_at_trough,
+        "max_drawdown": max_drawdown,
+        "warning_date": warning_date,
+        "warning_spy": warning_spy,
+        "warning_lead_days": warning_lead_days,
+        "avoided_drawdown": avoided_drawdown,
+        "dip_buy_date": dip_buy_date,
+        "dip_buy_spy": dip_buy_spy,
+        "dip_buy_return_20d": dip_buy_return_20d,
+        "dip_buy_return_60d": dip_buy_return_60d,
+        "signal_first_warnings": signal_first_warnings,
+        "snapshots": snapshots,
+        "total_sim_days": len(sampled_days),
+    }
+
+
+@st.cache_data(ttl=3600, show_spinner="Running all crash simulations...")
+def run_all_crash_simulations() -> list[dict]:
+    """Run all crash simulations and return comparison data."""
+    results = []
+    for key in CRASH_SCENARIOS:
+        result = run_crash_simulation(key)
+        results.append(result)
+    return results

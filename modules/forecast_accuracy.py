@@ -338,6 +338,25 @@ def _render_dashboard_tab():
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
+    # ── Row 3B: Kelly-weighted P&L ──────────────────────────────────────────
+    _cum_kelly  = stats.get("cumulative_kelly_return")
+    _avg_kelly  = stats.get("avg_kelly_return")
+    _kelly_wins = stats.get("avg_kelly_win")
+    _kelly_loss = stats.get("avg_kelly_loss")
+    _kelly_n    = stats.get("kelly_trades_resolved", 0)
+    if _kelly_n > 0:
+        _cum_col = COLORS["positive"] if _cum_kelly and _cum_kelly > 0 else COLORS["negative"]
+        cols_kelly = st.columns(5)
+        for col, (label, val, color) in zip(cols_kelly, [
+            ("KELLY CUMULATIVE",    f"{_cum_kelly:+.2f}%" if _cum_kelly is not None else "—",  _cum_col),
+            ("KELLY AVG/TRADE",     f"{_avg_kelly:+.3f}%" if _avg_kelly is not None else "—",  _cum_col),
+            ("KELLY AVG WIN",       f"{_kelly_wins:+.3f}%" if _kelly_wins is not None else "—", COLORS["positive"]),
+            ("KELLY AVG LOSS",      f"{_kelly_loss:+.3f}%" if _kelly_loss is not None else "—", COLORS["negative"]),
+            ("KELLY TRADES",        str(_kelly_n),                                               None),
+        ]):
+            with col:
+                st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
+
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px 0;"></div>', unsafe_allow_html=True)
 
     # ── Row 4: Streaks ────────────────────────────────────────────────────────

@@ -399,6 +399,7 @@ def log_forecast(
     horizon_days: int = 30,
     notes: str = "",
     use_weekly_atr: bool = False,
+    kelly_half_pct: Optional[float] = None,
 ) -> str:
     """Log a new forecast. Returns the forecast ID.
 
@@ -462,6 +463,8 @@ def log_forecast(
         "exit_reason": None,
         "exit_date": None,
         "notes": notes,
+        "kelly_half_pct": kelly_half_pct,
+        "kelly_weighted_return": None,
         "market_context": _capture_market_context(),
     }
 
@@ -525,6 +528,11 @@ def evaluate_pending(force: bool = False) -> int:
                 entry["target_at_log"] = atr_result["target_at_log"]
 
             entry["evaluated_at"] = now
+
+            # Kelly-weighted return: what % of account this trade made/lost
+            _khp = entry.get("kelly_half_pct")
+            if _khp and entry.get("return_pct") is not None:
+                entry["kelly_weighted_return"] = round(entry["return_pct"] * (_khp / 100), 4)
 
             # SPY benchmark — compute alpha
             spy_now = _fetch_spy_price()
@@ -708,6 +716,15 @@ def get_stats() -> dict:
     avg_return_correct   = round(sum(correct_returns)   / len(correct_returns),   2) if correct_returns   else None
     avg_return_incorrect = round(sum(incorrect_returns) / len(incorrect_returns), 2) if incorrect_returns else None
 
+    # Kelly-weighted cumulative return (proves Kelly sizing works)
+    kelly_returns = [e.get("kelly_weighted_return") for e in price_resolved if e.get("kelly_weighted_return") is not None]
+    cumulative_kelly_return = round(sum(kelly_returns), 4) if kelly_returns else None
+    avg_kelly_return = round(sum(kelly_returns) / len(kelly_returns), 4) if kelly_returns else None
+    kelly_wins = [k for k in kelly_returns if k > 0]
+    kelly_losses = [k for k in kelly_returns if k <= 0]
+    avg_kelly_win = round(sum(kelly_wins) / len(kelly_wins), 4) if kelly_wins else None
+    avg_kelly_loss = round(sum(kelly_losses) / len(kelly_losses), 4) if kelly_losses else None
+
     # Win rate by regime context (VIX bucket + quadrant stored at log time)
     by_regime: dict[str, dict] = {}
     for e in price_resolved:
@@ -759,5 +776,11 @@ def get_stats() -> dict:
         "price_streak_type":       price_streak_type,
         "macro_streak":            macro_streak_n,
         "macro_streak_type":       macro_streak_type,
+        # Kelly-weighted P&L
+        "cumulative_kelly_return":  cumulative_kelly_return,
+        "avg_kelly_return":         avg_kelly_return,
+        "avg_kelly_win":            avg_kelly_win,
+        "avg_kelly_loss":           avg_kelly_loss,
+        "kelly_trades_resolved":    len(kelly_returns),
         "log": log,
     }
