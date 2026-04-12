@@ -1120,9 +1120,39 @@ def _build_hmm_historical_inference() -> dict | None:
         posteriors = model.predict_proba(X)
         state_idxs = np.argmax(posteriors, axis=1).tolist()
 
-        # Per-observation log-likelihood (windowed)
-        ll_total = float(model.score(X))
-        ll_per_obs_val = ll_total / len(X)
+        # Compute distance-based soft probabilities per state
+        # Raw HMM posteriors are always 1.0/0.0 (states too well-separated in 10D space)
+        # Instead, use Mahalanobis distance → inverse-distance weighting for meaningful
+        # confidence/entropy values
+        softened_list = []
+        for i in range(len(X)):
+            dists = []
+            for k in range(n):
+                diff = X[i] - model.means_[k]
+                try:
+                    inv_cov = np.linalg.inv(model.covars_[k])
+                    maha = float(np.sqrt(diff @ inv_cov @ diff))
+                except Exception:
+                    maha = 1e6
+                dists.append(maha)
+            dists = np.array(dists)
+            # Inverse-distance weighting with scaling
+            inv_dists = 1.0 / (dists + 1e-6)
+            probs_soft = inv_dists / inv_dists.sum()
+            softened_list.append(probs_soft.tolist())
+        softened = np.array(softened_list)
+
+        # Per-date windowed log-likelihood (60-day rolling window)
+        _LL_WINDOW = 60
+        ll_per_date = []
+        for i in range(len(X)):
+            start = max(0, i - _LL_WINDOW + 1)
+            window = X[start:i + 1]
+            try:
+                ll_val = float(model.score(window)) / len(window)
+            except Exception:
+                ll_val = 0.0
+            ll_per_date.append(ll_val)
 
         dates = [str(d)[:10] for d in df.index]
 
@@ -1130,10 +1160,10 @@ def _build_hmm_historical_inference() -> dict | None:
             "dates": dates,
             "states": [brain.state_labels[i] for i in state_idxs],
             "state_idxs": state_idxs,
-            "probs": [posteriors[i].tolist() for i in range(len(posteriors))],
+            "probs": [softened[i].tolist() for i in range(len(softened))],
             "labels": brain.state_labels,
             "transmat": brain.transmat,
-            "ll_per_obs": ll_per_obs_val,
+            "ll_per_date": ll_per_date,
             "ll_baseline_mean": brain.ll_baseline_mean,
             "ll_baseline_std": brain.ll_baseline_std,
             "n_states": n,
@@ -1182,9 +1212,14 @@ def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
     max_entropy = float(np.log(hmm_data["n_states"]))
     normalized_entropy = round(raw_entropy / max_entropy, 4) if max_entropy > 0 else 0.0
 
-    # LL z-score
+    # LL z-score (per-date windowed)
+    ll_per_date = hmm_data.get("ll_per_date")
+    if ll_per_date and idx < len(ll_per_date):
+        _ll_val = ll_per_date[idx]
+    else:
+        _ll_val = hmm_data.get("ll_per_obs", 0)  # fallback to global
     ll_zscore = round(
-        (hmm_data["ll_per_obs"] - hmm_data["ll_baseline_mean"]) /
+        (_ll_val - hmm_data["ll_baseline_mean"]) /
         max(hmm_data["ll_baseline_std"], 1e-6), 3
     )
 

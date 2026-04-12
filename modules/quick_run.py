@@ -1074,6 +1074,7 @@ def _render_qir_dashboard() -> None:
     _entry_rec_html   = ""
     _velocity_block   = ""
     _signal_breakdown_block = ""
+    _top_bottom_block = ""
     if _populated:
         _verdict_color = _cls["color"]
         _verdict_label = _cls["label"]
@@ -1143,6 +1144,25 @@ def _render_qir_dashboard() -> None:
                     _lt_bull = _cls.get("bullish")
                     _lt_lean = "BULLISH" if _lt_bull else ("BEARISH" if _lt_bull is False else "NEUTRAL")
                     _lt_lean_pct = min(75, 50 + abs((_cls.get("conviction_score") or 50) - 50))
+                    # Calibration: degrade bullish lean when top proximity signals fire
+                    # At historical peaks: entropy > 0.80, velocity negative, conviction < 20
+                    if _lt_lean == "BULLISH":
+                        try:
+                            from services.hmm_regime import load_current_hmm_state as _cal_hmm_load
+                            _cal_hmm = _cal_hmm_load()
+                            _cal_ent = getattr(_cal_hmm, "entropy", 0.0) or 0.0 if _cal_hmm else 0.0
+                            # Read velocity
+                            import json as _cj, os as _co
+                            _cvp = _co.path.join(_co.path.dirname(_co.path.dirname(__file__)), "data", "tactical_score_history.json")
+                            with open(_cvp) as _cvf:
+                                _cvh = _cj.load(_cvf)
+                            _cvel = float(_rc.get("macro_score") or 50) - float(_cvh[-6].get("score", 50)) if _cvh and len(_cvh) >= 6 else 0
+                            # If high entropy + negative velocity → degrade to NEUTRAL
+                            if _cal_ent > 0.75 and _cvel < -5:
+                                _lt_lean = "NEUTRAL"
+                                _lt_lean_pct = 50
+                        except Exception:
+                            pass
                     _lt_domains = {
                         "macro": _rc.get("macro_score", 50),
                         "technical": _tac.get("tactical_score", 50),
@@ -1390,6 +1410,117 @@ def _render_qir_dashboard() -> None:
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
                 f'Z-scores sorted worst-first · Green &gt;0.3 · Red &lt;-0.3 · '
                 f'Pre-peak % = how often this signal fired before the peak across 8 historical crashes</div>'
+                f'</div>'
+            )
+
+        # ── Market Top/Bottom Proximity card ──────────────────────────────────
+        # Based on backtest data across 8 historical crashes:
+        # TOP signature:  regime > 0, velocity negative, entropy > 0.80, conviction < 20, LL declining
+        # BOTTOM signature: regime < -0.25, velocity decelerating, conviction > 25, LL extreme negative
+        # DIP BUY: regime crossing zero, velocity positive, conviction near 0
+        try:
+            from services.hmm_regime import load_current_hmm_state as _tb_hmm_load
+            _tb_hmm = _tb_hmm_load()
+            _tb_entropy = getattr(_tb_hmm, "entropy", 0.0) or 0.0 if _tb_hmm else 0.0
+            _tb_ll_z = getattr(_tb_hmm, "ll_zscore", 0.0) or 0.0 if _tb_hmm else 0.0
+            _tb_conf = getattr(_tb_hmm, "confidence", 0.5) or 0.5 if _tb_hmm else 0.5
+            _tb_hmm_label = getattr(_tb_hmm, "state_label", "") if _tb_hmm else ""
+        except Exception:
+            _tb_entropy, _tb_ll_z, _tb_conf, _tb_hmm_label = 0.0, 0.0, 0.5, ""
+
+        _tb_regime = float(_rc.get("score") or 0)
+        _tb_macro = float(_rc.get("macro_score") or 50)
+        _tb_conv = float(_cls.get("conviction_score") or 0) if _cls.get("conviction_score") is not None else 0
+
+        # Read velocity
+        _tb_vel = 0.0
+        try:
+            import json as _tb_json, os as _tb_os
+            _tb_vpath = _tb_os.path.join(_tb_os.path.dirname(_tb_os.path.dirname(__file__)), "data", "tactical_score_history.json")
+            with open(_tb_vpath) as _tb_vf:
+                _tb_vhist = _tb_json.load(_tb_vf)
+            if _tb_vhist and len(_tb_vhist) >= 6:
+                _tb_vel = float(_rc.get("macro_score") or 50) - float(_tb_vhist[-6].get("score", 50))
+        except Exception:
+            pass
+
+        # Score each condition (0-100 scale per factor, averaged)
+        _top_signals = []
+        _bottom_signals = []
+
+        # TOP conditions (from backtest: avg peak has regime +0.16, vel -0.01, entropy 0.82, conv 16)
+        if _tb_regime > 0:
+            _top_signals.append(("Regime positive", min(100, _tb_regime * 200)))
+        if _tb_vel < -3:
+            _top_signals.append(("Velocity negative", min(100, abs(_tb_vel) * 5)))
+        if _tb_entropy > 0.70:
+            _top_signals.append(("High entropy", min(100, (_tb_entropy - 0.5) * 200)))
+        if _tb_conv < 25:
+            _top_signals.append(("Low conviction", min(100, (25 - _tb_conv) * 4)))
+        if _tb_ll_z < -0.5:
+            _top_signals.append(("LL declining", min(100, abs(_tb_ll_z) * 20)))
+        if _tb_hmm_label in ("Late Cycle", "Stress", "Early Stress"):
+            _top_signals.append(("HMM stress regime", 60))
+
+        # BOTTOM conditions (from backtest: avg trough has regime -0.34, conv 34, LL_z -21)
+        if _tb_regime < -0.15:
+            _top_score_regime = min(100, abs(_tb_regime) * 250)
+            _bottom_signals.append(("Regime deep negative", _top_score_regime))
+        if _tb_vel > 3:
+            _bottom_signals.append(("Velocity turning positive", min(100, _tb_vel * 5)))
+        if _tb_macro < 40:
+            _bottom_signals.append(("Macro crushed", min(100, (40 - _tb_macro) * 5)))
+        if _tb_conv > 20:
+            _bottom_signals.append(("Conviction building", min(100, _tb_conv * 2)))
+        if _tb_ll_z < -5:
+            _bottom_signals.append(("Extreme LL stress", min(100, abs(_tb_ll_z) * 5)))
+        if _tb_hmm_label in ("Crisis", "Late Cycle"):
+            _bottom_signals.append(("HMM crisis/late cycle", 70))
+
+        _top_score = round(sum(s for _, s in _top_signals) / max(1, len(_top_signals))) if _top_signals else 0
+        _bot_score = round(sum(s for _, s in _bottom_signals) / max(1, len(_bottom_signals))) if _bottom_signals else 0
+
+        # Only show if any signal is active
+        if _top_signals or _bottom_signals:
+            _tb_rows = ""
+            if _top_signals:
+                _top_color = "#ef4444" if _top_score >= 50 else ("#f59e0b" if _top_score >= 25 else "#22c55e")
+                _tb_rows += (
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:4px 0;border-bottom:1px solid #1e293b33;">'
+                    f'<span style="color:#ef4444;font-size:10px;font-weight:700;">MARKET TOP</span>'
+                    f'<span style="color:{_top_color};font-size:12px;font-weight:800;">{_top_score}%</span>'
+                    f'</div>'
+                )
+                for _ts_name, _ts_val in _top_signals:
+                    _tb_rows += (
+                        f'<div style="font-size:8px;color:#64748b;padding:1px 0 1px 8px;">'
+                        f'{"●" if _ts_val >= 50 else "○"} {_ts_name}</div>'
+                    )
+            if _bottom_signals:
+                _bot_color = "#22c55e" if _bot_score >= 50 else ("#f59e0b" if _bot_score >= 25 else "#64748b")
+                _tb_rows += (
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:4px 0;border-bottom:1px solid #1e293b33;margin-top:4px;">'
+                    f'<span style="color:#22c55e;font-size:10px;font-weight:700;">MARKET BOTTOM</span>'
+                    f'<span style="color:{_bot_color};font-size:12px;font-weight:800;">{_bot_score}%</span>'
+                    f'</div>'
+                )
+                for _bs_name, _bs_val in _bottom_signals:
+                    _tb_rows += (
+                        f'<div style="font-size:8px;color:#64748b;padding:1px 0 1px 8px;">'
+                        f'{"●" if _bs_val >= 50 else "○"} {_bs_name}</div>'
+                    )
+
+            _top_bottom_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;'
+                f'margin-bottom:6px;">TOP / BOTTOM PROXIMITY</div>'
+                f'{_tb_rows}'
+                f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
+                f'Calibrated from 8 historical crashes · Top avg: regime +0.16, entropy 0.82, conv 16 · '
+                f'Bottom avg: regime -0.34, conv 34, LL_z -21</div>'
                 f'</div>'
             )
 
@@ -2395,7 +2526,7 @@ def _render_qir_dashboard() -> None:
                 f'{_conviction_block}{_velocity_block}{_kelly_block}'
                 f'</div>'
             )
-        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block
+        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
         _zone2_html = _top_row + _bot_row
 
     # ── Render the full dashboard ─────────────────────────────────────────
