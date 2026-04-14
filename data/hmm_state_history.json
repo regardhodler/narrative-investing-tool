@@ -164,11 +164,12 @@
     ],
     "confidence": 1.0,
     "persistence": 392,
-    "log_likelihood": -5.266893,
-    "ll_zscore": -1.32,
+    "log_likelihood": -5.105138,
+    "ll_zscore": -1.272,
     "entropy": 0.0,
     "transition_risk_1m": 0.1819,
-    "transition_risk_2m": 0.3212,
+    "transition_risk_3m": 0.4279,
+    "transition_risk_6m": 0.6215,
     "forecast_1m": [
       0.0273,
       0.8181,
@@ -177,13 +178,21 @@
       0.0528,
       0.0261
     ],
-    "forecast_2m": [
-      0.0501,
-      0.6788,
-      0.0958,
-      0.0353,
-      0.0944,
-      0.0456
+    "forecast_3m": [
+      0.0687,
+      0.5721,
+      0.1297,
+      0.0426,
+      0.127,
+      0.0599
+    ],
+    "forecast_6m": [
+      0.1053,
+      0.3785,
+      0.195,
+      0.0512,
+      0.1876,
+      0.0825
     ]
   }
 ]

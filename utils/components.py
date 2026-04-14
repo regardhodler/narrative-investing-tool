@@ -114,7 +114,7 @@ def render_regime_strip() -> None:
             return
         _recent = sorted(_hist, key=lambda x: x["date"])[-30:]
         _dots = ""
-        for _h in _recent:
+        for _i, _h in enumerate(_recent):
             _s = _h.get("macro_score", 50)
             _r = _h.get("regime", "")
             if _s >= 60 or "Risk-On" in _r:
@@ -123,24 +123,41 @@ def render_regime_strip() -> None:
                 _dc = "#ef4444"
             else:
                 _dc = "#f59e0b"
-            _dots += (
-                f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
-                f'background:{_dc};margin:1px;" title="{_h["date"]}"></span>'
-            )
+            _is_last = (_i == len(_recent) - 1)
+            if _is_last:
+                # Today's dot — glowing pulse ring
+                _dots += (
+                    f'<span style="display:inline-block;position:relative;width:10px;height:10px;'
+                    f'vertical-align:middle;margin:0 1px 0 2px;" title="TODAY · {_h["date"]}">'
+                    f'<span style="position:absolute;top:0;left:0;width:10px;height:10px;'
+                    f'border-radius:50%;background:{_dc};opacity:0.3;'
+                    f'animation:qir-pulse 1.5s ease-in-out infinite;"></span>'
+                    f'<span style="position:absolute;top:2px;left:2px;width:6px;height:6px;'
+                    f'border-radius:50%;background:{_dc};'
+                    f'box-shadow:0 0 6px 2px {_dc}88;"></span>'
+                    f'</span>'
+                )
+            else:
+                _dots += (
+                    f'<span style="display:inline-block;width:6px;height:6px;border-radius:50%;'
+                    f'background:{_dc};margin:1px;opacity:0.7;" title="{_h["date"]}"></span>'
+                )
         _last = _recent[-1]
         _last_score = _last.get("macro_score", 50)
         _rc = "#22c55e" if _last_score >= 60 else ("#ef4444" if _last_score <= 40 else "#f59e0b")
         st.markdown(
+            f'<style>@keyframes qir-pulse{{0%,100%{{transform:scale(1);opacity:0.3;}}50%{{transform:scale(1.8);opacity:0.1;}}}}</style>'
             f'<div style="margin:6px 0 4px 0;">'
             f'<div style="font-size:9px;color:#475569;letter-spacing:0.08em;margin-bottom:3px;">REGIME · 30D</div>'
-            f'<div style="line-height:1;">{_dots}</div>'
+            f'<div style="line-height:1.6;display:flex;align-items:center;flex-wrap:wrap;">{_dots}</div>'
             f'<div style="font-size:10px;color:{_rc};font-weight:700;margin-top:4px;">'
             f'{_last.get("regime", "")} · {_last_score:.0f}</div>'
             f'<div style="font-size:9px;color:#334155;margin-top:3px;line-height:1.4;">'
             f'Each dot = 1 day &nbsp;'
             f'<span style="color:#22c55e;">●</span> Risk-On &nbsp;'
             f'<span style="color:#f59e0b;">●</span> Neutral &nbsp;'
-            f'<span style="color:#ef4444;">●</span> Risk-Off'
+            f'<span style="color:#ef4444;">●</span> Risk-Off &nbsp;'
+            f'<span style="color:#94a3b8;font-size:8px;">⬤ = today</span>'
             f'</div>'
             f'</div>',
             unsafe_allow_html=True,
