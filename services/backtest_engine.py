@@ -1251,6 +1251,7 @@ def _compute_top_bottom_proximity(
     conviction: float,
     hmm_state_label: str,
     wyckoff: dict | None = None,
+    hy_spread: dict | None = None,
 ) -> dict:
     """Compute market top/bottom proximity scores using the same signal logic as the QIR dashboard."""
     vel = regime_velocity or 0.0
@@ -1332,6 +1333,23 @@ def _compute_top_bottom_proximity(
         if _wk_tgt and _wk_last and _wk_phase == "Accumulation" and _wk_tgt > _wk_last * 1.02:
             bottom_signals.append((f"Wyckoff upside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
+    # ── HY Credit Spread signals ────────────────────────────────────────────────
+    # Tight spreads = complacency → top zone; wide spreads = max fear → bottom zone
+    if hy_spread:
+        _hy_level = hy_spread.get("level")
+        _hy_z     = hy_spread.get("zscore")
+        if _hy_level is not None:
+            # TOP: historically tight spreads = risk complacency
+            if _hy_level < 3.5:
+                top_signals.append((f"HY spreads historically tight ({_hy_level:.1f}%)", 75))
+            elif _hy_level < 4.5 and _hy_z is not None and _hy_z < -0.5:
+                top_signals.append((f"HY spreads tight + compressing ({_hy_level:.1f}%)", 55))
+            # BOTTOM: elevated/crisis spreads = max fear / selling exhaustion
+            if _hy_level > 7.0:
+                bottom_signals.append((f"HY spreads at crisis level ({_hy_level:.1f}%)", 80))
+            elif _hy_level > 5.5 and _hy_z is not None and _hy_z > 1.5:
+                bottom_signals.append((f"HY spreads elevated + rising ({_hy_level:.1f}%)", 60))
+
     top_score = round(sum(s for _, s in top_signals) / max(1, len(top_signals))) if top_signals else 0
     bot_score = round(sum(s for _, s in bottom_signals) / max(1, len(bottom_signals))) if bottom_signals else 0
 
@@ -1391,6 +1409,19 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
 
     wyckoff = _get_historical_wyckoff(date, data)
 
+    # ── Historical HY spread at this date ─────────────────────────────────────
+    _hy_spread_hist = None
+    _hy_series = data.get("credit_hy")
+    if _hy_series is not None:
+        dt = pd.Timestamp(date)
+        _hy_sliced = _hy_series[_hy_series.index <= dt].dropna()
+        if len(_hy_sliced) >= 30:
+            _hy_level = float(_hy_sliced.iloc[-1])
+            _hy_window = _hy_sliced.iloc[-252:] if len(_hy_sliced) >= 252 else _hy_sliced
+            _hy_std = _hy_window.std()
+            _hy_z = float((_hy_level - _hy_window.mean()) / _hy_std) if _hy_std > 0 else 0.0
+            _hy_spread_hist = {"level": round(_hy_level, 2), "zscore": round(_hy_z, 3)}
+
     top_bottom = _compute_top_bottom_proximity(
         regime_score=regime["regime_score"],
         macro_score=macro_score,
@@ -1400,6 +1431,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         conviction=conviction,
         hmm_state_label=hmm["state_label"] if hmm else "",
         wyckoff=wyckoff,
+        hy_spread=_hy_spread_hist,
     )
 
     return {
@@ -1421,6 +1453,9 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         "vix": regime.get("vix"),
         "top_bottom": top_bottom,
         "wyckoff": wyckoff,
+        "hy_spread": _hy_spread_hist,
+        "top_signals": top_bottom.get("top_signals", []),
+        "bottom_signals": top_bottom.get("bottom_signals", []),
     }
 
 

@@ -1100,8 +1100,27 @@ def _render_crash_stress_test():
                     f'TOP / BOTTOM PROXIMITY</div>'
                     f'{_tb_rows}'
                     f'{_wk_pill}'
-                    f'</div>'
                 )
+                # HY credit spread pill
+                _hy_data = snap.get("hy_spread") or snap.get("top_bottom", {})
+                # extract from top_bottom signals if available
+                _hy_level_snap = None
+                for _sig_name in snap.get("top_signals", []) + snap.get("bottom_signals", []):
+                    if "HY spreads" in _sig_name:
+                        import re as _re
+                        _m = _re.search(r'\(([0-9.]+)%\)', _sig_name)
+                        if _m:
+                            _hy_level_snap = float(_m.group(1))
+                if _hy_level_snap is not None:
+                    _hy_c = COLORS["negative"] if _hy_level_snap > 7 else (COLORS["yellow"] if _hy_level_snap > 5 else COLORS["positive"])
+                    _tb_html += (
+                        f'<div style="margin-top:4px;padding:3px 8px;background:#0a0f1a;'
+                        f'border:1px solid {_hy_c}44;border-radius:4px;display:flex;justify-content:space-between;">'
+                        f'<span style="font-size:8px;color:#475569;font-weight:700;">HY SPREAD</span>'
+                        f'<span style="font-size:9px;color:{_hy_c};font-weight:700;">{_hy_level_snap:.1f}%</span>'
+                        f'</div>'
+                    )
+                _tb_html += f'</div>'
 
             st.markdown(
                 f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'

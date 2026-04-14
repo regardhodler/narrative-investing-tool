@@ -2001,6 +2001,25 @@ def _render_qir_dashboard() -> None:
         except Exception:
             pass
 
+        # ── HY credit spreads ──────────────────────────────────────────────────
+        _tb_hy = None
+        try:
+            from services.market_data import fetch_hy_spread as _fhs
+            _tb_hy = _fhs()
+        except Exception:
+            pass
+
+        # ── Market breadth (% SPX above 200MA) ────────────────────────────────
+        _tb_breadth = None
+        try:
+            from services.market_data import fetch_breadth_pct as _fbp
+            _tb_breadth = _fbp()
+        except Exception:
+            pass
+
+        # ── AAII sentiment ─────────────────────────────────────────────────────
+        _tb_aaii = st.session_state.get("_aaii_sentiment") or {}
+
         _top_signals = []
         _bottom_signals = []
 
@@ -2042,6 +2061,28 @@ def _render_qir_dashboard() -> None:
                 if _wk_tgt < _wk_last * 0.98:
                     _top_signals.append((f"Wyckoff downside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
+        # ── HY Credit Spread signals ───────────────────────────────────────────
+        # Tight spreads = complacency → TOP zone; wide spreads = max fear → BOTTOM zone
+        if _tb_hy:
+            _hy_level = _tb_hy.get("level")
+            _hy_z     = _tb_hy.get("zscore")
+            if _hy_level is not None:
+                if _hy_level < 3.5:
+                    _top_signals.append((f"HY spreads historically tight ({_hy_level:.1f}%)", 75))
+                elif _hy_level < 4.5 and _hy_z is not None and _hy_z < -0.5:
+                    _top_signals.append((f"HY spreads tight + compressing ({_hy_level:.1f}%)", 55))
+
+        # ── AAII sentiment (contrarian) ────────────────────────────────────────
+        _aaii_bull = float(_tb_aaii.get("bull_pct", 0) or 0)
+        if _aaii_bull > 55:
+            _top_signals.append((f"AAII extreme bulls ({_aaii_bull:.0f}%)", min(80, int((_aaii_bull - 40) * 2))))
+
+        # ── Market breadth ─────────────────────────────────────────────────────
+        if _tb_breadth:
+            _brd_pct = _tb_breadth.get("pct", 50)
+            if _brd_pct > 80:
+                _top_signals.append((f"Breadth extended — {_brd_pct:.0f}% above 200MA", min(70, int((_brd_pct - 60) * 2))))
+
         # ── BOTTOM signals — calibrated thresholds (empirical avg at 8 known troughs) ──
         # regime avg=-0.35 (100% hit), macro avg=32.8 (88%), conviction avg=34.4 (88%)
         # ll_z avg=-20.9 — tightened from -5 to -8 to reduce noise
@@ -2079,6 +2120,27 @@ def _render_qir_dashboard() -> None:
             if _wk_tgt and _wk_last and _wk_phase == "Accumulation":
                 if _wk_tgt > _wk_last * 1.02:
                     _bottom_signals.append((f"Wyckoff upside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
+
+        # ── HY Credit Spread signals ───────────────────────────────────────────
+        if _tb_hy:
+            _hy_level = _tb_hy.get("level")
+            _hy_z     = _tb_hy.get("zscore")
+            if _hy_level is not None:
+                if _hy_level > 7.0:
+                    _bottom_signals.append((f"HY spreads at crisis level ({_hy_level:.1f}%)", 80))
+                elif _hy_level > 5.5 and _hy_z is not None and _hy_z > 1.5:
+                    _bottom_signals.append((f"HY spreads elevated + rising ({_hy_level:.1f}%)", 60))
+
+        # ── AAII sentiment (contrarian) ────────────────────────────────────────
+        _aaii_bear = float(_tb_aaii.get("bear_pct", 0) or 0)
+        if _aaii_bear > 50:
+            _bottom_signals.append((f"AAII extreme bears ({_aaii_bear:.0f}%)", min(85, int((_aaii_bear - 35) * 2))))
+
+        # ── Market breadth ─────────────────────────────────────────────────────
+        if _tb_breadth:
+            _brd_pct = _tb_breadth.get("pct", 50)
+            if _brd_pct < 20:
+                _bottom_signals.append((f"Breadth washed out — {_brd_pct:.0f}% above 200MA", min(80, int((20 - _brd_pct) * 3))))
 
         _top_score = round(sum(s for _, s in _top_signals) / max(1, len(_top_signals))) if _top_signals else 0
         _bot_score = round(sum(s for _, s in _bottom_signals) / max(1, len(_bottom_signals))) if _bottom_signals else 0
@@ -2124,7 +2186,7 @@ def _render_qir_dashboard() -> None:
                 f'Empirically calibrated from 8 crash peaks &amp; troughs · '
                 f'Peak avg: regime +0.14, entropy 0.71, conviction 17 · '
                 f'Trough avg: regime -0.35, macro 33, conviction 34, LL_z -21 · '
-                f'Wyckoff S/R</div>'
+                f'Wyckoff S/R · HY credit spreads · AAII sentiment · SPX breadth</div>'
                 f'</div>'
             )
 

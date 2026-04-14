@@ -429,6 +429,81 @@ def ratio_latest(snaps: dict[str, AssetSnapshot], t1: str, t2: str) -> float | N
     return None
 
 
+@st.cache_data(ttl=43200, show_spinner=False)
+def fetch_hy_spread() -> dict | None:
+    """Current HY credit spread (BAMLH0A0HYM2) level + 1-year z-score.
+
+    Returns:
+        {"level": float (% bps/100), "zscore": float, "label": str}
+        None on failure.
+
+    Historical reference:
+        < 3.5% → historically tight / complacency zone (near market tops)
+        3.5–6%  → normal range
+        > 7.0%  → elevated fear / potential bottom zone
+        > 10%   → crisis (GFC peak ~22%, COVID peak ~11%)
+    """
+    try:
+        series = fetch_fred_series_safe("BAMLH0A0HYM2")
+        if series is None or len(series) < 30:
+            return None
+        current = float(series.iloc[-1])
+        z = zscore(series, lookback=252)
+        if current < 3.5:
+            label = "Historically Tight"
+        elif current < 5.0:
+            label = "Normal"
+        elif current < 7.0:
+            label = "Elevated"
+        elif current < 10.0:
+            label = "Crisis"
+        else:
+            label = "Extreme Crisis"
+        return {"level": round(current, 2), "zscore": round(z, 3) if z is not None else None, "label": label}
+    except Exception:
+        return None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_breadth_pct() -> dict | None:
+    """% of S&P 500 stocks above their 200-day moving average via CBOE ^SPXA200R.
+
+    ^SPXA200R index value = count of SPX components above 200MA.
+    Divide by 500 to get percentage.
+
+    Returns:
+        {"pct": float 0-100, "label": str}
+        None on failure.
+    """
+    try:
+        import yfinance as yf
+        raw = yf.download("^SPXA200R", period="2y", interval="1d", progress=False, auto_adjust=True)
+        if raw is None or raw.empty or len(raw) < 10:
+            return None
+        if isinstance(raw.columns, pd.MultiIndex):
+            raw = raw.droplevel("Ticker", axis=1)
+        close = raw["Close"].dropna()
+        if close.empty:
+            return None
+        # SPXA200R reports a count; divide by 5 to get percentage (index is out of 500)
+        current_count = float(close.iloc[-1])
+        pct = round(current_count / 5.0, 1)   # e.g. 400 → 80%
+        pct = min(100.0, max(0.0, pct))
+        if pct > 80:
+            label = "Breadth Extended"
+        elif pct > 60:
+            label = "Breadth Healthy"
+        elif pct > 40:
+            label = "Breadth Neutral"
+        elif pct > 20:
+            label = "Breadth Weak"
+        else:
+            label = "Breadth Washed Out"
+        return {"pct": pct, "label": label}
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=3600)
 def fetch_truflation() -> dict | None:
     """Fetch Truflation current inflation from their public API."""
