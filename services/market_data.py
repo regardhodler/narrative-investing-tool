@@ -261,6 +261,40 @@ def fetch_ohlcv_single(ticker: str, period: str = "1y", interval: str = "1d") ->
     return _fetch_single(ticker, period, interval)
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_wyckoff_spy(period: str = "1y") -> dict | None:
+    """Cached Wyckoff analysis for SPY. Returns compact dict of key signals.
+
+    Extracted fields:
+      phase         - "Accumulation" | "Distribution" | "Markup" | "Markdown"
+      sub_phase     - "A"-"E" or ""
+      confidence    - 0-100
+      support       - float price level
+      resistance    - float price level
+      cause_target  - float price target or None
+    """
+    try:
+        from services.wyckoff_engine import analyze_wyckoff
+        df = _fetch_single("SPY", period=period, interval="1d")
+        if df is None or len(df) < 60:
+            return None
+        result = analyze_wyckoff(df["Close"], df["High"], df["Low"], df["Volume"], interval="1d")
+        if result is None:
+            return None
+        cp = result.current_phase
+        return {
+            "phase":        cp.phase,
+            "sub_phase":    cp.sub_phase or "",
+            "confidence":   cp.confidence,
+            "support":      cp.key_levels.get("support"),
+            "resistance":   cp.key_levels.get("resistance"),
+            "cause_target": cp.cause_target,
+            "spy_last":     float(df["Close"].iloc[-1]),
+        }
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=3600)
 def fetch_correlation_matrix(tickers: tuple[str, ...], period: str = "6mo") -> pd.DataFrame | None:
     """Compute pairwise Pearson correlation of daily returns for a set of tickers.

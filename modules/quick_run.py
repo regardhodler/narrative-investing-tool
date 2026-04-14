@@ -1993,6 +1993,14 @@ def _render_qir_dashboard() -> None:
         except Exception:
             pass
 
+        # ── Wyckoff signals ────────────────────────────────────────────────────
+        _tb_wyckoff = None
+        try:
+            from services.market_data import fetch_wyckoff_spy as _fw_spy
+            _tb_wyckoff = _fw_spy()
+        except Exception:
+            pass
+
         _top_signals = []
         _bottom_signals = []
 
@@ -2009,6 +2017,26 @@ def _render_qir_dashboard() -> None:
         if _tb_hmm_label in ("Late Cycle", "Stress", "Early Stress"):
             _top_signals.append(("HMM stress regime", 60))
 
+        # Wyckoff top signals
+        if _tb_wyckoff:
+            _wk_phase = _tb_wyckoff.get("phase", "")
+            _wk_conf  = _tb_wyckoff.get("confidence", 0)
+            _wk_sub   = _tb_wyckoff.get("sub_phase", "")
+            _wk_res   = _tb_wyckoff.get("resistance")
+            _wk_tgt   = _tb_wyckoff.get("cause_target")
+            _wk_last  = _tb_wyckoff.get("spy_last")
+            if _wk_phase == "Distribution":
+                _top_signals.append((f"Wyckoff Distribution {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
+            if _wk_phase == "Markup" and _wk_sub in ("D", "E"):
+                _top_signals.append((f"Wyckoff Markup late phase {_wk_sub}", min(80, _wk_conf)))
+            if _wk_res and _wk_last and _wk_res > 0:
+                _res_prox = (_wk_last - _wk_res) / _wk_res * 100
+                if -2.0 <= _res_prox <= 1.5:
+                    _top_signals.append((f"SPY at Wyckoff resistance ${_wk_res:.0f}", min(90, 50 + _wk_conf // 2)))
+            if _wk_tgt and _wk_last and _wk_phase == "Distribution":
+                if _wk_tgt < _wk_last * 0.98:
+                    _top_signals.append((f"Wyckoff downside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
+
         if _tb_regime < -0.15:
             _bottom_signals.append(("Regime deep negative", min(100, abs(_tb_regime) * 250)))
         if _tb_vel > 3:
@@ -2021,6 +2049,26 @@ def _render_qir_dashboard() -> None:
             _bottom_signals.append(("Extreme LL stress", min(100, abs(_tb_ll_z) * 5)))
         if _tb_hmm_label in ("Crisis", "Late Cycle"):
             _bottom_signals.append(("HMM crisis/late cycle", 70))
+
+        # Wyckoff bottom signals
+        if _tb_wyckoff:
+            _wk_phase = _tb_wyckoff.get("phase", "")
+            _wk_conf  = _tb_wyckoff.get("confidence", 0)
+            _wk_sub   = _tb_wyckoff.get("sub_phase", "")
+            _wk_sup   = _tb_wyckoff.get("support")
+            _wk_tgt   = _tb_wyckoff.get("cause_target")
+            _wk_last  = _tb_wyckoff.get("spy_last")
+            if _wk_phase == "Accumulation":
+                _bottom_signals.append((f"Wyckoff Accumulation {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
+            if _wk_phase == "Markdown" and _wk_sub in ("D", "E"):
+                _bottom_signals.append((f"Wyckoff Markdown late phase {_wk_sub} — exhaustion", min(80, _wk_conf)))
+            if _wk_sup and _wk_last and _wk_sup > 0:
+                _sup_prox = (_wk_last - _wk_sup) / _wk_sup * 100
+                if -1.5 <= _sup_prox <= 2.0:
+                    _bottom_signals.append((f"SPY at Wyckoff support ${_wk_sup:.0f}", min(90, 50 + _wk_conf // 2)))
+            if _wk_tgt and _wk_last and _wk_phase == "Accumulation":
+                if _wk_tgt > _wk_last * 1.02:
+                    _bottom_signals.append((f"Wyckoff upside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
         _top_score = round(sum(s for _, s in _top_signals) / max(1, len(_top_signals))) if _top_signals else 0
         _bot_score = round(sum(s for _, s in _bottom_signals) / max(1, len(_bottom_signals))) if _bottom_signals else 0
@@ -2063,7 +2111,7 @@ def _render_qir_dashboard() -> None:
                 f'margin-bottom:6px;">TOP / BOTTOM PROXIMITY</div>'
                 f'{_tb_rows}'
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
-                f'Calibrated from 8 historical crashes · Top avg: regime +0.16, entropy 0.82, conv 16 · '
+                f'Calibrated from 8 historical crashes + Wyckoff S/R · Top avg: regime +0.16, entropy 0.82, conv 16 · '
                 f'Bottom avg: regime -0.34, conv 34, LL_z -21</div>'
                 f'</div>'
             )
@@ -2089,6 +2137,8 @@ def _render_qir_dashboard() -> None:
                         "ll_z": round(_tb_ll_z, 2),
                         "conviction": round(_tb_conv, 0),
                         "hmm_state": _tb_hmm_label,
+                        "wyckoff_phase": (_tb_wyckoff or {}).get("phase", "N/A"),
+                        "wyckoff_conf": (_tb_wyckoff or {}).get("confidence", 0),
                         "top_signals": [s[0] for s in _top_signals],
                         "bottom_signals": [s[0] for s in _bottom_signals],
                     })
