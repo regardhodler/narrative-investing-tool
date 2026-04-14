@@ -901,7 +901,29 @@ def compute_triple_kelly(
     kf_sh, kh_sh = _kelly(p_short, b_short)
     fear_boost = 1.0 + (fear_score / 100) * 0.20   # fear helps shorts, up to +20%
     kh_sh = kh_sh * fear_boost
-    kh_sh = min(kh_sh, 0.15)
+
+    # Lean alignment: suppress or penalise short leg when lean is clearly bullish
+    _is_bullish_lean = forced_lean == "BULLISH"
+    if _is_bullish_lean and lean_pct > 55:
+        # Clear BUY signal -- suppress the short leg entirely
+        kh_sh = 0.0
+        kf_sh = 0.0
+        _short_label = "Bear Hedge"
+        _short_note = f"Suppressed -- BUY lean {lean_pct:.0f}% exceeds 55% threshold"
+        _short_color = "#475569"
+    elif _is_bullish_lean:
+        # Weakly bullish -- allow a small hedge penalised by bear confidence
+        kh_sh = kh_sh * (_bear_pct / 100)
+        kh_sh = min(kh_sh, 0.05)
+        kf_sh = kh_sh * 2
+        _short_label = "Bear Hedge"
+        _short_note = f"Minority hedge -- bear {_bear_pct:.0f}% scenario, lean penalty applied"
+        _short_color = "#f97316"
+    else:
+        kh_sh = min(kh_sh, 0.15)
+        _short_label = "Tactical Short"
+        _short_note = f"Bear scenario {_bear_pct:.0f}% · fear {fear_score:.0f}/100 boost"
+        _short_color = "#ef4444"
 
     # ── 3. Tactical Long (scalp) ──────────────────────────────────────────────
     # p: leading momentum score, heavily penalised by uncertainty
@@ -928,10 +950,10 @@ def compute_triple_kelly(
             "half_pct":  round(kh_sh * 100, 1),
             "full_pct":  round(kf_sh * 100, 1),
             "p": round(p_short, 3), "b": round(b_short, 2),
-            "label":     "Tactical Short",
+            "label":     _short_label,
             "timeframe": "days/weeks",
-            "color":     "#ef4444",
-            "note":      f"Bear scenario {_bear_pct:.0f}% · fear {fear_score:.0f}/100 boost",
+            "color":     _short_color,
+            "note":      _short_note,
         },
         "tactical_long": {
             "half_pct":  round(kh_sc * 100, 1),
