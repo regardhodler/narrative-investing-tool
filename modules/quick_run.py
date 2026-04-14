@@ -2004,20 +2004,25 @@ def _render_qir_dashboard() -> None:
         _top_signals = []
         _bottom_signals = []
 
-        if _tb_regime > 0:
-            _top_signals.append(("Regime positive", min(100, _tb_regime * 200)))
+        # ── TOP signals — calibrated thresholds (empirical avg at 8 known peaks) ──
+        # regime avg=+0.14 (88% hit), entropy avg=0.71 (75%), conviction avg=17 (75%)
+        # ll_z avg=-6.0 — tightened from -0.5 to -3.0 to reduce false fires
+        if _tb_regime > 0.05:
+            _top_signals.append(("Regime elevated", min(100, _tb_regime * 180)))
         if _tb_vel < -3:
-            _top_signals.append(("Velocity negative", min(100, abs(_tb_vel) * 5)))
-        if _tb_entropy > 0.70:
-            _top_signals.append(("High entropy", min(100, (_tb_entropy - 0.5) * 200)))
-        if _tb_conv < 25:
-            _top_signals.append(("Low conviction", min(100, (25 - _tb_conv) * 4)))
-        if _tb_ll_z < -0.5:
-            _top_signals.append(("LL declining", min(100, abs(_tb_ll_z) * 20)))
+            _top_signals.append(("Velocity turning negative", min(100, abs(_tb_vel) * 5)))
+        if _tb_entropy > 0.68:
+            _top_signals.append(("High regime entropy", min(100, (_tb_entropy - 0.45) * 200)))
+        if _tb_conv < 22:
+            _top_signals.append(("Low conviction", min(100, (22 - _tb_conv) * 5)))
+        if _tb_ll_z < -3.0:
+            _top_signals.append(("LL deteriorating", min(100, abs(_tb_ll_z) * 8)))
+        # Late Cycle → top only (not bottom) — empirically fires at peaks
         if _tb_hmm_label in ("Late Cycle", "Stress", "Early Stress"):
-            _top_signals.append(("HMM stress regime", 60))
+            _top_signals.append(("HMM late/stress state", 65))
 
-        # Wyckoff top signals
+        # Wyckoff top signals — only Distribution is reliable (38% hit at peaks)
+        # Accumulation at peaks = 62% false positive → NOT a top signal
         if _tb_wyckoff:
             _wk_phase = _tb_wyckoff.get("phase", "")
             _wk_conf  = _tb_wyckoff.get("confidence", 0)
@@ -2037,18 +2042,23 @@ def _render_qir_dashboard() -> None:
                 if _wk_tgt < _wk_last * 0.98:
                     _top_signals.append((f"Wyckoff downside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
-        if _tb_regime < -0.15:
-            _bottom_signals.append(("Regime deep negative", min(100, abs(_tb_regime) * 250)))
+        # ── BOTTOM signals — calibrated thresholds (empirical avg at 8 known troughs) ──
+        # regime avg=-0.35 (100% hit), macro avg=32.8 (88%), conviction avg=34.4 (88%)
+        # ll_z avg=-20.9 — tightened from -5 to -8 to reduce noise
+        # Late Cycle removed from bottom — it fires at tops too, causing double-counting
+        if _tb_regime < -0.17:
+            _bottom_signals.append(("Regime deep negative", min(100, abs(_tb_regime) * 220)))
         if _tb_vel > 3:
             _bottom_signals.append(("Velocity turning positive", min(100, _tb_vel * 5)))
-        if _tb_macro < 40:
-            _bottom_signals.append(("Macro crushed", min(100, (40 - _tb_macro) * 5)))
-        if _tb_conv > 20:
+        if _tb_macro < 37:
+            _bottom_signals.append(("Macro crushed", min(100, (37 - _tb_macro) * 6)))
+        if _tb_conv > 24:
             _bottom_signals.append(("Conviction building", min(100, _tb_conv * 2)))
-        if _tb_ll_z < -5:
-            _bottom_signals.append(("Extreme LL stress", min(100, abs(_tb_ll_z) * 5)))
-        if _tb_hmm_label in ("Crisis", "Late Cycle"):
-            _bottom_signals.append(("HMM crisis/late cycle", 70))
+        if _tb_ll_z < -8:
+            _bottom_signals.append(("Extreme LL stress", min(100, abs(_tb_ll_z) * 3)))
+        # Crisis only for bottom HMM (not Late Cycle — it's a top indicator)
+        if _tb_hmm_label in ("Crisis",):
+            _bottom_signals.append(("HMM Crisis state", 75))
 
         # Wyckoff bottom signals
         if _tb_wyckoff:
@@ -2061,7 +2071,7 @@ def _render_qir_dashboard() -> None:
             if _wk_phase == "Accumulation":
                 _bottom_signals.append((f"Wyckoff Accumulation {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
             if _wk_phase == "Markdown" and _wk_sub in ("D", "E"):
-                _bottom_signals.append((f"Wyckoff Markdown late phase {_wk_sub} — exhaustion", min(80, _wk_conf)))
+                _bottom_signals.append((f"Wyckoff Markdown exhaustion {_wk_sub}", min(80, _wk_conf)))
             if _wk_sup and _wk_last and _wk_sup > 0:
                 _sup_prox = (_wk_last - _wk_sup) / _wk_sup * 100
                 if -1.5 <= _sup_prox <= 2.0:
@@ -2111,8 +2121,10 @@ def _render_qir_dashboard() -> None:
                 f'margin-bottom:6px;">TOP / BOTTOM PROXIMITY</div>'
                 f'{_tb_rows}'
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
-                f'Calibrated from 8 historical crashes + Wyckoff S/R · Top avg: regime +0.16, entropy 0.82, conv 16 · '
-                f'Bottom avg: regime -0.34, conv 34, LL_z -21</div>'
+                f'Empirically calibrated from 8 crash peaks &amp; troughs · '
+                f'Peak avg: regime +0.14, entropy 0.71, conviction 17 · '
+                f'Trough avg: regime -0.35, macro 33, conviction 34, LL_z -21 · '
+                f'Wyckoff S/R</div>'
                 f'</div>'
             )
 

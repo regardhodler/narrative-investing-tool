@@ -1258,20 +1258,25 @@ def _compute_top_bottom_proximity(
     top_signals = []
     bottom_signals = []
 
-    if regime_score > 0:
-        top_signals.append(("Regime positive", min(100, regime_score * 200)))
+    # ── TOP signals — calibrated from 8 known market peaks ─────────────────────
+    # regime avg=+0.14 (88% hit), entropy avg=0.71 (75%), conviction avg=17 (75%)
+    # ll_z avg=-6.0 — tightened threshold from -0.5 to -3.0
+    if regime_score > 0.05:
+        top_signals.append(("Regime elevated", min(100, regime_score * 180)))
     if vel < -3:
-        top_signals.append(("Velocity negative", min(100, abs(vel) * 5)))
-    if entropy > 0.70:
-        top_signals.append(("High entropy", min(100, (entropy - 0.5) * 200)))
-    if conviction < 25:
-        top_signals.append(("Low conviction", min(100, (25 - conviction) * 4)))
-    if ll_zscore < -0.5:
-        top_signals.append(("LL declining", min(100, abs(ll_zscore) * 20)))
+        top_signals.append(("Velocity turning negative", min(100, abs(vel) * 5)))
+    if entropy > 0.68:
+        top_signals.append(("High regime entropy", min(100, (entropy - 0.45) * 200)))
+    if conviction < 22:
+        top_signals.append(("Low conviction", min(100, (22 - conviction) * 5)))
+    if ll_zscore < -3.0:
+        top_signals.append(("LL deteriorating", min(100, abs(ll_zscore) * 8)))
+    # Late Cycle → top only (not bottom) — empirically fires at peaks
     if hmm_state_label in ("Late Cycle", "Stress", "Early Stress"):
-        top_signals.append(("HMM stress regime", 60))
+        top_signals.append(("HMM late/stress state", 65))
 
-    # Wyckoff top signals
+    # Wyckoff top signals — only Distribution reliable at peaks (38% hit)
+    # Accumulation at peaks = 62% false positive → NOT a top signal
     if wyckoff:
         _wk_phase = wyckoff.get("phase", "")
         _wk_conf  = wyckoff.get("confidence", 0)
@@ -1290,18 +1295,23 @@ def _compute_top_bottom_proximity(
         if _wk_tgt and _wk_last and _wk_phase == "Distribution" and _wk_tgt < _wk_last * 0.98:
             top_signals.append((f"Wyckoff downside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
-    if regime_score < -0.15:
-        bottom_signals.append(("Regime deep negative", min(100, abs(regime_score) * 250)))
+    # ── BOTTOM signals — calibrated from 8 known market troughs ────────────────
+    # regime avg=-0.35 (100% hit), macro avg=32.8 (88%), conviction avg=34.4 (88%)
+    # ll_z avg=-20.9 — tightened from -5 to -8
+    # Late Cycle removed — it fires at TOPS too, causing double-counting
+    if regime_score < -0.17:
+        bottom_signals.append(("Regime deep negative", min(100, abs(regime_score) * 220)))
     if vel > 3:
         bottom_signals.append(("Velocity turning positive", min(100, vel * 5)))
-    if macro_score < 40:
-        bottom_signals.append(("Macro crushed", min(100, (40 - macro_score) * 5)))
-    if conviction > 20:
+    if macro_score < 37:
+        bottom_signals.append(("Macro crushed", min(100, (37 - macro_score) * 6)))
+    if conviction > 24:
         bottom_signals.append(("Conviction building", min(100, conviction * 2)))
-    if ll_zscore < -5:
-        bottom_signals.append(("Extreme LL stress", min(100, abs(ll_zscore) * 5)))
-    if hmm_state_label in ("Crisis", "Late Cycle"):
-        bottom_signals.append(("HMM crisis/late cycle", 70))
+    if ll_zscore < -8:
+        bottom_signals.append(("Extreme LL stress", min(100, abs(ll_zscore) * 3)))
+    # Crisis only (not Late Cycle — that's a top indicator)
+    if hmm_state_label in ("Crisis",):
+        bottom_signals.append(("HMM Crisis state", 75))
 
     # Wyckoff bottom signals
     if wyckoff:
@@ -1314,7 +1324,7 @@ def _compute_top_bottom_proximity(
         if _wk_phase == "Accumulation":
             bottom_signals.append((f"Wyckoff Accumulation {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
         if _wk_phase == "Markdown" and _wk_sub in ("D", "E"):
-            bottom_signals.append((f"Wyckoff Markdown late phase {_wk_sub} — exhaustion", min(80, _wk_conf)))
+            bottom_signals.append((f"Wyckoff Markdown exhaustion {_wk_sub}", min(80, _wk_conf)))
         if _wk_sup and _wk_last and _wk_sup > 0:
             _sup_prox = (_wk_last - _wk_sup) / _wk_sup * 100
             if -1.5 <= _sup_prox <= 2.0:

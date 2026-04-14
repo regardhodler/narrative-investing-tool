@@ -1,44 +1,5 @@
 [
   {
-    "run_id": "2c2ba1a9",
-    "timestamp": "2026-04-12T08:08:24.621621",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 50.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 13,
-    "n_total": 15,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
-    "run_id": "cf81625e",
-    "timestamp": "2026-04-12T08:12:55.324657",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 50.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 13,
-    "n_total": 15,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
-    "run_id": "f5902c05",
-    "timestamp": "2026-04-12T09:39:37.239629",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 40.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 13,
-    "n_total": 15,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
     "run_id": "50471d01",
     "timestamp": "2026-04-12T12:21:21.312996",
     "pattern": "",
@@ -388,5 +349,44 @@
     "n_ok": 12,
     "n_total": 14,
     "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "e4fc9ab4",
+    "timestamp": "2026-04-14T11:41:20.606076",
+    "pattern": "",
+    "conviction": "MIXED",
+    "tactical_score": 66,
+    "options_score": 59.0,
+    "regime_label": "Neutral \u2014 Leaning Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "8450b9d6",
+    "timestamp": "2026-04-14T12:14:23.254373",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 63,
+    "options_score": 61.0,
+    "regime_label": "Neutral \u2014 Leaning Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "88605d76",
+    "timestamp": "2026-04-14T12:51:39.227960",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 66,
+    "options_score": 53.0,
+    "regime_label": "Neutral \u2014 Leaning Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\ud83e\udde0 Regard Mode"
   }
 ]
