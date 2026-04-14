@@ -1031,6 +1031,44 @@ def _render_crash_stress_test():
                 f'font-size:10px;font-weight:700;">SHORT SETUP</span>'
             )
 
+            # Top/Bottom proximity block
+            _tb = snap.get("top_bottom", {})
+            _top_pct = _tb.get("top_pct", 0)
+            _bot_pct = _tb.get("bottom_pct", 0)
+            _top_sigs = _tb.get("top_signals", [])
+            _bot_sigs = _tb.get("bottom_signals", [])
+            _tb_html = ""
+            if _top_sigs or _bot_sigs:
+                _tb_rows = ""
+                if _top_sigs:
+                    _top_c = COLORS["negative"] if _top_pct >= 50 else (COLORS["yellow"] if _top_pct >= 25 else COLORS["positive"])
+                    _tb_rows += (
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'
+                        f'<span style="color:{COLORS["negative"]};font-size:9px;font-weight:700;">▲ MARKET TOP</span>'
+                        f'<span style="color:{_top_c};font-size:13px;font-weight:900;">{_top_pct}%</span>'
+                        f'</div>'
+                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">{"●" if v >= 50 else "○"} {n}</div>'
+                                  for n, v in zip(_top_sigs, [_tb.get("top_pct",0)]*len(_top_sigs)))
+                    )
+                if _bot_sigs:
+                    _bot_c = COLORS["positive"] if _bot_pct >= 50 else (COLORS["yellow"] if _bot_pct >= 25 else COLORS["text_dim"])
+                    _tb_rows += (
+                        f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-top:3px;">'
+                        f'<span style="color:{COLORS["positive"]};font-size:9px;font-weight:700;">▼ MARKET BOTTOM</span>'
+                        f'<span style="color:{_bot_c};font-size:13px;font-weight:900;">{_bot_pct}%</span>'
+                        f'</div>'
+                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">{"●" if v >= 50 else "○"} {n}</div>'
+                                  for n, v in zip(_bot_sigs, [_tb.get("bottom_pct",0)]*len(_bot_sigs)))
+                    )
+                _tb_html = (
+                    f'<div style="margin-top:6px;padding:6px 10px;background:#0a0f1a;'
+                    f'border:1px solid #1e293b;border-radius:4px;">'
+                    f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.08em;margin-bottom:3px;">'
+                    f'TOP / BOTTOM PROXIMITY</div>'
+                    f'{_tb_rows}'
+                    f'</div>'
+                )
+
             st.markdown(
                 f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
                 f'border-radius:6px;padding:12px;margin:6px 0;">'
@@ -1072,6 +1110,7 @@ def _render_crash_stress_test():
                 f'<span style="color:{COLORS["text_dim"]};">N/A (no hist options)</span></div>'
                 f'</div>'
                 f'{_hmm_html}'
+                f'{_tb_html}'
                 f'</div>',
                 unsafe_allow_html=True,
             )

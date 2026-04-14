@@ -1187,6 +1187,58 @@ def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
     }
 
 
+def _compute_top_bottom_proximity(
+    regime_score: float,
+    macro_score: float,
+    regime_velocity: float | None,
+    entropy: float,
+    ll_zscore: float,
+    conviction: float,
+    hmm_state_label: str,
+) -> dict:
+    """Compute market top/bottom proximity scores using the same signal logic as the QIR dashboard."""
+    vel = regime_velocity or 0.0
+
+    top_signals = []
+    bottom_signals = []
+
+    if regime_score > 0:
+        top_signals.append(("Regime positive", min(100, regime_score * 200)))
+    if vel < -3:
+        top_signals.append(("Velocity negative", min(100, abs(vel) * 5)))
+    if entropy > 0.70:
+        top_signals.append(("High entropy", min(100, (entropy - 0.5) * 200)))
+    if conviction < 25:
+        top_signals.append(("Low conviction", min(100, (25 - conviction) * 4)))
+    if ll_zscore < -0.5:
+        top_signals.append(("LL declining", min(100, abs(ll_zscore) * 20)))
+    if hmm_state_label in ("Late Cycle", "Stress", "Early Stress"):
+        top_signals.append(("HMM stress regime", 60))
+
+    if regime_score < -0.15:
+        bottom_signals.append(("Regime deep negative", min(100, abs(regime_score) * 250)))
+    if vel > 3:
+        bottom_signals.append(("Velocity turning positive", min(100, vel * 5)))
+    if macro_score < 40:
+        bottom_signals.append(("Macro crushed", min(100, (40 - macro_score) * 5)))
+    if conviction > 20:
+        bottom_signals.append(("Conviction building", min(100, conviction * 2)))
+    if ll_zscore < -5:
+        bottom_signals.append(("Extreme LL stress", min(100, abs(ll_zscore) * 5)))
+    if hmm_state_label in ("Crisis", "Late Cycle"):
+        bottom_signals.append(("HMM crisis/late cycle", 70))
+
+    top_score = round(sum(s for _, s in top_signals) / max(1, len(top_signals))) if top_signals else 0
+    bot_score = round(sum(s for _, s in bottom_signals) / max(1, len(bottom_signals))) if bottom_signals else 0
+
+    return {
+        "top_pct": top_score,
+        "bottom_pct": bot_score,
+        "top_signals": [s[0] for s in top_signals],
+        "bottom_signals": [s[0] for s in bottom_signals],
+    }
+
+
 def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime_score: float | None = None) -> dict:
     """Build a simulated QIR snapshot for a historical date."""
     regime = reconstruct_regime_at_date(date, data)
@@ -1233,6 +1285,16 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
     if prev_regime_score is not None:
         regime_velocity = round(regime["regime_score"] - prev_regime_score, 4)
 
+    top_bottom = _compute_top_bottom_proximity(
+        regime_score=regime["regime_score"],
+        macro_score=macro_score,
+        regime_velocity=regime_velocity * 100 if regime_velocity is not None else None,  # scale to pts like QIR
+        entropy=hmm["entropy"] if hmm else 0.0,
+        ll_zscore=hmm["ll_zscore"] if hmm else 0.0,
+        conviction=conviction,
+        hmm_state_label=hmm["state_label"] if hmm else "",
+    )
+
     return {
         "date": date,
         "regime": regime,
@@ -1250,6 +1312,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         "hmm_kelly_mult": hmm_mult,
         "spy_price": regime.get("spy_price"),
         "vix": regime.get("vix"),
+        "top_bottom": top_bottom,
     }
 
 
