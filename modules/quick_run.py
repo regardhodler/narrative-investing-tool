@@ -1608,10 +1608,12 @@ def _render_qir_dashboard() -> None:
                 # ── Horizontal strip ─────────────────────────────────────────
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                    f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;'
+                    f'padding:6px 12px;margin:6px 0 4px;display:flex;align-items:center;'
                     f'flex-wrap:wrap;gap:4px 0;">'
                     f'<span style="font-size:9px;color:#475569;font-weight:700;'
                     f'letter-spacing:0.1em;margin-right:8px;">REGIME VELOCITY</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;margin-right:8px;">⏑ MEDIUM · DAYS/WEEKS</span>'
                     f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
                     f'{_v_arrow} {_v_delta:+.1f}/wk</span>'
                     f'<span style="font-size:9px;color:{_v_color};margin-left:5px;">'
@@ -1653,10 +1655,12 @@ def _render_qir_dashboard() -> None:
                     )
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                    f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;'
+                    f'padding:6px 12px;margin:6px 0 4px;display:flex;align-items:center;'
                     f'flex-wrap:wrap;gap:4px 0;">'
                     f'<span style="font-size:9px;color:#475569;font-weight:700;'
                     f'letter-spacing:0.1em;margin-right:8px;">REGIME VELOCITY</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;margin-right:8px;">⏑ MEDIUM · DAYS/WEEKS</span>'
                     f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
                     f'{_v_arrow} {_v_delta:+.0f}pt</span>'
                     f'<span style="font-size:9px;color:{_v_color};margin-left:5px;">· {_v_label}</span>'
@@ -1675,7 +1679,7 @@ def _render_qir_dashboard() -> None:
                        "#f97316" if _conviction_score >= 40 else "#ef4444")
             _velocity_block = (
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">'
+                f'padding:6px 12px;margin:6px 0 4px;display:flex;align-items:center;gap:8px;">'
                 f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
                 f'<span style="font-size:8px;color:#334155;">— insufficient history</span>'
                 f'<span style="background:#1e293b;border-radius:4px;padding:1px 7px;'
@@ -3040,6 +3044,7 @@ def _render_qir_dashboard() -> None:
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
+        f'{_velocity_block if _populated else ""}'
         # ── SLOW: Entry Signal (macro+leading+options aggregator) then HMM brain ─
         f'{_tf_divider("⏱  SLOW — REGIME BRAIN · WEEKS / MONTHS")}'
         f'{_entry_rec_html}'
@@ -3048,11 +3053,9 @@ def _render_qir_dashboard() -> None:
         f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
         f'{_medium_html}'
         f'{_verdict_html}'
-        f'{_top_bottom_block if _populated else ""}'
-        # ── FAST: Buy/Short Setups (Triple Kelly, lean-dependent) ─────────────
-        f'{_tf_divider("⚡  FAST — TACTICAL SETUPS · HOURS / DAYS")}'
-        f'{_velocity_block if _populated else ""}'
         f'{_fast_setups_html if _populated else ""}'
+        f'{_top_bottom_block if _populated else ""}'
+        # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
         f'</div>',
         unsafe_allow_html=True,
     )
