@@ -1719,19 +1719,19 @@ def _render_qir_dashboard() -> None:
                 f'<tbody>{_body}</tbody></table>'
             )
 
-        def _build_kelly_chain(kly: dict) -> str:
+        def _build_kelly_chain(kly: dict, hmm_lbl: str = "N/A", align_col: str = "#f59e0b") -> str:
             """Visual step-by-step Kelly sizing chain: raw → stress → alignment → HMM → final."""
-            _raw   = kly.get("kelly_half_raw_pct", kly.get("kelly_half_base_pct", 0))
-            _base  = kly.get("kelly_half_base_pct", _raw)   # after stress
-            _final = kly.get("kelly_half_pct", 0)
+            _raw      = kly.get("kelly_half_raw_pct", kly.get("kelly_half_base_pct", 0))
+            _base     = kly.get("kelly_half_base_pct", _raw)
+            _final    = kly.get("kelly_half_pct", 0)
             _stress_d = kly.get("stress_discount_pct", 0)
-            _fear  = kly.get("fear_score", 50)
-            _a_m   = kly.get("align_multiplier", 1.0)
-            _h_m   = kly.get("hmm_multiplier", 1.0)
-            _n_ag  = kly.get("n_signals_agree", 0)
-            _n_tot = kly.get("n_signals_total", 0)
-            _hmm_l = _hmm_label_for_kelly or "N/A"
-            _capped = kly.get("capped", False)
+            _fear     = kly.get("fear_score", 50)
+            _a_m      = kly.get("align_multiplier", 1.0)
+            _h_m      = kly.get("hmm_multiplier", 1.0)
+            _n_ag     = kly.get("n_signals_agree", 0)
+            _n_tot    = kly.get("n_signals_total", 0)
+            _hmm_l    = hmm_lbl or "N/A"
+            _capped   = kly.get("capped", False)
 
             def _node(val: float, label: str, sublabel: str, mult: str, color: str, arrow: bool = True) -> str:
                 _mc = "#22c55e" if mult.startswith("×1") or mult.startswith("+") else (
@@ -1747,25 +1747,20 @@ def _render_qir_dashboard() -> None:
                     + (f'<div style="color:#334155;font-size:14px;padding:0 2px;align-self:center;">→</div>' if arrow else '')
                 )
 
-            # Step values
             _after_stress = _base
             _after_align  = round(_after_stress * _a_m, 1)
-            _after_hmm    = _final
-
             _stress_mult  = f"−{_stress_d:.0f}% fear" if _stress_d > 0 else "×1.00"
             _align_mult   = f"×{_a_m:.2f} ({_n_ag}/{_n_tot})"
             _hmm_mult     = f"×{_h_m:.2f} {_hmm_l}"
             _cap_note     = ' <span style="color:#f59e0b;font-size:7px;">⚠ 15% cap</span>' if _capped else ""
-
-            _final_col = "#22c55e" if _final >= 10 else ("#f59e0b" if _final >= 5 else "#ef4444")
+            _final_col    = "#22c55e" if _final >= 10 else ("#f59e0b" if _final >= 5 else "#ef4444")
 
             _chain = (
-                _node(_raw,          "HALF-KELLY",  f"p={kly.get('p',0)*100:.0f}% b={kly.get('b',1.0)}", "raw",         "#94a3b8")
-                + _node(_after_stress, "AFTER STRESS", f"fear {_fear:.0f}/100",                             _stress_mult,  "#64748b")
-                + _node(_after_align,  "AFTER ALIGN",  f"{_n_ag}/{_n_tot} signals",                          _align_mult,   _align_mult_col)
-                + _node(_after_hmm,    "FINAL",         f"HMM {_hmm_l}",                                     _hmm_mult,     _final_col, arrow=False)
+                _node(_raw,         "HALF-KELLY",  f"p={kly.get('p',0)*100:.0f}% b={kly.get('b',1.0)}", "raw",          "#94a3b8")
+                + _node(_after_stress, "AFTER STRESS", f"fear {_fear:.0f}/100",                             _stress_mult,   "#64748b")
+                + _node(_after_align,  "AFTER ALIGN",  f"{_n_ag}/{_n_tot} signals",                          _align_mult,    align_col)
+                + _node(_final,        "FINAL",          f"HMM {_hmm_l}",                                    _hmm_mult,      _final_col, arrow=False)
             )
-
             return (
                 f'<div style="display:flex;align-items:stretch;gap:0;overflow-x:auto;'
                 f'background:#0a0f1a;border:1px solid #1e293b;border-radius:4px;padding:6px 8px;">'
@@ -1774,8 +1769,8 @@ def _render_qir_dashboard() -> None:
                 f'<div style="font-size:7px;color:#334155;margin-top:3px;">'
                 f'Half-Kelly = (b·p − q)/b ÷ 2 &nbsp;·&nbsp; '
                 f'stress = fear/100 × 30% discount &nbsp;·&nbsp; '
-                f'alignment caps by signal confluence &nbsp;·&nbsp; '
-                f'HMM scales by regime state{_cap_note}</div>'
+                f'alignment ×signal confluence &nbsp;·&nbsp; '
+                f'HMM ×regime state{_cap_note}</div>'
             )
 
         try:
@@ -1978,7 +1973,7 @@ def _render_qir_dashboard() -> None:
                     f'<div style="margin-bottom:6px;">{_lbl_html}</div>'
                     f'<div style="border-top:1px solid #1e293b;margin:5px 0 6px;"></div>'
                     f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">SIZING CHAIN</div>'
-                    f'{_build_kelly_chain(_kly)}'
+                    f'{_build_kelly_chain(_kly, hmm_lbl=_hmm_lbl_txt, align_col=_align_mult_col)}'
                     f'{_build_kelly_ref_table(_kly.get("kelly_half_base_pct", _kly_half))}'
                     f'</div>'
                 )
