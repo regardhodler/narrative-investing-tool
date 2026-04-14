@@ -901,6 +901,7 @@ def _render_qir_dashboard() -> None:
 
     # ── Verdict section ───────────────────────────────────────────────────
     _gu_profile = None  # computed inside if _populated when pattern == GENUINE_UNCERTAINTY
+    _entry_rec_html = ""
     if _populated:
         _verdict_color = _cls["color"]
         _verdict_label = _cls["label"]
@@ -1154,6 +1155,34 @@ def _render_qir_dashboard() -> None:
                 f'padding:5px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">{_vix_note}</div>'
             )
 
+        # Tactical Kelly pcts — computed later in Kelly block; init for badge guards
+        _tac_long_kelly_pct = None
+        _tac_short_kelly_pct = None
+
+        # Pre-compute Kelly for GENUINE_UNCERTAINTY tactical badges
+        if _cls.get("pattern") == "GENUINE_UNCERTAINTY" and _gu_profile:
+            try:
+                from services.portfolio_sizing import compute_triple_kelly as _pre_triple_kelly
+                try:
+                    from services.hmm_regime import load_current_hmm_state as _pre_hmm_load
+                    _pre_hmm_label = getattr(_pre_hmm_load(), "state_label", None)
+                except Exception:
+                    _pre_hmm_label = None
+                _pre_tkly = _pre_triple_kelly(
+                    fear_composite=st.session_state.get("_fear_composite") or {},
+                    regime_ctx=st.session_state.get("_regime_context") or {},
+                    hmm_state_label=_pre_hmm_label,
+                    forced_lean=_gu_profile.get("lean", "BEARISH"),
+                    lean_pct=float(_gu_profile.get("lean_pct", 53)),
+                    uncertainty_score=int(_gu_profile.get("uncertainty_score", 60)),
+                    macro_score=int((_rc or {}).get("macro_score") or 50),
+                    leading_score=int((_rc or {}).get("leading_score") or 50),
+                )
+                _tac_short_kelly_pct = _pre_tkly["tactical_short"]["half_pct"]
+                _tac_long_kelly_pct  = _pre_tkly["tactical_long"]["half_pct"]
+            except Exception:
+                pass
+
         # Tactical Long Kelly badge — only for GENUINE_UNCERTAINTY bullish lean
         _tac_long_badge = ""
         if (
@@ -1391,6 +1420,7 @@ def _render_qir_dashboard() -> None:
 
         # ── Kelly Criterion card ──────────────────────────────────────────────
         _kelly_block = ""
+        _bimodal_block = ""
         _kly_half = None
         _tac_short_kelly_pct = None
         _tac_long_kelly_pct  = None
@@ -1641,7 +1671,8 @@ def _render_qir_dashboard() -> None:
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
                     f'</div>'
                 )
-            _kelly_block = _triple_kelly_html + _kelly_html
+            _kelly_block = _kelly_html
+            _bimodal_block = _triple_kelly_html
         except Exception:
             pass
 
@@ -2086,8 +2117,16 @@ def _render_qir_dashboard() -> None:
                     f'No model trained — click Retrain HMM below to build your regime brain</div>'
                     f'</div>'
                 )
-        except Exception:
-            pass
+        except Exception as _hmm_exc:
+            import traceback as _hmm_tb
+            _hmm_block = (
+                f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:11px;color:#ef4444;font-weight:700;">HMM BLOCK ERROR</div>'
+                f'<pre style="font-size:9px;color:#f87171;white-space:pre-wrap;">'
+                f'{"".join(_hmm_tb.format_exception(type(_hmm_exc), _hmm_exc, _hmm_exc.__traceback__))}'
+                f'</pre></div>'
+            )
 
         # ── GEX Dealer Positioning card ──────────────────────────────────────
         try:
@@ -2377,9 +2416,9 @@ def _render_qir_dashboard() -> None:
         f'</span></div>'
     )
 
-    # ── Compose zone 2: top row = Conviction | Velocity | Kelly, bottom row = HMM + GEX + Lean + Signals + Top/Bottom ──
+    # ── Compose zone 2: bimodal (full width) → top row (Conviction | Velocity | Kelly) → bottom row (HMM + GEX + Lean + Signals + Top/Bottom) ──
     _zone2_html = ""
-    if _populated and (_conviction_block or _kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block):
+    if _populated and (_conviction_block or _kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block or _bimodal_block):
         _top_row = ""
         if _conviction_block or _kelly_block or _velocity_block:
             _top_row = (
@@ -2388,8 +2427,8 @@ def _render_qir_dashboard() -> None:
                 f'{_conviction_block}{_velocity_block}{_kelly_block}'
                 f'</div>'
             )
-        _bot_row = _entry_rec_html + _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
-        _zone2_html = _top_row + _bot_row
+        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
+        _zone2_html = _bimodal_block + _top_row + _bot_row
 
     # ── Crash pattern alert ──────────────────────────────────────────────
     _crash_alert_html = ""
@@ -2434,6 +2473,7 @@ def _render_qir_dashboard() -> None:
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
         f'{_verdict_html}'
+        f'{_entry_rec_html}'
         f'{_zone2_html}'
         f'</div>',
         unsafe_allow_html=True,
@@ -3897,6 +3937,169 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             )
     except Exception:
         pass
+
+    # ── HMM Regime Brain — maintenance section ───────────────────────────────
+    with st.expander("🧠 HMM Regime Brain", expanded=False):
+        try:
+            from services.hmm_regime import (
+                load_hmm_brain as _load_brain,
+                train_hmm as _train_hmm,
+                score_current_state as _score_hmm,
+                get_state_color as _hmm_col,
+                get_state_arrow as _hmm_arr,
+            )
+            _brain = _load_brain()
+            if _brain:
+                _b_trained = _brain.trained_at[:10]
+                _b_end     = _brain.training_end
+                _b_start   = _brain.training_start
+                st.markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:10px 14px;margin-bottom:10px;">'
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">CURRENT BRAIN</div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">STATES</div>'
+                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_brain.n_states}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">BIC</div>'
+                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_brain.bic:,.0f}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">TRAINED</div>'
+                    f'<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-top:4px;">{_b_trained}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">WINDOW</div>'
+                    f'<div style="font-size:9px;font-weight:700;color:#64748b;margin-top:4px;">{_b_start}<br>→ {_b_end}</div></div>'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#475569;">State labels: '
+                    f'{" | ".join(_brain.state_labels)}</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">'
+                    f'Features: {", ".join(_brain.feature_names)}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                # Transition matrix display
+                _tm = _brain.transmat
+                _n  = _brain.n_states
+                _rows_html = ""
+                for i in range(_n):
+                    def _fmt_tm(v):
+                        pct = v * 100
+                        if pct >= 1:
+                            return f"{pct:.1f}%"
+                        elif pct > 0:
+                            return "<1%"
+                        return "0%"
+                    _row_cells = "".join(
+                        f'<td style="padding:3px 8px;font-size:10px;color:#94a3b8;'
+                        f'background:rgba(255,255,255,{float(_tm[i][j])*0.15:.2f});'
+                        f'text-align:center;">{_fmt_tm(_tm[i][j])}</td>'
+                        for j in range(_n)
+                    )
+                    _state_col = _hmm_col(_brain.state_labels[i])
+                    _rows_html += (
+                        f'<tr><td style="padding:3px 8px;font-size:9px;color:{_state_col};'
+                        f'font-weight:700;white-space:nowrap;">{_brain.state_labels[i]}</td>'
+                        f'{_row_cells}</tr>'
+                    )
+                _col_headers = "".join(
+                    f'<th style="padding:3px 8px;font-size:8px;color:#475569;'
+                    f'font-weight:700;text-align:center;">{lbl[:4]}</th>'
+                    for lbl in _brain.state_labels
+                )
+                st.markdown(
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">TRANSITION MATRIX</div>'
+                    f'<table style="border-collapse:collapse;background:#0a0a14;'
+                    f'border-radius:4px;overflow:hidden;">'
+                    f'<thead><tr><th style="padding:3px 8px;"></th>{_col_headers}</tr></thead>'
+                    f'<tbody>{_rows_html}</tbody></table>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:4px;">'
+                    f'Row = current state → columns = next-day probability</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div style="color:#ef444466;font-size:12px;padding:8px 0;">'
+                    'No brain trained yet. Click Retrain to build the HMM regime model.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── Retrain due? ──────────────────────────────────────────────
+            _retrain_due = False
+            _days_since   = None
+            if _brain:
+                try:
+                    from datetime import datetime, timezone as _tz
+                    _trained_dt = datetime.fromisoformat(_brain.trained_at.replace("Z", "+00:00"))
+                    _days_since = (datetime.now(_tz.utc) - _trained_dt).days
+                    _retrain_due = _days_since >= 90
+                except Exception:
+                    pass
+
+            if _retrain_due:
+                st.markdown(
+                    f'<div style="background:#1a0a00;border:1px solid #f59e0b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
+                    f'<span style="font-size:18px;">⏰</span>'
+                    f'<div>'
+                    f'<div style="font-size:11px;font-weight:700;color:#f59e0b;">Quarterly retrain due</div>'
+                    f'<div style="font-size:10px;color:#92400e;">'
+                    f'Last trained {_days_since} days ago — click Retrain HMM to refresh the model</div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+                st.markdown(
+                    '<style>'
+                    '#btn_hmm_retrain_wrapper button {'
+                    '  box-shadow: 0 0 8px #f59e0b, 0 0 20px #f59e0b88 !important;'
+                    '  border-color: #f59e0b !important;'
+                    '}'
+                    '</style>',
+                    unsafe_allow_html=True,
+                )
+
+            _retrain_label = "🔄 Retrain HMM" if not _retrain_due else "🔄 Retrain HMM ⚠️"
+            _retrain_help  = (
+                f"Quarterly retrain due — {_days_since}d since last train"
+                if _retrain_due else
+                "Train GaussianHMM on 15yr FRED data. Run quarterly."
+            )
+
+            _hm_c1, _hm_c2 = st.columns([1, 2])
+            with _hm_c1:
+                if st.button(_retrain_label, key="btn_hmm_retrain", use_container_width=True,
+                             help=_retrain_help, type="primary" if _retrain_due else "secondary"):
+                    with st.spinner("Training HMM on 15yr FRED signal matrix..."):
+                        try:
+                            _new_brain = _train_hmm(lookback_years=15)
+                            _new_state = _score_hmm(_new_brain, log_to_history=True)
+                            _st_lbl = _new_state.state_label if _new_state else "unknown"
+                            st.toast(
+                                f"✅ HMM trained — {_new_brain.n_states} states (BIC {_new_brain.bic:,.0f}) "
+                                f"· Today: {_st_lbl}",
+                                icon="🧠",
+                            )
+                            st.rerun()
+                        except Exception as _e:
+                            st.error(f"HMM training failed: {_e}")
+            with _hm_c2:
+                if st.button("📍 Score Today", key="btn_hmm_score", use_container_width=True,
+                             help="Run inference on today's signal vector (no refit)"):
+                    if _brain is None:
+                        st.warning("Train the model first (Retrain HMM).")
+                    else:
+                        with st.spinner("Scoring today's state..."):
+                            _ts = _score_hmm(_brain, log_to_history=True)
+                            if _ts:
+                                st.toast(
+                                    f"📍 {_ts.state_label} · {int(_ts.confidence*100)}% confidence "
+                                    f"· {_ts.persistence}d persistence",
+                                    icon="🧠",
+                                )
+                                st.rerun()
+                            else:
+                                st.error("Scoring failed — check console for details.")
+        except ImportError:
+            st.error("hmmlearn not installed. Run: pip install hmmlearn")
+        except Exception as _hmm_e:
+            st.error(f"HMM section error: {_hmm_e}")
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):
