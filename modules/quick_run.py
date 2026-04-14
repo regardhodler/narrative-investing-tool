@@ -697,6 +697,8 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
 
     Always forces a lean — never outputs 'unclear'. Sizes the trade to match
     the measured uncertainty. Reads only from the pre-built profile dict.
+    The lean header is rendered inline in the main verdict block (above the setups);
+    this function renders the domain breakdown, known unknowns, and decision rules.
     """
     lean         = profile["lean"]
     lean_pct     = profile["lean_pct"]
@@ -706,8 +708,6 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
     unknowns     = profile["known_unknowns"]
 
     lean_color = "#22c55e" if lean == "BULLISH" else ("#ef4444" if lean == "BEARISH" else "#f59e0b")
-    lean_bg    = "#052e16" if lean == "BULLISH" else ("#2d0a0a" if lean == "BEARISH" else "#1a1400")
-    lean_arrow = "▲" if lean == "BULLISH" else ("▼" if lean == "BEARISH" else "◆")
 
     unc_color = "#22c55e" if unc_score < 40 else ("#f59e0b" if unc_score < 65 else "#ef4444")
 
@@ -718,32 +718,6 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
         "HIGH RISK":  "#ef4444", "ELEVATED":     "#f97316",
         "MODERATE":   "#64748b",
     }
-
-    # ── Lean header — subdued, embedded in panel ─────────────────────────────
-    st.markdown(
-        f'<div style="background:#0d1117;border:1px solid {lean_color}33;border-left:3px solid {lean_color};'
-        f'border-radius:5px;padding:8px 12px;margin:6px 0;display:flex;align-items:center;gap:12px;">'
-        f'<div>'
-        f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:2px;">'
-        f'{"DIRECTIONAL LEAN" if lean != "NEUTRAL" else "NO DIRECTIONAL EDGE"}</div>'
-        f'<div style="font-size:15px;font-weight:800;color:{lean_color};letter-spacing:0.04em;">'
-        f'{lean_arrow} {lean} {lean_pct}%</div>'
-        f'</div>'
-        f'<div style="flex:1;border-left:1px solid #1e293b;padding-left:12px;">'
-        f'<div style="font-size:8px;color:#64748b;font-weight:700;margin-bottom:2px;">ANTI-AMBIGUITY OVERRIDE</div>'
-        f'<div style="font-size:9px;color:#475569;line-height:1.5;">'
-        f'Uncertainty is quantified — not an excuse for inaction. '
-        f'Act at <span style="color:#94a3b8;font-weight:700;">{size_label}</span> of normal. Wrong? Stop early.'
-        f'</div>'
-        f'</div>'
-        f'<div style="text-align:right;min-width:48px;">'
-        f'<div style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">UNC</div>'
-        f'<div style="font-size:14px;font-weight:800;color:{unc_color};font-family:monospace;">{unc_score}</div>'
-        f'<div style="font-size:8px;color:#334155;">/100</div>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
 
     # ── 5-domain breakdown ────────────────────────────────────────────────────
     domain_rows = ""
@@ -1363,7 +1337,36 @@ def _render_qir_dashboard() -> None:
         # GENUINE_UNCERTAINTY: grey out the opposing side — lean-aligned panel is active, other is dimmed.
         # NEUTRAL lean: both sides get mild dimming with equal weight.
         if _cls["pattern"] == "GENUINE_UNCERTAINTY" and _gu_profile:
-            _gu_lean = _gu_profile["lean"]
+            _gu_lean     = _gu_profile["lean"]
+            _gu_lean_pct = _gu_profile["lean_pct"]
+            _gu_unc      = _gu_profile["uncertainty_score"]
+            _gu_size_lbl = _gu_profile["size_label"]
+            _gu_lc  = "#22c55e" if _gu_lean == "BULLISH" else ("#ef4444" if _gu_lean == "BEARISH" else "#f59e0b")
+            _gu_arr = "▲" if _gu_lean == "BULLISH" else ("▼" if _gu_lean == "BEARISH" else "◆")
+            _gu_unc_col = "#22c55e" if _gu_unc < 40 else ("#f59e0b" if _gu_unc < 65 else "#ef4444")
+            _verdict_html += (
+                f'<div style="background:#0d1117;border:1px solid {_gu_lc}33;border-left:3px solid {_gu_lc};'
+                f'border-radius:5px;padding:8px 12px;margin:6px 0;display:flex;align-items:center;gap:12px;">'
+                f'<div>'
+                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:2px;">'
+                f'{"DIRECTIONAL LEAN" if _gu_lean != "NEUTRAL" else "NO DIRECTIONAL EDGE"}</div>'
+                f'<div style="font-size:15px;font-weight:800;color:{_gu_lc};letter-spacing:0.04em;">'
+                f'{_gu_arr} {_gu_lean} {_gu_lean_pct}%</div>'
+                f'</div>'
+                f'<div style="flex:1;border-left:1px solid #1e293b;padding-left:12px;">'
+                f'<div style="font-size:8px;color:#64748b;font-weight:700;margin-bottom:2px;">ANTI-AMBIGUITY OVERRIDE</div>'
+                f'<div style="font-size:9px;color:#475569;line-height:1.5;">'
+                f'Uncertainty is quantified — not an excuse for inaction. '
+                f'Act at <span style="color:#94a3b8;font-weight:700;">{_gu_size_lbl}</span> of normal. Wrong? Stop early.'
+                f'</div>'
+                f'</div>'
+                f'<div style="text-align:right;min-width:48px;">'
+                f'<div style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">UNC</div>'
+                f'<div style="font-size:14px;font-weight:800;color:{_gu_unc_col};font-family:monospace;">{_gu_unc}</div>'
+                f'<div style="font-size:8px;color:#334155;">/100</div>'
+                f'</div>'
+                f'</div>'
+            )
 
             def _dim(html: str) -> str:
                 return html.replace(
@@ -1883,9 +1886,13 @@ def _render_qir_dashboard() -> None:
                 _d = _kly_sdirs.get(_sig_key)
                 if _d is None:
                     _sq_col = "#334155"; _sq_char = "—"
-                elif _d == _verdict_dir_for_display and _verdict_dir_for_display != 0:
+                elif _verdict_dir_for_display == 0:
+                    # Kelly is neutral — no signal can truly "disagree"; directional = divergence, not error
+                    _sq_col = "#f59e0b" if _d != 0 else "#334155"
+                    _sq_char = "~"
+                elif _d == _verdict_dir_for_display:
                     _sq_col = "#22c55e"; _sq_char = "✓"
-                elif _d != _verdict_dir_for_display and _d != 0:
+                elif _d != 0:
                     _sq_col = "#ef4444"; _sq_char = "✗"
                 else:
                     _sq_col = "#f59e0b"; _sq_char = "~"
@@ -2658,10 +2665,16 @@ def _render_qir_dashboard() -> None:
                     f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
                     f'<div style="font-size:13px;color:#475569;font-weight:700;'
                     f'letter-spacing:0.1em;">GEX DEALER POSITIONING</div>'
+                    f'<div style="display:flex;gap:14px;align-items:flex-end;">'
+                    f'<div style="text-align:right;">'
+                    f'<div style="font-size:14px;font-weight:800;color:{_gx_delta_col};">{_gx_delta:+.3f}</div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;">DELTA</div>'
+                    f'</div>'
                     f'<div style="text-align:right;">'
                     f'<div style="font-size:18px;font-weight:900;color:{_gx_comp_col};">'
                     f'{_gx_composite:+.2f}</div>'
                     f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">COMPOSITE</div>'
+                    f'</div>'
                     f'</div>'
                     f'</div>'
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;">'
