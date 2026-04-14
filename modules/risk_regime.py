@@ -159,6 +159,7 @@ CORE_TICKERS = {
     "RSP": "S&P 500 Equal Weight",  # Used for market breadth signal (RSP/SPY ratio)
     "EWG": "Germany ETF (Eurozone mfg proxy)",  # Global manufacturing signal
     "FXI": "China Large-Cap ETF",               # Global manufacturing signal
+    "FXY": "Yen ETF (JPY carry proxy)",         # JPY carry trade risk sensor
     # Display-only (ticker bar)
     "IWM": "Russell 2000",
     "GLD": "Gold",
@@ -226,10 +227,11 @@ def _clamp_score(value: float, scale: float) -> float:
 
 
 def _zscore_score(series: pd.Series | None, invert: bool = False, lookback: int = 252) -> float:
-    """Convert a FRED/market series to a [-1, 1] score via z-score normalization.
+    """Convert a FRED/market series to a (-1, 1) score via z-score + tanh normalization.
 
     Uses the series' own historical distribution (lookback window) rather than
-    hardcoded thresholds. Z-scores are divided by 2 so ±2σ maps to ±1.
+    hardcoded thresholds. tanh(z/1.5) gives a smooth, differentiable mapping where
+    ±1σ → ±0.58, ±2σ → ±0.93, ±3σ → ±0.99 — no hard cliff at ±1.
     """
     if series is None:
         return 0.0
@@ -244,7 +246,7 @@ def _zscore_score(series: pd.Series | None, invert: bool = False, lookback: int 
     z = (float(clean.iloc[-1]) - float(window.mean())) / std
     if invert:
         z = -z
-    return _clamp(z / 2.0)
+    return float(np.tanh(z / 1.5))
 
 
 def _ewma_zscore_score(
@@ -253,7 +255,7 @@ def _ewma_zscore_score(
     lookback: int = 252,
     halflife: int = 21,
 ) -> float:
-    """EWMA z-score mapped to [-1, 1] with the same scaling as _zscore_score."""
+    """EWMA z-score mapped to (-1, 1) with tanh normalization — same scale as _zscore_score."""
     if series is None:
         return 0.0
     clean = series.dropna()
@@ -269,7 +271,7 @@ def _ewma_zscore_score(
     z = (float(window.iloc[-1]) - float(mu)) / float(sigma)
     if invert:
         z = -z
-    return _clamp(z / 2.0)
+    return float(np.tanh(z / 1.5))
 
 
 def _score_with_mode(
@@ -722,6 +724,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "T10Y2Y", "T10Y3M", "BAMLH0A0HYM2", "BAMLC0A0CM", "M2SL", "SAHMREALTIME", "UNRATE",
         "PCEPILFE", "PNFI", "THREEFYTP10", "INDPRO", "NFCI", "DGS10",
         "ICSA", "USSLIND", "UMCSENT", "PERMIT", "FEDFUNDS", "DFII10", "MANEMP", "TOTBKCR", "DGS2",
+        "DTWEXBGS",
     ]
     fred_key_map = {
         "yield_curve": "T10Y2Y", "yield_curve_3m10y": "T10Y3M",
@@ -733,6 +736,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         "permit": "PERMIT", "fedfunds": "FEDFUNDS",
         "real_yield": "DFII10", "napm": "MANEMP",
         "totbkcr": "TOTBKCR", "dgs2": "DGS2",
+        "dtwexbgs": "DTWEXBGS",
     }
 
     with ThreadPoolExecutor(max_workers=3) as ex:
@@ -1000,6 +1004,128 @@ def _fetch_spy_pe_safe() -> float | None:
         return _SPY_PE_FALLBACK
 
 
+# ─────────────────────────────────────────────
+# MARKET STRUCTURE SIGNAL HELPERS
+# Elliott Wave and Wyckoff phase → directional scalar for macro dashboard
+# ─────────────────────────────────────────────
+
+# Wave label → directional score mapping (impulse 1-5, corrective A-C)
+_EW_WAVE_SCORES: dict[str, float] = {
+    "1": +0.50,   # early impulse leg — bullish but tentative
+    "2": -0.20,   # pullback correcting wave 1
+    "3": +0.90,   # strongest impulse — highest conviction bullish
+    "4": -0.30,   # consolidation after wave 3
+    "5": +0.30,   # final impulse leg — bullish but exhaustion risk
+    "A": -0.50,   # corrective wave A — first leg down
+    "B": +0.20,   # corrective bounce — not trustworthy
+    "C": -0.80,   # corrective wave C — strong bearish completion
+    "i": +0.50,
+    "ii": -0.20,
+    "iii": +0.90,
+    "iv": -0.30,
+    "v": +0.30,
+}
+
+_WYCKOFF_PHASE_SCORES: dict[str, float] = {
+    "Accumulation": +0.60,   # smart money loading — bullish setup
+    "Markup":       +0.85,   # confirmed uptrend — strong bullish
+    "Distribution": -0.60,   # smart money distributing — bearish setup
+    "Markdown":     -0.85,   # confirmed downtrend — strong bearish
+}
+
+# Sub-phase directional nudge: late sub-phases lean toward the coming transition
+_WYCKOFF_SUBPHASE_NUDGE: dict[str, dict[str, float]] = {
+    "Accumulation": {"D": +0.10, "E": +0.15},    # late accumulation → imminent markup
+    "Markup":       {"D": -0.05, "E": -0.10},    # late markup → distribution forming
+    "Distribution": {"D": -0.10, "E": -0.15},   # late distribution → imminent markdown
+    "Markdown":     {"D": +0.05, "E": +0.10},    # late markdown → accumulation forming
+}
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _ew_directional_score(ticker: str = "SPY") -> tuple[float, int, str]:
+    """Extract a directional scalar from the Elliott Wave engine for the given ticker.
+
+    Returns:
+        (score, confidence, label)
+        score   — tanh-normalized directional signal in (-1, 1)
+        confidence — 0-100 int from BestCount
+        label   — human-readable description e.g. "Wave 3 (Primary)"
+    """
+    try:
+        from services.elliott_wave_engine import get_degree_wave_count, DEGREE_CONFIGS
+        from services.market_data import fetch_ohlcv_single
+
+        df = fetch_ohlcv_single(ticker, period="max", interval="1d")
+        if df is None or df.empty:
+            return 0.0, 0, "EW: no data"
+
+        close = df["Close"].iloc[:, 0] if isinstance(df["Close"], pd.DataFrame) else df["Close"]
+        close = close.dropna()
+        if len(close) < 100:
+            return 0.0, 0, "EW: insufficient history"
+
+        best = get_degree_wave_count(close, degree="Primary")
+        if best is None:
+            return 0.0, 0, "EW: no count"
+
+        label = best.current_wave_label.strip()
+        raw_score = _EW_WAVE_SCORES.get(label, 0.0)
+        # Confidence-weight the score so uncertain counts are shrunk toward 0
+        conf_weight = best.confidence / 100.0
+        score = float(np.tanh(raw_score * conf_weight * 2.0))  # amplify before tanh for correct range
+        readable = f"Wave {label} (Primary, {best.confidence}% conf)"
+        return score, best.confidence, readable
+    except Exception:
+        return 0.0, 0, "EW: error"
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def _wyckoff_directional_score(ticker: str = "SPY") -> tuple[float, int, str]:
+    """Extract a directional scalar from the Wyckoff phase engine for the given ticker.
+
+    Returns:
+        (score, confidence, label)
+        score   — tanh-normalized directional signal in (-1, 1)
+        confidence — 0-100 int from WyckoffPhase
+        label   — human-readable description e.g. "Markup / Sub-phase D"
+    """
+    try:
+        from services.wyckoff_engine import analyze_wyckoff
+        from services.market_data import fetch_ohlcv_single
+
+        df = fetch_ohlcv_single(ticker, period="2y", interval="1d")
+        if df is None or df.empty:
+            return 0.0, 0, "Wyckoff: no data"
+
+        def _col(key: str) -> pd.Series:
+            col = df[key]
+            return (col.iloc[:, 0] if isinstance(col, pd.DataFrame) else col).dropna()
+
+        close, high, low, volume = _col("Close"), _col("High"), _col("Low"), _col("Volume")
+        if len(close) < 100:
+            return 0.0, 0, "Wyckoff: insufficient history"
+
+        result = analyze_wyckoff(close, high, low, volume, interval="1d")
+        if result is None:
+            return 0.0, 0, "Wyckoff: no phase"
+
+        phase_obj = result.current_phase
+        phase = phase_obj.phase
+        sub = phase_obj.sub_phase or ""
+        conf = phase_obj.confidence
+
+        base_score = _WYCKOFF_PHASE_SCORES.get(phase, 0.0)
+        nudge = _WYCKOFF_SUBPHASE_NUDGE.get(phase, {}).get(sub, 0.0)
+        raw_score = base_score + nudge
+        conf_weight = conf / 100.0
+        score = float(np.tanh(raw_score * conf_weight * 2.0))
+        readable = f"{phase}{(' / Sub-phase ' + sub) if sub else ''} ({conf}% conf)"
+        return score, conf, readable
+    except Exception:
+        return 0.0, 0, "Wyckoff: error"
+
+
 @st.cache_data(ttl=14400, show_spinner=False)
 def _build_macro_dashboard(
     snaps: dict[str, AssetSnapshot],
@@ -1029,6 +1155,7 @@ def _build_macro_dashboard(
         "napm": "MANEMP",  # Manufacturing Employment (monthly, YoY = expansion/contraction proxy)
         "totbkcr": "TOTBKCR",  # Total Bank Credit (weekly) — for credit impulse calculation
         "dgs2": "DGS2",  # 2-Year Treasury yield (daily) — rate expectations vs Fed Funds
+        "dtwexbgs": "DTWEXBGS",  # Nominal Broad Trade-Weighted Dollar Index (weekly) — global dollar liquidity
     }
     if fred_data is not None:
         # Use pre-fetched FRED data from warm cache — avoid duplicate requests
@@ -1158,10 +1285,31 @@ def _build_macro_dashboard(
         dxy_score = 0.0
     indicators.append(("US Dollar Index (DXY proxy)", dxy, "% blend", dxy_score, _confidence_from_snap("UUP", snaps=snaps)))
 
+    # --- JPY Carry Risk (FXY) ---
+    # FXY tracks the Japanese Yen vs USD. A sharp JPY rally signals carry-trade unwinding:
+    # leveraged long-risk / short-JPY positions unwind → forced selling of risk assets.
+    # Inverted: FXY rising (strong yen) → carry unwind risk → negative (risk-off) score.
+    # Distinct from broad DXY: you can have selective JPY strength while USD is mixed.
+    _fxy_snap = snaps.get("FXY")
+    _fxy_series = _fxy_snap.series if _fxy_snap else None
+    fxy_30d = _fxy_snap.pct_change_30d if _fxy_snap else None
+    fxy_score = _score_with_mode(_fxy_series, invert=True, mode=score_mode) if _fxy_series is not None else 0.0
+    indicators.append(("JPY Carry Risk (FXY)", fxy_30d, "% 30d", fxy_score, _confidence_from_snap("FXY", snaps=snaps)))
+
     m2_yoy = _yoy_latest(fred["m2"], periods=12)
     m2_yoy_full = _yoy_series(fred["m2"], periods=12)
     liquidity_score = _zscore_score(m2_yoy_full) if m2_yoy_full is not None else _clamp_score(((m2_yoy or 0.0) - 2.0), 4.0)
     indicators.append(("Global Liquidity (M2 proxy)", m2_yoy, "% YoY", liquidity_score, _confidence_from_age(fred["m2"], expected_days=45)))
+
+    # --- Global Dollar Liquidity (Broad Trade-Weighted DXY) ---
+    # DTWEXBGS: Nominal Broad Trade-Weighted Dollar Index (FRED, weekly).
+    # Captures dollar strength vs ALL major trading partners (not just G7 like DXY).
+    # Rising broad DXY = tighter global dollar liquidity (higher cost for EM/foreign USD borrowers).
+    # Inverted: broad dollar weakness → easier global credit conditions → positive (risk-on) score.
+    _broad_dxy = fred.get("dtwexbgs")
+    broad_dxy_val = _safe_latest(_broad_dxy)
+    broad_dxy_score = _score_with_mode(_broad_dxy, invert=True, mode=score_mode) if _broad_dxy is not None else 0.0
+    indicators.append(("Global Dollar Liquidity (Broad DXY)", broad_dxy_val, "index", broad_dxy_score, _confidence_from_age(_broad_dxy, expected_days=14)))
 
     sahm = _safe_latest(fred["sahm"])
     if sahm is None:
@@ -1227,6 +1375,17 @@ def _build_macro_dashboard(
     vix_series = vix_snap.series if vix_snap else None
     vix_score = _score_with_mode(vix_series, invert=True, mode=score_mode) if vix_series is not None else _clamp_score((20.0 - (vix or 20.0)), 8.0)
     indicators.append(("VIX (Equity Volatility)", vix, "level", vix_score, _confidence_from_snap("^VIX", snaps=snaps)))
+
+    # --- CBOE SKEW — Options Tail Risk / Put Skew ---
+    # SKEW measures demand for OTM crash protection (implied skewness of S&P 500 returns).
+    # Higher SKEW → institutions buying far-OTM puts → they see elevated tail risk → bearish signal.
+    # Normal range 110-130; >140 = extreme crash hedging demand.
+    # Inverted: rising SKEW → more tail risk → negative (risk-off) score.
+    skew_snap = snaps.get("^SKEW")
+    skew_val = skew_snap.latest_price if skew_snap else None
+    skew_series = skew_snap.series if skew_snap else None
+    skew_score = _score_with_mode(skew_series, invert=True, mode=score_mode) if skew_series is not None else 0.0
+    indicators.append(("Options Tail Risk (CBOE SKEW)", skew_val, "index", skew_score, _confidence_from_snap("^SKEW", snaps=snaps)))
 
     # --- Initial Jobless Claims ---
     icsa = _safe_latest(fred["icsa"])
@@ -1342,6 +1501,20 @@ def _build_macro_dashboard(
         global_mfg_score = _clamp_score(global_mfg_val, 8.0)
     indicators.append(("Global Manufacturing (EWG+FXI)", global_mfg_val, "% 1m blend", global_mfg_score, _confidence_from_snap("EWG", "FXI", snaps=snaps)))
 
+    # --- Elliott Wave Structure (SPY Primary Degree) ---
+    # Maps the current Primary wave position to a directional scalar.
+    # Wave 3 is the strongest bullish signal; Wave C the strongest bearish.
+    # Cached 24h — EW counts are daily-scale signals, not intraday noise.
+    _ew_score, _ew_conf, _ew_label = _ew_directional_score("SPY")
+    indicators.append(("Elliott Wave Structure (SPY)", _ew_label, "", _ew_score, _ew_conf))
+
+    # --- Wyckoff Market Cycle Phase (SPY) ---
+    # Maps the current Wyckoff phase/sub-phase to a directional scalar.
+    # Markup = strong bullish; Markdown = strong bearish; Accumulation/Distribution = setup signals.
+    # Cached 24h — phase detection operates on daily-scale price structure.
+    _wy_score, _wy_conf, _wy_label = _wyckoff_directional_score("SPY")
+    indicators.append(("Wyckoff Phase (SPY)", _wy_label, "", _wy_score, _wy_conf))
+
     SIGNAL_CATEGORIES = {
         "Yield Curve (10Y-2Y)": "Rates",
         "Yield Curve (3M-10Y)": "Rates",
@@ -1372,6 +1545,15 @@ def _build_macro_dashboard(
         "Credit Impulse (Bank Credit Accel)": "Credit",
         "Rate Expectations (2Y vs Fed Funds)": "Rates",
         "Global Manufacturing (EWG+FXI)": "Growth",
+        # FX
+        "JPY Carry Risk (FXY)": "FX",
+        # Liquidity
+        "Global Dollar Liquidity (Broad DXY)": "Liquidity",
+        # Tail Risk
+        "Options Tail Risk (CBOE SKEW)": "Volatility",
+        # Market Structure — price-cycle signals from EW and Wyckoff engines
+        "Elliott Wave Structure (SPY)": "Market Structure",
+        "Wyckoff Phase (SPY)": "Market Structure",
     }
 
     SIGNAL_WEIGHTS = {
@@ -1411,6 +1593,17 @@ def _build_macro_dashboard(
         "Yield Curve (3M-10Y)": 2.0,                # Tier 1 — Fed's preferred recession indicator
         "Credit Spreads (IG OAS)": 1.5,             # Tier 2 — IG less volatile than HY, confirms systemic vs idiosyncratic stress
         "HY-IG Quality Spread": 1.5,                # Tier 2 — HY-IG differential flags concentrated speculative stress
+        # Market Structure — TA-derived price cycle signals (Tier 3.5)
+        # Lower than macro fundamentals but meaningful structural confirmation.
+        # Both count as one category voice via two-stage averaging.
+        "Elliott Wave Structure (SPY)": 0.8,
+        "Wyckoff Phase (SPY)": 0.8,
+        # Tail risk / crash hedging demand — market-implied, fast-moving
+        "Options Tail Risk (CBOE SKEW)": 1.5,
+        # Global dollar liquidity — affects all risk assets via USD funding costs
+        "Global Dollar Liquidity (Broad DXY)": 1.5,
+        # JPY carry-trade risk — selective but important systemic risk channel
+        "JPY Carry Risk (FXY)": 1.0,
     }
 
     signal_rows = []
@@ -1420,7 +1613,7 @@ def _build_macro_dashboard(
         emoji, verdict = _score_to_bucket(score)
         scores.append(score)
         confidence_scores.append(confidence)
-        display_value = "N/A" if value is None else f"{value:.2f} {unit}".strip()
+        display_value = str(value) if isinstance(value, str) else ("N/A" if value is None else f"{value:.2f} {unit}".strip())
         signal_rows.append({
             "Category": SIGNAL_CATEGORIES.get(name, "Other"),
             "Indicator": name,
