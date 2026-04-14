@@ -1060,12 +1060,46 @@ def _render_crash_stress_test():
                         + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">{"●" if v >= 50 else "○"} {n}</div>'
                                   for n, v in zip(_bot_sigs, [_tb.get("bottom_pct",0)]*len(_bot_sigs)))
                     )
+
+                # Wyckoff phase pill
+                _wk = snap.get("wyckoff")
+                _wk_pill = ""
+                if _wk:
+                    _wk_phase = _wk.get("phase", "")
+                    _wk_sub   = _wk.get("sub_phase", "")
+                    _wk_conf  = _wk.get("confidence", 0)
+                    _wk_res   = _wk.get("resistance")
+                    _wk_sup   = _wk.get("support")
+                    _wk_tgt   = _wk.get("cause_target")
+                    _wk_last  = _wk.get("spy_last")
+                    _phase_colors = {
+                        "Accumulation": COLORS["positive"],
+                        "Distribution": COLORS["negative"],
+                        "Markup":        COLORS["yellow"],
+                        "Markdown":      COLORS["orange"],
+                    }
+                    _wk_c = _phase_colors.get(_wk_phase, COLORS["text_dim"])
+                    _wk_details = f"${_wk_sup:.0f}–${_wk_res:.0f}" if _wk_sup and _wk_res else ""
+                    _wk_tgt_str = f" · target ${_wk_tgt:.0f}" if _wk_tgt else ""
+                    _wk_pill = (
+                        f'<div style="margin-top:5px;padding:4px 8px;background:#0a0f1a;'
+                        f'border:1px solid {_wk_c}44;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">'
+                        f'<div>'
+                        f'<span style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.08em;">WYCKOFF</span> '
+                        f'<span style="font-size:9px;color:{_wk_c};font-weight:700;">{_wk_phase} {_wk_sub}</span>'
+                        f'<span style="font-size:8px;color:#475569;"> {_wk_conf}% conf{_wk_tgt_str}</span>'
+                        f'</div>'
+                        f'<span style="font-size:8px;color:#475569;">{_wk_details}</span>'
+                        f'</div>'
+                    )
+
                 _tb_html = (
                     f'<div style="margin-top:6px;padding:6px 10px;background:#0a0f1a;'
                     f'border:1px solid #1e293b;border-radius:4px;">'
                     f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.08em;margin-bottom:3px;">'
                     f'TOP / BOTTOM PROXIMITY</div>'
                     f'{_tb_rows}'
+                    f'{_wk_pill}'
                     f'</div>'
                 )
 

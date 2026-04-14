@@ -787,6 +787,8 @@ def _load_all_historical_data() -> dict:
                 data[label] = raw["Close"].dropna()
                 if label == "spy":
                     data["spy_ohlc"] = raw[["Open", "High", "Low", "Close"]].dropna()
+                    if "Volume" in raw.columns:
+                        data["spy_volume"] = raw["Volume"].dropna()
         except Exception:
             pass
 
@@ -1187,6 +1189,59 @@ def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
     }
 
 
+def _get_historical_wyckoff(date: str, data: dict) -> dict | None:
+    """Run Wyckoff analysis on SPY OHLCV up to (and including) the given date.
+
+    Uses a 1-year lookback window ending at `date`. Returns the same compact
+    dict as fetch_wyckoff_spy() in market_data.py, or None on failure.
+    """
+    try:
+        from services.wyckoff_engine import analyze_wyckoff
+        ohlc = data.get("spy_ohlc")
+        vol  = data.get("spy_volume")
+        if ohlc is None or len(ohlc) < 60:
+            return None
+
+        dt = pd.Timestamp(date)
+        start = dt - pd.DateOffset(years=1)
+
+        ohlc_slice = ohlc[(ohlc.index >= start) & (ohlc.index <= dt)]
+        if len(ohlc_slice) < 60:
+            # Fall back to all available history up to date
+            ohlc_slice = ohlc[ohlc.index <= dt].tail(252)
+
+        if len(ohlc_slice) < 60:
+            return None
+
+        close_s = ohlc_slice["Close"]
+        high_s  = ohlc_slice["High"]
+        low_s   = ohlc_slice["Low"]
+
+        if vol is not None:
+            vol_slice = vol[(vol.index >= ohlc_slice.index[0]) & (vol.index <= dt)]
+            vol_slice = vol_slice.reindex(ohlc_slice.index, fill_value=0)
+        else:
+            # Flat volume proxy — Wyckoff degrades gracefully
+            vol_slice = pd.Series(1_000_000, index=ohlc_slice.index, dtype=float)
+
+        result = analyze_wyckoff(close_s, high_s, low_s, vol_slice, interval="1d")
+        if result is None:
+            return None
+
+        cp = result.current_phase
+        return {
+            "phase":        cp.phase,
+            "sub_phase":    cp.sub_phase or "",
+            "confidence":   cp.confidence,
+            "support":      cp.key_levels.get("support"),
+            "resistance":   cp.key_levels.get("resistance"),
+            "cause_target": cp.cause_target,
+            "spy_last":     float(close_s.iloc[-1]),
+        }
+    except Exception:
+        return None
+
+
 def _compute_top_bottom_proximity(
     regime_score: float,
     macro_score: float,
@@ -1195,6 +1250,7 @@ def _compute_top_bottom_proximity(
     ll_zscore: float,
     conviction: float,
     hmm_state_label: str,
+    wyckoff: dict | None = None,
 ) -> dict:
     """Compute market top/bottom proximity scores using the same signal logic as the QIR dashboard."""
     vel = regime_velocity or 0.0
@@ -1215,6 +1271,25 @@ def _compute_top_bottom_proximity(
     if hmm_state_label in ("Late Cycle", "Stress", "Early Stress"):
         top_signals.append(("HMM stress regime", 60))
 
+    # Wyckoff top signals
+    if wyckoff:
+        _wk_phase = wyckoff.get("phase", "")
+        _wk_conf  = wyckoff.get("confidence", 0)
+        _wk_sub   = wyckoff.get("sub_phase", "")
+        _wk_res   = wyckoff.get("resistance")
+        _wk_tgt   = wyckoff.get("cause_target")
+        _wk_last  = wyckoff.get("spy_last")
+        if _wk_phase == "Distribution":
+            top_signals.append((f"Wyckoff Distribution {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
+        if _wk_phase == "Markup" and _wk_sub in ("D", "E"):
+            top_signals.append((f"Wyckoff Markup late phase {_wk_sub}", min(80, _wk_conf)))
+        if _wk_res and _wk_last and _wk_res > 0:
+            _res_prox = (_wk_last - _wk_res) / _wk_res * 100
+            if -2.0 <= _res_prox <= 1.5:
+                top_signals.append((f"SPY at Wyckoff resistance ${_wk_res:.0f}", min(90, 50 + _wk_conf // 2)))
+        if _wk_tgt and _wk_last and _wk_phase == "Distribution" and _wk_tgt < _wk_last * 0.98:
+            top_signals.append((f"Wyckoff downside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
+
     if regime_score < -0.15:
         bottom_signals.append(("Regime deep negative", min(100, abs(regime_score) * 250)))
     if vel > 3:
@@ -1227,6 +1302,25 @@ def _compute_top_bottom_proximity(
         bottom_signals.append(("Extreme LL stress", min(100, abs(ll_zscore) * 5)))
     if hmm_state_label in ("Crisis", "Late Cycle"):
         bottom_signals.append(("HMM crisis/late cycle", 70))
+
+    # Wyckoff bottom signals
+    if wyckoff:
+        _wk_phase = wyckoff.get("phase", "")
+        _wk_conf  = wyckoff.get("confidence", 0)
+        _wk_sub   = wyckoff.get("sub_phase", "")
+        _wk_sup   = wyckoff.get("support")
+        _wk_tgt   = wyckoff.get("cause_target")
+        _wk_last  = wyckoff.get("spy_last")
+        if _wk_phase == "Accumulation":
+            bottom_signals.append((f"Wyckoff Accumulation {_wk_sub} ({_wk_conf}% conf)", min(100, _wk_conf)))
+        if _wk_phase == "Markdown" and _wk_sub in ("D", "E"):
+            bottom_signals.append((f"Wyckoff Markdown late phase {_wk_sub} — exhaustion", min(80, _wk_conf)))
+        if _wk_sup and _wk_last and _wk_sup > 0:
+            _sup_prox = (_wk_last - _wk_sup) / _wk_sup * 100
+            if -1.5 <= _sup_prox <= 2.0:
+                bottom_signals.append((f"SPY at Wyckoff support ${_wk_sup:.0f}", min(90, 50 + _wk_conf // 2)))
+        if _wk_tgt and _wk_last and _wk_phase == "Accumulation" and _wk_tgt > _wk_last * 1.02:
+            bottom_signals.append((f"Wyckoff upside target ${_wk_tgt:.0f}", min(80, _wk_conf)))
 
     top_score = round(sum(s for _, s in top_signals) / max(1, len(top_signals))) if top_signals else 0
     bot_score = round(sum(s for _, s in bottom_signals) / max(1, len(bottom_signals))) if bottom_signals else 0
@@ -1285,6 +1379,8 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
     if prev_regime_score is not None:
         regime_velocity = round(regime["regime_score"] - prev_regime_score, 4)
 
+    wyckoff = _get_historical_wyckoff(date, data)
+
     top_bottom = _compute_top_bottom_proximity(
         regime_score=regime["regime_score"],
         macro_score=macro_score,
@@ -1293,6 +1389,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         ll_zscore=hmm["ll_zscore"] if hmm else 0.0,
         conviction=conviction,
         hmm_state_label=hmm["state_label"] if hmm else "",
+        wyckoff=wyckoff,
     )
 
     return {
@@ -1313,6 +1410,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         "spy_price": regime.get("spy_price"),
         "vix": regime.get("vix"),
         "top_bottom": top_bottom,
+        "wyckoff": wyckoff,
     }
 
 
