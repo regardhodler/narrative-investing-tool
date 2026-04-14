@@ -1426,6 +1426,7 @@ def _render_qir_dashboard() -> None:
         _hmm_block        = ""
         _gex_block        = ""
         _lean_card        = ""
+        _fast_setups_html = ""
 
         # Conviction block (standalone card for zone2 — separate from inline verdict)
         if _conviction_score is not None:
@@ -1828,7 +1829,7 @@ def _render_qir_dashboard() -> None:
                         f'<span style="font-size:10px;color:#f59e0b;font-weight:700;letter-spacing:0.1em;">'
                         f'⚡ BIMODAL SIZING — TRIPLE KELLY</span>'
                         f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
-                        f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</span>'
+                        f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⚡ FAST · HOURS/DAYS</span>'
                         f'</div>'
                         f'<div style="font-size:8px;color:#334155;margin-bottom:8px;">'
                         f'Genuine Uncertainty active — three concurrent position legs · '
@@ -1990,8 +1991,9 @@ def _render_qir_dashboard() -> None:
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
                     f'</div>'
                 )
-            _kelly_block = _kelly_html + _triple_kelly_html
-            _bimodal_block = ""
+            _kelly_block       = _kelly_html        # structural sizing → MEDIUM
+            _fast_setups_html  = _triple_kelly_html  # Buy/Short Setup → FAST
+            _bimodal_block     = ""
         except Exception:
             pass
 
@@ -2882,17 +2884,17 @@ def _render_qir_dashboard() -> None:
     )
 
     # ── Compose zone 2: slow signals (Kelly+HMM+GEX+lean+signal) — top_bottom rendered separately ──
-    _zone2_html = ""
-    if _populated and (_kelly_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block):
-        _top_row = ""
+    # ── SLOW: just the HMM regime brain (LL + entropy + forecasts) ──────────
+    _slow_html = _hmm_block if _populated else ""
+
+    # ── MEDIUM: structural Kelly sizing + contextual signals + entry card ────
+    _medium_html = ""
+    if _populated:
+        _medium_parts = []
         if _kelly_block:
-            _top_row = (
-                f'<div style="margin-bottom:10px;">'
-                f'{_kelly_block}'
-                f'</div>'
-            )
-        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block
-        _zone2_html = _top_row + _bot_row
+            _medium_parts.append(f'<div style="margin-bottom:10px;">{_kelly_block}</div>')
+        _medium_parts.append(_gex_block + _lean_card + _signal_breakdown_block)
+        _medium_html = "".join(_medium_parts)
 
     # ── Crash pattern alert ──────────────────────────────────────────────
     _crash_alert_html = ""
@@ -2945,17 +2947,19 @@ def _render_qir_dashboard() -> None:
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
-        # ── SLOW ──────────────────────────────────────────────────────────────
-        f'{_tf_divider("⏱  SLOW — STRUCTURAL · WEEKS / MONTHS")}'
-        f'{_zone2_html}'
-        # ── MEDIUM ────────────────────────────────────────────────────────────
-        f'{_tf_divider("⏑  MEDIUM — DIRECTIONAL · DAYS / WEEKS")}'
+        # ── SLOW: HMM regime brain (LL, entropy, forecasts) ───────────────────
+        f'{_tf_divider("⏱  SLOW — REGIME BRAIN · WEEKS / MONTHS")}'
+        f'{_slow_html}'
+        # ── MEDIUM: structural Kelly + entry signal ────────────────────────────
+        f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING & ENTRY · DAYS / WEEKS")}'
+        f'{_medium_html}'
         f'{_verdict_html}'
         f'{_top_bottom_block if _populated else ""}'
-        # ── FAST ──────────────────────────────────────────────────────────────
-        f'{_tf_divider("⚡  FAST — TACTICAL · HOURS / DAYS")}'
-        f'{_velocity_block if _populated else ""}'
         f'{_entry_rec_html}'
+        # ── FAST: Buy/Short Setups (Triple Kelly, lean-dependent) ─────────────
+        f'{_tf_divider("⚡  FAST — TACTICAL SETUPS · HOURS / DAYS")}'
+        f'{_velocity_block if _populated else ""}'
+        f'{_fast_setups_html if _populated else ""}'
         f'</div>',
         unsafe_allow_html=True,
     )
