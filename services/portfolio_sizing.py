@@ -890,11 +890,13 @@ def compute_triple_kelly(
     kh_s = min(kh_s, 0.15)
 
     # ── 2. Tactical Short ─────────────────────────────────────────────────────
-    # p: lean confidence (how bearish is the lean)
-    # b: short-calibrated (inverted regime)
+    # p: BEARISH scenario probability — opposite side of the forced lean
+    # When lean is BULLISH, bearish prob = (100 - lean_pct) / 100
+    # When lean is BEARISH, bearish prob = lean_pct / 100
     # Fear AMPLIFIES short edge (high fear = better short environment)
     # No HMM mult — this is a short-term hedge, not a regime trade
-    p_short = max(0.01, min(0.99, lean_pct / 100))
+    _bear_pct = (100 - lean_pct) if forced_lean == "BULLISH" else lean_pct
+    p_short = max(0.01, min(0.99, _bear_pct / 100))
     b_short  = _SHORT_B_IMPLIED.get(quadrant, 1.2)
     kf_sh, kh_sh = _kelly(p_short, b_short)
     fear_boost = 1.0 + (fear_score / 100) * 0.20   # fear helps shorts, up to +20%
@@ -929,7 +931,7 @@ def compute_triple_kelly(
             "label":     "Tactical Short",
             "timeframe": "days/weeks",
             "color":     "#ef4444",
-            "note":      f"Lean {lean_pct:.0f}% bearish · fear {fear_score:.0f}/100 boost",
+            "note":      f"Bear scenario {_bear_pct:.0f}% · fear {fear_score:.0f}/100 boost",
         },
         "tactical_long": {
             "half_pct":  round(kh_sc * 100, 1),
