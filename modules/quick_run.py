@@ -400,12 +400,14 @@ def _classify_entry_recommendation(
         # Leading still holding up but macro is sliding — downgrade to WAIT, not a full buy
         verdict = "WAIT"
     elif leading_bull and tac_dip and not macro_bear:
+        # Options flow is a same-day confirming signal — bearish flow blocks unless early risk-on or accelerating
         if opts_bearish and not early_risk_on and not vel_accelerating:
             verdict = "WAIT"
         else:
             verdict = "BUY THE DIP"
     elif early_risk_on and large_div and tac_dip and not macro_bear:
-        verdict = "BUY THE DIP"
+        # Even with early risk-on divergence, very bearish options flow is a veto
+        verdict = "WAIT" if opts_bearish else "BUY THE DIP"
     elif early_risk_off and large_div:
         verdict = "WAIT"
     elif leading_bear and not tac_rip:
@@ -418,8 +420,10 @@ def _classify_entry_recommendation(
         verdict = "HOLD"
         if opts_bullish and leading_bull and tac_dip:
             verdict = "BUY THE DIP"
-        # Rapidly improving macro softens a HOLD to a positive lean — not a BUY, but note it
-        # (no verdict change here — velocity note added to reasoning below)
+        elif opts_bearish and not leading_bull:
+            # Options flow bearish + no bullish leadership → downgrade hold to wait
+            verdict = "WAIT"
+        # Rapidly improving macro softens a HOLD to a positive lean — note added to reasoning
 
     _meta = {
         "BUY THE DIP":  ("#22c55e", "#052e16", "▲"),
@@ -429,8 +433,13 @@ def _classify_entry_recommendation(
     }
     color, bg, icon = _meta[verdict]
 
-    div_sign = f"+{divergence_pts}" if divergence_pts >= 0 else str(divergence_pts)
+    div_sign  = f"+{divergence_pts}" if divergence_pts >= 0 else str(divergence_pts)
     vel_sign  = f"+{velocity_delta}" if velocity_delta >= 0 else str(velocity_delta)
+    opts_note = ""
+    if opts_bearish:
+        opts_note = f" Options flow bearish ({options_score}/100) — confirms caution."
+    elif opts_bullish:
+        opts_note = f" Options flow bullish ({options_score}/100) — confirms setup."
     vel_note  = ""
     if vel_accelerating:
         vel_note = f" Macro velocity {vel_sign} pts/5d — regime accelerating, supports entry."
@@ -442,28 +451,28 @@ def _classify_entry_recommendation(
             f"Leading indicators healthy at {leading_score}/100 vs macro {macro_score}/100 "
             f"({div_sign} pts divergence). "
             f"Tactical pullback to {tactical_score}/100 creates a favorable entry before lagging confirms."
-            f"{vel_note}"
+            f"{opts_note}{vel_note}"
         )
     elif verdict == "HOLD":
         reasoning = (
             f"All layers aligned — leading {leading_score}/100, macro {macro_score}/100, "
             f"tactical {tactical_score}/100. "
             f"No new entry trigger or exit signal; maintain existing positions."
-            f"{vel_note}"
+            f"{opts_note}{vel_note}"
         )
     elif verdict == "WAIT":
         reasoning = (
             f"Leading score ({leading_score}/100) diverging {div_sign} pts from composite — "
             f"fast signals have weakened. "
             f"Hold new entries until divergence resolves or macro catches down."
-            f"{vel_note}"
+            f"{opts_note}{vel_note}"
         )
     else:
         reasoning = (
             f"Leading indicators cracking ({leading_score}/100) while price remains elevated "
             f"(tactical {tactical_score}/100). "
             f"Use current strength to reduce exposure before lagging composite confirms the move."
-            f"{vel_note}"
+            f"{opts_note}{vel_note}"
         )
 
     return {
@@ -1761,9 +1770,12 @@ def _render_qir_dashboard() -> None:
                     _triple_kelly_html = (
                         f'<div style="background:#0f172a;border:1px solid #334155;'
                         f'border-radius:6px;padding:10px 14px;margin-top:6px;">'
-                        f'<div style="font-size:10px;color:#f59e0b;font-weight:700;'
-                        f'letter-spacing:0.1em;margin-bottom:2px;">'
-                        f'⚡ BIMODAL SIZING — TRIPLE KELLY</div>'
+                        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">'
+                        f'<span style="font-size:10px;color:#f59e0b;font-weight:700;letter-spacing:0.1em;">'
+                        f'⚡ BIMODAL SIZING — TRIPLE KELLY</span>'
+                        f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                        f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</span>'
+                        f'</div>'
                         f'<div style="font-size:8px;color:#334155;margin-bottom:8px;">'
                         f'Genuine Uncertainty active — three concurrent position legs · '
                         f'% shown = half-Kelly, i.e. recommended portfolio allocation per leg</div>'
@@ -1874,7 +1886,11 @@ def _render_qir_dashboard() -> None:
                 _kelly_html = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:6px 10px;margin-bottom:8px;">'
-                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">KELLY SIZING</div>'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">KELLY SIZING</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
+                    f'</div>'
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;">'
                     f'<div>'
                     f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">HALF-KELLY</div>'
@@ -1914,7 +1930,11 @@ def _render_qir_dashboard() -> None:
                 _kelly_html = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:8px 12px;margin-bottom:8px;">'
-                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">KELLY SIZING</div>'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">KELLY SIZING</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
+                    f'</div>'
                     f'<div style="font-size:11px;color:#ef444466;">Negative expectancy — no position suggested</div>'
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
                     f'</div>'
@@ -1950,14 +1970,25 @@ def _render_qir_dashboard() -> None:
         _entry_rec_html = (
             f'<div style="background:{_er_bg};border:1px solid {_er_color}44;'
             f'border-radius:6px;padding:10px 14px;margin:0 0 10px;">'
-            f'<div style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">ENTRY SIGNAL</div>'
+            f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+            f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">ENTRY SIGNAL</span>'
+            f'<span style="font-size:7px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;'
+            f'background:#1a1200;padding:1px 5px;border-radius:2px;">⚡ FAST · HOURS/DAYS</span>'
+            f'</div>'
             f'<div style="font-size:20px;font-weight:900;color:{_er_color};'
             f'letter-spacing:0.04em;margin-bottom:8px;">{_er_icon} {_er_verb}</div>'
-            f'<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:8px;">'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px;">'
             f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">LEADING</div>'
-            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_ldg}/100</div></div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_ldg}/100</div>'
+            f'<div style="font-size:7px;color:#475569;">fast signals</div></div>'
             f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">MACRO</div>'
-            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_mac}/100</div></div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_mac}/100</div>'
+            f'<div style="font-size:7px;color:#475569;">slow guard</div></div>'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">OPTIONS</div>'
+            f'<div style="font-size:15px;font-weight:800;'
+            f'color:{"#22c55e" if _opts_s >= 60 else "#ef4444" if _opts_s < 40 else "#f1f5f9"};">'
+            f'{_opts_s}/100</div>'
+            f'<div style="font-size:7px;color:#475569;">same-day flow</div></div>'
             f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">DIVERGENCE</div>'
             f'<div style="margin-top:2px;">{_er_div_badge}</div></div>'
             f'</div>'
@@ -2179,8 +2210,11 @@ def _render_qir_dashboard() -> None:
             _top_bottom_block = (
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                 f'padding:8px 12px;margin-bottom:8px;">'
-                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;'
-                f'margin-bottom:6px;">TOP / BOTTOM PROXIMITY</div>'
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">TOP / BOTTOM PROXIMITY</span>'
+                f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</span>'
+                f'</div>'
                 f'{_tb_rows}'
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
                 f'Empirically calibrated from 8 crash peaks &amp; troughs · '
@@ -2380,8 +2414,11 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:#0f172a;border:1px solid #1e293b;'
                     f'border-left:3px solid {_hs_col};border-radius:5px;'
                     f'padding:8px 12px;margin-bottom:8px;">'
-                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
-                    f'letter-spacing:0.1em;margin-bottom:6px;">HMM BRAIN STATE</div>'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                    f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">HMM BRAIN STATE</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
+                    f'</div>'
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">'
                     f'<div>'
                     f'<div style="font-size:8px;color:#64748b;font-weight:700;'
@@ -2793,9 +2830,9 @@ def _render_qir_dashboard() -> None:
         f'</span></div>'
     )
 
-    # ── Compose zone 2: top row (Kelly full-width, bimodal inside) → bottom row ──
+    # ── Compose zone 2: slow signals (Kelly+HMM+GEX+lean+signal) — top_bottom rendered separately ──
     _zone2_html = ""
-    if _populated and (_kelly_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block):
+    if _populated and (_kelly_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block):
         _top_row = ""
         if _kelly_block:
             _top_row = (
@@ -2803,7 +2840,7 @@ def _render_qir_dashboard() -> None:
                 f'{_kelly_block}'
                 f'</div>'
             )
-        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
+        _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block
         _zone2_html = _top_row + _bot_row
 
     # ── Crash pattern alert ──────────────────────────────────────────────
@@ -2835,7 +2872,16 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
             )
 
-    # ── Render the full dashboard ─────────────────────────────────────────
+    # ── Render the full dashboard — ordered SLOW → MEDIUM → FAST ─────────────
+    def _tf_divider(label: str, color: str = "#1e293b") -> str:
+        return (
+            f'<div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">'
+            f'<div style="flex:1;height:1px;background:{color};"></div>'
+            f'<span style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.12em;'
+            f'white-space:nowrap;">{label}</span>'
+            f'<div style="flex:1;height:1px;background:{color};"></div>'
+            f'</div>'
+        )
     st.markdown(
         f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
         f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
@@ -2848,10 +2894,17 @@ def _render_qir_dashboard() -> None:
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
-        f'{_verdict_html}'
-        f'{_entry_rec_html}'
-        f'{_velocity_block if _populated else ""}'
+        # ── SLOW ──────────────────────────────────────────────────────────────
+        f'{_tf_divider("⏱  SLOW — STRUCTURAL · WEEKS / MONTHS")}'
         f'{_zone2_html}'
+        # ── MEDIUM ────────────────────────────────────────────────────────────
+        f'{_tf_divider("⏑  MEDIUM — DIRECTIONAL · DAYS / WEEKS")}'
+        f'{_verdict_html}'
+        f'{_top_bottom_block if _populated else ""}'
+        # ── FAST ──────────────────────────────────────────────────────────────
+        f'{_tf_divider("⚡  FAST — TACTICAL · HOURS / DAYS")}'
+        f'{_velocity_block if _populated else ""}'
+        f'{_entry_rec_html}'
         f'</div>',
         unsafe_allow_html=True,
     )
