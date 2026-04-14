@@ -364,8 +364,14 @@ def _classify_entry_recommendation(
     options_score: int,
     divergence_label: str,
     divergence_pts: int,
+    velocity_delta: int = 0,
 ) -> dict:
-    """Map leading/lagging indicator divergence + tactical + options into a single entry verdict."""
+    """Map leading/lagging indicator divergence + tactical + options + macro velocity into a single entry verdict.
+
+    velocity_delta: 5-day macro score change (positive = strengthening, negative = deteriorating).
+    Rapid deterioration (< -8) overrides bullish setups to WAIT; rapid improvement (> 8) reinforces
+    bullish setups and softens cautious holds.
+    """
     leading_bull  = leading_score  >= 55
     leading_bear  = leading_score  <  44
     macro_bear    = macro_score    <  40
@@ -377,12 +383,24 @@ def _classify_entry_recommendation(
     early_risk_off = divergence_label == "Early Risk-Off Warning"
     large_div      = abs(divergence_pts) >= 8
 
+    # Velocity regime — captures rate-of-change of macro conditions.
+    # Threshold of ±8 pts/5d corresponds to roughly 1σ of weekly swing.
+    vel_accelerating = velocity_delta >  8   # macro rapidly improving
+    vel_deteriorating = velocity_delta < -8  # macro rapidly deteriorating
+
     if leading_bear and tac_rip and not macro_bear:
         verdict = "SELL THE RIP"
     elif early_risk_off and large_div and tac_rip:
         verdict = "SELL THE RIP"
+    # Rapidly deteriorating macro overrides buy signals regardless of leading/tactical positioning.
+    # Exception: if leading is still strongly bull AND deterioration is shallow (<-15), allow a WAIT.
+    elif vel_deteriorating and not leading_bull:
+        verdict = "SELL THE RIP" if tac_rip else "WAIT"
+    elif vel_deteriorating and leading_bull and not macro_bear:
+        # Leading still holding up but macro is sliding — downgrade to WAIT, not a full buy
+        verdict = "WAIT"
     elif leading_bull and tac_dip and not macro_bear:
-        if opts_bearish and not early_risk_on:
+        if opts_bearish and not early_risk_on and not vel_accelerating:
             verdict = "WAIT"
         else:
             verdict = "BUY THE DIP"
@@ -400,6 +418,8 @@ def _classify_entry_recommendation(
         verdict = "HOLD"
         if opts_bullish and leading_bull and tac_dip:
             verdict = "BUY THE DIP"
+        # Rapidly improving macro softens a HOLD to a positive lean — not a BUY, but note it
+        # (no verdict change here — velocity note added to reasoning below)
 
     _meta = {
         "BUY THE DIP":  ("#22c55e", "#052e16", "▲"),
@@ -410,29 +430,40 @@ def _classify_entry_recommendation(
     color, bg, icon = _meta[verdict]
 
     div_sign = f"+{divergence_pts}" if divergence_pts >= 0 else str(divergence_pts)
+    vel_sign  = f"+{velocity_delta}" if velocity_delta >= 0 else str(velocity_delta)
+    vel_note  = ""
+    if vel_accelerating:
+        vel_note = f" Macro velocity {vel_sign} pts/5d — regime accelerating, supports entry."
+    elif vel_deteriorating:
+        vel_note = f" Macro velocity {vel_sign} pts/5d — regime deteriorating fast, raises bar for new longs."
+
     if verdict == "BUY THE DIP":
         reasoning = (
             f"Leading indicators healthy at {leading_score}/100 vs macro {macro_score}/100 "
             f"({div_sign} pts divergence). "
             f"Tactical pullback to {tactical_score}/100 creates a favorable entry before lagging confirms."
+            f"{vel_note}"
         )
     elif verdict == "HOLD":
         reasoning = (
             f"All layers aligned — leading {leading_score}/100, macro {macro_score}/100, "
             f"tactical {tactical_score}/100. "
             f"No new entry trigger or exit signal; maintain existing positions."
+            f"{vel_note}"
         )
     elif verdict == "WAIT":
         reasoning = (
             f"Leading score ({leading_score}/100) diverging {div_sign} pts from composite — "
             f"fast signals have weakened. "
             f"Hold new entries until divergence resolves or macro catches down."
+            f"{vel_note}"
         )
     else:
         reasoning = (
             f"Leading indicators cracking ({leading_score}/100) while price remains elevated "
             f"(tactical {tactical_score}/100). "
             f"Use current strength to reduce exposure before lagging composite confirms the move."
+            f"{vel_note}"
         )
 
     return {
@@ -445,6 +476,7 @@ def _classify_entry_recommendation(
         "macro_score":      macro_score,
         "divergence_pts":   divergence_pts,
         "divergence_label": divergence_label,
+        "velocity_delta":   velocity_delta,
     }
 
 
@@ -1182,8 +1214,11 @@ def _render_qir_dashboard() -> None:
         _div_label = _rc.get("leading_label") or "Aligned"
         _tac_s     = int(_tac.get("tactical_score", 50)) if _tac else 50
         _opts_s    = int(_of.get("options_score", 50))   if _of  else 50
+        # Velocity: prefer 5-day macro trend (wider signal); fall back to 1-day delta
+        _vel_for_entry = int(_rc.get("score_5d_trend") or _rc.get("velocity") or 0)
         _entry_rec = _classify_entry_recommendation(
-            _leading_s, _macro_s, _tac_s, _opts_s, _div_label, _div_pts
+            _leading_s, _macro_s, _tac_s, _opts_s, _div_label, _div_pts,
+            velocity_delta=_vel_for_entry,
         )
 
         _verdict_html = (
@@ -1442,6 +1477,34 @@ def _render_qir_dashboard() -> None:
                 )
         except Exception:
             pass
+
+        # Fallback: if file-based velocity failed, build from regime context (always available)
+        if not _velocity_block:
+            _rc_vel = _rc.get("score_5d_trend") if _rc.get("score_5d_trend") is not None else _rc.get("velocity")
+            if _rc_vel is not None:
+                _v_delta = float(_rc_vel)
+                _v_abs = abs(_v_delta)
+                _v_color = "#22c55e" if _v_delta > 3 else ("#ef4444" if _v_delta < -3 else "#f59e0b")
+                _v_arrow = "▲" if _v_delta > 3 else ("▼" if _v_delta < -3 else "►")
+                _v_label = ("ACCELERATING" if _v_abs > 15 else
+                            "FLIPPING" if _v_abs > 8 else
+                            "DRIFTING" if _v_abs > 3 else "STABLE")
+                _v_bar_w = min(100, int(_v_abs * 3))
+                _v_src = "5d" if _rc.get("score_5d_trend") is not None else "1d"
+                _velocity_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                    f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
+                    f'{_v_arrow} {_v_delta:+.0f}pt · {_v_label}</span>'
+                    f'</div>'
+                    f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
+                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
+                    f'</div>'
+                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_src} macro trend · feeds entry signal</div>'
+                    f'</div>'
+                )
 
         # ── Signal Breakdown card ────────────────────────────────────────────
         _raw_sigs = st.session_state.get("_regime_raw_signals") or {}
@@ -2510,10 +2573,23 @@ def _render_qir_dashboard() -> None:
     if _populated and (_conviction_block or _kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block or _bimodal_block):
         _top_row = ""
         if _conviction_block or _kelly_block or _velocity_block:
+            # Build columns dynamically — only include non-empty blocks to avoid blank slots.
+            _top_col_defs: list[str] = []
+            _top_col_html: list[str] = []
+            if _conviction_block:
+                _top_col_defs.append("120px")
+                _top_col_html.append(_conviction_block)
+            if _velocity_block:
+                _top_col_defs.append("120px")
+                _top_col_html.append(_velocity_block)
+            if _kelly_block:
+                _top_col_defs.append("1fr")
+                _top_col_html.append(_kelly_block)
+            _col_template = " ".join(_top_col_defs) if _top_col_defs else "1fr"
             _top_row = (
-                f'<div style="display:grid;grid-template-columns:120px 120px 1fr;'
+                f'<div style="display:grid;grid-template-columns:{_col_template};'
                 f'gap:10px;margin-bottom:10px;">'
-                f'{_conviction_block}{_velocity_block}{_kelly_block}'
+                f'{"".join(_top_col_html)}'
                 f'</div>'
             )
         _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
