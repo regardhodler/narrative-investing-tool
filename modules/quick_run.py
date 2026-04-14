@@ -1532,8 +1532,41 @@ def _render_qir_dashboard() -> None:
                 f'{_warn_row}'
                 f'</div>'
             )
-
-        # ── Regime Velocity strip (horizontal) ───────────────────────────────
+        elif _cls.get("pattern") == "GENUINE_UNCERTAINTY" and _gu_profile:
+            # GU has no conviction score — show the uncertainty score as the sizing anchor instead
+            _gu_unc_v   = _gu_profile.get("uncertainty_score", 75)
+            _gu_szl     = _gu_profile.get("size_label", "30% SIZE")
+            _gu_unc_c   = "#22c55e" if _gu_unc_v < 40 else ("#f59e0b" if _gu_unc_v < 65 else "#ef4444")
+            _conviction_block = (
+                f'<div style="background:#0f172a;border:1px solid #7c3aed44;'
+                f'border-left:3px solid #7c3aed;border-radius:6px;padding:10px 14px;margin-bottom:10px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">'
+                f'<div>'
+                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.12em;margin-bottom:3px;">CONVICTION</div>'
+                f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</div>'
+                f'</div>'
+                f'<div style="text-align:right;">'
+                f'<div style="font-size:16px;font-weight:900;color:#7c3aed;">N/A</div>'
+                f'<div style="font-size:7px;color:#64748b;">GU mode</div>'
+                f'</div>'
+                f'</div>'
+                f'<div style="font-size:9px;color:#64748b;margin-bottom:6px;line-height:1.5;">'
+                f'Genuine Uncertainty active — conviction is replaced by the 5-domain uncertainty score below. '
+                f'Pattern layers disagree; no single-pattern strength can be computed.</div>'
+                f'<div style="display:flex;align-items:center;gap:10px;background:#0a0f1a;'
+                f'border:1px solid #1e293b;border-radius:4px;padding:6px 10px;">'
+                f'<div><div style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.08em;">UNCERTAINTY</div>'
+                f'<div style="font-size:20px;font-weight:900;color:{_gu_unc_c};">{_gu_unc_v}</div>'
+                f'<div style="font-size:7px;color:#334155;">/100 · domain disagreement</div></div>'
+                f'<div style="flex:1;border-left:1px solid #1e293b;padding-left:10px;">'
+                f'<div style="font-size:7px;color:#334155;margin-bottom:3px;">SIZING ANCHOR</div>'
+                f'<div style="font-size:12px;font-weight:800;color:#7c3aed;">→ {_gu_szl}</div>'
+                f'<div style="font-size:7px;color:#334155;margin-top:2px;">from uncertainty penalty, not conviction</div>'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+            )
         import json as _vjson, os as _vos
         try:
             _vpath = _vos.path.join(_vos.path.dirname(_vos.path.dirname(__file__)), "data", "tactical_score_history.json")
