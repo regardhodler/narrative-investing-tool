@@ -160,12 +160,27 @@ CORE_TICKERS = {
     "EWG": "Germany ETF (Eurozone mfg proxy)",  # Global manufacturing signal
     "FXI": "China Large-Cap ETF",               # Global manufacturing signal
     "FXY": "Yen ETF (JPY carry proxy)",         # JPY carry trade risk sensor
+    # Sector breadth universe — 11 GICS sector ETFs (used for % above 200DMA calculation)
+    "XLK":  "Technology Sector",
+    "XLF":  "Financials Sector",
+    "XLE":  "Energy Sector",
+    "XLV":  "Health Care Sector",
+    "XLI":  "Industrials Sector",
+    "XLC":  "Communication Sector",
+    "XLP":  "Consumer Staples Sector",
+    "XLY":  "Consumer Discr. Sector",
+    "XLU":  "Utilities Sector",
+    "XLB":  "Materials Sector",
+    "XLRE": "Real Estate Sector",
     # Display-only (ticker bar)
     "IWM": "Russell 2000",
     "GLD": "Gold",
     "SLV": "Silver",
     "TLT": "20Y+ Treasury",
 }
+
+# The 11 GICS sector ETFs used for sector breadth calculation.
+BREADTH_TICKERS = ["XLK", "XLF", "XLE", "XLV", "XLI", "XLC", "XLP", "XLY", "XLU", "XLB", "XLRE"]
 
 
 # ─────────────────────────────────────────────
@@ -408,6 +423,34 @@ def _confidence_from_snap(*tickers: str, snaps: dict[str, AssetSnapshot]) -> int
         else:
             vals.append(60 if snap.stale else 90)
     return int(round(np.mean(vals))) if vals else 35
+
+
+def _pct_above_sma(
+    tickers: list[str],
+    snaps: dict[str, "AssetSnapshot"],
+    window: int = 200,
+) -> tuple[float | None, float | None]:
+    """Return (% of tickers above their SMA-`window`, mean distance from SMA as %).
+
+    Both values are None when no tickers have enough history.
+    """
+    above_flags: list[int] = []
+    distances: list[float] = []
+    for t in tickers:
+        snap = snaps.get(t)
+        if snap is None or snap.series is None:
+            continue
+        s = snap.series.dropna()
+        if len(s) < window:
+            continue
+        sma = float(s.iloc[-window:].mean())
+        latest = float(s.iloc[-1])
+        if sma > 0:
+            above_flags.append(1 if latest > sma else 0)
+            distances.append((latest - sma) / sma * 100.0)
+    if not above_flags:
+        return None, None
+    return round(float(np.mean(above_flags)) * 100.0, 1), round(float(np.mean(distances)), 2)
 
 
 def _interpret_valuation(cape: float | None) -> str:
@@ -704,8 +747,12 @@ def _key_levels(macro: dict, snaps: dict[str, AssetSnapshot]) -> list[dict]:
 # ─────────────────────────────────────────────
 
 def fetch_core_data() -> dict[str, AssetSnapshot]:
-    """Fetch core tickers for signals + ticker bar display."""
-    return fetch_batch_safe(CORE_TICKERS, period="6mo", interval="1d")
+    """Fetch core tickers for signals + ticker bar display.
+
+    Uses 1y of daily history so that 200DMA breadth calculations are available
+    and z-score windows (lookback=252) have the full intended dataset.
+    """
+    return fetch_batch_safe(CORE_TICKERS, period="1y", interval="1d")
 
 
 def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool:
@@ -1448,6 +1495,20 @@ def _build_macro_dashboard(
             breadth_score = _score_with_mode(_brd_ratio, mode=score_mode)  # RSP outperforming SPY = broad participation = risk-on
     indicators.append(("Market Breadth (RSP/SPY)", breadth_val, "ratio", breadth_score, _confidence_from_snap("RSP", "SPY", snaps=snaps)))
 
+    # --- Sector Breadth (% of S&P 500 sectors above 200DMA) ---
+    # Measures how many of the 11 GICS sector ETFs are trading above their 200-day SMA.
+    # 80-100%: broad market strength — most sectors healthy → strongly risk-on.
+    # 40-60%: neutral / mixed leadership.
+    # 0-30%: broad distribution — very few sectors holding up → strongly risk-off.
+    # Normalised with tanh centred at 50%: ±20pp gives ±tanh(1)≈±0.76 score.
+    _sect_pct, _sect_dist = _pct_above_sma(BREADTH_TICKERS, snaps, window=200)
+    sector_breadth_score = 0.0
+    if _sect_pct is not None:
+        sector_breadth_score = float(np.tanh((_sect_pct - 50.0) / 20.0))
+    _breadth_conf_tickers = [t for t in BREADTH_TICKERS if snaps.get(t) is not None]
+    indicators.append(("Sector Breadth (% above 200DMA)", _sect_pct, "%", sector_breadth_score,
+                        _confidence_from_snap(*_breadth_conf_tickers, snaps=snaps) if _breadth_conf_tickers else 35))
+
     # --- Credit Impulse (acceleration of total bank credit growth, TOTBKCR) ---
     # Credit impulse = change in the YoY credit growth rate (quarterly)
     # Positive impulse = credit accelerating = leads GDP growth by ~9 months = risk-on
@@ -1542,6 +1603,7 @@ def _build_macro_dashboard(
         "Real Yields (10Y TIPS)": "Rates",
         "Manufacturing Employment": "Growth",
         "Market Breadth (RSP/SPY)": "Equities",
+        "Sector Breadth (% above 200DMA)": "Equities",
         "Credit Impulse (Bank Credit Accel)": "Credit",
         "Rate Expectations (2Y vs Fed Funds)": "Rates",
         "Global Manufacturing (EWG+FXI)": "Growth",
@@ -1586,6 +1648,7 @@ def _build_macro_dashboard(
         "Real Yields (10Y TIPS)": 2.0,              # Tier 1 — most important rates signal
         "Manufacturing Employment": 1.5,             # Tier 2 — manufacturing sector proxy
         "Market Breadth (RSP/SPY)": 1.5,            # Tier 2 — breadth confirms or diverges
+        "Sector Breadth (% above 200DMA)": 2.0,     # Tier 1 — % sectors above 200DMA is a canonical breadth engine
         "Credit Impulse (Bank Credit Accel)": 2.0,  # Tier 1 — leads GDP by ~9 months, highest-lead macro signal
         "Rate Expectations (2Y vs Fed Funds)": 1.5, # Tier 2 — market vs Fed pricing gap
         "Global Manufacturing (EWG+FXI)": 1.0,     # Tier 3 — global growth breadth
