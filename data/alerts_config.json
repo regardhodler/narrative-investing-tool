@@ -15,12 +15,12 @@
     "tactical_risk_off": 38,
     "tactical_entry": 65
   },
-  "last_check": "1776190349.3043401",
+  "last_check": "1776195262.874754",
   "last_regime": "Neutral \u2014 Leaning Risk-On",
   "alert_history": [],
   "price_targets": [],
-  "current_tactical_score": 64,
-  "last_tactical_score": 66,
+  "current_tactical_score": 66,
+  "last_tactical_score": 64,
   "current_data_quality_score": 70,
   "data_quality_alerted": false
 }

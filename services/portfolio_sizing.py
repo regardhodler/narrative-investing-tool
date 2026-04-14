@@ -808,12 +808,14 @@ def compute_qir_kelly(
     return {
         "kelly_half_pct":      round(kelly_half * 100, 1),
         "kelly_full_pct":      round(max(kelly_full, 0.0) * 100, 1),
+        "kelly_half_raw_pct":  round(max(kelly_full * 0.5, 0.0) * 100, 1),  # before stress/alignment/HMM
         "p":                   round(p, 3),
         "b":                   round(b, 2),
         "p_source":            p_source,
         "b_source":            b_source,
         "n_closed":            n_closed,
         "stress_discount_pct": round(stress_discount * 100, 1),
+        "fear_score":          round(fear_score, 1),
         "capped":              capped,
         "viable":              round(kelly_half * 100, 1) >= 0.1,
         "alignment_score":     round(_alignment * 100),
