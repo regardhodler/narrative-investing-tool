@@ -4,7 +4,7 @@ load_dotenv()
 import streamlit as st
 from utils.styles import apply_global_css
 from utils.auth import auth_gate
-from utils.components import render_header, render_sidebar_header, render_macro_events, render_regime_strip, render_watchlist_widget, render_signal_scorecard
+from utils.components import render_header, render_sidebar_header, render_macro_events, render_regime_strip, render_watchlist_widget
 from utils.session import get_narrative, get_ticker
 from utils.theme import COLORS
 
@@ -192,9 +192,6 @@ section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="s
             label_visibility="collapsed",
             key="sub_module",
         )
-
-# --- Signal Scorecard (top of every page) ---
-render_signal_scorecard()
 
 # --- Module routing ---
 if top_level == "⚡ Quick Intel Run":

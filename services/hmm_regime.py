@@ -300,6 +300,21 @@ def train_hmm(lookback_years: int = 15, max_states: int = 6,
 
     state_labels = _label_states(best_model, feature_names)
 
+    # ── Empirical transition matrix from decoded state sequence ───────────
+    # The EM-learned transmat_ is nearly diagonal (1.00) because emissions are
+    # so well-separated that posterior state assignments are ~100% certain.
+    # Instead, count actual state→state transitions in the Viterbi path and
+    # apply Laplace smoothing so no transition is exactly zero.
+    _decoded_states = best_model.predict(X)
+    _emp_trans = np.zeros((best_n, best_n))
+    for _t in range(1, len(_decoded_states)):
+        _emp_trans[_decoded_states[_t - 1], _decoded_states[_t]] += 1
+    # Laplace smoothing: add 1 pseudo-count to prevent zero probabilities
+    _emp_trans += 1.0
+    _emp_trans /= _emp_trans.sum(axis=1, keepdims=True)
+    # Override the model's degenerate transmat with the empirical one
+    best_model.transmat_ = _emp_trans
+
     # ── LL baseline: compute mean and std of per-observation log-likelihood ───
     # Rolling 60-day windows give a distribution of "normal" LL values.
     # Daily scoring compares against this to detect model-market divergence.
@@ -352,6 +367,59 @@ def load_hmm_brain() -> Optional[HMMBrain]:
         return HMMBrain(**d)
     except Exception:
         return None
+
+
+def load_transition_heat() -> Optional[dict]:
+    """Return daily + monthly transition matrices, diagonal health, and warming alerts.
+
+    The daily matrix has very high diagonals (~0.99) because regimes persist for months.
+    The monthly matrix (daily^21) shows actionable 1-month transition probabilities.
+
+    Returns dict with:
+      - matrix_daily: list[list[float]]  (raw daily transition probs)
+      - matrix: list[list[float]]        (monthly = daily^21, the primary display)
+      - labels: list[str]
+      - current_idx: int
+      - diagonal_health: list[float]     (monthly self-transition, i.e. chance of staying)
+      - warming: list[tuple[str,str,float]]  (monthly off-diag > 3%)
+      - expected_persistence: list[float] (expected days = 1/(1-daily_diag))
+    """
+    brain = load_hmm_brain()
+    if not brain:
+        return None
+    state = load_current_hmm_state()
+    cur_idx = state.state_idx if state else 0
+    tm_daily = np.array(brain.transmat)
+    labels = brain.state_labels
+    n = len(labels)
+
+    # Monthly matrix: raise daily to power 21 (business days)
+    tm_monthly = np.linalg.matrix_power(tm_daily, 21)
+
+    # Daily diagonal for expected persistence calculation
+    daily_diag = [float(tm_daily[i, i]) for i in range(n)]
+    persistence = [round(1.0 / max(1 - d, 1e-6), 1) for d in daily_diag]
+
+    # Monthly diagonal = chance of staying in same state over 1 month
+    monthly_diag = [float(tm_monthly[i, i]) for i in range(n)]
+
+    # Warming: monthly off-diagonal > 3% (actionable threshold)
+    warming = []
+    for i in range(n):
+        for j in range(n):
+            if i != j and tm_monthly[i, j] > 0.03:
+                warming.append((labels[i], labels[j], round(float(tm_monthly[i, j]), 4)))
+    warming.sort(key=lambda x: -x[2])
+
+    return {
+        "matrix_daily": tm_daily.tolist(),
+        "matrix": tm_monthly.tolist(),  # primary display = monthly
+        "labels": labels,
+        "current_idx": cur_idx,
+        "diagonal_health": [round(d, 4) for d in monthly_diag],
+        "expected_persistence": persistence,
+        "warming": warming,
+    }
 
 
 def _load_history() -> list[dict]:

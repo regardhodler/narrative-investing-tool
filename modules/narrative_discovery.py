@@ -1155,7 +1155,7 @@ def render():
         st.markdown(
             '<span style="color:#64748b;font-size:11px;">'
             '⚔️ <b style="color:#94a3b8;">Narrative Debate</b> — '
-            'Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂 argue which sectors, narratives &amp; '
+            'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 argue which sectors, narratives &amp; '
             'tickers are best positioned right now. '
             '<span style="color:#475569;">Runs on all data above · 3 LLM calls</span></span>'
             '<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: Generate Plays + Trending scan first — debate argues sectors &amp; tickers by name</div>',
@@ -1260,7 +1260,7 @@ def render():
         _nd_signals_text = "\n\n".join(_nd_parts) if _nd_parts else "No signals loaded — run Quick Intel Run first."
 
         from services.claude_client import generate_adversarial_debate as _gen_nd_debate
-        with st.spinner("⚔️ Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂 — debating your narratives..."):
+        with st.spinner("⚔️ Sir Doomburger 🐻 vs Sir Fukyerputs 🐂 — debating your narratives..."):
             try:
                 _nd_debate = _gen_nd_debate(
                     _nd_signals_text,

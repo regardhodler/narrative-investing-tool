@@ -238,5 +238,20 @@
     "thesis": "GENUINE UNCERTAINTY | Sell | conf 51%",
     "regime_at_entry": "Neutral \u2014 Leaning Risk-On",
     "status": "open"
+  },
+  {
+    "id": "d1ec221f-fe05-46b4-9921-675efd1fa5ee",
+    "ticker": "SPY",
+    "direction": "Long",
+    "entry_date": "2026-04-13",
+    "entry_price": 686.1,
+    "exit_date": null,
+    "exit_price": null,
+    "position_size": 1,
+    "signal_source": "QIR",
+    "notes": "buy setup selective, confidence low 22/100",
+    "thesis": "EARLY BULL | Buy | conf 56%",
+    "regime_at_entry": "Neutral \u2014 Leaning Risk-On",
+    "status": "open"
   }
 ]

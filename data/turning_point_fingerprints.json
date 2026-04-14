@@ -1,0 +1,284 @@
+{
+  "peaks": {
+    "macro_score": {
+      "mean": 56.95,
+      "std": 6.3419
+    },
+    "regime_velocity": {
+      "mean": -0.013,
+      "std": 0.0439
+    },
+    "entropy": {
+      "mean": 0.7067,
+      "std": 0.2817
+    },
+    "ll_zscore": {
+      "mean": -6.0226,
+      "std": 14.5726
+    },
+    "hmm_confidence": {
+      "mean": 0.4525,
+      "std": 0.1153
+    },
+    "conviction": {
+      "mean": 17.25,
+      "std": 7.3272
+    },
+    "vix": {
+      "mean": 15.21,
+      "std": 3.5208
+    },
+    "credit_hy_z": {
+      "mean": 0.208,
+      "std": 0.7101
+    },
+    "yield_curve_z": {
+      "mean": -0.112,
+      "std": 0.6732
+    },
+    "nfci_z": {
+      "mean": -0.1406,
+      "std": 0.4805
+    }
+  },
+  "troughs": {
+    "macro_score": {
+      "mean": 32.7625,
+      "std": 6.0957
+    },
+    "regime_velocity": {
+      "mean": -0.0634,
+      "std": 0.0976
+    },
+    "entropy": {
+      "mean": 0.695,
+      "std": 0.2829
+    },
+    "ll_zscore": {
+      "mean": -20.9119,
+      "std": 48.2865
+    },
+    "hmm_confidence": {
+      "mean": 0.4711,
+      "std": 0.127
+    },
+    "conviction": {
+      "mean": 34.375,
+      "std": 12.2672
+    },
+    "vix": {
+      "mean": 41.9,
+      "std": 9.7768
+    },
+    "credit_hy_z": {
+      "mean": -0.8653,
+      "std": 0.1851
+    },
+    "yield_curve_z": {
+      "mean": -0.1489,
+      "std": 0.7647
+    },
+    "nfci_z": {
+      "mean": -0.492,
+      "std": 0.4642
+    }
+  },
+  "per_crash": {
+    "peaks": {
+      "dotcom_2000": {
+        "macro_score": 43.0,
+        "regime_velocity": -0.0213,
+        "entropy": 0.0,
+        "ll_zscore": 0.0,
+        "hmm_confidence": 0.5,
+        "conviction": 14.0,
+        "vix": 23.309999465942383,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": -1.0,
+        "nfci_z": -0.866
+      },
+      "gfc_2008": {
+        "macro_score": 51.2,
+        "regime_velocity": 0.0052,
+        "entropy": 0.9041,
+        "ll_zscore": -44.217,
+        "hmm_confidence": 0.274,
+        "conviction": 2.0,
+        "vix": 16.1200008392334,
+        "credit_hy_z": -0.599,
+        "yield_curve_z": 1.0,
+        "nfci_z": -1.0
+      },
+      "eu_debt_2011": {
+        "macro_score": 57.6,
+        "regime_velocity": -0.0404,
+        "entropy": 0.9666,
+        "ll_zscore": -5.462,
+        "hmm_confidence": 0.271,
+        "conviction": 15.0,
+        "vix": 14.75,
+        "credit_hy_z": 0.665,
+        "yield_curve_z": 0.423,
+        "nfci_z": 0.437
+      },
+      "china_2015": {
+        "macro_score": 63.3,
+        "regime_velocity": 0.0045,
+        "entropy": 0.7161,
+        "ll_zscore": -0.254,
+        "hmm_confidence": 0.568,
+        "conviction": 27.0,
+        "vix": 12.25,
+        "credit_hy_z": -0.432,
+        "yield_curve_z": 0.052,
+        "nfci_z": -0.031
+      },
+      "volmageddon_2018": {
+        "macro_score": 63.0,
+        "regime_velocity": -0.0047,
+        "entropy": 0.8016,
+        "ll_zscore": -0.47,
+        "hmm_confidence": 0.422,
+        "conviction": 26.0,
+        "vix": 11.079999923706055,
+        "credit_hy_z": 1.0,
+        "yield_curve_z": -0.832,
+        "nfci_z": 0.169
+      },
+      "covid_2020": {
+        "macro_score": 60.2,
+        "regime_velocity": -0.0849,
+        "entropy": 0.7368,
+        "ll_zscore": -0.006,
+        "hmm_confidence": 0.579,
+        "conviction": 20.0,
+        "vix": 14.380000114440918,
+        "credit_hy_z": 0.784,
+        "yield_curve_z": -0.26,
+        "nfci_z": 0.16
+      },
+      "rate_shock_2022": {
+        "macro_score": 58.2,
+        "regime_velocity": 0.0765,
+        "entropy": 0.8421,
+        "ll_zscore": 1.927,
+        "hmm_confidence": 0.459,
+        "conviction": 16.0,
+        "vix": 16.600000381469727,
+        "credit_hy_z": 0.648,
+        "yield_curve_z": -0.75,
+        "nfci_z": 0.071
+      },
+      "carry_unwind_2024": {
+        "macro_score": 59.1,
+        "regime_velocity": -0.0391,
+        "entropy": 0.6865,
+        "ll_zscore": 0.301,
+        "hmm_confidence": 0.547,
+        "conviction": 18.0,
+        "vix": 13.1899995803833,
+        "credit_hy_z": 0.598,
+        "yield_curve_z": 0.471,
+        "nfci_z": -0.065
+      }
+    },
+    "troughs": {
+      "dotcom_2000": {
+        "macro_score": 31.3,
+        "regime_velocity": -0.0404,
+        "entropy": 0.0,
+        "ll_zscore": 0.0,
+        "hmm_confidence": 0.5,
+        "conviction": 37.0,
+        "vix": 42.130001068115234,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": -0.128,
+        "nfci_z": 0.088
+      },
+      "gfc_2008": {
+        "macro_score": 29.3,
+        "regime_velocity": -0.0118,
+        "entropy": 0.9835,
+        "ll_zscore": -148.096,
+        "hmm_confidence": 0.219,
+        "conviction": 41.0,
+        "vix": 49.68000030517578,
+        "credit_hy_z": -0.668,
+        "yield_curve_z": 0.353,
+        "nfci_z": -1.0
+      },
+      "eu_debt_2011": {
+        "macro_score": 20.2,
+        "regime_velocity": 0.0029,
+        "entropy": 0.9354,
+        "ll_zscore": -14.545,
+        "hmm_confidence": 0.306,
+        "conviction": 60.0,
+        "vix": 45.45000076293945,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": -1.0,
+        "nfci_z": 0.154
+      },
+      "china_2015": {
+        "macro_score": 31.4,
+        "regime_velocity": -0.0617,
+        "entropy": 0.6999,
+        "ll_zscore": -0.948,
+        "hmm_confidence": 0.606,
+        "conviction": 37.0,
+        "vix": 28.139999389648438,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": -1.0,
+        "nfci_z": -0.659
+      },
+      "volmageddon_2018": {
+        "macro_score": 33.3,
+        "regime_velocity": -0.0349,
+        "entropy": 0.7442,
+        "ll_zscore": -1.186,
+        "hmm_confidence": 0.52,
+        "conviction": 33.0,
+        "vix": 36.06999969482422,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": -0.64,
+        "nfci_z": -0.433
+      },
+      "covid_2020": {
+        "macro_score": 40.8,
+        "regime_velocity": 0.018,
+        "entropy": 0.8089,
+        "ll_zscore": -2.085,
+        "hmm_confidence": 0.52,
+        "conviction": 18.0,
+        "vix": 61.59000015258789,
+        "credit_hy_z": -1.0,
+        "yield_curve_z": 1.0,
+        "nfci_z": -1.0
+      },
+      "rate_shock_2022": {
+        "macro_score": 36.2,
+        "regime_velocity": -0.0681,
+        "entropy": 0.6756,
+        "ll_zscore": -0.651,
+        "hmm_confidence": 0.583,
+        "conviction": 28.0,
+        "vix": 33.56999969482422,
+        "credit_hy_z": -0.751,
+        "yield_curve_z": -0.688,
+        "nfci_z": -1.0
+      },
+      "carry_unwind_2024": {
+        "macro_score": 39.6,
+        "regime_velocity": -0.3108,
+        "entropy": 0.7127,
+        "ll_zscore": 0.216,
+        "hmm_confidence": 0.515,
+        "conviction": 21.0,
+        "vix": 38.56999969482422,
+        "credit_hy_z": -0.503,
+        "yield_curve_z": 0.912,
+        "nfci_z": -0.086
+      }
+    }
+  }
+}

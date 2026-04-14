@@ -1,0 +1,48 @@
+[
+ {
+  "date": "2026-04-12",
+  "top_pct": 46,
+  "bottom_pct": 20,
+  "regime_score": 0.08,
+  "velocity": 4.0,
+  "entropy": 0.0,
+  "ll_z": -1.06,
+  "conviction": 0,
+  "hmm_state": "Bull",
+  "top_signals": [
+   "Regime positive",
+   "Low conviction",
+   "LL declining"
+  ],
+  "bottom_signals": [
+   "Velocity turning positive"
+  ]
+ },
+ {
+  "date": "2026-04-13",
+  "top_pct": 39,
+  "bottom_pct": 2,
+  "regime_score": 0.12,
+  "velocity": -4.0,
+  "entropy": 0.0,
+  "ll_z": -1.32,
+  "conviction": 0,
+  "hmm_state": "Bull",
+  "confidence": "MED",
+  "hmm_base": 18.2,
+  "signal_breadth": 30.2,
+  "top_signals": [
+   "Macro Score",
+   "Yield Curve (10Y-2Y)",
+   "Credit HY Spreads",
+   "Financial Conditions",
+   "LL Z-Score",
+   "VIX"
+  ],
+  "bottom_signals": [
+   "Yield Curve (10Y-2Y)",
+   "LL Z-Score",
+   "Financial Conditions"
+  ]
+ }
+]

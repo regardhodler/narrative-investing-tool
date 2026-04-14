@@ -338,112 +338,22 @@ def _render_dashboard_tab():
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
 
-    # ── Row 3B: Kelly-weighted P&L ──────────────────────────────────────────
-    _cum_kelly  = stats.get("cumulative_kelly_return")
-    _avg_kelly  = stats.get("avg_kelly_return")
-    _kelly_wins = stats.get("avg_kelly_win")
-    _kelly_loss = stats.get("avg_kelly_loss")
-    _kelly_n    = stats.get("kelly_trades_resolved", 0)
-    if _kelly_n > 0:
-        _cum_col = COLORS["positive"] if _cum_kelly and _cum_kelly > 0 else COLORS["negative"]
-        cols_kelly = st.columns(5)
-        for col, (label, val, color) in zip(cols_kelly, [
-            ("KELLY CUMULATIVE",    f"{_cum_kelly:+.2f}%" if _cum_kelly is not None else "—",  _cum_col),
-            ("KELLY AVG/TRADE",     f"{_avg_kelly:+.3f}%" if _avg_kelly is not None else "—",  _cum_col),
-            ("KELLY AVG WIN",       f"{_kelly_wins:+.3f}%" if _kelly_wins is not None else "—", COLORS["positive"]),
-            ("KELLY AVG LOSS",      f"{_kelly_loss:+.3f}%" if _kelly_loss is not None else "—", COLORS["negative"]),
-            ("KELLY TRADES",        str(_kelly_n),                                               None),
-        ]):
-            with col:
-                st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
-
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px 0;"></div>', unsafe_allow_html=True)
 
     # ── Row 4: Streaks ────────────────────────────────────────────────────────
-    def _fmt_streak(n, stype):
-        if not n:
-            return "—"
-        icon = "🔥" if stype == "correct" else "❄️"
-        return f"{icon} {n} {stype or '—'} in a row"
-
-    def _streak_col(stype, n):
-        return COLORS["positive"] if stype == "correct" else (COLORS["negative"] if stype == "incorrect" else COLORS["text_dim"])
-
-    # Combined streak
     streak_type  = stats.get("current_streak_type")
     streak_n     = stats.get("current_streak", 0)
-    streak_color = _streak_col(streak_type, streak_n)
-    streak_label = _fmt_streak(streak_n, streak_type)
-
-    # Price streak (SPY trades)
-    p_streak_type = stats.get("price_streak_type")
-    p_streak_n    = stats.get("price_streak", 0)
-    p_streak_col  = _streak_col(p_streak_type, p_streak_n)
-    p_streak_lbl  = _fmt_streak(p_streak_n, p_streak_type)
-
-    # Signal streak (macro verdicts)
-    m_streak_type = stats.get("macro_streak_type")
-    m_streak_n    = stats.get("macro_streak", 0)
-    m_streak_col  = _streak_col(m_streak_type, m_streak_n)
-    m_streak_lbl  = _fmt_streak(m_streak_n, m_streak_type)
+    streak_color = COLORS["positive"] if streak_type == "correct" else (COLORS["negative"] if streak_type == "incorrect" else COLORS["text_dim"])
+    streak_label = f"{'🔥' if streak_type == 'correct' else '❄️'} {streak_n} {streak_type or '—'} in a row" if streak_n else "—"
 
     cols2 = st.columns(3)
     for col, (label, val, color) in zip(cols2, [
-        ("BEST WIN STREAK",       str(stats.get("best_correct_streak", 0)), COLORS["positive"]),
-        ("PRICE STREAK (SPY)",    p_streak_lbl,                              p_streak_col),
-        ("SIGNAL STREAK (MACRO)", m_streak_lbl,                              m_streak_col),
+        ("CURRENT STREAK",    streak_label,                               streak_color),
+        ("BEST WIN STREAK",   str(stats.get("best_correct_streak", 0)),   COLORS["positive"]),
+        ("WORST LOSS STREAK", str(stats.get("worst_incorrect_streak", 0)), COLORS["negative"]),
     ]):
         with col:
             st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
-
-    # ── Option A: Divergence flag ─────────────────────────────────────────────
-    _both_have_data = p_streak_n > 0 and m_streak_n > 0
-    if _both_have_data and p_streak_type != m_streak_type:
-        if p_streak_type == "correct" and m_streak_type == "incorrect":
-            _div_msg  = "Execution is ahead of the model — price trades working but signals are off. Re-examine signal calibration."
-            _div_icon = "⚡"
-            _div_col  = COLORS["yellow"]
-        else:
-            _div_msg  = "Signals are right but price trades are underperforming — review entry timing and position sizing."
-            _div_icon = "⚠"
-            _div_col  = COLORS["negative"]
-        st.markdown(
-            f'<div style="background:#0f172a;border-left:3px solid {_div_col};'
-            f'border-radius:0 4px 4px 0;padding:7px 12px;margin:8px 0 4px;">'
-            f'<span style="color:{_div_col};font-weight:700;font-size:10px;">'
-            f'{_div_icon} DIVERGENCE — Price {p_streak_type} · Signal {m_streak_type}</span>'
-            f'<div style="color:#94a3b8;font-size:10px;margin-top:3px;">{_div_msg}</div>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    # ── Option D: Zero-cross alert (streak just flipped) ─────────────────────
-    # Check last 2 resolved entries per category to detect a flip
-    _log = stats.get("log", [])
-    _price_types_set = {"valuation", "squeeze"}
-
-    def _last_two_outcomes(log, is_price: bool):
-        filtered = [e for e in log if
-                    (e.get("signal_type") in _price_types_set) == is_price
-                    and e.get("outcome") in ("correct", "incorrect")]
-        filtered.sort(key=lambda e: e.get("timestamp") or "")
-        return [e["outcome"] for e in filtered[-2:]]
-
-    for _cat, _is_price in (("Price (SPY)", True), ("Signal (Macro)", False)):
-        _last2 = _last_two_outcomes(_log, _is_price)
-        if len(_last2) == 2 and _last2[0] != _last2[1]:
-            _prev, _curr = _last2
-            _flip_col  = COLORS["positive"] if _curr == "correct" else COLORS["negative"]
-            _flip_icon = "🔄"
-            _flip_msg  = f"{_cat} streak just flipped: {_prev} → {_curr}"
-            st.markdown(
-                f'<div style="background:#0f172a;border-left:3px solid {_flip_col};'
-                f'border-radius:0 4px 4px 0;padding:5px 12px;margin:4px 0;">'
-                f'<span style="color:{_flip_col};font-weight:700;font-size:10px;">'
-                f'{_flip_icon} STREAK BREAK — {_flip_msg}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
 
     st.markdown(f'<div style="height:16px;"></div>', unsafe_allow_html=True)
 
@@ -811,12 +721,8 @@ def _render_history_tab():
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Log:</span> <span style="color:{COLORS["text"]}">{price_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">Price@Eval:</span> <span style="color:{COLORS["text"]}">{price_eval_str}</span></div>'
                     f'<div><span style="color:{COLORS["text_dim"]}">{"Days Open" if is_atr_signal else "Eval Due"}:</span> <span style="color:{COLORS["text"]}">{days_open_str if is_atr_signal else eval_due_str}</span></div>'
-                    + (
-                        f'<div><span style="color:{COLORS["text_dim"]}">Return:</span> <span style="color:{COLORS["positive"] if (entry.get("return_pct") or 0) > 0 else COLORS["negative"] if (entry.get("return_pct") or 0) < 0 else COLORS["text_dim"]}">{f"{entry["return_pct"]:+.2f}%" if entry.get("return_pct") is not None else "—"}</span></div>'
-                        if (entry.get("ticker") or "").upper() == "SPY" else
-                        f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
-                    )
-                    + f'</div>'
+                    f'<div><span style="color:{COLORS["text_dim"]}">Alpha vs SPY:</span> <span style="color:{COLORS["positive"] if entry.get("alpha_pct") and entry["alpha_pct"] > 0 else COLORS["negative"] if entry.get("alpha_pct") and entry["alpha_pct"] < 0 else COLORS["text_dim"]}">{f"{entry["alpha_pct"]:+.2f}%" if entry.get("alpha_pct") is not None else "—"}</span></div>'
+                    f'</div>'
                     + (
                         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-bottom:10px;font-size:11px;">'
                         f'<div><span style="color:{COLORS["text_dim"]}">ATR@Log:</span> <span style="color:{COLORS["text"]}">{f"${entry["atr_at_log"]:.2f}" if entry.get("atr_at_log") else "—"}</span></div>'

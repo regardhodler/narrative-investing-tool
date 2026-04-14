@@ -3,8 +3,6 @@ import os
 import requests
 import streamlit as st
 
-from utils.api_helpers import post_with_retry, capture_api_error, _store_error
-
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 XAI_API_URL  = "https://api.x.ai/v1/chat/completions"
 XAI_MODEL_REGARD = "grok-4-1-fast-reasoning"
@@ -25,7 +23,6 @@ def _fmt_tactical_ctx(ctx: dict | None) -> str:
     return f"Tactical Score: {score}/100 ({label}) — {bias}"
 
 
-@capture_api_error("xAI", fallback="")
 def _call_xai(
     messages: list,
     model: str,
@@ -58,39 +55,6 @@ def _call_xai(
     )
     if not resp.ok:
         raise ValueError(f"xAI {resp.status_code}: {resp.text[:500]}")
-    return resp.json()["choices"][0]["message"]["content"].strip()
-
-
-@capture_api_error("Groq", fallback="")
-def _groq_post(
-    messages: list,
-    model: str = "llama-3.3-70b-versatile",
-    max_tokens: int = 600,
-    temperature: float = 0.2,
-    timeout: int = 30,
-    json_mode: bool = False,
-) -> str:
-    """Central Groq POST with 2-retry backoff. Raises on failure.
-
-    Prefer this over direct requests.post(GROQ_API_URL, ...) in new code.
-    Existing call sites work fine as-is; migrate when touching a function.
-    """
-    key = os.getenv("GROQ_API_KEY", "")
-    if not key:
-        raise ValueError("GROQ_API_KEY not set")
-    headers = {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-    }
-    payload: dict = {
-        "model": model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
-    resp = post_with_retry(GROQ_API_URL, headers=headers, payload=payload, timeout=timeout)
     return resp.json()["choices"][0]["message"]["content"].strip()
 
 
@@ -2636,19 +2600,19 @@ def generate_adversarial_debate(
     """Run a 3-agent adversarial debate on the current macro signals.
 
     Agents:
-      🐻 Dr. Doomburger — bear case maximalist
+      🐻 Sir Doomburger — bear case maximalist
       🐂 Sir Fukyerputs — bull case maximalist
-      ⚖️  Commander Wincyl — neutral synthesis + asymmetric risk verdict
+      ⚖️  Judge Judy — neutral synthesis + asymmetric risk verdict
 
     Returns dict with keys:
-      bear_argument: str (Dr. Doomburger's full argument, 3-5 sentences)
+      bear_argument: str (Sir Doomburger's full argument, 3-5 sentences)
       bull_argument: str (Sir Fukyerputs's full argument, 3-5 sentences)
-      bear_strongest: str (Commander Wincyl's pick: strongest bear point)
-      bull_strongest: str (Commander Wincyl's pick: strongest bull point)
-      verdict: "BULL WINS" | "BEAR WINS" | "CONTESTED" (Commander Wincyl's ruling)
+      bear_strongest: str (Judge Judy's pick: strongest bear point)
+      bull_strongest: str (Judge Judy's pick: strongest bull point)
+      verdict: "BULL WINS" | "BEAR WINS" | "CONTESTED" (Judge Judy's ruling)
       asymmetry: str (which side has better risk/reward asymmetry and why)
       key_disagreement: str (the single most important point of contention)
-      confidence: int (1-10, Commander Wincyl's confidence in verdict, low = truly contested)
+      confidence: int (1-10, Judge Judy's confidence in verdict, low = truly contested)
     contested_bias: str (optional tie-break lean when verdict is CONTESTED)
     contested_bias_reason: str (short rationale for the lean)
     """
@@ -2678,17 +2642,17 @@ def generate_adversarial_debate(
         _raw_blk = ""
     _raw_header = f"RAW NUMERIC GROUND TRUTH (cite these numbers — do not invent others):\n{_raw_blk}\n\n" if _raw_blk else ""
 
-    # ── Commander Wincyl's court record — informs her of past accuracy ─────────────
+    # ── Judge Judy's court record — informs her of past accuracy ─────────────
     try:
         from utils.debate_record import get_record_summary as _get_record
         _court_record = _get_record()
     except Exception:
         _court_record = ""
 
-    # ── Dr. Doomburger (Bear) ──────────────────────────────────────────────────
+    # ── Sir Doomburger (Bear) ──────────────────────────────────────────────────
     _topic_line = f"DEBATE QUESTION: {topic}\n\n" if topic else ""
     bear_prompt = (
-        "You are Dr. Doomburger, a legendary permabear macro analyst. "
+        "You are Sir Doomburger, a legendary permabear macro analyst. "
         "Your job is to make the strongest possible BEARISH case using ONLY the data provided. "
         "You are not allowed to be balanced — you must argue the bear case with maximum conviction. "
         "Cite specific numbers and signal names from the data. "
@@ -2753,16 +2717,16 @@ def generate_adversarial_debate(
         except Exception:
             return ""
 
-    # Agents argue at 0.5 (creative), Commander Wincyl rules at 0.1 (decisive)
+    # Agents argue at 0.5 (creative), Judge Judy rules at 0.1 (decisive)
     bear_arg = _call_llm(bear_prompt, 400, temperature=0.5)
     bull_arg = _call_llm(bull_prompt, 400, temperature=0.5)
 
-    # ── Commander Wincyl ────────────────────────────────────────────────────────────
+    # ── Judge Judy ────────────────────────────────────────────────────────────
     _record_line = f"YOUR COURT RECORD: {_court_record}\n" if _court_record else ""
     _topic_verdict_line = f"DEBATE QUESTION BEFORE THE COURT: {topic}\n\n" if topic else ""
     mod_prompt = (
-        "You are Commander Wincyl, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
-        "You have heard the bear case from Dr. Doomburger and the bull case from Sir Fukyerputs. "
+        "You are Judge Judy, a no-nonsense macro risk arbiter with zero tolerance for weak arguments. "
+        "You have heard the bear case from Sir Doomburger and the bull case from Sir Fukyerputs. "
         "Your job is to deliver a structured verdict. Be blunt, be decisive, take no prisoners. "
         "Your confidence score should reflect how one-sided the evidence is — high = decisive, low = genuinely contested.\n\n"
         f"{_record_line}"
@@ -2778,7 +2742,7 @@ def generate_adversarial_debate(
         '"confidence": <1-10 integer>}'
     )
 
-    mod_raw = _call_llm(mod_prompt, 500, temperature=0.1)  # Commander Wincyl rules decisively
+    mod_raw = _call_llm(mod_prompt, 500, temperature=0.1)  # Judge Judy rules decisively
 
     import json as _json, re as _re
     try:
@@ -2790,7 +2754,7 @@ def generate_adversarial_debate(
             "bear_strongest": "Parse error",
             "bull_strongest": "Parse error",
             "verdict": "CONTESTED",
-            "asymmetry": "Commander Wincyl unavailable",
+            "asymmetry": "Judge Judy unavailable",
             "key_disagreement": "",
             "confidence": 5,
         }

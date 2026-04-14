@@ -406,18 +406,6 @@ def render():
             f" | VIX9D {_vc_v.get('vix9d','?')} / VIX {_vc_v.get('vix','?')} / VIX3M {_vc_v.get('vix3m','?')} / VIX6M {_vc_v.get('vix6m','?')}"
         )
 
-    # Inject GEX Dealer Positioning (structural gamma from SPY/SPX)
-    _gex_v = st.session_state.get("_gex_dealer_context") or {}
-    if _gex_v:
-        signals_text += (
-            f"\nGEX Dealer Positioning: {_gex_v.get('zone','')} | "
-            f"Composite {_gex_v.get('composite', 0):+.2f} | "
-            f"Net GEX {_gex_v.get('total_gex', 0):+.0f}M | "
-            f"Delta {_gex_v.get('dealer_net_delta', 0):+.3f} (call/put OI ratio) | "
-            f"Flip ${_gex_v.get('gamma_flip', 0):,.0f} | "
-            f"Put Wall ${_gex_v.get('put_wall', 0):,.0f} / Call Wall ${_gex_v.get('call_wall', 0):,.0f}"
-        )
-
     _inst_b = st.session_state.get("_institutional_bias") or {}
     if _inst_b.get("ticker", "").upper() == ticker.upper():
         signals_text += (
@@ -637,9 +625,6 @@ def render():
     _ce_v2 = st.session_state.get("_current_events_digest", "")
     if _ce_v2:
         _inj_rows.append(("Current Events", _ce_v2[:120] + "…"))
-    _gex_v2 = st.session_state.get("_gex_dealer_context") or {}
-    if _gex_v2:
-        _inj_rows.append(("GEX Dealer", f"{_gex_v2.get('zone','')} · composite {_gex_v2.get('composite',0):+.2f} · delta {_gex_v2.get('dealer_net_delta',0):+.3f} · flip ${_gex_v2.get('gamma_flip',0):,.0f}"))
 
     if _inj_rows:
         _inj_html = "".join(
@@ -747,7 +732,6 @@ def render():
             'margin:6px 0 12px 0;border-radius:1px;"></div>',
             unsafe_allow_html=True,
         )
-    _render_executive_block(result)
     _render_rating_banner(result)
 
     # ── Inline forecast log button ─────────────────────────────────────────────
@@ -795,7 +779,7 @@ def render():
     with _vd_col1:
         st.markdown(
             f'<span style="color:#64748b;font-size:11px;">⚔️ Debate this valuation — '
-            f'Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Commander Wincyl ⚖️. '
+            f'Sir Doomburger 🐻 vs Sir Fukyerputs 🐂, judged by Judge Judy ⚖️. '
             f'<span style="color:#475569;">3 LLM calls</span></span>'
             f'<div style="color:#475569;font-size:10px;margin-top:3px;">💡 Best results: run the AI Valuation above first — debate uses the rating &amp; confidence as evidence</div>',
             unsafe_allow_html=True,
@@ -812,7 +796,7 @@ def render():
 
     if _run_val_debate:
         st.session_state[_val_debate_key] = {}
-        with st.spinner("⚔️ Debate — Dr. Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
+        with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
             try:
                 from services.claude_client import generate_adversarial_debate as _gen_vd
                 from utils.signal_block import build_ticker_block as _build_vtb, build_macro_block as _build_vmb
@@ -1525,95 +1509,6 @@ RATING_COLORS = {
     "Sell": "#FF5252",
     "Strong Sell": "#D50000",
 }
-
-
-def _render_executive_block(result: dict):
-    """Top-of-page 4-cell executive summary: Direction | Conviction | Size | Key Risk.
-
-    Designed to give a binary decision before the user scrolls into detailed analysis.
-    """
-    rating = result.get("rating", "Hold")
-    confidence = result.get("confidence", 50)
-    conflicts = result.get("signal_conflicts", [])
-
-    # Direction: map rating to binary Long/Short/Neutral
-    _DIRECTION_MAP = {
-        "Strong Buy": ("LONG", "#22c55e", "▲"),
-        "Buy":        ("LONG", "#22c55e", "▲"),
-        "Hold":       ("NEUTRAL", "#f59e0b", "→"),
-        "Sell":       ("SHORT", "#ef4444", "▼"),
-        "Strong Sell":("SHORT", "#ef4444", "▼"),
-    }
-    direction, dir_col, dir_arrow = _DIRECTION_MAP.get(rating, ("NEUTRAL", "#f59e0b", "→"))
-
-    # Conviction color
-    cv_col = "#22c55e" if confidence >= 75 else ("#f59e0b" if confidence >= 55 else "#ef4444")
-
-    # Quick Kelly estimate from session state (computed by QIR or prior valuation run)
-    _kelly_pct = None
-    _kelly_source = ""
-    try:
-        _qir_kelly = (st.session_state.get("_qir_kelly") or {})
-        if _qir_kelly.get("kelly_half_pct"):
-            _kelly_pct = _qir_kelly["kelly_half_pct"]
-            _kelly_source = "QIR"
-    except Exception:
-        pass
-    if _kelly_pct is None:
-        # Fallback: estimate from AI confidence + a conservative b=1.5
-        p = confidence / 100.0
-        b = 1.5
-        kelly_full = (b * p - (1 - p)) / b
-        _kelly_pct = round(max(kelly_full * 0.5, 0.0) * 100, 1)
-        _kelly_source = "est"
-    _k_col = "#22c55e" if _kelly_pct >= 5 else ("#f59e0b" if _kelly_pct >= 2 else "#ef4444")
-
-    # Key Risk: top signal conflict (pre-mortem)
-    key_risk = conflicts[0] if conflicts else "No major conflicts detected"
-    if len(key_risk) > 120:
-        key_risk = key_risk[:117] + "..."
-
-    st.markdown(
-        f'<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;'
-        f'padding:14px 16px;margin-bottom:12px;">'
-        f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.12em;'
-        f'margin-bottom:10px;">EXECUTIVE SUMMARY</div>'
-        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 2fr;gap:12px;">'
-        # Direction
-        f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;'
-        f'padding:10px 12px;text-align:center;">'
-        f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
-        f'margin-bottom:4px;">DIRECTION</div>'
-        f'<div style="font-size:24px;font-weight:900;color:{dir_col};">{dir_arrow}</div>'
-        f'<div style="font-size:13px;font-weight:800;color:{dir_col};">{direction}</div>'
-        f'</div>'
-        # Conviction
-        f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;'
-        f'padding:10px 12px;text-align:center;">'
-        f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
-        f'margin-bottom:4px;">CONVICTION</div>'
-        f'<div style="font-size:28px;font-weight:900;color:{cv_col};">{confidence}</div>'
-        f'<div style="font-size:9px;color:#64748b;">out of 100</div>'
-        f'</div>'
-        # Size
-        f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:6px;'
-        f'padding:10px 12px;text-align:center;">'
-        f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
-        f'margin-bottom:4px;">SIZE</div>'
-        f'<div style="font-size:28px;font-weight:900;color:{_k_col};">{_kelly_pct:.1f}%</div>'
-        f'<div style="font-size:9px;color:#64748b;">half-Kelly ({_kelly_source})</div>'
-        f'</div>'
-        # Key Risk
-        f'<div style="background:#0f172a;border:1px solid #1e293b;border-left:3px solid #ef4444;'
-        f'border-radius:6px;padding:10px 12px;">'
-        f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
-        f'margin-bottom:4px;">KEY RISK (PRE-MORTEM)</div>'
-        f'<div style="font-size:11px;color:#f87171;line-height:1.5;">{key_risk}</div>'
-        f'</div>'
-        f'</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
 
 
 def _signal_tile(col, label: str, sentiment: str, lines: list[str]):
