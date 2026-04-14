@@ -247,6 +247,7 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     conviction_size_mult = None
     conviction_size_label = None
     leading_warning = None
+    _cv_comps = {}
 
     if pattern != "GENUINE_UNCERTAINTY":
         _regime_pts  = abs(score) * 40                              # max 40 — regime strength
@@ -313,6 +314,19 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
 
         conviction_score = int(max(0, min(100, round(_raw * _fear_mult))))
 
+        # Store component breakdown for the UI card
+        _cv_comps = {
+            "regime":   round(_regime_pts, 1),
+            "tactical": round(_tac_pts, 1),
+            "options":  round(_opts_pts, 1),
+            "leading":  round(_lead_pts, 1),
+            "rate":     round(_rate_pts, 1),
+            "whale":    round(_whale_pts, 1),
+            "velocity": round(_vel_pts, 1),
+            "fear_mult": round(_fear_mult, 3),
+            "hmm_mult":  1.0,
+        }
+
         # HMM regime state modifier — passive, secondary dampener
         try:
             from services.hmm_regime import load_current_hmm_state, get_conviction_multiplier
@@ -320,6 +334,7 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
             if _hmm_state is not None:
                 _hmm_entropy = getattr(_hmm_state, "entropy", 0.0) or 0.0
                 _hmm_mult = get_conviction_multiplier(_hmm_state.state_label, entropy=_hmm_entropy)
+                _cv_comps["hmm_mult"] = round(_hmm_mult, 3)
                 # Persistence bonus: >10 days in same state adds confidence
                 if _hmm_state.persistence > 10:
                     conviction_score = min(int(round(conviction_score * _hmm_mult)) + 3, 100)
@@ -353,6 +368,7 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
         "conviction_size_mult": conviction_size_mult,
         "conviction_size_label": conviction_size_label,
         "leading_warning": leading_warning,
+        "conviction_components": _cv_comps if pattern != "GENUINE_UNCERTAINTY" else {},
         **pat_meta,
     }
 
@@ -1186,9 +1202,10 @@ def _render_qir_dashboard() -> None:
             return (f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
                     f'letter-spacing:0.06em;margin:6px 0 2px;">{label}</div>{rows}')
 
-        _conviction_score = _cls.get("conviction_score")
+        _conviction_score  = _cls.get("conviction_score")
         _conviction_size_label = _cls.get("conviction_size_label")
-        _leading_warning = _cls.get("leading_warning")
+        _leading_warning   = _cls.get("leading_warning")
+        _conviction_comps  = _cls.get("conviction_components") or {}
 
         # Entry signal recommendation (leading vs lagging synthesis)
         _leading_s = int(_rc.get("leading_score") or 50)
@@ -1211,26 +1228,8 @@ def _render_qir_dashboard() -> None:
             f'<div style="color:#94a3b8;font-size:11px;margin-bottom:10px;">{_verdict_interp}</div>'
         )
 
-        # Conviction score row — only for the 6 concrete patterns
-        if _conviction_score is not None:
-            _cv_color = "#22c55e" if _conviction_score >= 75 else (
-                "#f59e0b" if _conviction_score >= 55 else (
-                "#f97316" if _conviction_score >= 40 else "#ef4444"
-            ))
-            _cv_bar_w = _conviction_score
-            _verdict_html += (
-                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                f'padding:8px 12px;margin-bottom:8px;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
-                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
-                f'<span style="font-size:13px;font-weight:800;color:{_cv_color};">'
-                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
-                f'</div>'
-                f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
-                f'<div style="background:{_cv_color};width:{_cv_bar_w}%;height:4px;border-radius:3px;"></div>'
-                f'</div>'
-                f'</div>'
-            )
+        # Conviction and leading warning are now shown in the dedicated MEDIUM conviction card.
+        # Keep only the VIX note and leading divergence warning here for pattern context.
 
         # Leading divergence warning
         if _leading_warning:
@@ -1431,23 +1430,96 @@ def _render_qir_dashboard() -> None:
         _lean_card        = ""
         _fast_setups_html = ""
 
-        # Conviction block (standalone card for zone2 — separate from inline verdict)
+        # Conviction block — full card with component breakdown
         if _conviction_score is not None:
             _cv_color2 = "#22c55e" if _conviction_score >= 75 else (
                 "#f59e0b" if _conviction_score >= 55 else (
                 "#f97316" if _conviction_score >= 40 else "#ef4444"
             ))
+            # Component rows (sorted best → worst absolute contribution)
+            _cv_rows_data = [
+                ("Regime",    _conviction_comps.get("regime",   0), 40,  "macro z-score strength"),
+                ("Tactical",  _conviction_comps.get("tactical", 0), 30,  "how far from neutral 50"),
+                ("Options",   _conviction_comps.get("options",  0), 20,  "flow conviction"),
+                ("Leading",   _conviction_comps.get("leading",  0), 10,  "fast signal divergence"),
+                ("Whale",     _conviction_comps.get("whale",    0), 10,  "institutional flow"),
+                ("Rate Path", _conviction_comps.get("rate",     0), 8,   "Fed path alignment"),
+                ("Velocity",  _conviction_comps.get("velocity", 0), 8,   "momentum direction"),
+            ]
+            _cv_comp_rows = ""
+            for _cvr_name, _cvr_val, _cvr_max, _cvr_tip in _cv_rows_data:
+                _cvr_col = "#22c55e" if _cvr_val > 0 else ("#ef4444" if _cvr_val < 0 else "#334155")
+                _cvr_bar_pct = int(min(abs(_cvr_val) / max(_cvr_max, 1) * 100, 100))
+                _cvr_sign = f"+{_cvr_val:.1f}" if _cvr_val >= 0 else f"{_cvr_val:.1f}"
+                _cv_comp_rows += (
+                    f'<div style="display:grid;grid-template-columns:60px 1fr 36px;'
+                    f'align-items:center;gap:5px;margin-bottom:3px;">'
+                    f'<div style="font-size:8px;color:#475569;text-align:right;">{_cvr_name}</div>'
+                    f'<div style="background:#1e293b;border-radius:2px;height:6px;position:relative;">'
+                    f'<div style="background:{_cvr_col};width:{_cvr_bar_pct}%;height:100%;'
+                    f'border-radius:2px;{"float:right;" if _cvr_val < 0 else ""}"></div>'
+                    f'</div>'
+                    f'<div style="font-size:8px;color:{_cvr_col};font-weight:700;'
+                    f'font-family:monospace;text-align:right;">{_cvr_sign}</div>'
+                    f'</div>'
+                )
+            # Multiplier pills
+            _fear_mult_v  = _conviction_comps.get("fear_mult", 1.0)
+            _hmm_mult_v   = _conviction_comps.get("hmm_mult",  1.0)
+            _fear_pill_c  = "#22c55e" if _fear_mult_v >= 0.95 else ("#f59e0b" if _fear_mult_v >= 0.80 else "#ef4444")
+            _hmm_pill_c   = "#22c55e" if _hmm_mult_v >= 1.0 else ("#f59e0b" if _hmm_mult_v >= 0.85 else "#ef4444")
+            _warn_row = ""
+            if _leading_warning:
+                _warn_row = (
+                    f'<div style="background:#1a1200;border-left:3px solid #f59e0b;'
+                    f'padding:5px 8px;font-size:9px;color:#f59e0b;margin-top:5px;'
+                    f'border-radius:0 3px 3px 0;line-height:1.4;">⚠ {_leading_warning}</div>'
+                )
             _conviction_block = (
-                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                f'padding:8px 12px;margin-bottom:8px;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
-                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
-                f'<span style="font-size:13px;font-weight:800;color:{_cv_color2};">'
-                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
+                f'<div style="background:#0f172a;border:1px solid {_cv_color2}44;'
+                f'border-left:3px solid {_cv_color2};border-radius:6px;'
+                f'padding:10px 14px;margin-bottom:10px;">'
+                # Header row
+                f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+                f'<div>'
+                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.12em;margin-bottom:3px;">'
+                f'CONVICTION</div>'
+                f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</div>'
                 f'</div>'
-                f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
-                f'<div style="background:{_cv_color2};width:{_conviction_score}%;height:4px;border-radius:3px;"></div>'
+                f'<div style="text-align:right;">'
+                f'<div style="font-size:28px;font-weight:900;color:{_cv_color2};line-height:1;">'
+                f'{_conviction_score}</div>'
+                f'<div style="font-size:8px;color:#64748b;">/100</div>'
                 f'</div>'
+                f'</div>'
+                # Master bar
+                f'<div style="background:#1e293b;border-radius:3px;height:5px;margin-bottom:8px;">'
+                f'<div style="background:{_cv_color2};width:{_conviction_score}%;height:5px;border-radius:3px;"></div>'
+                f'</div>'
+                # Size label
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+                f'<div style="background:{_cv_color2}22;border:1px solid {_cv_color2}55;'
+                f'border-radius:4px;padding:3px 10px;font-size:10px;font-weight:800;color:{_cv_color2};">'
+                f'→ {_conviction_size_label}</div>'
+                f'<span style="font-size:9px;color:#334155;">recommended max position size</span>'
+                f'</div>'
+                # Component breakdown
+                f'<div style="border-top:1px solid #1e293b;padding-top:7px;margin-bottom:4px;">'
+                f'<div style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">'
+                f'COMPONENT BREAKDOWN  · +max / −drag</div>'
+                f'{_cv_comp_rows}'
+                f'</div>'
+                # Multiplier pills
+                f'<div style="display:flex;gap:6px;margin-top:5px;">'
+                f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:3px;'
+                f'padding:2px 7px;font-size:8px;color:{_fear_pill_c};">'
+                f'fear ×{_fear_mult_v:.2f}</div>'
+                f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:3px;'
+                f'padding:2px 7px;font-size:8px;color:{_hmm_pill_c};">'
+                f'HMM ×{_hmm_mult_v:.2f}</div>'
+                f'</div>'
+                f'{_warn_row}'
                 f'</div>'
             )
 
@@ -2910,6 +2982,8 @@ def _render_qir_dashboard() -> None:
     _medium_html = ""
     if _populated:
         _medium_parts = []
+        if _conviction_block:
+            _medium_parts.append(_conviction_block)
         if _kelly_block:
             _medium_parts.append(f'<div style="margin-bottom:10px;">{_kelly_block}</div>')
         _medium_parts.append(_gex_block + _lean_card + _signal_breakdown_block)
