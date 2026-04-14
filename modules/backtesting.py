@@ -1037,28 +1037,37 @@ def _render_crash_stress_test():
             _bot_pct = _tb.get("bottom_pct", 0)
             _top_sigs = _tb.get("top_signals", [])
             _bot_sigs = _tb.get("bottom_signals", [])
+            
+            # Count firing signals (assume 50+ threshold since we don't have individual values in backtest)
+            _top_count = len(_top_sigs)  # Simplified: assume all listed signals fired
+            _bot_count = len(_bot_sigs)
+            
             _tb_html = ""
             if _top_sigs or _bot_sigs:
                 _tb_rows = ""
                 if _top_sigs:
-                    _top_c = COLORS["negative"] if _top_pct >= 50 else (COLORS["yellow"] if _top_pct >= 25 else COLORS["positive"])
+                    _top_c = COLORS["negative"] if _top_count >= len(_top_sigs)//2 else (COLORS["yellow"] if _top_count > 0 else COLORS["text_dim"])
                     _tb_rows += (
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:flex-end;padding:3px 0;">'
                         f'<span style="color:{COLORS["negative"]};font-size:9px;font-weight:700;">▲ MARKET TOP</span>'
-                        f'<span style="color:{_top_c};font-size:13px;font-weight:900;">{_top_pct}%</span>'
+                        f'<div style="text-align:right;">'
+                        f'<span style="color:{_top_c};font-size:11px;font-weight:800;">{_top_count}/{len(_top_sigs)} signals</span><br>'
+                        f'<span style="color:#64748b;font-size:7px;">avg {_top_pct}%</span>'
                         f'</div>'
-                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">{"●" if v >= 50 else "○"} {n}</div>'
-                                  for n, v in zip(_top_sigs, [_tb.get("top_pct",0)]*len(_top_sigs)))
+                        f'</div>'
+                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">● {n}</div>' for n in _top_sigs)
                     )
                 if _bot_sigs:
-                    _bot_c = COLORS["positive"] if _bot_pct >= 50 else (COLORS["yellow"] if _bot_pct >= 25 else COLORS["text_dim"])
+                    _bot_c = COLORS["positive"] if _bot_count >= len(_bot_sigs)//2 else (COLORS["yellow"] if _bot_count > 0 else COLORS["text_dim"])
                     _tb_rows += (
-                        f'<div style="display:flex;justify-content:space-between;align-items:center;padding:3px 0;margin-top:3px;">'
+                        f'<div style="display:flex;justify-content:space-between;align-items:flex-end;padding:3px 0;margin-top:3px;">'
                         f'<span style="color:{COLORS["positive"]};font-size:9px;font-weight:700;">▼ MARKET BOTTOM</span>'
-                        f'<span style="color:{_bot_c};font-size:13px;font-weight:900;">{_bot_pct}%</span>'
+                        f'<div style="text-align:right;">'
+                        f'<span style="color:{_bot_c};font-size:11px;font-weight:800;">{_bot_count}/{len(_bot_sigs)} signals</span><br>'
+                        f'<span style="color:#64748b;font-size:7px;">avg {_bot_pct}%</span>'
                         f'</div>'
-                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">{"●" if v >= 50 else "○"} {n}</div>'
-                                  for n, v in zip(_bot_sigs, [_tb.get("bottom_pct",0)]*len(_bot_sigs)))
+                        f'</div>'
+                        + "".join(f'<div style="font-size:8px;color:#475569;padding:1px 0 1px 8px;">● {n}</div>' for n in _bot_sigs)
                     )
 
                 # Wyckoff phase pill
