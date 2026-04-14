@@ -44,5 +44,22 @@
    "LL Z-Score",
    "Financial Conditions"
   ]
+ },
+ {
+  "date": "2026-04-14",
+  "top_pct": 50,
+  "bottom_pct": 0,
+  "regime_score": 0.12,
+  "velocity": 0.0,
+  "entropy": 0.0,
+  "ll_z": -1.32,
+  "conviction": 0,
+  "hmm_state": "Bull",
+  "top_signals": [
+   "Regime positive",
+   "Low conviction",
+   "LL declining"
+  ],
+  "bottom_signals": []
  }
 ]

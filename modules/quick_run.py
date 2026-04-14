@@ -1440,6 +1440,25 @@ def _render_qir_dashboard() -> None:
 
         # ── Regime Velocity card ─────────────────────────────────────────────
         import json as _vjson, os as _vos
+
+        # Conviction suffix — appended to velocity card when score is available
+        _cv_suffix = ""
+        if _conviction_score is not None:
+            _cv_color_vel = ("#22c55e" if _conviction_score >= 75 else
+                             "#f59e0b" if _conviction_score >= 55 else
+                             "#f97316" if _conviction_score >= 40 else "#ef4444")
+            _cv_suffix = (
+                f'<div style="border-top:1px solid #1e293b;margin-top:6px;padding-top:5px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">'
+                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
+                f'<span style="font-size:11px;font-weight:800;color:{_cv_color_vel};">'
+                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
+                f'</div>'
+                f'<div style="background:#1e293b;border-radius:2px;height:3px;">'
+                f'<div style="background:{_cv_color_vel};width:{_conviction_score}%;height:3px;border-radius:2px;"></div>'
+                f'</div>'
+                f'</div>'
+            )
         try:
             _vpath = _vos.path.join(_vos.path.dirname(_vos.path.dirname(__file__)), "data", "tactical_score_history.json")
             with open(_vpath) as _vf:
@@ -1473,6 +1492,7 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
                     f'</div>'
                     f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_note}</div>'
+                    f'{_cv_suffix}'
                     f'</div>'
                 )
         except Exception:
@@ -1503,6 +1523,7 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
                     f'</div>'
                     f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_src} macro trend · feeds entry signal</div>'
+                    f'{_cv_suffix}'
                     f'</div>'
                 )
 
@@ -2568,19 +2589,16 @@ def _render_qir_dashboard() -> None:
         f'</span></div>'
     )
 
-    # ── Compose zone 2: bimodal (full width) → top row (Conviction | Velocity | Kelly) → bottom row (HMM + GEX + Lean + Signals + Top/Bottom) ──
+    # ── Compose zone 2: bimodal (full width) → top row (Velocity+Conviction | Kelly) → bottom row (HMM + GEX + Lean + Signals + Top/Bottom) ──
     _zone2_html = ""
-    if _populated and (_conviction_block or _kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block or _bimodal_block):
+    if _populated and (_kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block or _bimodal_block):
         _top_row = ""
-        if _conviction_block or _kelly_block or _velocity_block:
-            # Build columns dynamically — only include non-empty blocks to avoid blank slots.
+        if _kelly_block or _velocity_block:
+            # Build columns dynamically — conviction is now embedded in velocity card.
             _top_col_defs: list[str] = []
             _top_col_html: list[str] = []
-            if _conviction_block:
-                _top_col_defs.append("120px")
-                _top_col_html.append(_conviction_block)
             if _velocity_block:
-                _top_col_defs.append("120px")
+                _top_col_defs.append("160px")
                 _top_col_html.append(_velocity_block)
             if _kelly_block:
                 _top_col_defs.append("1fr")

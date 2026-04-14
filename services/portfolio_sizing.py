@@ -815,7 +815,7 @@ def compute_qir_kelly(
         "n_closed":            n_closed,
         "stress_discount_pct": round(stress_discount * 100, 1),
         "capped":              capped,
-        "viable":              kelly_full > 0,
+        "viable":              round(kelly_half * 100, 1) >= 0.1,
         "alignment_score":     round(_alignment * 100),
         "n_signals_agree":     _n_agree,
         "n_signals_total":     _n_total,
