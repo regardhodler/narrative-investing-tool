@@ -14,6 +14,12 @@ from utils.components import (
 
 # ── QIR Dashboard helpers ────────────────────────────────────────────────────
 
+_RATE_PATH_SCALE = {
+    "CUT_75": 1.0, "CUT_50": 0.75, "CUT_25": 0.5,
+    "HOLD": 0.0,
+    "HIKE_25": -0.5, "HIKE_50": -0.75, "HIKE_100": -1.0,
+}
+
 _PATTERNS = {
     "BULLISH_CONFIRMATION": {
         "label": "BULLISH CONFIRMATION",
@@ -177,6 +183,29 @@ _PATTERNS = {
 }
 
 
+def _regime_velocity_pts(current_macro_score: float, is_bullish: bool | None) -> float:
+    """Return directional velocity pts (±8 max) from tactical_score_history.json."""
+    import json as _json, os as _os
+    try:
+        _path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "tactical_score_history.json")
+        with open(_path) as _f:
+            _hist = _json.load(_f)
+        if not _hist or len(_hist) < 6:
+            return 0.0
+        _old_score = float(_hist[-6].get("score", 50))
+        velocity = current_macro_score - _old_score
+        vel_norm = max(-1.0, min(1.0, velocity / 25.0))
+        if is_bullish is True:
+            vel_dir = 1 if vel_norm > 0 else (-1 if vel_norm < 0 else 0)
+        elif is_bullish is False:
+            vel_dir = 1 if vel_norm < 0 else (-1 if vel_norm > 0 else 0)
+        else:
+            vel_dir = 0
+        return vel_dir * abs(vel_norm) * 8
+    except Exception:
+        return 0.0
+
+
 def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     """Map three timing signal contexts to one of 7 dashboard patterns.
 
@@ -224,6 +253,16 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
         _tac_pts     = abs(tac_score - 50) / 50.0 * 30             # max 30 — tactical strength
         _opts_pts    = abs(of_score - 50)  / 50.0 * 20             # max 20 — options strength
 
+        # Staleness weight: regime data older than 24h gets downweighted
+        import time as _time
+        try:
+            _regime_ts  = st.session_state.get("_regime_context_ts") or 0
+            _age_hours  = (_time.time() - float(_regime_ts)) / 3600.0
+            _age_weight = max(0.75, 1.0 - (_age_hours / 48.0))
+        except Exception:
+            _age_weight = 1.0
+        _regime_pts *= _age_weight
+
         # Leading divergence: does the early-warning direction confirm or contradict?
         _leading_div = regime_ctx.get("leading_divergence", 0) or 0
         _is_bullish  = pat_meta.get("bullish")
@@ -233,9 +272,61 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
             _dir_match = 1 if _leading_div < 0 else (-1 if _leading_div > 0 else 0)
         else:
             _dir_match = 0
-
         _lead_pts = _dir_match * min(abs(_leading_div) / 20.0, 1.0) * 10  # ±10 pts
-        conviction_score = int(max(0, min(100, round(_regime_pts + _tac_pts + _opts_pts + _lead_pts))))
+
+        # Rate path: normalized -1..+1, directional vs pattern, max ±8 pts
+        try:
+            _rate_path = st.session_state.get("_dominant_rate_path") or "HOLD"
+            _rate_val  = _RATE_PATH_SCALE.get(str(_rate_path).upper(), 0.0)
+            _rate_dir  = 1 if ((_is_bullish is True  and _rate_val > 0) or
+                               (_is_bullish is False and _rate_val < 0)) else -1
+            _rate_pts  = _rate_dir * abs(_rate_val) * 8
+        except Exception:
+            _rate_pts = 0.0
+
+        # Whale flow: bull_pct normalized, directional, max ±10 pts
+        try:
+            _wf        = st.session_state.get("_whale_flow_score") or {}
+            _bull_pct  = float(_wf.get("bull_pct", 50))
+            _wf_norm   = (_bull_pct - 50) / 50.0
+            _wf_dir    = 1 if ((_is_bullish is True  and _wf_norm > 0) or
+                               (_is_bullish is False and _wf_norm < 0)) else -1
+            _whale_pts = _wf_dir * abs(_wf_norm) * 10
+        except Exception:
+            _whale_pts = 0.0
+
+        # Regime velocity — how fast is the regime moving? max ±8 pts
+        _macro_score_0to100 = (score + 1.0) * 50.0
+        _vel_pts = _regime_velocity_pts(_macro_score_0to100, _is_bullish)
+
+        # Sum and apply fear multiplier
+        _raw = (_regime_pts + _rate_pts + _tac_pts + _opts_pts +
+                _whale_pts + _lead_pts + _vel_pts)
+
+        try:
+            _fc         = st.session_state.get("_fear_composite") or {}
+            _fear_score = float(_fc.get("score", 50))
+            _fear_ext   = abs(_fear_score - 50) / 50.0
+            _fear_mult  = 1.0 - _fear_ext * 0.30
+        except Exception:
+            _fear_mult = 1.0
+
+        conviction_score = int(max(0, min(100, round(_raw * _fear_mult))))
+
+        # HMM regime state modifier — passive, secondary dampener
+        try:
+            from services.hmm_regime import load_current_hmm_state, get_conviction_multiplier
+            _hmm_state = load_current_hmm_state()
+            if _hmm_state is not None:
+                _hmm_entropy = getattr(_hmm_state, "entropy", 0.0) or 0.0
+                _hmm_mult = get_conviction_multiplier(_hmm_state.state_label, entropy=_hmm_entropy)
+                # Persistence bonus: >10 days in same state adds confidence
+                if _hmm_state.persistence > 10:
+                    conviction_score = min(int(round(conviction_score * _hmm_mult)) + 3, 100)
+                else:
+                    conviction_score = int(max(0, min(100, round(conviction_score * _hmm_mult))))
+        except Exception:
+            _hmm_state = None
 
         # Position sizing from conviction
         if conviction_score >= 75:
@@ -263,6 +354,97 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
         "conviction_size_label": conviction_size_label,
         "leading_warning": leading_warning,
         **pat_meta,
+    }
+
+
+def _classify_entry_recommendation(
+    leading_score: int,
+    macro_score: int,
+    tactical_score: int,
+    options_score: int,
+    divergence_label: str,
+    divergence_pts: int,
+) -> dict:
+    """Map leading/lagging indicator divergence + tactical + options into a single entry verdict."""
+    leading_bull  = leading_score  >= 55
+    leading_bear  = leading_score  <  44
+    macro_bear    = macro_score    <  40
+    tac_dip       = tactical_score <  48
+    tac_rip       = tactical_score >= 62
+    opts_bearish  = options_score  <  40
+    opts_bullish  = options_score  >= 60
+    early_risk_on  = divergence_label == "Early Risk-On Setup"
+    early_risk_off = divergence_label == "Early Risk-Off Warning"
+    large_div      = abs(divergence_pts) >= 8
+
+    if leading_bear and tac_rip and not macro_bear:
+        verdict = "SELL THE RIP"
+    elif early_risk_off and large_div and tac_rip:
+        verdict = "SELL THE RIP"
+    elif leading_bull and tac_dip and not macro_bear:
+        if opts_bearish and not early_risk_on:
+            verdict = "WAIT"
+        else:
+            verdict = "BUY THE DIP"
+    elif early_risk_on and large_div and tac_dip and not macro_bear:
+        verdict = "BUY THE DIP"
+    elif early_risk_off and large_div:
+        verdict = "WAIT"
+    elif leading_bear and not tac_rip:
+        verdict = "WAIT"
+    elif leading_bull and tac_dip and macro_bear:
+        verdict = "WAIT"
+    elif not leading_bull and not leading_bear and tac_dip and opts_bearish:
+        verdict = "WAIT"
+    else:
+        verdict = "HOLD"
+        if opts_bullish and leading_bull and tac_dip:
+            verdict = "BUY THE DIP"
+
+    _meta = {
+        "BUY THE DIP":  ("#22c55e", "#052e16", "▲"),
+        "HOLD":         ("#4B9FFF", "#0a1628", "◆"),
+        "WAIT":         ("#FFD700", "#1a1200", "◌"),
+        "SELL THE RIP": ("#ef4444", "#2d0a0a", "▼"),
+    }
+    color, bg, icon = _meta[verdict]
+
+    div_sign = f"+{divergence_pts}" if divergence_pts >= 0 else str(divergence_pts)
+    if verdict == "BUY THE DIP":
+        reasoning = (
+            f"Leading indicators healthy at {leading_score}/100 vs macro {macro_score}/100 "
+            f"({div_sign} pts divergence). "
+            f"Tactical pullback to {tactical_score}/100 creates a favorable entry before lagging confirms."
+        )
+    elif verdict == "HOLD":
+        reasoning = (
+            f"All layers aligned — leading {leading_score}/100, macro {macro_score}/100, "
+            f"tactical {tactical_score}/100. "
+            f"No new entry trigger or exit signal; maintain existing positions."
+        )
+    elif verdict == "WAIT":
+        reasoning = (
+            f"Leading score ({leading_score}/100) diverging {div_sign} pts from composite — "
+            f"fast signals have weakened. "
+            f"Hold new entries until divergence resolves or macro catches down."
+        )
+    else:
+        reasoning = (
+            f"Leading indicators cracking ({leading_score}/100) while price remains elevated "
+            f"(tactical {tactical_score}/100). "
+            f"Use current strength to reduce exposure before lagging composite confirms the move."
+        )
+
+    return {
+        "verdict":          verdict,
+        "color":            color,
+        "bg":               bg,
+        "icon":             icon,
+        "reasoning":        reasoning,
+        "leading_score":    leading_score,
+        "macro_score":      macro_score,
+        "divergence_pts":   divergence_pts,
+        "divergence_label": divergence_label,
     }
 
 
@@ -536,6 +718,86 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
     )
 
 
+# ── Crash Pattern Fingerprints ────────────────────────────────────────────────
+_CRASH_FINGERPRINTS = [
+    {
+        "name": "GFC 2008",
+        "lead_days": 481,
+        "max_drawdown": -56.8,
+        "conditions": [
+            ("credit_hy_widening", lambda rc: (rc.get("score", 0) < -0.10), "Regime score turning negative"),
+            ("vix_elevated", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 22, "VIX elevated above 22"),
+            ("hmm_stress", lambda _: (st.session_state.get("_hmm_state") or {}).get("state_label", "") in ("Early Stress", "Stress", "Late Cycle", "Crisis"), "HMM detecting stress regime"),
+            ("fear_high", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 30, "Fear composite in extreme fear"),
+            ("tactical_weak", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 40, "Tactical score bearish"),
+            ("stress_z_high", lambda _: (st.session_state.get("_stress_zscore") or {}).get("z", 0) > 1.0, "Stress z-score elevated >1σ"),
+        ],
+    },
+    {
+        "name": "COVID 2020",
+        "lead_days": 33,
+        "max_drawdown": -33.9,
+        "conditions": [
+            ("vix_spike", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 30, "VIX spiking above 30"),
+            ("regime_risk_off", lambda rc: rc.get("score", 0) < -0.25, "Regime deep Risk-Off"),
+            ("fear_extreme", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 20, "Fear composite extreme"),
+            ("tactical_crash", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 30, "Tactical score collapsed"),
+            ("options_bearish", lambda _: (st.session_state.get("_options_flow_context") or {}).get("options_score", 50) < 35, "Options flow bearish"),
+        ],
+    },
+    {
+        "name": "Rate Shock 2022",
+        "lead_days": 282,
+        "max_drawdown": -25.4,
+        "conditions": [
+            ("regime_negative", lambda rc: rc.get("score", 0) < -0.15, "Regime turning Risk-Off"),
+            ("hmm_late_cycle", lambda _: (st.session_state.get("_hmm_state") or {}).get("state_label", "") in ("Late Cycle", "Stress", "Early Stress"), "HMM late cycle / stress"),
+            ("fear_elevated", lambda _: (st.session_state.get("_fear_composite") or {}).get("score", 50) < 35, "Fear composite elevated"),
+            ("whale_bearish", lambda _: (st.session_state.get("_whale_flow_score") or {}).get("bull_pct", 50) < 40, "Whale flow leaning bearish"),
+            ("stress_rising", lambda _: (st.session_state.get("_stress_zscore") or {}).get("z", 0) > 0.5, "Stress z-score rising"),
+        ],
+    },
+    {
+        "name": "Carry Unwind 2024",
+        "lead_days": 20,
+        "max_drawdown": -8.5,
+        "conditions": [
+            ("vix_spike", lambda _: (st.session_state.get("_vix_curve") or {}).get("vix_spot", 0) > 25, "VIX spike above 25"),
+            ("regime_flip", lambda rc: rc.get("score", 0) < -0.10, "Regime flipping negative"),
+            ("gex_negative", lambda _: (st.session_state.get("_gex_dealer_context") or {}).get("composite", 0) < -0.3, "GEX deeply negative (dealers amplify)"),
+            ("tactical_drop", lambda _: (st.session_state.get("_tactical_context") or {}).get("tactical_score", 50) < 40, "Tactical score dropped sharply"),
+        ],
+    },
+]
+
+
+def _check_crash_patterns(rc: dict) -> list[dict]:
+    """Check current signals against historical crash fingerprints."""
+    matches = []
+    for fp in _CRASH_FINGERPRINTS:
+        matched = []
+        total = len(fp["conditions"])
+        for cond_name, check_fn, desc in fp["conditions"]:
+            try:
+                if check_fn(rc):
+                    matched.append(desc)
+            except Exception:
+                pass
+        pct = len(matched) / total * 100 if total > 0 else 0
+        if pct >= 50:
+            matches.append({
+                "name": fp["name"],
+                "lead_days": fp["lead_days"],
+                "max_drawdown": fp["max_drawdown"],
+                "match_pct": round(pct),
+                "matched": len(matched),
+                "total": total,
+                "details": matched,
+            })
+    matches.sort(key=lambda m: m["match_pct"], reverse=True)
+    return matches
+
+
 def _render_qir_dashboard() -> None:
     """Render the QIR Intelligence Dashboard.
 
@@ -699,6 +961,113 @@ def _render_qir_dashboard() -> None:
             if _cls["pattern"] == "GENUINE_UNCERTAINTY" else None
         )
 
+        # Store conviction score so _capture_market_context() can read it on log
+        st.session_state["_qir_conviction_score"] = _cls.get("conviction_score")
+
+        # ── Lean Tracker: log daily snapshot ─────────────────────────────────
+        try:
+            import json as _lt_json, os as _lt_os
+            from datetime import date as _lt_date
+            _lt_path = _lt_os.path.join(_lt_os.path.dirname(_lt_os.path.dirname(__file__)), "data", "lean_tracker.json")
+            _lt_today = str(_lt_date.today())
+            _lt_history = []
+            if _lt_os.path.exists(_lt_path):
+                with open(_lt_path, "r") as _lt_f:
+                    _lt_history = _lt_json.load(_lt_f)
+            if not any(h.get("date") == _lt_today for h in _lt_history):
+                if _gu_profile:
+                    _lt_lean = _gu_profile["lean"]
+                    _lt_lean_pct = _gu_profile["lean_pct"]
+                    _lt_domains = {d["name"].lower().replace(" ", "_"): d["score"] for d in _gu_profile["domains"]}
+                else:
+                    _lt_bull = _cls.get("bullish")
+                    _lt_lean = "BULLISH" if _lt_bull else ("BEARISH" if _lt_bull is False else "NEUTRAL")
+                    _lt_lean_pct = min(75, 50 + abs((_cls.get("conviction_score") or 50) - 50))
+                    if _lt_lean == "BULLISH":
+                        try:
+                            from services.hmm_regime import load_current_hmm_state as _cal_hmm_load
+                            _cal_hmm = _cal_hmm_load()
+                            _cal_ent = getattr(_cal_hmm, "entropy", 0.0) or 0.0 if _cal_hmm else 0.0
+                            import json as _cj, os as _co
+                            _cvp = _co.path.join(_co.path.dirname(_co.path.dirname(__file__)), "data", "tactical_score_history.json")
+                            with open(_cvp) as _cvf:
+                                _cvh = _cj.load(_cvf)
+                            _cvel = float(_rc.get("macro_score") or 50) - float(_cvh[-6].get("score", 50)) if _cvh and len(_cvh) >= 6 else 0
+                            if _cal_ent > 0.75 and _cvel < -5:
+                                _lt_lean = "NEUTRAL"
+                                _lt_lean_pct = 50
+                        except Exception:
+                            pass
+                    _lt_domains = {
+                        "macro": _rc.get("macro_score", 50),
+                        "technical": _tac.get("tactical_score", 50),
+                        "options_flow": _of.get("options_score", 50),
+                        "sentiment": 50,
+                        "event_risk": 50,
+                    }
+                _lt_hmm_state = ""
+                _lt_hmm_entropy = 0.0
+                try:
+                    from services.hmm_regime import load_current_hmm_state as _lt_hmm
+                    _lt_hs = _lt_hmm()
+                    if _lt_hs:
+                        _lt_hmm_state = _lt_hs.state_label
+                        _lt_hmm_entropy = getattr(_lt_hs, "entropy", 0.0) or 0.0
+                except Exception:
+                    pass
+                _lt_gex = (st.session_state.get("_gex_dealer_context") or {}).get("composite", 0.0)
+                _lt_entry = {
+                    "date": _lt_today,
+                    "lean": _lt_lean,
+                    "lean_pct": _lt_lean_pct,
+                    "domain_avg": round(sum(_lt_domains.values()) / max(len(_lt_domains), 1), 1),
+                    "macro_score": _lt_domains.get("macro", 50),
+                    "tech_score": _lt_domains.get("technical", 50),
+                    "opts_score": _lt_domains.get("options_flow", 50),
+                    "sent_score": _lt_domains.get("sentiment", 50),
+                    "event_score": _lt_domains.get("event_risk", 50),
+                    "regime": _rc.get("regime", ""),
+                    "hmm_state": _lt_hmm_state,
+                    "hmm_entropy": round(_lt_hmm_entropy, 4),
+                    "gex_composite": round(_lt_gex or 0.0, 3),
+                    "conviction_score": _cls.get("conviction_score"),
+                    "pattern": _cls.get("pattern", ""),
+                    "fwd_5d_spy_return": None,
+                    "fwd_20d_spy_return": None,
+                }
+                _lt_history.append(_lt_entry)
+                import pandas as _lt_pd
+                if len(_lt_history) >= 6:
+                    _lt_bf5 = _lt_history[-6]
+                    if _lt_bf5.get("fwd_5d_spy_return") is None:
+                        try:
+                            import yfinance as _lt_yf
+                            _lt_spy = _lt_yf.download("SPY", start=_lt_bf5["date"], end=_lt_today, progress=False, auto_adjust=True)
+                            if _lt_spy is not None and len(_lt_spy) >= 5:
+                                _lt_c = _lt_spy["Close"]
+                                if isinstance(_lt_c, _lt_pd.DataFrame):
+                                    _lt_c = _lt_c.iloc[:, 0]
+                                _lt_bf5["fwd_5d_spy_return"] = round(float((_lt_c.iloc[5] / _lt_c.iloc[0] - 1) * 100), 2)
+                        except Exception:
+                            pass
+                if len(_lt_history) >= 22:
+                    _lt_bf20 = _lt_history[-22]
+                    if _lt_bf20.get("fwd_20d_spy_return") is None:
+                        try:
+                            import yfinance as _lt_yf2
+                            _lt_spy2 = _lt_yf2.download("SPY", start=_lt_bf20["date"], end=_lt_today, progress=False, auto_adjust=True)
+                            if _lt_spy2 is not None and len(_lt_spy2) >= 20:
+                                _lt_c2 = _lt_spy2["Close"]
+                                if isinstance(_lt_c2, _lt_pd.DataFrame):
+                                    _lt_c2 = _lt_c2.iloc[:, 0]
+                                _lt_bf20["fwd_20d_spy_return"] = round(float((_lt_c2.iloc[20] / _lt_c2.iloc[0] - 1) * 100), 2)
+                        except Exception:
+                            pass
+                with open(_lt_path, "w") as _lt_fw:
+                    _lt_json.dump(_lt_history, _lt_fw, indent=2)
+        except Exception:
+            pass
+
         # Build verdict HTML helpers
         def _tier_badge(tier):
             _tc = {"STRONG": "#22c55e", "MODERATE": "#f59e0b",
@@ -731,6 +1100,17 @@ def _render_qir_dashboard() -> None:
         _conviction_score = _cls.get("conviction_score")
         _conviction_size_label = _cls.get("conviction_size_label")
         _leading_warning = _cls.get("leading_warning")
+
+        # Entry signal recommendation (leading vs lagging synthesis)
+        _leading_s = int(_rc.get("leading_score") or 50)
+        _macro_s   = int(_rc.get("macro_score") or 50)
+        _div_pts   = int(_rc.get("leading_divergence") or 0)
+        _div_label = _rc.get("leading_label") or "Aligned"
+        _tac_s     = int(_tac.get("tactical_score", 50)) if _tac else 50
+        _opts_s    = int(_of.get("options_score", 50))   if _of  else 50
+        _entry_rec = _classify_entry_recommendation(
+            _leading_s, _macro_s, _tac_s, _opts_s, _div_label, _div_pts
+        )
 
         _verdict_html = (
             f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
@@ -774,18 +1154,61 @@ def _render_qir_dashboard() -> None:
                 f'padding:5px 10px;font-size:10px;color:#f59e0b;margin-bottom:8px;">{_vix_note}</div>'
             )
 
+        # Tactical Long Kelly badge — only for GENUINE_UNCERTAINTY bullish lean
+        _tac_long_badge = ""
+        if (
+            _cls.get("pattern") == "GENUINE_UNCERTAINTY"
+            and _gu_profile
+            and _tac_long_kelly_pct is not None
+        ):
+            _tlk_col = "#22c55e" if _tac_long_kelly_pct >= 4 else "#f59e0b" if _tac_long_kelly_pct >= 2 else "#94a3b8"
+            _tlk_label = "TACTICAL LONG KELLY" if _gu_profile.get("lean") == "BULLISH" else "SCALP KELLY"
+            _tlk_note = "days/weeks" if _gu_profile.get("lean") == "BULLISH" else "1-3 days · uncertainty-penalised"
+            _tac_long_badge = (
+                f'<div style="display:flex;align-items:baseline;gap:6px;'
+                f'background:#0a1a0a;border:1px solid #22c55e33;border-radius:4px;'
+                f'padding:5px 8px;margin:5px 0 6px;">'
+                f'<span style="font-size:8px;color:#22c55e;font-weight:700;'
+                f'letter-spacing:0.08em;">{_tlk_label}</span>'
+                f'<span style="font-size:22px;font-weight:900;color:{_tlk_col};">'
+                f'{_tac_long_kelly_pct}%</span>'
+                f'<span style="font-size:9px;color:#475569;">of portfolio · {_tlk_note}</span>'
+                f'</div>'
+            )
         _buy_html = (
             f'<div style="padding:8px;background:#0a1628;border:1px solid {_cls["color"]}22;border-radius:5px;">'
             f'<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>'
             f'{_tier_badge(_buy_tier)}'
+            f'{_tac_long_badge}'
             f'{_instruments_html(_instr_buy)}'
             f'{_entry_html(_entry_buy)}'
             f'</div>'
         )
+        # Tactical Short Kelly badge — only for GENUINE_UNCERTAINTY bearish lean
+        _tac_short_badge = ""
+        if (
+            _cls.get("pattern") == "GENUINE_UNCERTAINTY"
+            and _gu_profile
+            and _gu_profile.get("lean") == "BEARISH"
+            and _tac_short_kelly_pct is not None
+        ):
+            _tsk_col = "#22c55e" if _tac_short_kelly_pct >= 6 else "#f59e0b" if _tac_short_kelly_pct >= 3 else "#ef4444"
+            _tac_short_badge = (
+                f'<div style="display:flex;align-items:baseline;gap:6px;'
+                f'background:#0a0a1a;border:1px solid #ef444433;border-radius:4px;'
+                f'padding:5px 8px;margin:5px 0 6px;">'
+                f'<span style="font-size:8px;color:#ef4444;font-weight:700;'
+                f'letter-spacing:0.08em;">TACTICAL SHORT KELLY</span>'
+                f'<span style="font-size:22px;font-weight:900;color:{_tsk_col};">'
+                f'{_tac_short_kelly_pct}%</span>'
+                f'<span style="font-size:9px;color:#475569;">of portfolio · days/weeks</span>'
+                f'</div>'
+            )
         _short_html = (
             f'<div style="padding:8px;background:#160a0a;border:1px solid {_cls["color"]}22;border-radius:5px;">'
             f'<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">SHORT SETUP</div>'
             f'{_tier_badge(_short_tier)}'
+            f'{_tac_short_badge}'
             f'{_instruments_html(_instr_shrt)}'
             f'{_entry_html(_entry_shrt)}'
             f'</div>'
@@ -832,6 +1255,1071 @@ def _render_qir_dashboard() -> None:
                 f'padding:5px 10px;font-size:10px;color:#ef4444;margin-top:4px;">{c}</div>'
                 for c in _earn_caveats
             )
+
+        # ── Zone 2 blocks (populated below) ──────────────────────────────────
+        _conviction_block = ""
+        _velocity_block   = ""
+        _signal_breakdown_block = ""
+        _top_bottom_block = ""
+        _hmm_block        = ""
+        _gex_block        = ""
+        _lean_card        = ""
+
+        # Conviction block (standalone card for zone2 — separate from inline verdict)
+        if _conviction_score is not None:
+            _cv_color2 = "#22c55e" if _conviction_score >= 75 else (
+                "#f59e0b" if _conviction_score >= 55 else (
+                "#f97316" if _conviction_score >= 40 else "#ef4444"
+            ))
+            _conviction_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
+                f'<span style="font-size:13px;font-weight:800;color:{_cv_color2};">'
+                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
+                f'</div>'
+                f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
+                f'<div style="background:{_cv_color2};width:{_conviction_score}%;height:4px;border-radius:3px;"></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        # ── Regime Velocity card ─────────────────────────────────────────────
+        import json as _vjson, os as _vos
+        try:
+            _vpath = _vos.path.join(_vos.path.dirname(_vos.path.dirname(__file__)), "data", "tactical_score_history.json")
+            with open(_vpath) as _vf:
+                _vhist = _vjson.load(_vf)
+            if _vhist and len(_vhist) >= 6:
+                _v_now = float(_rc.get("macro_score") or 50)
+                _v_old = float(_vhist[-6].get("score", 50))
+                _v_delta = round(_v_now - _v_old, 1)
+                _v_abs = abs(_v_delta)
+                _v_color = "#22c55e" if _v_delta > 3 else ("#ef4444" if _v_delta < -3 else "#f59e0b")
+                _v_arrow = "▲" if _v_delta > 3 else ("▼" if _v_delta < -3 else "►")
+                _v_label = ("ACCELERATING" if _v_abs > 15 else
+                            "FLIPPING" if _v_abs > 8 else
+                            "DRIFTING" if _v_abs > 3 else "STABLE")
+                _v_bar_w = min(100, int(_v_abs * 3))
+                _v_note = {
+                    "ACCELERATING": "Regime moving fast (>15pts/wk) — major shift underway, high conviction directional move",
+                    "FLIPPING": "Regime changing direction (8-15pts/wk) — transition zone, watch for regime flip confirmation",
+                    "DRIFTING": "Slow trend (3-8pts/wk) — gradual deterioration or improvement, stay alert",
+                    "STABLE": "No meaningful change (<3pts/wk) — current regime holding steady",
+                }[_v_label]
+                _velocity_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                    f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
+                    f'{_v_arrow} {_v_delta:+.1f}/wk · {_v_label}</span>'
+                    f'</div>'
+                    f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
+                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
+                    f'</div>'
+                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_note}</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
+        # ── Signal Breakdown card ────────────────────────────────────────────
+        _raw_sigs = st.session_state.get("_regime_raw_signals") or {}
+        _meta_keys = {"macro_score_norm", "macro_regime", "quadrant", "leading_score",
+                       "leading_divergence", "leading_label", "score_5d_trend",
+                       "fear_greed", "fear_greed_label", "tactical_score"}
+        _sig_items = [(k, v) for k, v in _raw_sigs.items()
+                      if k not in _meta_keys and isinstance(v, (int, float))]
+        if _sig_items:
+            _SIG_PROB = {
+                "vix": ("75%", "Best early warning — fired before 6/8 peaks"),
+                "real_yield": ("62%", "Very early signal — avg 212d lead time"),
+                "fedfunds": ("50%", "Policy-driven crashes — 69d avg lead"),
+                "credit_ig": ("50%", "Credit stress detector — 64d avg lead"),
+                "credit_hy": ("50%", "Risk appetite gauge — 38d avg lead"),
+                "yield_curve": ("50%", "Recession predictor — 105d avg lead"),
+                "credit_impulse": ("50%", "Credit cycle turn — 166d avg lead"),
+                "umcsent": ("50%", "Slow burn detector — 145d avg lead"),
+                "spy_trend": ("38%", "Confirms, doesn't lead — 25d avg lead"),
+                "fci": ("25%", "Late confirmer — fires after peak"),
+                "yield_curve_3m": ("25%", "Late confirmer — fires after peak"),
+                "permit": ("25%", "Niche — only fired in GFC + EU Debt"),
+                "icsa": ("0%", "Lagging — always fires after peak"),
+                "indpro": ("0%", "Lagging — always fires after peak"),
+            }
+            _sig_items.sort(key=lambda x: x[1])
+            _sb_rows = ""
+            for _sk, _sv in _sig_items:
+                _s_name = _sk.replace("_", " ").title()
+                _s_color = "#22c55e" if _sv > 0.3 else ("#ef4444" if _sv < -0.3 else "#f59e0b")
+                _s_arrow = "▲" if _sv > 0.3 else ("▼" if _sv < -0.3 else "►")
+                _s_bar_w = min(100, int(abs(_sv) * 50))
+                _prob_info = _SIG_PROB.get(_sk)
+                _prob_html = ""
+                if _prob_info and _sv < -0.3:
+                    _prob_html = (
+                        f'<div style="font-size:7px;color:#64748b;padding-left:16px;">'
+                        f'Pre-peak probability: {_prob_info[0]} · {_prob_info[1]}</div>'
+                    )
+                _sb_rows += (
+                    f'<div style="display:flex;align-items:center;gap:6px;padding:2px 0;'
+                    f'border-bottom:1px solid #1e293b22;">'
+                    f'<span style="color:{_s_color};font-size:9px;width:10px;">{_s_arrow}</span>'
+                    f'<span style="color:#94a3b8;font-size:9px;width:120px;white-space:nowrap;'
+                    f'overflow:hidden;text-overflow:ellipsis;">{_s_name}</span>'
+                    f'<span style="color:{_s_color};font-size:10px;font-weight:700;width:45px;'
+                    f'text-align:right;font-family:monospace;">{_sv:+.2f}</span>'
+                    f'<div style="flex:1;background:#1e293b;border-radius:2px;height:3px;">'
+                    f'<div style="background:{_s_color};width:{_s_bar_w}%;height:3px;border-radius:2px;'
+                    f'margin-{"left:auto" if _sv >= 0 else "right:auto"};"></div></div>'
+                    f'</div>'
+                    f'{_prob_html}'
+                )
+            _signal_breakdown_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;'
+                f'margin-bottom:6px;">SIGNAL HEALTH MONITOR</div>'
+                f'{_sb_rows}'
+                f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
+                f'Z-scores sorted worst-first · Green &gt;0.3 · Red &lt;-0.3 · '
+                f'Pre-peak % = how often this signal fired before the peak across 8 historical crashes</div>'
+                f'</div>'
+            )
+
+        # ── Kelly Criterion card ──────────────────────────────────────────────
+        _kelly_block = ""
+        _kly_half = None
+        _tac_short_kelly_pct = None
+        _tac_long_kelly_pct  = None
+        def _build_kelly_ref_table(base_pct: float) -> str:
+            """Compact scenario reference grid: alignment × HMM state → half-Kelly %."""
+            _A_ROWS = [
+                ("4/4", 1.00), ("3/4", 0.90), ("2/4", 0.75), ("1/4", 0.50), ("0/4", 0.25),
+            ]
+            _H_COLS = [
+                ("Bull", 1.10), ("Neut", 1.00), ("Str", 0.85), ("Late", 0.75), ("Cris", 0.60),
+            ]
+            _header = "".join(
+                f'<th style="padding:2px 5px;font-size:7px;color:#475569;'
+                f'font-weight:700;text-align:center;">{h}</th>'
+                for h, _ in _H_COLS
+            )
+            _body = ""
+            for _a_lbl, _a_m in _A_ROWS:
+                _cells = ""
+                for _h_lbl, _h_m in _H_COLS:
+                    _val = min(base_pct * _a_m * _h_m, 15.0)
+                    _col = (
+                        "#22c55e" if _val >= 10 else
+                        "#f59e0b" if _val >= 6 else
+                        "#ef4444"
+                    )
+                    _cells += (
+                        f'<td style="padding:2px 5px;font-size:8px;font-weight:700;'
+                        f'color:{_col};text-align:center;">{_val:.1f}%</td>'
+                    )
+                _body += (
+                    f'<tr><td style="padding:2px 5px;font-size:7px;color:#475569;'
+                    f'font-weight:700;white-space:nowrap;">{_a_lbl}</td>{_cells}</tr>'
+                )
+            return (
+                f'<div style="border-top:1px solid #1e293b;margin:6px 0 4px;"></div>'
+                f'<div style="font-size:7px;color:#334155;font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:3px;">'
+                f'HALF-KELLY REFERENCE · base {base_pct:.1f}% · rows=alignment cols=HMM</div>'
+                f'<table style="border-collapse:collapse;width:100%;">'
+                f'<thead><tr><th style="padding:2px 5px;"></th>{_header}</tr></thead>'
+                f'<tbody>{_body}</tbody></table>'
+            )
+
+        try:
+            from services.portfolio_sizing import compute_qir_kelly as _compute_kelly, compute_triple_kelly as _compute_triple_kelly
+            try:
+                from services.hmm_regime import load_current_hmm_state as _hmm_load_ks
+                _hmm_state_for_kelly = _hmm_load_ks()
+                _hmm_label_for_kelly = getattr(_hmm_state_for_kelly, "state_label", None)
+            except Exception:
+                _hmm_label_for_kelly = None
+
+            _is_gu = _cls.get("pattern") == "GENUINE_UNCERTAINTY"
+            _triple_kelly_html = ""
+            if _is_gu and _gu_profile:
+                try:
+                    _tkly = _compute_triple_kelly(
+                        fear_composite=st.session_state.get("_fear_composite") or {},
+                        regime_ctx=st.session_state.get("_regime_context") or {},
+                        hmm_state_label=_hmm_label_for_kelly,
+                        forced_lean=_gu_profile.get("lean", "BEARISH"),
+                        lean_pct=float(_gu_profile.get("lean_pct", 53)),
+                        uncertainty_score=int(_gu_profile.get("uncertainty_score", 60)),
+                        macro_score=int((_rc or {}).get("macro_score") or 50),
+                        leading_score=int((_rc or {}).get("leading_score") or 50),
+                    )
+                    _tk_accordions = ""
+                    for _tk in (_tkly["structural"], _tkly["tactical_short"], _tkly["tactical_long"]):
+                        _tk_col  = _tk["color"]
+                        _tk_half = _tk["half_pct"]
+                        _tk_accordions += (
+                            f'<details style="border-bottom:1px solid #1e293b;margin:0;">'
+                            f'<summary style="list-style:none;cursor:pointer;padding:10px 8px;'
+                            f'display:flex;align-items:center;gap:12px;">'
+                            f'<span style="font-size:12px;font-weight:700;color:{_tk_col};flex:0 0 150px;">'
+                            f'{_tk["label"]}</span>'
+                            f'<span style="font-size:26px;font-weight:900;color:{_tk_col};flex:0 0 70px;">'
+                            f'{_tk_half}%</span>'
+                            f'<span style="font-size:10px;color:#64748b;">{_tk["timeframe"]}</span>'
+                            f'</summary>'
+                            f'<div style="padding:8px 12px 12px 12px;background:#0a0f1a;">'
+                            f'<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">'
+                            f'p = {_tk["p"]*100:.0f}% &nbsp;·&nbsp; b = {_tk["b"]}</div>'
+                            f'<div style="font-size:10px;color:#475569;">{_tk["note"]}</div>'
+                            f'</div>'
+                            f'</details>'
+                        )
+                    _tac_short_kelly_pct = _tkly["tactical_short"]["half_pct"]
+                    _tac_long_kelly_pct  = _tkly["tactical_long"]["half_pct"]
+                    _triple_kelly_html = (
+                        f'<div style="background:#0f172a;border:1px solid #334155;'
+                        f'border-radius:6px;padding:14px 16px;margin-bottom:10px;">'
+                        f'<div style="font-size:11px;color:#f59e0b;font-weight:700;'
+                        f'letter-spacing:0.1em;margin-bottom:4px;">'
+                        f'⚡ BIMODAL SIZING — TRIPLE KELLY</div>'
+                        f'<div style="font-size:9px;color:#475569;margin-bottom:10px;">'
+                        f'Genuine Uncertainty active — three concurrent position frameworks</div>'
+                        f'<div style="border:1px solid #1e293b;border-radius:4px;overflow:hidden;">'
+                        f'{_tk_accordions}'
+                        f'</div>'
+                        f'</div>'
+                    )
+                except Exception as _tk_err:
+                    _triple_kelly_html = (
+                        f'<div style="background:#1a0a00;border:1px solid #7f1d1d;'
+                        f'border-radius:5px;padding:6px 10px;margin-bottom:6px;">'
+                        f'<div style="font-size:8px;color:#ef4444;">⚠ Triple Kelly error: {_tk_err}</div>'
+                        f'</div>'
+                    )
+
+            _kly = _compute_kelly(
+                _conviction_score,
+                st.session_state.get("_fear_composite") or {},
+                st.session_state.get("_regime_context") or {},
+                options_score=(st.session_state.get("_options_flow_context") or {}).get("options_score"),
+                tactical_score=(st.session_state.get("_tactical_context") or {}).get("tactical_score"),
+                hmm_state_label=_hmm_label_for_kelly,
+            )
+            _kly_half   = _kly["kelly_half_pct"]
+            _kly_full   = _kly["kelly_full_pct"]
+            _kly_p      = _kly["p"]
+            _kly_b      = _kly["b"]
+            _kly_psrc   = _kly["p_source"]
+            _kly_bsrc   = _kly["b_source"]
+            _kly_stress = _kly["stress_discount_pct"]
+            _kly_cap    = _kly["capped"]
+            _kly_viable = _kly["viable"]
+            _kly_n_agree  = _kly.get("n_signals_agree", 0)
+            _kly_n_total  = _kly.get("n_signals_total", 0)
+            _kly_align_m  = _kly.get("align_multiplier", 1.0)
+            _kly_hmm_m    = _kly.get("hmm_multiplier", 1.0)
+            _kly_sdirs    = _kly.get("signal_dirs", {})
+
+            _SIG_ORDER = [
+                ("options",   "Options",  "Fast"),
+                ("tactical",  "Tactical", "Med"),
+                ("regime",    "Regime",   "Slow"),
+                ("conviction","Conviction","Very Slow"),
+            ]
+            _verdict_dir_for_display = 1 if _kly_p > 0.55 else (-1 if _kly_p < 0.45 else 0)
+            _sq_html = ""
+            _lbl_html = ""
+            for _sig_key, _sig_name, _sig_speed in _SIG_ORDER:
+                _d = _kly_sdirs.get(_sig_key)
+                if _d is None:
+                    _sq_col = "#334155"; _sq_char = "—"
+                elif _d == _verdict_dir_for_display and _verdict_dir_for_display != 0:
+                    _sq_col = "#22c55e"; _sq_char = "✓"
+                elif _d != _verdict_dir_for_display and _d != 0:
+                    _sq_col = "#ef4444"; _sq_char = "✗"
+                else:
+                    _sq_col = "#f59e0b"; _sq_char = "~"
+                _dir_arrow = "↑" if _d == 1 else ("↓" if _d == -1 else ("~" if _d == 0 else "?"))
+                _sq_html += (
+                    f'<div style="display:inline-flex;flex-direction:column;align-items:center;'
+                    f'margin-right:6px;">'
+                    f'<div style="width:18px;height:18px;background:{_sq_col};border-radius:3px;'
+                    f'display:flex;align-items:center;justify-content:center;'
+                    f'font-size:10px;font-weight:900;color:#0f172a;">{_sq_char}</div>'
+                    f'<div style="font-size:7px;color:#475569;margin-top:2px;white-space:nowrap;">'
+                    f'{_sig_speed}</div>'
+                    f'</div>'
+                )
+                _lbl_html += (
+                    f'<span style="font-size:9px;color:#64748b;">'
+                    f'{_sig_name} <span style="color:#94a3b8;">{_dir_arrow}</span></span>  '
+                )
+
+            _align_pct_txt = f"{_kly_n_agree}/{_kly_n_total} agree"
+            _align_mult_col = "#22c55e" if _kly_align_m >= 0.90 else ("#f59e0b" if _kly_align_m >= 0.75 else "#ef4444")
+            _hmm_mult_col = "#22c55e" if _kly_hmm_m >= 1.0 else ("#f59e0b" if _kly_hmm_m >= 0.85 else "#ef4444")
+            _hmm_lbl_txt = _hmm_label_for_kelly or "N/A"
+
+            try:
+                from services.forecast_tracker import get_stats as _get_fstats
+                _fst = _get_fstats()
+                def _streak_badge(n, stype, label):
+                    if not n:
+                        return (f'<span style="font-size:9px;color:#334155;">'
+                                f'{label} <span style="color:#475569;">—</span></span>')
+                    _sc = "#22c55e" if stype == "correct" else "#ef4444"
+                    _icon = "🔥" if stype == "correct" else "❄️"
+                    return (f'<span style="font-size:9px;color:#64748b;">{label} '
+                            f'<span style="color:{_sc};font-weight:700;">{_icon}{n}</span></span>')
+                _streak_row_html = (
+                    f'<div style="border-top:1px solid #1e293b;margin:5px 0 4px;"></div>'
+                    f'<div style="display:flex;gap:14px;align-items:center;">'
+                    f'{_streak_badge(_fst.get("price_streak",0), _fst.get("price_streak_type"), "Price")}'
+                    f'{_streak_badge(_fst.get("macro_streak",0), _fst.get("macro_streak_type"), "Signal")}'
+                    f'<span style="font-size:8px;color:#334155;">streaks</span>'
+                    f'</div>'
+                )
+            except Exception:
+                _streak_row_html = ""
+
+            if _kly_viable:
+                _kly_col  = "#22c55e" if _kly_half >= 8 else "#f59e0b" if _kly_half >= 4 else "#94a3b8"
+                _kly_cap_badge = (
+                    '<span style="color:#f59e0b;font-size:9px;"> · 15% cap applied</span>'
+                    if _kly_cap else ""
+                )
+                _kelly_html = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:6px 10px;margin-bottom:8px;">'
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">KELLY SIZING</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;">'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">HALF-KELLY</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:{_kly_col};">{_kly_half}%</div>'
+                    f'<div style="font-size:9px;color:#475569;">portfolio{_kly_cap_badge}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">FULL KELLY</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:#334155;">{_kly_full}%</div>'
+                    f'<div style="font-size:9px;color:#334155;">reference</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">WIN/LOSS</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:#94a3b8;">b={_kly_b}</div>'
+                    f'<div style="font-size:9px;color:#475569;">{_kly_bsrc}</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#475569;line-height:1.5;">'
+                    f'p={_kly_p*100:.0f}% · {_kly_psrc}'
+                    f'{"  ·  stress −" + str(_kly_stress) + "%" if _kly_stress > 0 else ""}'
+                    f'</div>'
+                    f'{_streak_row_html}'
+                    f'<div style="border-top:1px solid #1e293b;margin:6px 0 5px;"></div>'
+                    f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">SIGNAL ALIGNMENT</div>'
+                    f'<div style="display:flex;align-items:flex-start;margin-bottom:4px;">{_sq_html}</div>'
+                    f'<div style="margin-bottom:4px;">{_lbl_html}</div>'
+                    f'<div style="display:flex;gap:12px;align-items:center;margin-top:3px;">'
+                    f'<span style="font-size:9px;color:#64748b;">{_align_pct_txt} '
+                    f'<span style="color:{_align_mult_col};font-weight:700;">×{_kly_align_m:.2f}</span></span>'
+                    f'<span style="font-size:9px;color:#64748b;">HMM: {_hmm_lbl_txt} '
+                    f'<span style="color:{_hmm_mult_col};font-weight:700;">×{_kly_hmm_m:.2f}</span></span>'
+                    f'</div>'
+                    f'{_build_kelly_ref_table(_kly.get("kelly_half_base_pct", _kly_half))}'
+                    f'</div>'
+                )
+            else:
+                _kelly_html = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">KELLY SIZING</div>'
+                    f'<div style="font-size:11px;color:#ef444466;">Negative expectancy — no position suggested</div>'
+                    f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
+                    f'</div>'
+                )
+            _kelly_block = _triple_kelly_html + _kelly_html
+        except Exception:
+            pass
+
+        # ── Entry Signal card ────────────────────────────────────────────────
+        _entry_rec_html = ""
+        _er_color = _entry_rec["color"]
+        _er_bg    = _entry_rec["bg"]
+        _er_icon  = _entry_rec["icon"]
+        _er_verb  = _entry_rec["verdict"]
+        _er_rsn   = _entry_rec["reasoning"]
+        _er_ldg   = _entry_rec["leading_score"]
+        _er_mac   = _entry_rec["macro_score"]
+        _er_dpts  = _entry_rec["divergence_pts"]
+        _er_dlbl  = _entry_rec["divergence_label"]
+        _er_dsign = f"+{_er_dpts}" if _er_dpts >= 0 else str(_er_dpts)
+        _er_div_color = (
+            "#22c55e" if _er_dlbl == "Early Risk-On Setup" else
+            "#ef4444" if _er_dlbl == "Early Risk-Off Warning" else
+            "#64748b"
+        )
+        _er_div_fg = "#052e16" if _er_div_color == "#22c55e" else "white"
+        _er_div_badge = (
+            f'<span style="background:{_er_div_color};color:{_er_div_fg};'
+            f'font-weight:800;font-size:8px;padding:1px 6px;border-radius:3px;letter-spacing:0.05em;">'
+            f'{_er_dsign} pts · {_er_dlbl.upper()}</span>'
+        )
+        _entry_rec_html = (
+            f'<div style="background:{_er_bg};border:1px solid {_er_color}44;'
+            f'border-radius:6px;padding:10px 14px;margin:0 0 10px;">'
+            f'<div style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">ENTRY SIGNAL</div>'
+            f'<div style="font-size:20px;font-weight:900;color:{_er_color};'
+            f'letter-spacing:0.04em;margin-bottom:8px;">{_er_icon} {_er_verb}</div>'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px;margin-bottom:8px;">'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">LEADING</div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_ldg}/100</div></div>'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">MACRO</div>'
+            f'<div style="font-size:15px;font-weight:800;color:#f1f5f9;">{_er_mac}/100</div></div>'
+            f'<div><div style="font-size:9px;color:#f59e0b;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">DIVERGENCE</div>'
+            f'<div style="margin-top:2px;">{_er_div_badge}</div></div>'
+            f'</div>'
+            f'<div style="background:#0d1117;border-left:3px solid {_er_color}44;'
+            f'padding:7px 10px;font-size:11px;color:#94a3b8;line-height:1.6;border-radius:0 3px 3px 0;">'
+            f'{_er_rsn}</div>'
+            f'</div>'
+        )
+
+        # ── Market Top/Bottom Proximity card ──────────────────────────────────
+        try:
+            from services.hmm_regime import load_current_hmm_state as _tb_hmm_load
+            _tb_hmm = _tb_hmm_load()
+            _tb_entropy = getattr(_tb_hmm, "entropy", 0.0) or 0.0 if _tb_hmm else 0.0
+            _tb_ll_z = getattr(_tb_hmm, "ll_zscore", 0.0) or 0.0 if _tb_hmm else 0.0
+            _tb_conf = getattr(_tb_hmm, "confidence", 0.5) or 0.5 if _tb_hmm else 0.5
+            _tb_hmm_label = getattr(_tb_hmm, "state_label", "") if _tb_hmm else ""
+        except Exception:
+            _tb_entropy, _tb_ll_z, _tb_conf, _tb_hmm_label = 0.0, 0.0, 0.5, ""
+
+        _tb_regime = float(_rc.get("score") or 0)
+        _tb_macro = float(_rc.get("macro_score") or 50)
+        _tb_conv = float(_cls.get("conviction_score") or 0) if _cls.get("conviction_score") is not None else 0
+
+        _tb_vel = 0.0
+        try:
+            import json as _tb_json, os as _tb_os
+            _tb_vpath = _tb_os.path.join(_tb_os.path.dirname(_tb_os.path.dirname(__file__)), "data", "tactical_score_history.json")
+            with open(_tb_vpath) as _tb_vf:
+                _tb_vhist = _tb_json.load(_tb_vf)
+            if _tb_vhist and len(_tb_vhist) >= 6:
+                _tb_vel = float(_rc.get("macro_score") or 50) - float(_tb_vhist[-6].get("score", 50))
+        except Exception:
+            pass
+
+        _top_signals = []
+        _bottom_signals = []
+
+        if _tb_regime > 0:
+            _top_signals.append(("Regime positive", min(100, _tb_regime * 200)))
+        if _tb_vel < -3:
+            _top_signals.append(("Velocity negative", min(100, abs(_tb_vel) * 5)))
+        if _tb_entropy > 0.70:
+            _top_signals.append(("High entropy", min(100, (_tb_entropy - 0.5) * 200)))
+        if _tb_conv < 25:
+            _top_signals.append(("Low conviction", min(100, (25 - _tb_conv) * 4)))
+        if _tb_ll_z < -0.5:
+            _top_signals.append(("LL declining", min(100, abs(_tb_ll_z) * 20)))
+        if _tb_hmm_label in ("Late Cycle", "Stress", "Early Stress"):
+            _top_signals.append(("HMM stress regime", 60))
+
+        if _tb_regime < -0.15:
+            _bottom_signals.append(("Regime deep negative", min(100, abs(_tb_regime) * 250)))
+        if _tb_vel > 3:
+            _bottom_signals.append(("Velocity turning positive", min(100, _tb_vel * 5)))
+        if _tb_macro < 40:
+            _bottom_signals.append(("Macro crushed", min(100, (40 - _tb_macro) * 5)))
+        if _tb_conv > 20:
+            _bottom_signals.append(("Conviction building", min(100, _tb_conv * 2)))
+        if _tb_ll_z < -5:
+            _bottom_signals.append(("Extreme LL stress", min(100, abs(_tb_ll_z) * 5)))
+        if _tb_hmm_label in ("Crisis", "Late Cycle"):
+            _bottom_signals.append(("HMM crisis/late cycle", 70))
+
+        _top_score = round(sum(s for _, s in _top_signals) / max(1, len(_top_signals))) if _top_signals else 0
+        _bot_score = round(sum(s for _, s in _bottom_signals) / max(1, len(_bottom_signals))) if _bottom_signals else 0
+
+        if _top_signals or _bottom_signals:
+            _tb_rows = ""
+            if _top_signals:
+                _top_color = "#ef4444" if _top_score >= 50 else ("#f59e0b" if _top_score >= 25 else "#22c55e")
+                _tb_rows += (
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:4px 0;border-bottom:1px solid #1e293b33;">'
+                    f'<span style="color:#ef4444;font-size:10px;font-weight:700;">MARKET TOP</span>'
+                    f'<span style="color:{_top_color};font-size:12px;font-weight:800;">{_top_score}%</span>'
+                    f'</div>'
+                )
+                for _ts_name, _ts_val in _top_signals:
+                    _tb_rows += (
+                        f'<div style="font-size:8px;color:#64748b;padding:1px 0 1px 8px;">'
+                        f'{"●" if _ts_val >= 50 else "○"} {_ts_name}</div>'
+                    )
+            if _bottom_signals:
+                _bot_color = "#22c55e" if _bot_score >= 50 else ("#f59e0b" if _bot_score >= 25 else "#64748b")
+                _tb_rows += (
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                    f'padding:4px 0;border-bottom:1px solid #1e293b33;margin-top:4px;">'
+                    f'<span style="color:#22c55e;font-size:10px;font-weight:700;">MARKET BOTTOM</span>'
+                    f'<span style="color:{_bot_color};font-size:12px;font-weight:800;">{_bot_score}%</span>'
+                    f'</div>'
+                )
+                for _bs_name, _bs_val in _bottom_signals:
+                    _tb_rows += (
+                        f'<div style="font-size:8px;color:#64748b;padding:1px 0 1px 8px;">'
+                        f'{"●" if _bs_val >= 50 else "○"} {_bs_name}</div>'
+                    )
+
+            _top_bottom_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;'
+                f'margin-bottom:6px;">TOP / BOTTOM PROXIMITY</div>'
+                f'{_tb_rows}'
+                f'<div style="font-size:7px;color:#475569;margin-top:4px;">'
+                f'Calibrated from 8 historical crashes · Top avg: regime +0.16, entropy 0.82, conv 16 · '
+                f'Bottom avg: regime -0.34, conv 34, LL_z -21</div>'
+                f'</div>'
+            )
+
+            # Auto-log proximity scores to history file
+            try:
+                import json as _al_json, os as _al_os
+                from datetime import date as _al_date
+                _al_path = _al_os.path.join(_al_os.path.dirname(_al_os.path.dirname(__file__)), "data", "top_bottom_history.json")
+                _al_today = str(_al_date.today())
+                _al_hist = []
+                if _al_os.path.exists(_al_path):
+                    with open(_al_path, "r") as _al_f:
+                        _al_hist = _al_json.load(_al_f)
+                if not any(h.get("date") == _al_today for h in _al_hist):
+                    _al_hist.append({
+                        "date": _al_today,
+                        "top_pct": _top_score,
+                        "bottom_pct": _bot_score,
+                        "regime_score": round(_tb_regime, 3),
+                        "velocity": round(_tb_vel, 1),
+                        "entropy": round(_tb_entropy, 3),
+                        "ll_z": round(_tb_ll_z, 2),
+                        "conviction": round(_tb_conv, 0),
+                        "hmm_state": _tb_hmm_label,
+                        "top_signals": [s[0] for s in _top_signals],
+                        "bottom_signals": [s[0] for s in _bottom_signals],
+                    })
+                    _al_hist = _al_hist[-365:]
+                    with open(_al_path, "w") as _al_f:
+                        _al_json.dump(_al_hist, _al_f, indent=1)
+                st.session_state["_top_bottom_proximity"] = {
+                    "top_pct": _top_score, "bottom_pct": _bot_score,
+                    "top_signals": [s[0] for s in _top_signals],
+                    "bottom_signals": [s[0] for s in _bottom_signals],
+                }
+            except Exception:
+                pass
+
+        # ── HMM Brain State card ──────────────────────────────────────────────
+        try:
+            from services.hmm_regime import (
+                load_current_hmm_state, load_hmm_brain,
+                get_state_color, get_state_arrow, get_state_tips,
+                get_hmm_state_history, get_conviction_multiplier,
+            )
+            _hmm_s = load_current_hmm_state()
+            _hmm_b = load_hmm_brain()
+            if _hmm_s is not None and _hmm_b is not None:
+                _hs_col = get_state_color(_hmm_s.state_label)
+                _hs_arr = get_state_arrow(_hmm_s.state_label)
+                _hs_conf = int(_hmm_s.confidence * 100)
+                _hs_pers = _hmm_s.persistence
+                _hs_trained = _hmm_b.trained_at[:10] if _hmm_b.trained_at else "—"
+
+                _hs_retrain_due = False
+                try:
+                    from datetime import datetime, timezone as _hmm_tz
+                    _hs_dt = datetime.fromisoformat(_hmm_b.trained_at.replace("Z", "+00:00"))
+                    _hs_days_since = (datetime.now(_hmm_tz.utc) - _hs_dt).days
+                    _hs_retrain_due = _hs_days_since >= 90
+                except Exception:
+                    pass
+                _hs_retrain_badge = (
+                    f'<span style="background:#92400e;color:#fcd34d;font-size:8px;'
+                    f'font-weight:700;padding:1px 6px;border-radius:3px;'
+                    f'letter-spacing:0.05em;margin-left:6px;">RETRAIN DUE</span>'
+                    if _hs_retrain_due else ""
+                )
+
+                _trans_row = _hmm_b.transmat[_hmm_s.state_idx]
+                def _fmt_prob(v):
+                    pct = v * 100
+                    if pct >= 1:
+                        return f"{pct:.0f}%"
+                    elif pct > 0:
+                        return f"<1%"
+                    return "0%"
+                _trans_cells = "".join(
+                    f'<span style="font-size:9px;color:#64748b;">'
+                    f'{_hmm_b.state_labels[j][:4]} '
+                    f'<span style="color:#94a3b8;">{_fmt_prob(_trans_row[j])}</span>'
+                    f'</span>  '
+                    for j in range(_hmm_b.n_states)
+                )
+
+                # ── Live Sensor: LL + Entropy + Transition Projections ────────
+                _ll_z = getattr(_hmm_s, "ll_zscore", 0.0) or 0.0
+                _entropy = getattr(_hmm_s, "entropy", 0.0) or 0.0
+                _tr_1m = getattr(_hmm_s, "transition_risk_1m", 0.0) or 0.0
+                _tr_2m = getattr(_hmm_s, "transition_risk_2m", 0.0) or 0.0
+                _fc_1m = getattr(_hmm_s, "forecast_1m", None)
+                _fc_2m = getattr(_hmm_s, "forecast_2m", None)
+
+                _ll_col = "#22c55e" if _ll_z > -1 else ("#f59e0b" if _ll_z > -2 else "#ef4444")
+                _ll_label = "Normal" if _ll_z > -1 else ("Caution" if _ll_z > -2 else "CHECK ENGINE")
+
+                _ent_col = "#22c55e" if _entropy < 0.3 else ("#f59e0b" if _entropy < 0.6 else "#ef4444")
+                _ent_label = "Pure" if _entropy < 0.3 else ("Mixed" if _entropy < 0.6 else "Fog")
+                _ent_bar_w = int(min(_entropy * 100, 100))
+
+                _tr1_col = "#22c55e" if _tr_1m < 0.03 else ("#f59e0b" if _tr_1m < 0.10 else "#ef4444")
+                _tr2_col = "#22c55e" if _tr_2m < 0.05 else ("#f59e0b" if _tr_2m < 0.15 else "#ef4444")
+
+                def _build_forecast_bars(forecast, horizon_label, tr_pct, tr_col):
+                    if not forecast or not _hmm_b:
+                        return f'<div style="font-size:9px;color:#334155;">{horizon_label}: N/A</div>'
+                    bars = ""
+                    for j, p in enumerate(forecast):
+                        bar_w = max(int(p * 100), 1)
+                        lbl = _hmm_b.state_labels[j][:4] if j < len(_hmm_b.state_labels) else f"S{j}"
+                        s_col = get_state_color(_hmm_b.state_labels[j]) if j < len(_hmm_b.state_labels) else "#64748b"
+                        is_current = (j == _hmm_s.state_idx)
+                        border = f"border:1px solid {s_col};" if is_current else ""
+                        bars += (
+                            f'<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">'
+                            f'<span style="font-size:8px;color:#64748b;width:32px;text-align:right;">{lbl}</span>'
+                            f'<div style="background:#1e293b;border-radius:2px;flex:1;height:10px;{border}">'
+                            f'<div style="background:{s_col};width:{bar_w}%;height:100%;border-radius:2px;'
+                            f'opacity:{"1.0" if is_current else "0.5"};"></div>'
+                            f'</div>'
+                            f'<span style="font-size:8px;color:#94a3b8;width:28px;">{p*100:.1f}%</span>'
+                            f'</div>'
+                        )
+                    return (
+                        f'<div>'
+                        f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                        f'letter-spacing:0.08em;margin-bottom:4px;">{horizon_label}</div>'
+                        f'<div style="font-size:10px;color:{tr_col};font-weight:700;margin-bottom:4px;">'
+                        f'Transition Risk: {tr_pct*100:.1f}%</div>'
+                        f'{bars}'
+                        f'</div>'
+                    )
+
+                _forecast_1m_html = _build_forecast_bars(_fc_1m, "1-MONTH OUTLOOK", _tr_1m, _tr1_col)
+                _forecast_2m_html = _build_forecast_bars(_fc_2m, "2-MONTH OUTLOOK", _tr_2m, _tr2_col)
+
+                _live_sensor_html = (
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;'
+                    f'margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">LOG-LIKELIHOOD</div>'
+                    f'<div style="font-size:16px;font-weight:900;color:{_ll_col};">'
+                    f'{_ll_z:+.2f}z</div>'
+                    f'<div style="font-size:9px;color:{_ll_col};font-weight:600;">{_ll_label}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">ENTROPY</div>'
+                    f'<div style="display:flex;align-items:center;gap:6px;">'
+                    f'<div style="font-size:16px;font-weight:900;color:{_ent_col};">'
+                    f'{_entropy:.2f}</div>'
+                    f'<div style="font-size:9px;color:{_ent_col};font-weight:600;">{_ent_label}</div>'
+                    f'</div>'
+                    f'<div style="background:#1e293b;border-radius:2px;height:4px;margin-top:3px;">'
+                    f'<div style="background:{_ent_col};width:{_ent_bar_w}%;height:100%;'
+                    f'border-radius:2px;"></div>'
+                    f'</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
+                    f'border-radius:3px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:8px;color:#334155;line-height:1.6;">'
+                    f'<b style="color:#3b4f6b;">Log-Likelihood</b> measures how well today\'s '
+                    f'market data fits the trained model. A dropping LL (z &lt; -1) means the '
+                    f'market is behaving unusually — the "Check Engine" light. '
+                    f'<b style="color:#3b4f6b;">Entropy</b> measures regime certainty: '
+                    f'0 = the model is sure of the current state, 1 = total fog between states. '
+                    f'Rising entropy dampens the Kelly multiplier automatically.<br>'
+                    f'<span style="color:#475569;">Note: The HMM only sees credit spreads, yields, '
+                    f'and VIX — not equity prices. Equity-only corrections (e.g. Apr 2025) '
+                    f'that don\'t spill into credit markets will not flip the regime state. '
+                    f'Watch the LL for early divergence.</span>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;'
+                    f'margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">'
+                    f'{_forecast_1m_html}'
+                    f'{_forecast_2m_html}'
+                    f'</div>'
+                )
+
+                _hmm_html = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-left:3px solid {_hs_col};border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:6px;">HMM BRAIN STATE</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">REGIME</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:{_hs_col};'
+                    f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                    f'{_hs_arr}</div>'
+                    f'<div style="font-size:11px;font-weight:700;color:{_hs_col};">'
+                    f'{_hmm_s.state_label}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">CONFIDENCE</div>'
+                    f'<div style="font-size:28px;font-weight:900;color:#94a3b8;">'
+                    f'{_hs_conf}%</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">PERSISTENCE</div>'
+                    f'<div style="font-size:28px;font-weight:900;color:#94a3b8;">'
+                    f'{_hs_pers}d</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">'
+                    f'→ {_trans_cells}'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:3px;">'
+                    f'{_hmm_b.n_states}-state model · trained {_hs_trained} · '
+                    f'BIC {_hmm_b.bic:,.0f}{_hs_retrain_badge}</div>'
+                    f'{_live_sensor_html}'
+                    f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e293b;'
+                    f'font-size:10px;color:#64748b;line-height:1.6;">'
+                    f'<span style="color:{_hs_col};font-weight:700;">What to do: </span>'
+                    f'{get_state_tips(_hmm_s.state_label)}</div>'
+                    f'<div style="margin-top:8px;padding:6px 10px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:8px;color:#1e293b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:4px;">ARCHITECTURE NOTES</div>'
+                    f'<div style="font-size:8px;color:#1e3a5f;line-height:1.7;">'
+                    f'HMM is a <span style="color:#1e4a7a;">MULTIPLIER</span>, not a signal — '
+                    f'it gates Kelly sizing only, never the entry direction.<br>'
+                    f'<span style="color:#1e4a7a;">Structural Long</span> always uses long-side b '
+                    f'(_REGIME_B_IMPLIED). The forced lean must NOT flip the structural b — '
+                    f'lean is short-duration noise (sentiment, options, event risk); '
+                    f'structural is a weeks/months regime trade.<br>'
+                    f'<span style="color:#1e4a7a;">Tactical Short</span> uses short-side b '
+                    f'(_SHORT_B_IMPLIED) + fear boost. It expresses the lean, not the regime.<br>'
+                    f'<span style="color:#1e4a7a;">init_params="smc"</span> — the "t" is excluded '
+                    f'so hmmlearn does not overwrite the seeded diagonal prior (0.70) on each fit. '
+                    f'Diagonal prior + Laplace 1e-6 prevent ping-pong states.</div>'
+                    f'</div>'
+                )
+
+                # ── State Calibration Table ──
+                _cal_html = ""
+                try:
+                    _cal_hist = get_hmm_state_history()
+                    _cal_data = {}
+                    for _ch in _cal_hist:
+                        if "fwd_20d_spy_return" in _ch:
+                            _cl = _ch.get("state_label", "?")
+                            _cal_data.setdefault(_cl, []).append(_ch["fwd_20d_spy_return"])
+                    if _cal_data:
+                        _cal_rows = ""
+                        _all_labels = ["Bull", "Neutral", "Stress", "Late Cycle", "Crisis"]
+                        for _cl in _all_labels:
+                            _rets = _cal_data.get(_cl, [])
+                            _mult = get_conviction_multiplier(_cl)
+                            if _rets:
+                                _avg = sum(_rets) / len(_rets)
+                                _avg_col = "#22c55e" if _avg >= 0 else "#ef4444"
+                                _cal_rows += (
+                                    f'<tr><td style="color:{get_state_color(_cl)};font-weight:700;">{_cl}</td>'
+                                    f'<td style="color:{_avg_col};font-weight:700;">{_avg:+.2f}%</td>'
+                                    f'<td>{len(_rets)}</td>'
+                                    f'<td>{_mult:.2f}x</td></tr>'
+                                )
+                            else:
+                                _cal_rows += (
+                                    f'<tr><td style="color:{get_state_color(_cl)};font-weight:700;">{_cl}</td>'
+                                    f'<td style="color:#334155;">waiting</td>'
+                                    f'<td>0</td>'
+                                    f'<td>{_mult:.2f}x</td></tr>'
+                                )
+                        _cal_html = (
+                            f'<div style="margin-top:8px;padding:6px 10px;background:#0a0f1a;'
+                            f'border-radius:4px;border:1px solid #1e293b;">'
+                            f'<div style="font-size:8px;color:#3b4f6b;font-weight:700;'
+                            f'letter-spacing:0.08em;margin-bottom:4px;">STATE CALIBRATION (20d fwd SPY)</div>'
+                            f'<table style="width:100%;font-size:9px;color:#64748b;border-collapse:collapse;">'
+                            f'<tr style="border-bottom:1px solid #1e293b;">'
+                            f'<th style="text-align:left;padding:2px 4px;">State</th>'
+                            f'<th style="text-align:left;padding:2px 4px;">Avg Ret</th>'
+                            f'<th style="text-align:left;padding:2px 4px;">N</th>'
+                            f'<th style="text-align:left;padding:2px 4px;">Mult</th></tr>'
+                            f'{_cal_rows}</table></div>'
+                        )
+                except Exception:
+                    pass
+
+                _hmm_html = _hmm_html + _cal_html + f'</div>'
+                _hmm_block = _hmm_html
+            elif _hmm_b is None:
+                _hmm_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">HMM BRAIN STATE</div>'
+                    f'<div style="font-size:11px;color:#ef444466;">'
+                    f'No model trained — click Retrain HMM below to build your regime brain</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
+        # ── GEX Dealer Positioning card ──────────────────────────────────────
+        try:
+            _rc_fresh = st.session_state.get("_regime_context") or {}
+            _gex_data = _rc_fresh.get("gex_profile") or st.session_state.get("_gex_profile_spx") or _rc.get("gex_profile")
+            if not _gex_data:
+                try:
+                    from services.market_data import fetch_gex_profile as _fgp_fallback
+                    _fgp_fn = getattr(_fgp_fallback, "__wrapped__", _fgp_fallback)
+                    _gex_data = _fgp_fn("SPY", 3)
+                except Exception:
+                    pass
+            if _gex_data:
+                import numpy as _np_gex
+                _gx_spot = _gex_data.get("spot", 0)
+                _gx_flip = _gex_data.get("gamma_flip", _gx_spot)
+                _gx_cw = _gex_data.get("call_wall", _gx_spot)
+                _gx_pw = _gex_data.get("put_wall", _gx_spot)
+                _gx_total = _gex_data.get("total_gex", 0)
+                _gx_delta = _gex_data.get("dealer_net_delta", 0)
+                _gx_zone = _gex_data.get("zone", "")
+
+                _gx_zone_s = float(_np_gex.tanh(_gx_total / 2000.0))
+                _gx_flip_pct = ((_gx_spot - _gx_flip) / max(_gx_spot, 1)) * 100
+                _gx_flip_s = max(-1, min(1, _gx_flip_pct / 3.0))
+                _gx_delta_s = max(-1, min(1, _gx_delta))
+                _gx_wall_pct = ((_gx_cw - _gx_pw) / max(_gx_spot, 1)) * 100
+                _gx_width_s = max(-1, min(1, (_gx_wall_pct - 5) / 5.0))
+                _gx_composite = max(-1, min(1,
+                    0.35 * _gx_zone_s + 0.25 * _gx_flip_s + 0.25 * _gx_delta_s + 0.15 * _gx_width_s
+                ))
+
+                _gx_comp_col = "#22c55e" if _gx_composite > 0.1 else ("#ef4444" if _gx_composite < -0.1 else "#f59e0b")
+                _gx_zone_col = "#22c55e" if "Positive" in _gx_zone else "#ef4444"
+                _gx_delta_col = "#22c55e" if _gx_delta >= 0 else "#ef4444"
+                _gx_flip_col = "#22c55e" if _gx_flip_pct > 0.5 else ("#ef4444" if _gx_flip_pct < -0.5 else "#f59e0b")
+
+                def _gex_factor_bar(label, value, color, detail):
+                    bar_w = int(min(abs(value) * 100, 100))
+                    bar_dir = "right" if value >= 0 else "left"
+                    return (
+                        f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;">'
+                        f'<span style="font-size:8px;color:#64748b;width:42px;text-align:right;">{label}</span>'
+                        f'<div style="background:#1e293b;border-radius:2px;flex:1;height:8px;position:relative;">'
+                        f'<div style="background:{color};width:{bar_w}%;height:100%;border-radius:2px;'
+                        f'float:{bar_dir};"></div>'
+                        f'</div>'
+                        f'<span style="font-size:8px;color:#94a3b8;width:50px;">{detail}</span>'
+                        f'</div>'
+                    )
+
+                _gex_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-left:3px solid {_gx_comp_col};border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;">GEX DEALER POSITIONING</div>'
+                    f'<div style="text-align:right;">'
+                    f'<div style="font-size:18px;font-weight:900;color:{_gx_comp_col};">'
+                    f'{_gx_composite:+.2f}</div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">COMPOSITE</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:6px;margin-bottom:8px;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">SPOT</div>'
+                    f'<div style="font-size:13px;font-weight:800;color:#94a3b8;">${_gx_spot:,.0f}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">FLIP</div>'
+                    f'<div style="font-size:13px;font-weight:800;color:{_gx_flip_col};">${_gx_flip:,.0f}</div>'
+                    f'<div style="font-size:8px;color:{_gx_flip_col};">{_gx_flip_pct:+.1f}%</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">DELTA</div>'
+                    f'<div style="font-size:13px;font-weight:800;color:{_gx_delta_col};">{_gx_delta:+.3f}</div>'
+                    f'<div style="font-size:7px;color:#3b5998;">call/put OI ratio</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">PUT WALL</div>'
+                    f'<div style="font-size:13px;font-weight:800;color:#ef4444;">${_gx_pw:,.0f}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">CALL WALL</div>'
+                    f'<div style="font-size:13px;font-weight:800;color:#22c55e;">${_gx_cw:,.0f}</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="margin-bottom:4px;">'
+                    f'{_gex_factor_bar("Zone", _gx_zone_s, _gx_zone_col, f"{_gx_total:+.0f}M")}'
+                    f'{_gex_factor_bar("Flip", _gx_flip_s, _gx_flip_col, f"{_gx_flip_pct:+.1f}%")}'
+                    f'{_gex_factor_bar("Delta", _gx_delta_s, _gx_delta_col, f"{_gx_delta:+.3f}")}'
+                    f'{_gex_factor_bar("Width", _gx_width_s, "#94a3b8", f"{_gx_wall_pct:.1f}%")}'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:{_gx_zone_col};font-weight:600;">'
+                    f'{_gx_zone}</div>'
+                    f'<div style="font-size:8px;color:#334155;margin-top:3px;">'
+                    f'{_gex_data.get("zone_detail", "")}</div>'
+                    f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
+                    f'border-radius:3px;border:1px solid #1e293b;'
+                    f'font-size:8px;color:#3b5998;line-height:1.7;">'
+                    f'<b style="color:#4a6fa5;">Zone</b> = gamma at spot strike (do dealers dampen or amplify moves <i>here</i>). '
+                    f'<b style="color:#4a6fa5;">Delta</b> = net directional lean across ALL strikes (are dealers long or short the market). '
+                    f'<b style="color:#4a6fa5;">Flip</b> = distance to gamma sign change — how far price must move before dealers switch behavior. '
+                    f'<b style="color:#4a6fa5;">Width</b> = call wall minus put wall — wider = more dealer control, tighter = breakout risk.<br>'
+                    f'Zone and Delta can disagree: positive gamma at spot (dealers absorb small moves) '
+                    f'with negative delta (dealers are net short overall) means calm near spot but directional pressure building underneath.'
+                    f'</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
+        # ── Lean Accuracy card ───────────────────────────────────────────────
+        try:
+            import json as _la_json, os as _la_os
+            _la_path = _la_os.path.join(_la_os.path.dirname(_la_os.path.dirname(__file__)), "data", "lean_tracker.json")
+            if _la_os.path.exists(_la_path):
+                with open(_la_path, "r") as _la_f:
+                    _la_hist = _la_json.load(_la_f)
+                _la_stats = {}
+                _la_regime_stats = {}
+                for _la_e in _la_hist:
+                    _la_l = _la_e.get("lean", "?")
+                    if _la_l not in _la_stats:
+                        _la_stats[_la_l] = {"5d": [], "20d": [], "count": 0}
+                    _la_stats[_la_l]["count"] += 1
+                    if _la_e.get("fwd_5d_spy_return") is not None:
+                        _la_stats[_la_l]["5d"].append(_la_e["fwd_5d_spy_return"])
+                    if _la_e.get("fwd_20d_spy_return") is not None:
+                        _la_stats[_la_l]["20d"].append(_la_e["fwd_20d_spy_return"])
+                    _la_hmm = _la_e.get("hmm_state", "?")
+                    _la_rk = (_la_hmm, _la_l)
+                    if _la_rk not in _la_regime_stats:
+                        _la_regime_stats[_la_rk] = {"5d": [], "count": 0}
+                    _la_regime_stats[_la_rk]["count"] += 1
+                    if _la_e.get("fwd_5d_spy_return") is not None:
+                        _la_regime_stats[_la_rk]["5d"].append(_la_e["fwd_5d_spy_return"])
+
+                _la_streak = 0
+                _la_cur_lean = _la_hist[-1].get("lean", "?") if _la_hist else "?"
+                for _la_e2 in reversed(_la_hist):
+                    if _la_e2.get("lean") == _la_cur_lean:
+                        _la_streak += 1
+                    else:
+                        break
+                _la_cur_davg = _la_hist[-1].get("domain_avg", 50) if _la_hist else 50
+                _la_streak_col = "#22c55e" if _la_cur_lean == "BULLISH" else ("#ef4444" if _la_cur_lean == "BEARISH" else "#f59e0b")
+
+                _la_has_data = any(s["5d"] for s in _la_stats.values())
+
+                _la_rows = ""
+                for _la_dir in ["BULLISH", "NEUTRAL", "BEARISH"]:
+                    _la_s = _la_stats.get(_la_dir, {"5d": [], "20d": [], "count": 0})
+                    _la_n = _la_s["count"]
+                    if _la_n == 0:
+                        continue
+                    _la_col = "#22c55e" if _la_dir == "BULLISH" else ("#ef4444" if _la_dir == "BEARISH" else "#f59e0b")
+                    if _la_s["5d"]:
+                        _la_5avg = sum(_la_s["5d"]) / len(_la_s["5d"])
+                        _la_5col = "#22c55e" if _la_5avg >= 0 else "#ef4444"
+                        _la_5str = f'<span style="color:{_la_5col};font-weight:700;">{_la_5avg:+.2f}%</span>'
+                    else:
+                        _la_5str = '<span style="color:#334155;">—</span>'
+                    if _la_s["20d"]:
+                        _la_20avg = sum(_la_s["20d"]) / len(_la_s["20d"])
+                        _la_20col = "#22c55e" if _la_20avg >= 0 else "#ef4444"
+                        _la_20str = f'<span style="color:{_la_20col};font-weight:700;">{_la_20avg:+.2f}%</span>'
+                    else:
+                        _la_20str = '<span style="color:#334155;">—</span>'
+                    _la_rows += (
+                        f'<tr>'
+                        f'<td style="padding:2px 6px;color:{_la_col};font-weight:700;">{_la_dir}</td>'
+                        f'<td style="padding:2px 6px;text-align:center;">{_la_5str}</td>'
+                        f'<td style="padding:2px 6px;text-align:center;">{_la_20str}</td>'
+                        f'<td style="padding:2px 6px;text-align:center;color:#94a3b8;">{_la_n}</td>'
+                        f'</tr>'
+                    )
+
+                _la_regime_rows = ""
+                for (_la_rh, _la_rl), _la_rs in sorted(_la_regime_stats.items()):
+                    if len(_la_rs["5d"]) >= 3:
+                        _la_r5 = sum(_la_rs["5d"]) / len(_la_rs["5d"])
+                        _la_r5c = "#22c55e" if _la_r5 >= 0 else "#ef4444"
+                        _la_rlc = "#22c55e" if _la_rl == "BULLISH" else ("#ef4444" if _la_rl == "BEARISH" else "#f59e0b")
+                        _la_regime_rows += (
+                            f'<tr>'
+                            f'<td style="padding:1px 6px;font-size:8px;color:#64748b;">{_la_rh}</td>'
+                            f'<td style="padding:1px 6px;font-size:8px;color:{_la_rlc};">{_la_rl}</td>'
+                            f'<td style="padding:1px 6px;font-size:8px;color:{_la_r5c};font-weight:700;">{_la_r5:+.2f}%</td>'
+                            f'<td style="padding:1px 6px;font-size:8px;color:#94a3b8;">n={len(_la_rs["5d"])}</td>'
+                            f'</tr>'
+                        )
+
+                _la_regime_html = ""
+                if _la_regime_rows:
+                    _la_regime_html = (
+                        f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e293b;">'
+                        f'<div style="font-size:8px;color:#3b4f6b;font-weight:700;letter-spacing:0.08em;margin-bottom:3px;">BY REGIME × LEAN (5d avg)</div>'
+                        f'<table style="width:100%;font-size:9px;color:#64748b;border-collapse:collapse;">'
+                        f'{_la_regime_rows}</table></div>'
+                    )
+
+                _la_status = "" if _la_has_data else (
+                    '<div style="font-size:8px;color:#334155;margin-top:4px;">'
+                    'accumulating data... forward returns appear after 5+ daily QIR runs</div>'
+                )
+
+                _lean_card = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-left:3px solid {_la_streak_col};border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;">LEAN ACCURACY</div>'
+                    f'<div style="font-size:10px;color:{_la_streak_col};font-weight:700;">'
+                    f'{_la_cur_lean} × {_la_streak}d | avg {_la_cur_davg:.0f}</div>'
+                    f'</div>'
+                    f'<table style="width:100%;font-size:9px;color:#64748b;border-collapse:collapse;">'
+                    f'<tr style="border-bottom:1px solid #1e293b;">'
+                    f'<th style="text-align:left;padding:2px 6px;font-size:8px;">Lean</th>'
+                    f'<th style="text-align:center;padding:2px 6px;font-size:8px;">Avg 5d</th>'
+                    f'<th style="text-align:center;padding:2px 6px;font-size:8px;">Avg 20d</th>'
+                    f'<th style="text-align:center;padding:2px 6px;font-size:8px;">Count</th>'
+                    f'</tr>{_la_rows}</table>'
+                    f'{_la_regime_html}'
+                    f'{_la_status}'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
     else:
         # No fresh QIR run — show stale data if available, or minimal placeholder
         _stale_syn = st.session_state.get("_macro_synopsis") or {}
@@ -889,6 +2377,49 @@ def _render_qir_dashboard() -> None:
         f'</span></div>'
     )
 
+    # ── Compose zone 2: top row = Conviction | Velocity | Kelly, bottom row = HMM + GEX + Lean + Signals + Top/Bottom ──
+    _zone2_html = ""
+    if _populated and (_conviction_block or _kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block):
+        _top_row = ""
+        if _conviction_block or _kelly_block or _velocity_block:
+            _top_row = (
+                f'<div style="display:grid;grid-template-columns:120px 120px 1fr;'
+                f'gap:10px;margin-bottom:10px;">'
+                f'{_conviction_block}{_velocity_block}{_kelly_block}'
+                f'</div>'
+            )
+        _bot_row = _entry_rec_html + _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
+        _zone2_html = _top_row + _bot_row
+
+    # ── Crash pattern alert ──────────────────────────────────────────────
+    _crash_alert_html = ""
+    if _populated:
+        _crash_matches = _check_crash_patterns(_rc)
+        if _crash_matches:
+            _alert_parts = []
+            for _cm in _crash_matches:
+                _sev_color = "#ef4444" if _cm["match_pct"] >= 80 else ("#f59e0b" if _cm["match_pct"] >= 60 else "#f97316")
+                _icon = "🚨" if _cm["match_pct"] >= 80 else "⚠"
+                _detail_str = " · ".join(_cm["details"][:3])
+                _alert_parts.append(
+                    f'<div style="padding:4px 0;border-bottom:1px solid #1e293b22;">'
+                    f'<span style="color:{_sev_color};font-weight:800;font-size:11px;">'
+                    f'{_icon} {_cm["name"]} — {_cm["match_pct"]}% match</span>'
+                    f'<span style="color:#64748b;font-size:9px;margin-left:8px;">'
+                    f'({_cm["matched"]}/{_cm["total"]} conditions) · {_cm["lead_days"]}d lead · '
+                    f'{_cm["max_drawdown"]}% drawdown</span>'
+                    f'<div style="font-size:8px;color:#475569;padding-left:20px;">{_detail_str}</div>'
+                    f'</div>'
+                )
+            _crash_alert_html = (
+                f'<div style="background:#1a0a0a;border:1px solid #ef444433;'
+                f'border-radius:5px;padding:8px 12px;margin-bottom:10px;">'
+                f'<div style="font-size:9px;color:#ef4444;font-weight:700;'
+                f'letter-spacing:0.1em;margin-bottom:4px;">CRASH PATTERN ALERT</div>'
+                f'{"".join(_alert_parts)}'
+                f'</div>'
+            )
+
     # ── Render the full dashboard ─────────────────────────────────────────
     st.markdown(
         f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
@@ -898,10 +2429,12 @@ def _render_qir_dashboard() -> None:
         f'text-transform:uppercase;">QIR Intelligence Dashboard</div>'
         f'</div>'
         f'{_freshness_html}'
+        f'{_crash_alert_html}'
         f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
         f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
         f'</div>'
         f'{_verdict_html}'
+        f'{_zone2_html}'
         f'</div>',
         unsafe_allow_html=True,
     )
@@ -969,6 +2502,59 @@ def _render_qir_dashboard() -> None:
             else:
                 st.button("🚫 No SPY Trade", key=f"qir_spy_none_{_tac_score}", use_container_width=True,
                           disabled=True, help=f"{_verdict_label} — no clear directional edge for SPY")
+
+    # ── Call Top / Call Bottom manual log buttons ─────────────────────────
+    _tb_prox = st.session_state.get("_top_bottom_proximity")
+    if _populated and _tb_prox:
+        _tb_col1, _tb_col2 = st.columns(2)
+        with _tb_col1:
+            if _tb_prox["top_pct"] >= 20:
+                with st.popover(f"📉 Call Market Top ({_tb_prox['top_pct']}%)", use_container_width=True):
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#ef4444;font-weight:700;">CALLING MARKET TOP</div>'
+                        f'<div style="font-size:10px;color:#94a3b8;margin:4px 0;">Top proximity: {_tb_prox["top_pct"]}%</div>'
+                        f'<div style="font-size:9px;color:#64748b;">Signals: {" · ".join(_tb_prox["top_signals"])}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _tb_top_conf = st.slider("Confidence", 30, 95, min(80, _tb_prox["top_pct"]), key="tb_top_conf")
+                    _tb_top_notes = st.text_input("Notes", key="tb_top_notes", placeholder="Why I think this is a top...")
+                    if st.button("Confirm Call Top", key="tb_top_confirm", type="primary", use_container_width=True):
+                        from services.forecast_tracker import log_forecast as _tb_log
+                        _tb_log(
+                            signal_type="valuation",
+                            prediction="Sell",
+                            confidence=_tb_top_conf,
+                            summary=f"MARKET TOP CALL | Top proximity: {_tb_prox['top_pct']}% | "
+                                    f"Signals: {', '.join(_tb_prox['top_signals'])} | {_tb_top_notes}",
+                            model="Top/Bottom Proximity",
+                            ticker="SPY",
+                            horizon_days=60,
+                        )
+                        st.toast(f"Market Top call logged at {_tb_prox['top_pct']}% proximity!", icon="📉")
+        with _tb_col2:
+            if _tb_prox["bottom_pct"] >= 20:
+                with st.popover(f"📈 Call Market Bottom ({_tb_prox['bottom_pct']}%)", use_container_width=True):
+                    st.markdown(
+                        f'<div style="font-size:11px;color:#22c55e;font-weight:700;">CALLING MARKET BOTTOM</div>'
+                        f'<div style="font-size:10px;color:#94a3b8;margin:4px 0;">Bottom proximity: {_tb_prox["bottom_pct"]}%</div>'
+                        f'<div style="font-size:9px;color:#64748b;">Signals: {" · ".join(_tb_prox["bottom_signals"])}</div>',
+                        unsafe_allow_html=True,
+                    )
+                    _tb_bot_conf = st.slider("Confidence", 30, 95, min(80, _tb_prox["bottom_pct"]), key="tb_bot_conf")
+                    _tb_bot_notes = st.text_input("Notes", key="tb_bot_notes", placeholder="Why I think this is a bottom...")
+                    if st.button("Confirm Call Bottom", key="tb_bot_confirm", type="primary", use_container_width=True):
+                        from services.forecast_tracker import log_forecast as _tb_log2
+                        _tb_log2(
+                            signal_type="valuation",
+                            prediction="Buy",
+                            confidence=_tb_bot_conf,
+                            summary=f"MARKET BOTTOM CALL | Bottom proximity: {_tb_prox['bottom_pct']}% | "
+                                    f"Signals: {', '.join(_tb_prox['bottom_signals'])} | {_tb_bot_notes}",
+                            model="Top/Bottom Proximity",
+                            ticker="SPY",
+                            horizon_days=60,
+                        )
+                        st.toast(f"Market Bottom call logged at {_tb_prox['bottom_pct']}% proximity!", icon="📈")
 
 
 def render():
