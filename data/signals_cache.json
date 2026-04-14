@@ -2,7 +2,7 @@
   "_regime_context": {
     "regime": "Neutral \u2014 Leaning Risk-On",
     "score": 0.12,
-    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.90 ()\n- Options Tail Risk (CBOE SKEW): z=-0.81 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Yield Curve (3M-10Y): z=+0.70 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 21/100 \u2014 Extreme Fear (contrarian)",
+    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.90 ()\n- Options Tail Risk (CBOE SKEW): z=-0.81 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.72 ()\n- Yield Curve (3M-10Y): z=+0.70 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 21/100 \u2014 Extreme Fear (contrarian)",
     "quadrant": "Transition",
     "macro_score": 56,
     "leading_score": 58,
@@ -15,7 +15,7 @@
     "velocity_label": "\u2192 Stable (-1 pts vs 2026-04-13)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-14T11:11:56.282893"
+    "__datetime__": "2026-04-14T11:28:12.726601"
   },
   "_rp_plays_result": {
     "sectors": [
@@ -124,7 +124,7 @@
     }
   ],
   "_rate_path_probs_ts": {
-    "__datetime__": "2026-04-14T11:12:25.874767"
+    "__datetime__": "2026-04-14T11:28:42.595164"
   },
   "_fed_plays_result": {
     "sectors": [
@@ -197,20 +197,20 @@
     "rationale": "The Neutral \u2014 Leaning Risk-On regime (+0.12) is driven by a steep yield curve, rising corporate CAPEX, global manufacturing strength, and positive equity trends, favoring cyclicals like Financials and Industrials despite weak consumer sentiment. Extreme Fear (21/100) acts as a contrarian buy signal for equities. Elevated term premium limits long-duration bonds, tilting toward credit and short-end for yield in this environment."
   },
   "_fed_plays_result_ts": {
-    "__datetime__": "2026-04-14T11:12:25.874772"
+    "__datetime__": "2026-04-14T11:28:42.595166"
   },
   "_fed_plays_engine": "\u26a1 Freeloader Mode",
   "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
-  "_chain_narration": "The most likely rate path, with a probability of 66.73%, is the \"hold\" scenario, where the Fed maintains current interest rates. This scenario transmits through credit markets by keeping short rates stable, leading to a flat mortgage market and contained credit spreads, which in turn supports housing and employment. As a result, asset classes such as mortgage-backed securities (e.g., VNQ) and homebuilders (e.g., ITB) are likely to benefit, while growth and tech stocks (e.g., ARKK, TQQQ) may face headwinds due to the lack of a rate cut. In this environment, the US dollar (e.g., UUP) is likely to remain stable, limiting the upside for emerging markets (e.g., EEM) and commodities (e.g., DBA).",
+  "_chain_narration": "The most likely rate path, with a probability of 66.73%, is the \"hold\" scenario, where the Fed maintains current interest rates. This path transmits through credit markets by keeping short rates stable, leading to a flat mortgage market and contained credit spreads, which in turn supports housing and employment. As a result, asset classes such as mortgage-backed securities (e.g., VNQ) and homebuilders (e.g., ITB) are likely to benefit, while growth and tech stocks (e.g., ARKK, TQQQ) may face headwinds due to the stable interest rate environment. In this scenario, the USD is likely to remain stable, which may lead to a neutral impact on commodities (e.g., DBA) and emerging markets (e.g., EEM).",
   "_chain_narration_engine": "\u26a1 Freeloader Mode",
-  "_doom_briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 19.0/100 indicates a moderate level of financial system stress.\n* The HY Credit Spread (OAS) of 2.95 is relatively elevated, suggesting increased risk perception in high-yield markets.\n* The Yield Curve 10Y-2Y of 0.52 is slightly inverted, which may indicate a moderate recession risk.\n* The Private Equity Exposure segment exhibits a significant drawdown of -33.2%, potentially signaling stress in this specific market.\n* The Volatility / Fear index has decreased by 10.6% over the past month, with a drawdown of -24.4%, which may indicate a decrease in market anxiety.\n\nLooking forward, the current stress signals do not indicate an imminent systemic crisis, but the elevated HY Credit Spread and inverted Yield Curve warrant continued monitoring. The significant drawdown in Private Equity Exposure may be an isolated issue, but its potential impact on interconnected markets should be assessed. Overall, the financial system stress level is moderate, and allocators should maintain a cautious stance.",
+  "_doom_briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 18.8/100 indicates a moderate level of financial system stress.\n* The HY Credit Spread (OAS) of 2.95 and IG Credit Spread of 0.82 suggest a relatively stable credit market, with the former being 0.13 above its 5-year average and the latter being 0.05 below its 5-year average.\n* The Yield Curve 10Y-2Y of 0.52 is relatively flat, indicating a potential slowdown in economic growth.\n* The Regional Banks sector has experienced a 1-month return of +12.5% and a drawdown of -11.9%, while the Private Equity Exposure sector has seen a 1-month return of +14.4% and a significant drawdown of -33.0%, suggesting potential pockets of instability.\n\nLooking forward, the current stress signals do not indicate a systemic crisis, but the drawdowns in certain sectors, such as Private Equity Exposure and Subprime / Consumer Credit, warrant continued monitoring. The relatively stable credit spreads and yield curve suggest that the financial system is currently able to absorb shocks, but the potential for contagion risks should not be dismissed. Overall, the stress level is expected to remain moderate in the near term, with a need for ongoing surveillance of the Canary Watchlist sectors.",
   "_doom_briefing_ts": {
-    "__datetime__": "2026-04-14T11:12:32.285585"
+    "__datetime__": "2026-04-14T11:28:49.678887"
   },
   "_doom_briefing_engine": "\u26a1 Freeloader Mode",
-  "_whale_summary": "The latest quarterly 13F filings reveal a convergence of institutional investors towards the technology and healthcare sectors. BlackRock, Vanguard Group, and State Street Corp, among the largest hedge funds and institutions, have increased their positions in prominent tech companies such as NVIDIA Corporation, Apple Inc, Alphabet Inc, and Microsoft Corp. Notably, NVIDIA Corporation saw a significant increase of $62.2 billion, a 37.6% change, in BlackRock's portfolio, while Apple Inc witnessed a $43.7 billion increase, representing a 24.5% change. Alphabet Inc also received substantial investments from Vanguard Group, with two separate increases of $40 billion and $31.6 billion, representing 31.9% and 31.4% changes, respectively.\n\n \n\nMultiple whales are showing conviction in certain names, particularly in the tech sector. Alphabet Inc, for instance, has seen increased investments from BlackRock, Vanguard Group, and State Street Corp, with changes ranging from 20.2% to 31.9%. Apple Inc has also received significant investments from BlackRock and Vanguard Group, with changes of 24.5% and 8.8%, respectively. Eli Lilly & Co, a healthcare company, has seen increased investments from Vanguard Group and State Street Corp, with changes of 42.6% and 49.9%, respectively. This conviction from multiple institutional investors suggests a strong bullish sentiment towards these companies.\n\n \n\nThere are notable exits or position closures that signal a shift in institutional sentiment. Vanguard Group decreased its position in Microsoft Corp by $16.4 billion, representing a 4.5% change, while State Street Corp decreased its position in the same company by $11.8 billion, representing a 10.9% change. Additionally, Vanguard Group decreased its position in Oracle Corp by $13.4 billion, representing a 28.3% change, and in Netflix Inc by $9.6 billion, representing a 20.8% change. These decreases may indicate a shift in sentiment towards these companies or a reallocation of funds towards more promising opportunities.\n\n \n\nThe overall flow pattern suggests a bullish sentiment towards the technology and healthcare sectors, with institutional investors increasing their positions in prominent companies. The significant investments in NVIDIA Corporation, Apple Inc, and Alphabet Inc indicate a strong conviction in the growth potential of these companies. However, the decreases in Microsoft Corp, Oracle Corp, and Netflix Inc may signal a shift in sentiment or a reallocation of funds. As institutional investors continue to allocate their funds, it will be essential to monitor their movements to gauge the overall market sentiment.\n\n \n\nNo SC 13D activism filings are included in the provided data. Therefore, there are no activist campaigns to report on. However, the significant investments from institutional investors may indicate a potential for future activism or a shift in the corporate governance of the targeted companies. As the landscape of institutional investing continues to evolve, it is crucial to monitor the movements of prominent hedge funds and institutions to anticipate potential changes in the market.",
+  "_whale_summary": "The latest quarterly 13F filings reveal a convergence of institutional investors towards the technology and healthcare sectors. Notably, BlackRock, Vanguard Group, and State Street Corp have increased their positions in key players such as NVIDIA Corporation, Apple Inc, Alphabet Inc, and Eli Lilly & Co. BlackRock's increase in NVIDIA Corporation by $62.2 billion, representing a 37.6% change, is particularly significant. Similarly, Vanguard Group's increases in Alphabet Inc, with two separate filings totaling $71.6 billion, and Apple Inc, with a $31.4 billion increase, demonstrate strong conviction in these names. The fact that multiple whales, including BlackRock and State Street Corp, are buying into Alphabet Inc, suggests a high level of institutional confidence in the company's prospects.\n\n \n\nThe data also highlights notable exits or position closures, which may signal a shift in institutional sentiment. Vanguard Group's decrease in Microsoft Corp by $16.4 billion, representing a 4.5% change, and State Street Corp's decrease in the same company by $11.8 billion, representing a 10.9% change, are significant. Additionally, Vanguard Group's decreases in Oracle Corp, Netflix Inc, and Meta Platforms Inc, totaling $32.6 billion, may indicate a rotation out of these names. These exits could be driven by concerns over valuation, growth prospects, or changing industry dynamics. On the other hand, Micron Technology Inc, which saw a $12.9 billion increase from Vanguard Group, representing a 73.8% change, may be benefiting from the ongoing semiconductor cycle.\n\n \n\nThe overall flow pattern suggests that institutional investors are becoming increasingly bullish on the technology and healthcare sectors, with a focus on market leaders and growth stories. The fact that BlackRock, Vanguard Group, and State Street Corp are all increasing their positions in key names such as Alphabet Inc, Apple Inc, and Eli Lilly & Co, indicates a high level of conviction in these companies' prospects. The decreases in Microsoft Corp, Oracle Corp, Netflix Inc, and Meta Platforms Inc, on the other hand, may signal a shift towards more growth-oriented names. As the market continues to evolve, it will be important to monitor these institutional flows and adjust investment strategies accordingly.\n\n \n\nNo SC 13D activism filings are included in the provided data. However, if such filings were present, they would likely indicate a campaign by an activist investor to influence the strategy or operations of a target company. For example, an activist investor may file a 13D to signal their intention to engage with the company's management or board of directors, or to propose changes to the company's capital structure or governance. In the absence of such filings, it is difficult to speculate on the intentions of activist investors. Nevertheless, the provided data offers valuable insights into the investment strategies and convictions of top-tier institutional investors, and highlights the importance of monitoring these flows to stay ahead of the market.",
   "_whale_summary_ts": {
-    "__datetime__": "2026-04-14T11:12:22.563279"
+    "__datetime__": "2026-04-14T11:28:39.386473"
   },
   "_whale_summary_engine": "\u26a1 Freeloader Mode",
   "_plays_result": {
@@ -417,9 +417,9 @@
     "__datetime__": "2026-04-07T03:52:42.068415"
   },
   "_portfolio_analysis_engine": "\ud83e\udde0 Regard Mode",
-  "_current_events_digest": "Geopolitical de-escalation drives markets, with U.S. oil prices plunging over 6% on White House-Iran talks and Israel-Lebanon direct talks amid Hezbollah tensions, while Polymarket odds remain low (1%) for Israeli action in Beirut. AI infrastructure stocks rally, Oracle extending gains and Bloom Energy soaring 23% on data center power deals, though Jamie Dimon flags Anthropic's Mythos exposing cyber vulnerabilities; BlackRock reports profits jump on $130bn inflows. China growth outlook weakens per Polymarket (72% odds for 4-5% in 2026, 0% for Q1 >=6%), signaling EM risks, as Einhorn's Greenlight prioritizes capital protection.",
+  "_current_events_digest": "Geopolitical de-escalation dominates with U.S.-Iran talks catalyzing a >6% plunge in oil prices and Israel-Lebanon direct talks amid Hezbollah tensions, though Polymarket assigns just 1% odds to Israeli action in Greater Beirut by April 2026 and rising but modest probabilities (34% by year-end) for Iran leadership change. AI infrastructure surges lift Oracle and Bloom Energy (latter +23%) on data center power deals, alongside BlackRock's $130bn inflows and profits jump, contrasting EV weakness and David Einhorn's capital protection pivot; private credit risks dismissed as non-systemic by IMF. China slowdown narrative firms via Polymarket's 72% odds for 4-5% 2026 GDP growth and 0% for Q1 2026 >=6%, with low Fed easing (4% to 0%) or inflation (>5% at 21%) probabilities signaling policy stability.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-04-14T11:11:53.493049"
+    "__datetime__": "2026-04-14T11:28:13.815190"
   },
   "_current_events_engine": "\ud83e\udde0 Regard Mode",
   "_factor_analysis": {
@@ -640,50 +640,49 @@
   },
   "_macro_synopsis": {
     "conviction": "MIXED",
-    "summary": "The overall macro conviction is mixed due to conflicting signals from various sources, with some indicators suggesting a risk-on posture and others indicating risk-off sentiments. The regime score of +0.12 and a 5-session trend of +2 points for both composite and leading scores suggest a leaning risk-on stance, but this is countered by elevated tail risk and extreme fear sentiment.",
+    "summary": "The overall macro conviction is mixed due to conflicting signals from various sources, with some indicators suggesting a risk-on environment and others indicating caution. The regime is neutral with a lean towards risk-on, but the signals are not uniformly aligned.",
     "key_points": [
-      "Regime score: +0.12",
-      "5-session trend: +2 points (composite and leading)",
+      "Regime: Neutral \u2014 Leaning Risk-On with a score of +0.12",
+      "Tactical regime: Favorable Entry with a score of 64/100",
       "Sector Breadth: +0.970",
       "Term Premium: +0.900",
-      "CBOE SKEW: -0.810",
-      "Fear & Greed: 21/100 (Extreme Fear)"
+      "Options Tail Risk (Cboe Skew): -0.810"
     ],
     "contradictions": [
-      "CBOE SKEW: -0.810 (risk-off) vs VIX Term Structure: 0.888 (risk-on)",
-      "Elevated tail risk vs risk-on sentiments from SPY momentum and sector breadth"
+      "Consumer Sentiment (Michigan): -0.800",
+      "CBOE SKEW: 156.9 (+8.5 5d) (Risk-Off)"
     ]
   },
   "_macro_synopsis_ts": {
-    "__datetime__": "2026-04-14T11:12:36.401708"
+    "__datetime__": "2026-04-14T11:28:54.075524"
   },
   "_macro_synopsis_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 63,
-    "label": "Neutral / Hold",
-    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup.",
+    "tactical_score": 64,
+    "label": "Favorable Entry",
+    "action_bias": "Conditions support initiating or adding to risk positions on pullbacks.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "18.5",
-        "Score": 0.089,
+        "Value": "18.4",
+        "Score": 0.099,
         "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.888",
-        "Score": 0.747,
+        "Value": "0.884",
+        "Score": 0.773,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+5.0%/20d  +3.0%/50d",
+        "Value": "+5.1%/20d  +3.1%/50d",
         "Score": 0.4,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +5.2%  20d +3.9%",
+        "Value": "5d +5.2%  20d +4.0%",
         "Score": 1.0,
         "Direction": "Risk-On"
       },
@@ -695,8 +694,8 @@
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:17.2 VIX:18.5 3M:20.8 6M:22.8",
-        "Score": 0.587,
+        "Value": "9D:17.0 VIX:18.4 3M:20.8 6M:22.7",
+        "Score": 0.611,
         "Direction": "Risk-On"
       },
       {
@@ -720,21 +719,21 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-14T11:11:56.283131"
+    "__datetime__": "2026-04-14T11:28:12.726831"
   },
-  "_tactical_analysis": "The combined signal picture suggests a Neutral / Hold stance with a score of 63/100, indicating a delicate balance between risk-on and risk-off sentiments. The VIX level of 18.5 and its 5-day trend score of +0.089 indicate a neutral leaning risk-on posture. However, this is countered by the CBOE SKEW score of -1.000, signaling elevated tail risk and a risk-off sentiment. The SPY momentum, with a 5-day ROC of +5.2% and a 20-day ROC of +3.9%, scores +1.000, firmly indicating a risk-on condition.\n\nThe most dominant signals right now are the SPY momentum (+1.000) and the VIX term structure (VIX/VIX3M) score of +0.747, both of which strongly suggest a risk-on environment. The VIX term structure, at 0.888, indicates that the market is pricing in less volatility in the short term compared to the medium term, which is typically a bullish sign. On the other hand, the CBOE SKEW score of -1.000 and the Breadth Trend score of -1.000 are cautionary, suggesting that despite the momentum, there are underlying concerns about market breadth and tail risk. The Fear & Greed index, at 21, indicates extreme fear, which from a contrarian perspective, scores +0.580, suggesting that the market might be due for a bounce.\n\nGiven this setup, a trader should exercise caution and maintain a hold position. The strong momentum indicators suggest that adding to long positions could be rewarding, but the elevated tail risk and negative breadth trend advise against aggressive additions. The Fear & Greed index suggests that the market is oversold and due for a bounce, which could provide a buying opportunity. However, the overall neutral stance and the presence of risk-off signals mean that traders should be prepared to reduce positions or hedge if the market shows signs of reversing. A prudent approach would be to maintain current positions, monitor the VIX and SPY momentum closely, and be ready to adjust the portfolio as the signals evolve.",
+  "_tactical_analysis": "The combined signal picture suggests a favorable entry condition with a score of 64/100, indicating a neutral macro backdrop with a lean towards risk-on. The VIX level of 18.4 and its 5-day trend score of +0.099 indicate a neutral stance, while the VIX term structure (VIX/VIX3M) score of +0.773 and the SPY vs 20d/50d MA scores of +0.400 suggest a risk-on environment. The SPY momentum, with a 5-day ROC of +5.2% and a 20-day ROC of +4.0%, further reinforces this notion with a score of +1.000.\n\nThe most dominant signals right now are the VIX term structure and the SPY momentum, which both point towards a risk-on environment. The VIX term structure score of +0.773 indicates that the market is expecting lower volatility in the short term, which is often a sign of increased risk appetite. The SPY momentum score of +1.000, driven by the strong 5-day and 20-day ROC values, suggests that the market is experiencing a significant uptrend. However, the CBOE SKEW score of -1.000 and the Breadth Trend score of -1.000 introduce some caution, as they indicate increased tail risk and weakening market breadth.\n\nGiven this setup, a trader should consider adding to their long positions or holding existing ones, as the overall signal picture suggests a favorable entry condition. The strong momentum and risk-on signals outweigh the cautionary signals, but it's essential to monitor the CBOE SKEW and Breadth Trend closely, as a deterioration in these signals could lead to a shift in market sentiment. With the Fear & Greed index at 21, indicating extreme fear, and the VIX curve score of +0.611, the market may be due for a bounce, making this a potentially attractive entry point for traders.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-14T11:11:56.283221"
+    "__datetime__": "2026-04-14T11:28:12.726920"
   },
   "_options_flow_context": {
-    "options_score": 66,
-    "label": "Call-Skewed Flow",
-    "action_bias": "Options market favoring risk-on. Call flow dominant \u2014 supportive of long entries.",
+    "options_score": 62,
+    "label": "Neutral Flow",
+    "action_bias": "Options positioning mixed. No strong directional bias in the market.",
     "signals": [
       {
         "Signal": "P/C Ratio",
-        "Value": "0.93 (neutral) [z=-0.7, n=30]",
-        "Score": 0.327,
+        "Value": "0.95 (neutral) [z=-0.6, n=30]",
+        "Score": 0.283,
         "Direction": "Bullish"
       },
       {
@@ -745,27 +744,27 @@
       },
       {
         "Signal": "IV Skew (put/call)",
-        "Value": "1.12 (moderate) [z=-1.5, n=30]",
-        "Score": 0.756,
+        "Value": "1.15 (moderate) [z=-1.0, n=30]",
+        "Score": 0.515,
         "Direction": "Bullish"
       },
       {
         "Signal": "Unusual Activity",
-        "Value": "calls 2,627,285 vs puts 2,271,354 (mixed)",
-        "Score": 0.073,
+        "Value": "calls 2,727,112 vs puts 2,407,008 (mixed)",
+        "Score": 0.062,
         "Direction": "Neutral"
       }
     ],
-    "pc_ratio": 0.929,
-    "raw_score": 0.325,
-    "vix_level": 18.5,
+    "pc_ratio": 0.946,
+    "raw_score": 0.247,
+    "vix_level": 18.4,
     "vix_regime": "Normal (15-25)",
     "n_pc_hist": 30,
     "n_skew_hist": 30,
     "scoring_mode": "z-score adaptive"
   },
   "_options_flow_context_ts": {
-    "__datetime__": "2026-04-14T11:12:22.564191"
+    "__datetime__": "2026-04-14T11:28:39.387053"
   },
   "_data_quality": {
     "score": 70,
@@ -781,7 +780,7 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-14T11:11:56.283306"
+    "__datetime__": "2026-04-14T11:28:12.727005"
   },
   "_portfolio_risk_snapshot": {
     "beta": 0.4,
@@ -789,7 +788,7 @@
     "var_99_pct": -4.27,
     "cvar_95_pct": -3.92,
     "var_95_dollar": -1440,
-    "total_value": 54324,
+    "total_value": 54329,
     "position_count": 9,
     "sector_weights": {
       "Unknown": 91.7,
@@ -804,46 +803,46 @@
       {
         "scenario": "2008 GFC",
         "spy_shock_pct": -57,
-        "port_impact_pct": -36.2,
-        "port_impact_dollar": -19673
+        "port_impact_pct": -36.1,
+        "port_impact_dollar": -19603
       },
       {
         "scenario": "COVID Crash",
         "spy_shock_pct": -34,
-        "port_impact_pct": -21.6,
-        "port_impact_dollar": -11735
+        "port_impact_pct": -21.5,
+        "port_impact_dollar": -11693
       },
       {
         "scenario": "2022 Rate Shock",
         "spy_shock_pct": -25,
-        "port_impact_pct": -15.9,
-        "port_impact_dollar": -8628
+        "port_impact_pct": -15.8,
+        "port_impact_dollar": -8598
       },
       {
         "scenario": "Flash Crash",
         "spy_shock_pct": -10,
-        "port_impact_pct": -6.4,
-        "port_impact_dollar": -3451
+        "port_impact_pct": -6.3,
+        "port_impact_dollar": -3439
       },
       {
         "scenario": "VIX Spike +200%",
         "spy_shock_pct": -15,
         "port_impact_pct": -9.5,
-        "port_impact_dollar": -5177
+        "port_impact_dollar": -5159
       }
     ],
-    "worst_stress_pct": -36.2
+    "worst_stress_pct": -36.1
   },
   "_portfolio_risk_snapshot_ts": {
-    "__datetime__": "2026-04-14T11:12:40.163047"
+    "__datetime__": "2026-04-14T11:28:57.793929"
   },
   "_risk_matrix_interpretation": {
     "alert_level": "MODERATE",
-    "summary": "The Neutral - Leaning Risk-On regime may favor the portfolio's low beta, but the high correlation between PHYS.TO and PSLV.TO limits diversification benefits. The VaR and CVaR levels suggest moderate potential losses, and the stress test impacts indicate vulnerability to market downturns. Given the Transition quadrant, the portfolio's risk profile may be exposed to unexpected shifts in market sentiment.",
+    "summary": "The Neutral \u2014 Leaning Risk-On regime supports the portfolio's current risk profile, but the high correlation between PHYS.TO and PSLV.TO limits diversification benefits. The beta of 0.4 and VaR of -2.65% are relatively conservative, but may not be sufficient given the portfolio's concentration in a single sector. The 2008 GFC stress test impact of -36.1% is the most concerning scenario, suggesting vulnerability to severe market downturns.",
     "action_items": [
-      "Rebalance the portfolio to reduce PHYS.TO's weight below 15% to mitigate concentration risk",
-      "Diversify the portfolio by adding non-correlated assets to reduce the impact of stress scenarios",
-      "Monitor the Tactical Timing score and be prepared to adjust the portfolio's risk profile if the regime shifts towards Risk-Off"
+      "Rebalance the portfolio to reduce concentration in Basic Materials",
+      "Consider adding assets with low correlation to PHYS.TO and PSLV.TO",
+      "Monitor and adjust the portfolio's beta and VaR in response to changes in the macro regime"
     ]
   },
   "_qir_earnings_risk": [
@@ -851,12 +850,12 @@
       "ticker": "FCX",
       "days_away": 9,
       "date": "Apr 23, 2026",
-      "expected_move_pct": 4.6,
-      "expected_move_dollar": 3.14
+      "expected_move_pct": 3.6,
+      "expected_move_dollar": 2.47
     }
   ],
   "_qir_earnings_risk_ts": {
-    "__datetime__": "2026-04-14T11:12:45.856247"
+    "__datetime__": "2026-04-14T11:29:03.917892"
   },
   "_forecast_log": [
     {
@@ -1237,14 +1236,14 @@
   "_forecast_log_ts": {
     "__datetime__": "2026-04-11T20:56:35.261116"
   },
-  "_activism_digest": "**Actionable Intelligence Summary**\n\nThe recent SC 13D/13G filings reveal a surge in activist investing across various sectors. Upon analyzing the filings, we identify key trends and potential campaign objectives.\n\n**Significant 13D Filings Analysis**\n\n1. **NACCO INDUSTRIES INC (NC)**: The activist's likely campaign objective is to influence governance and potentially seek board seats. The target's vulnerability lies in its undervalued assets and weak governance. Historical outcome patterns suggest a 60% probability of success, with a timeline of 6-12 months.\n2. **Eos Energy Enterprises, Inc. (EOSE)**: The activist, Cerberus Capital Management, likely aims to push for a merger or acquisition. The target's vulnerability stems from its depressed valuation and insider entrenchment. Historical outcome patterns indicate a 50% probability of success, with a timeline of 9-18 months.\n3. **Garrett Motion Inc. (GTX)**: The activist, Centerbridge Credit Partners, likely seeks to influence governance and potentially push for a CEO change. The target's vulnerability lies in its weak governance and undervalued assets. Historical outcome patterns suggest a 55% probability of success, with a timeline of 6-12 months.\n4. **BICYCLE THERAPEUTICS PLC (BCYC)**: The activist, BAKER BROS. ADVISORS LP, likely aims to push for a buyback or merger. The target's vulnerability stems from its depressed valuation and insider entrenchment. Historical outcome patterns indicate a 45% probability of success, with a timeline of 9-18 months.\n\n**Cross-Filing Synthesis**\n\nThe current wave of activism is concentrated in the energy, biotech, and finance sectors. Common themes include energy restructuring, biotech governance, and tech buybacks. This activism wave signals that the market is seeking to unlock value in undervalued assets and push for better governance. The surge in activism also indicates that investors are becoming increasingly impatient with underperforming companies, leading to a rise in campaigns targeting CEO changes, mergers, and acquisitions.\n\n**Sector Analysis**\n\n1. **Energy**: Activists are targeting energy companies with undervalued assets, pushing for restructuring and potential mergers.\n2. **Biotech**: Activists are focusing on biotech companies with weak governance, seeking to improve governance and potentially push for buybacks or mergers.\n3. **Finance**: Activists are targeting financial institutions with undervalued assets, pushing for better governance and potential acquisitions.\n\n**Investment Actionability**\n\nInvestors should monitor the targeted companies and consider the following strategies:\n\n1. **Long positions**: Consider taking long positions in companies with undervalued assets and weak governance, as activists may push for value-enhancing initiatives.\n2. **Short positions**: Consider taking short positions in companies with depressed valuations and insider entrenchment, as activists may push for mergers or acquisitions.\n3. **Event-driven strategies**: Consider implementing event-driven strategies, such as merger arbitrage or activist-driven trades, to capitalize on the potential outcomes of these campaigns.\n\nOverall, the current wave of activism presents opportunities for investors to capitalize on potential value creation in undervalued assets and companies with weak governance. By monitoring these campaigns and adapting investment strategies, investors can potentially generate alpha and outperform the market.",
+  "_activism_digest": "**Individual Filing Analysis**\n\n1. **AGL Private Credit Income Fund (CIK 000) - Abu Dhabi Investment Authority (CIK 000)**: The activist's likely campaign objective is to influence investment decisions, potentially seeking better returns or more transparency. The target's vulnerability lies in its undervalued assets and potential for improved governance. Historical outcome patterns for similar campaigns suggest a moderate success rate. Estimated probability of success: 40% within 6-12 months.\n2. **FIRST NATIONAL CORP /VA/ (FXNC) - WILKINS III JAMES R (CIK 0001252758)**: The activist may seek board seats or a CEO change, given the target's weak governance. Vulnerability stems from insider entrenchment and depressed valuation. Historical outcomes indicate a 50% success rate for similar campaigns. Estimated probability of success: 50% within 9-18 months.\n3. **Arcus Biosciences, Inc. (RCUS) - ROSEN TERRY J (CIK 0001182473)**: The activist likely aims to influence the company's strategic direction, potentially seeking a merger or acquisition. The target's vulnerability lies in its undervalued assets and biotech sector volatility. Historical outcome patterns suggest a 60% success rate for similar campaigns. Estimated probability of success: 60% within 12-24 months.\n\n**Cross-Filing Synthesis**\n\nThe current wave of activism is concentrated in the biotech, finance, and energy sectors. Common themes include governance improvements, strategic restructurings, and buyback initiatives. This activism wave signals a broader market condition where investors are seeking to unlock value in undervalued companies, particularly in sectors with high growth potential or those undergoing significant transformations.\n\nThe biotech sector is attracting significant activism, with campaigns focused on improving governance, influencing strategic decisions, and enhancing shareholder value. The energy sector is also seeing increased activism, driven by the need for companies to adapt to changing market conditions and investor expectations.\n\nThe finance sector is experiencing activism related to governance, investment decisions, and potential mergers or acquisitions. This wave of activism may indicate a broader market trend where investors are becoming more active in shaping the strategic direction of companies, particularly in sectors with high growth potential or those undergoing significant transformations.\n\n**Investment-Actionable Insights**\n\n1. **Biotech sector**: Investors should monitor biotech companies with undervalued assets, weak governance, or those undergoing significant strategic transformations, as these may be potential targets for activism.\n2. **Energy sector**: Companies in the energy sector, particularly those with poor governance or undervalued assets, may be subject to activism aimed at improving their strategic direction or enhancing shareholder value.\n3. **Finance sector**: Investors should focus on financial institutions with weak governance, undervalued assets, or those with potential for strategic restructurings, as these may be targets for activism.\n\nBy monitoring these sectors and themes, investors can identify potential opportunities for value creation and position themselves for potential activist-driven catalysts.",
   "_activism_digest_ts": {
-    "__datetime__": "2026-04-14T11:11:40.509680"
+    "__datetime__": "2026-04-14T11:27:55.900799"
   },
   "_activism_digest_engine": "\u26a1 Freeloader Mode",
-  "_sector_regime_digest": "Sector momentum diverges from the macro regime, as none of the top momentum leaders, including XLB and XLK, are regime-aligned. The highest-conviction sector plays are XLB and XLY, given their strong 4-week momentum and potential for continued outperformance. Notably, the underperformance of defensive sectors such as XLP and XLV in a Neutral-Risk On regime is a warning signal, suggesting that the market may be due for a rotation. The trading implication is to tactically allocate to XLB and XLY while maintaining a close eye on the regime's evolution, as the current divergence between sector momentum and macro regime may be a harbinger of a broader market shift.",
+  "_sector_regime_digest": "Sector momentum diverges from the macro regime, as none of the top momentum leaders, including XLB and XLK, are regime-aligned, indicating a potential mismatch between the current market leadership and the neutral leaning risk-on macro environment. The highest-conviction sector plays are XLB and XLF, as materials and financials tend to perform well in a transitioning macro regime. Notably, the underperformance of defensives such as XLV and XLP in a risk-on regime is a warning sign, suggesting that the market may be due for a rotation. The trading implication is that investors should consider taking profits in momentum leaders and rotating into regime-aligned sectors, such as XLF, to better position their portfolios for the current macro environment.",
   "_sector_regime_digest_ts": {
-    "__datetime__": "2026-04-14T11:12:24.273798"
+    "__datetime__": "2026-04-14T11:28:41.187215"
   },
   "_sector_regime_digest_engine": "\u26a1 Freeloader Mode",
   "_fear_greed": {
@@ -1252,22 +1251,22 @@
     "label": "Extreme Fear",
     "change_7d": 10,
     "source": "alternative.me",
-    "fetched_at": "2026-04-14T17:11:34.534011+00:00"
+    "fetched_at": "2026-04-14T17:27:52.989658+00:00"
   },
   "_fear_greed_ts": {
-    "__datetime__": "2026-04-14T11:12:22.564333"
+    "__datetime__": "2026-04-14T11:28:39.387109"
   },
   "_vix_curve": {
-    "vix9d": 17.24,
+    "vix9d": 17.0,
     "vix": null,
     "vix3m": null,
     "vix6m": null,
     "contango_9d_3m": null,
     "contango_spot_3m": null,
     "structure": "Unknown",
-    "fetched_at": "2026-04-14T17:11:32.862887+00:00"
+    "fetched_at": "2026-04-14T17:27:51.890577+00:00"
   },
   "_vix_curve_ts": {
-    "__datetime__": "2026-04-14T11:12:22.564333"
+    "__datetime__": "2026-04-14T11:28:39.387109"
   }
 }

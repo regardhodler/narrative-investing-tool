@@ -83,9 +83,11 @@ class HMMState:
     ll_zscore: float = 0.0            # (daily_ll - baseline_mean) / baseline_std
     entropy: float = 0.0              # normalized Shannon entropy [0=pure, 1=fog]
     transition_risk_1m: float = 0.0   # P(leaving current state) over 21 biz days
-    transition_risk_2m: float = 0.0   # P(leaving current state) over 42 biz days
+    transition_risk_3m: float = 0.0   # P(leaving current state) over 63 biz days
+    transition_risk_6m: float = 0.0   # P(leaving current state) over 126 biz days
     forecast_1m: list = None          # state probability vector at +21 days
-    forecast_2m: list = None          # state probability vector at +42 days
+    forecast_3m: list = None          # state probability vector at +63 days
+    forecast_6m: list = None          # state probability vector at +126 days
 
 
 # ── FRED CSV loader ───────────────────────────────────────────────────────────
@@ -509,13 +511,15 @@ def score_current_state(brain: Optional[HMMBrain] = None,
         max_entropy = float(np.log(brain.n_states))
         normalized_entropy = round(raw_entropy / max_entropy, 4) if max_entropy > 0 else 0.0
 
-        # ── Transition projections: 1-month (21d) and 2-month (42d) ─────────
+        # ── Transition projections: 1-month (21d), 3-month (63d), 6-month (126d) ─
         transmat = np.array(brain.transmat)
         prob_vec = np.array(today_probs)
         forecast_1m = (prob_vec @ np.linalg.matrix_power(transmat, 21)).tolist()
-        forecast_2m = (prob_vec @ np.linalg.matrix_power(transmat, 42)).tolist()
+        forecast_3m = (prob_vec @ np.linalg.matrix_power(transmat, 63)).tolist()
+        forecast_6m = (prob_vec @ np.linalg.matrix_power(transmat, 126)).tolist()
         transition_risk_1m = round(1.0 - forecast_1m[state_idx], 4)
-        transition_risk_2m = round(1.0 - forecast_2m[state_idx], 4)
+        transition_risk_3m = round(1.0 - forecast_3m[state_idx], 4)
+        transition_risk_6m = round(1.0 - forecast_6m[state_idx], 4)
 
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         state = HMMState(
@@ -529,9 +533,11 @@ def score_current_state(brain: Optional[HMMBrain] = None,
             ll_zscore=ll_zscore,
             entropy=normalized_entropy,
             transition_risk_1m=transition_risk_1m,
-            transition_risk_2m=transition_risk_2m,
+            transition_risk_3m=transition_risk_3m,
+            transition_risk_6m=transition_risk_6m,
             forecast_1m=[round(p, 4) for p in forecast_1m],
-            forecast_2m=[round(p, 4) for p in forecast_2m],
+            forecast_3m=[round(p, 4) for p in forecast_3m],
+            forecast_6m=[round(p, 4) for p in forecast_6m],
         )
 
         if log_to_history:

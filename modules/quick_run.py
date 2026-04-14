@@ -1438,27 +1438,8 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
             )
 
-        # ── Regime Velocity card ─────────────────────────────────────────────
+        # ── Regime Velocity strip (horizontal) ───────────────────────────────
         import json as _vjson, os as _vos
-
-        # Conviction suffix — appended to velocity card when score is available
-        _cv_suffix = ""
-        if _conviction_score is not None:
-            _cv_color_vel = ("#22c55e" if _conviction_score >= 75 else
-                             "#f59e0b" if _conviction_score >= 55 else
-                             "#f97316" if _conviction_score >= 40 else "#ef4444")
-            _cv_suffix = (
-                f'<div style="border-top:1px solid #1e293b;margin-top:6px;padding-top:5px;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">'
-                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">CONVICTION</span>'
-                f'<span style="font-size:11px;font-weight:800;color:{_cv_color_vel};">'
-                f'{_conviction_score}/100 · {_conviction_size_label}</span>'
-                f'</div>'
-                f'<div style="background:#1e293b;border-radius:2px;height:3px;">'
-                f'<div style="background:{_cv_color_vel};width:{_conviction_score}%;height:3px;border-radius:2px;"></div>'
-                f'</div>'
-                f'</div>'
-            )
         try:
             _vpath = _vos.path.join(_vos.path.dirname(_vos.path.dirname(__file__)), "data", "tactical_score_history.json")
             with open(_vpath) as _vf:
@@ -1475,17 +1456,16 @@ def _render_qir_dashboard() -> None:
                             "DRIFTING" if _v_abs > 3 else "STABLE")
                 _v_bar_w = min(100, int(_v_abs * 3))
                 _v_note = {
-                    "ACCELERATING": "Regime moving fast (>15pts/wk) — major shift underway, high conviction directional move",
-                    "FLIPPING": "Regime changing direction (8-15pts/wk) — transition zone, watch for regime flip confirmation",
-                    "DRIFTING": "Slow trend (3-8pts/wk) — gradual deterioration or improvement, stay alert",
-                    "STABLE": "No meaningful change (<3pts/wk) — current regime holding steady",
+                    "ACCELERATING": "major shift — trade with conviction",
+                    "FLIPPING": "transition zone — watch for confirmation",
+                    "DRIFTING": "gradual shift — stay alert",
+                    "STABLE": "regime holding steady",
                 }[_v_label]
 
-                # ── Previous velocity window + acceleration ──────────────────
+                # ── Previous velocity + acceleration ────────────────────────
                 _v_accel_html = ""
                 _v_spark_html = ""
                 if len(_vhist) >= 12:
-                    # Previous 5d window: entries [-12] to [-7]
                     _v_prev_delta = round(
                         float(_vhist[-7].get("score", 50)) - float(_vhist[-12].get("score", 50)), 1
                     )
@@ -1497,17 +1477,13 @@ def _render_qir_dashboard() -> None:
                                    "ACCELERATING" if _v_accel > 2 else
                                    "DECELERATING" if _v_accel < -2 else "STEADY")
                     _v_accel_html = (
-                        f'<div style="display:flex;justify-content:space-between;'
-                        f'align-items:center;margin-top:4px;padding-top:4px;'
-                        f'border-top:1px solid #1e293b;">'
-                        f'<span style="font-size:8px;color:#475569;">prev wk: '
-                        f'<span style="color:#64748b;">{_v_prev_delta:+.1f}</span></span>'
-                        f'<span style="font-size:8px;color:{_v_ac_color};font-weight:700;">'
+                        f'<span style="font-size:8px;color:#475569;margin-left:10px;">'
+                        f'prev: <span style="color:#64748b;">{_v_prev_delta:+.1f}</span></span>'
+                        f'<span style="font-size:8px;color:{_v_ac_color};font-weight:700;margin-left:6px;">'
                         f'{_v_ac_arrow} {_v_accel:+.1f} · {_v_ac_label}</span>'
-                        f'</div>'
                     )
 
-                # Mini sparkline: last 8 weekly velocity windows using unicode blocks
+                # Sparkline
                 if len(_vhist) >= 12:
                     _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
                     _spark_vals = []
@@ -1517,7 +1493,6 @@ def _render_qir_dashboard() -> None:
                         if _s_start >= 0:
                             _sv = float(_vhist[_s_end].get("score", 50)) - float(_vhist[_s_start].get("score", 50))
                             _spark_vals.insert(0, _sv)
-                    # Also add the current delta as the rightmost bar
                     _spark_vals.append(_v_delta)
                     if _spark_vals:
                         _sp_max = max(abs(v) for v in _spark_vals) or 1
@@ -1528,28 +1503,41 @@ def _render_qir_dashboard() -> None:
                             _sp_col = "#22c55e" if _sv > 2 else ("#ef4444" if _sv < -2 else "#64748b")
                             _sp_spans.append(f'<span style="color:{_sp_col};">{_sp_char}</span>')
                         _v_spark_html = (
-                            f'<div style="font-family:monospace;font-size:12px;letter-spacing:2px;'
-                            f'margin-top:3px;" title="Weekly velocity sparkline (left=oldest)">'
-                            f'{"".join(_sp_spans)}'
-                            f'<span style="font-size:7px;color:#334155;margin-left:4px;">weekly Δ</span>'
-                            f'</div>'
+                            f'<span style="font-family:monospace;font-size:12px;letter-spacing:2px;'
+                            f'margin-left:10px;" title="Weekly velocity (left=oldest)">'
+                            f'{"".join(_sp_spans)}</span>'
                         )
 
+                # ── Conviction pill ──────────────────────────────────────────
+                _v_conv_html = ""
+                if _conviction_score is not None:
+                    _cv_c2 = ("#22c55e" if _conviction_score >= 75 else
+                               "#f59e0b" if _conviction_score >= 55 else
+                               "#f97316" if _conviction_score >= 40 else "#ef4444")
+                    _v_conv_html = (
+                        f'<span style="background:#1e293b;border-radius:4px;padding:1px 7px;'
+                        f'font-size:9px;color:{_cv_c2};font-weight:700;margin-left:10px;">'
+                        f'CONVICTION {_conviction_score}/100 · {_conviction_size_label}</span>'
+                    )
+
+                # ── Horizontal strip ─────────────────────────────────────────
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                    f'padding:8px 12px;margin-bottom:8px;">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
-                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                    f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;'
+                    f'flex-wrap:wrap;gap:4px 0;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-right:8px;">REGIME VELOCITY</span>'
                     f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
-                    f'{_v_arrow} {_v_delta:+.1f}/wk · {_v_label}</span>'
-                    f'</div>'
-                    f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
-                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
-                    f'</div>'
-                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_note}</div>'
-                    f'{_v_spark_html}'
+                    f'{_v_arrow} {_v_delta:+.1f}/wk</span>'
+                    f'<span style="font-size:9px;color:{_v_color};margin-left:5px;">'
+                    f'· {_v_label}</span>'
+                    f'<span style="font-size:8px;color:#475569;margin-left:8px;">({_v_note})</span>'
                     f'{_v_accel_html}'
-                    f'{_cv_suffix}'
+                    f'{_v_spark_html}'
+                    f'{_v_conv_html}'
+                    f'<div style="width:100%;background:#1e293b;border-radius:2px;height:2px;margin-top:4px;">'
+                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:2px;border-radius:2px;"></div>'
+                    f'</div>'
                     f'</div>'
                 )
         except Exception:
@@ -1568,30 +1556,46 @@ def _render_qir_dashboard() -> None:
                             "DRIFTING" if _v_abs > 3 else "STABLE")
                 _v_bar_w = min(100, int(_v_abs * 3))
                 _v_src = "5d" if _rc.get("score_5d_trend") is not None else "1d"
+                _v_conv_html = ""
+                if _conviction_score is not None:
+                    _cv_c2 = ("#22c55e" if _conviction_score >= 75 else
+                               "#f59e0b" if _conviction_score >= 55 else
+                               "#f97316" if _conviction_score >= 40 else "#ef4444")
+                    _v_conv_html = (
+                        f'<span style="background:#1e293b;border-radius:4px;padding:1px 7px;'
+                        f'font-size:9px;color:{_cv_c2};font-weight:700;margin-left:10px;">'
+                        f'CONVICTION {_conviction_score}/100 · {_conviction_size_label}</span>'
+                    )
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                    f'padding:8px 12px;margin-bottom:8px;">'
-                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">'
-                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                    f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;'
+                    f'flex-wrap:wrap;gap:4px 0;">'
+                    f'<span style="font-size:9px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-right:8px;">REGIME VELOCITY</span>'
                     f'<span style="font-size:13px;font-weight:800;color:{_v_color};">'
-                    f'{_v_arrow} {_v_delta:+.0f}pt · {_v_label}</span>'
+                    f'{_v_arrow} {_v_delta:+.0f}pt</span>'
+                    f'<span style="font-size:9px;color:{_v_color};margin-left:5px;">· {_v_label}</span>'
+                    f'<span style="font-size:8px;color:#475569;margin-left:8px;">({_v_src} macro trend)</span>'
+                    f'{_v_conv_html}'
+                    f'<div style="width:100%;background:#1e293b;border-radius:2px;height:2px;margin-top:4px;">'
+                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:2px;border-radius:2px;"></div>'
                     f'</div>'
-                    f'<div style="background:#1e293b;border-radius:3px;height:4px;">'
-                    f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
-                    f'</div>'
-                    f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_src} macro trend · feeds entry signal</div>'
-                    f'{_cv_suffix}'
                     f'</div>'
                 )
 
-        # Final fallback: if velocity is unavailable but conviction exists, show a conviction-only card
-        if not _velocity_block and _cv_suffix:
+        # Final fallback: if velocity is unavailable but conviction exists, show conviction-only strip
+        if not _velocity_block and _conviction_score is not None:
+            _cv_c2 = ("#22c55e" if _conviction_score >= 75 else
+                       "#f59e0b" if _conviction_score >= 55 else
+                       "#f97316" if _conviction_score >= 40 else "#ef4444")
             _velocity_block = (
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                f'padding:8px 12px;margin-bottom:8px;">'
-                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">VELOCITY</div>'
-                f'<div style="font-size:8px;color:#334155;margin-bottom:4px;">— insufficient history</div>'
-                f'{_cv_suffix}'
+                f'padding:6px 12px;margin-bottom:8px;display:flex;align-items:center;gap:8px;">'
+                f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">REGIME VELOCITY</span>'
+                f'<span style="font-size:8px;color:#334155;">— insufficient history</span>'
+                f'<span style="background:#1e293b;border-radius:4px;padding:1px 7px;'
+                f'font-size:9px;color:{_cv_c2};font-weight:700;">'
+                f'CONVICTION {_conviction_score}/100 · {_conviction_size_label}</span>'
                 f'</div>'
             )
 
@@ -1735,18 +1739,20 @@ def _render_qir_dashboard() -> None:
                         _tk_half = _tk["half_pct"]
                         _tk_accordions += (
                             f'<details style="border-bottom:1px solid #1e293b;margin:0;">'
-                            f'<summary style="list-style:none;cursor:pointer;padding:10px 8px;'
-                            f'display:flex;align-items:center;gap:12px;">'
-                            f'<span style="font-size:12px;font-weight:700;color:{_tk_col};flex:0 0 150px;">'
+                            f'<summary style="list-style:none;cursor:pointer;padding:7px 8px;'
+                            f'display:flex;align-items:center;gap:10px;">'
+                            f'<span style="font-size:10px;font-weight:700;color:{_tk_col};flex:0 0 140px;">'
                             f'{_tk["label"]}</span>'
-                            f'<span style="font-size:26px;font-weight:900;color:{_tk_col};flex:0 0 70px;">'
+                            f'<span style="font-size:20px;font-weight:900;color:{_tk_col};flex:0 0 60px;">'
                             f'{_tk_half}%</span>'
-                            f'<span style="font-size:10px;color:#64748b;">{_tk["timeframe"]}</span>'
+                            f'<span style="font-size:8px;color:#64748b;">{_tk["timeframe"]}</span>'
                             f'</summary>'
-                            f'<div style="padding:8px 12px 12px 12px;background:#0a0f1a;">'
-                            f'<div style="font-size:10px;color:#94a3b8;margin-bottom:4px;">'
+                            f'<div style="padding:6px 12px 10px 12px;background:#0a0f1a;">'
+                            f'<div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">'
                             f'p = {_tk["p"]*100:.0f}% &nbsp;·&nbsp; b = {_tk["b"]}</div>'
-                            f'<div style="font-size:10px;color:#475569;">{_tk["note"]}</div>'
+                            f'<div style="font-size:9px;color:#475569;">{_tk["note"]}</div>'
+                            f'<div style="font-size:8px;color:#334155;margin-top:3px;">'
+                            f'% of total portfolio to size this leg</div>'
                             f'</div>'
                             f'</details>'
                         )
@@ -1754,12 +1760,13 @@ def _render_qir_dashboard() -> None:
                     _tac_long_kelly_pct  = _tkly["tactical_long"]["half_pct"]
                     _triple_kelly_html = (
                         f'<div style="background:#0f172a;border:1px solid #334155;'
-                        f'border-radius:6px;padding:14px 16px;margin-bottom:10px;">'
-                        f'<div style="font-size:11px;color:#f59e0b;font-weight:700;'
-                        f'letter-spacing:0.1em;margin-bottom:4px;">'
+                        f'border-radius:6px;padding:10px 14px;margin-top:6px;">'
+                        f'<div style="font-size:10px;color:#f59e0b;font-weight:700;'
+                        f'letter-spacing:0.1em;margin-bottom:2px;">'
                         f'⚡ BIMODAL SIZING — TRIPLE KELLY</div>'
-                        f'<div style="font-size:9px;color:#475569;margin-bottom:10px;">'
-                        f'Genuine Uncertainty active — three concurrent position frameworks</div>'
+                        f'<div style="font-size:8px;color:#334155;margin-bottom:8px;">'
+                        f'Genuine Uncertainty active — three concurrent position legs · '
+                        f'% shown = half-Kelly, i.e. recommended portfolio allocation per leg</div>'
                         f'<div style="border:1px solid #1e293b;border-radius:4px;overflow:hidden;">'
                         f'{_tk_accordions}'
                         f'</div>'
@@ -1912,8 +1919,8 @@ def _render_qir_dashboard() -> None:
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
                     f'</div>'
                 )
-            _kelly_block = _kelly_html
-            _bimodal_block = _triple_kelly_html
+            _kelly_block = _kelly_html + _triple_kelly_html
+            _bimodal_block = ""
         except Exception:
             pass
 
@@ -2147,9 +2154,11 @@ def _render_qir_dashboard() -> None:
                 _ll_z = getattr(_hmm_s, "ll_zscore", 0.0) or 0.0
                 _entropy = getattr(_hmm_s, "entropy", 0.0) or 0.0
                 _tr_1m = getattr(_hmm_s, "transition_risk_1m", 0.0) or 0.0
-                _tr_2m = getattr(_hmm_s, "transition_risk_2m", 0.0) or 0.0
+                _tr_3m = getattr(_hmm_s, "transition_risk_3m", 0.0) or 0.0
+                _tr_6m = getattr(_hmm_s, "transition_risk_6m", 0.0) or 0.0
                 _fc_1m = getattr(_hmm_s, "forecast_1m", None)
-                _fc_2m = getattr(_hmm_s, "forecast_2m", None)
+                _fc_3m = getattr(_hmm_s, "forecast_3m", None)
+                _fc_6m = getattr(_hmm_s, "forecast_6m", None)
 
                 _ll_col = "#22c55e" if _ll_z > -1 else ("#f59e0b" if _ll_z > -2 else "#ef4444")
                 _ll_label = "Normal" if _ll_z > -1 else ("Caution" if _ll_z > -2 else "CHECK ENGINE")
@@ -2159,7 +2168,8 @@ def _render_qir_dashboard() -> None:
                 _ent_bar_w = int(min(_entropy * 100, 100))
 
                 _tr1_col = "#22c55e" if _tr_1m < 0.03 else ("#f59e0b" if _tr_1m < 0.10 else "#ef4444")
-                _tr2_col = "#22c55e" if _tr_2m < 0.05 else ("#f59e0b" if _tr_2m < 0.15 else "#ef4444")
+                _tr3_col = "#22c55e" if _tr_3m < 0.10 else ("#f59e0b" if _tr_3m < 0.25 else "#ef4444")
+                _tr6_col = "#22c55e" if _tr_6m < 0.20 else ("#f59e0b" if _tr_6m < 0.40 else "#ef4444")
 
                 def _build_forecast_bars(forecast, horizon_label, tr_pct, tr_col):
                     if not forecast or not _hmm_b:
@@ -2192,7 +2202,8 @@ def _render_qir_dashboard() -> None:
                     )
 
                 _forecast_1m_html = _build_forecast_bars(_fc_1m, "1-MONTH OUTLOOK", _tr_1m, _tr1_col)
-                _forecast_2m_html = _build_forecast_bars(_fc_2m, "2-MONTH OUTLOOK", _tr_2m, _tr2_col)
+                _forecast_3m_html = _build_forecast_bars(_fc_3m, "3-MONTH OUTLOOK", _tr_3m, _tr3_col)
+                _forecast_6m_html = _build_forecast_bars(_fc_6m, "6-MONTH OUTLOOK", _tr_6m, _tr6_col)
 
                 _live_sensor_html = (
                     f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;'
@@ -2233,10 +2244,11 @@ def _render_qir_dashboard() -> None:
                     f'Watch the LL for early divergence.</span>'
                     f'</div>'
                     f'</div>'
-                    f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;'
                     f'margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">'
                     f'{_forecast_1m_html}'
-                    f'{_forecast_2m_html}'
+                    f'{_forecast_3m_html}'
+                    f'{_forecast_6m_html}'
                     f'</div>'
                 )
 
@@ -2657,29 +2669,18 @@ def _render_qir_dashboard() -> None:
         f'</span></div>'
     )
 
-    # ── Compose zone 2: bimodal (full width) → top row (Velocity+Conviction | Kelly) → bottom row (HMM + GEX + Lean + Signals + Top/Bottom) ──
+    # ── Compose zone 2: top row (Kelly full-width, bimodal inside) → bottom row ──
     _zone2_html = ""
-    if _populated and (_kelly_block or _velocity_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block or _bimodal_block):
+    if _populated and (_kelly_block or _hmm_block or _gex_block or _lean_card or _signal_breakdown_block or _top_bottom_block):
         _top_row = ""
-        if _kelly_block or _velocity_block:
-            # Build columns dynamically — conviction is now embedded in velocity card.
-            _top_col_defs: list[str] = []
-            _top_col_html: list[str] = []
-            if _velocity_block:
-                _top_col_defs.append("160px")
-                _top_col_html.append(_velocity_block)
-            if _kelly_block:
-                _top_col_defs.append("1fr")
-                _top_col_html.append(_kelly_block)
-            _col_template = " ".join(_top_col_defs) if _top_col_defs else "1fr"
+        if _kelly_block:
             _top_row = (
-                f'<div style="display:grid;grid-template-columns:{_col_template};'
-                f'gap:10px;margin-bottom:10px;">'
-                f'{"".join(_top_col_html)}'
+                f'<div style="margin-bottom:10px;">'
+                f'{_kelly_block}'
                 f'</div>'
             )
         _bot_row = _hmm_block + _gex_block + _lean_card + _signal_breakdown_block + _top_bottom_block
-        _zone2_html = _bimodal_block + _top_row + _bot_row
+        _zone2_html = _top_row + _bot_row
 
     # ── Crash pattern alert ──────────────────────────────────────────────
     _crash_alert_html = ""
@@ -2725,6 +2726,7 @@ def _render_qir_dashboard() -> None:
         f'</div>'
         f'{_verdict_html}'
         f'{_entry_rec_html}'
+        f'{_velocity_block if _populated else ""}'
         f'{_zone2_html}'
         f'</div>',
         unsafe_allow_html=True,
