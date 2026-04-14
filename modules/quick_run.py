@@ -1527,6 +1527,17 @@ def _render_qir_dashboard() -> None:
                     f'</div>'
                 )
 
+        # Final fallback: if velocity is unavailable but conviction exists, show a conviction-only card
+        if not _velocity_block and _cv_suffix:
+            _velocity_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">VELOCITY</div>'
+                f'<div style="font-size:8px;color:#334155;margin-bottom:4px;">— insufficient history</div>'
+                f'{_cv_suffix}'
+                f'</div>'
+            )
+
         # ── Signal Breakdown card ────────────────────────────────────────────
         _raw_sigs = st.session_state.get("_regime_raw_signals") or {}
         _meta_keys = {"macro_score_norm", "macro_regime", "quadrant", "leading_score",
