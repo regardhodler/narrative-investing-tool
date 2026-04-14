@@ -546,13 +546,63 @@ def _build_uncertainty_profile(rc: dict, tac: dict, of_ctx: dict) -> dict:
     )
     event_detail = f"Event uncertainty score: {event_risk_score}/100"
 
-    # ── Force a directional lean ──────────────────────────────────────────────
-    # Average all 5 domain scores; anything above 50 = bullish lean
-    domain_avg = (macro_score + tech_score + opts_score + sent_score + event_risk_score) / 5
-    lean       = "BULLISH" if domain_avg >= 50 else "BEARISH"
-    # Map domain_avg distance from 50 to a lean probability (50–75%)
-    lean_pct   = int(50 + abs(domain_avg - 50) * 0.5)
-    lean_pct   = min(75, max(51, lean_pct))  # never claim > 75% in genuine uncertainty
+    # ── Directional lean (weighted, regime-aware) ──────────────────────────
+    _lean_weights = {"macro": 0.30, "tech": 0.25, "opts": 0.20, "sent": 0.15, "event": 0.10}
+    _lean_scores = {
+        "macro": macro_score, "tech": tech_score, "opts": opts_score,
+        "sent": sent_score, "event": event_risk_score,
+    }
+    domain_avg = sum(_lean_scores[k] * _lean_weights[k] for k in _lean_weights)
+
+    # Fast leading score nudge: if leading diverges from macro by >10pts, blend toward it
+    _fast_ls = int(rc.get("leading_score_fast") or rc.get("leading_score") or 50)
+    if abs(_fast_ls - macro_score) > 10:
+        domain_avg = domain_avg * 0.85 + _fast_ls * 0.15  # 15% nudge
+
+    # Neutral zone: 47-53 → NEUTRAL
+    if domain_avg > 53:
+        lean = "BULLISH"
+    elif domain_avg < 47:
+        lean = "BEARISH"
+    else:
+        lean = "NEUTRAL"
+
+    # HMM state guardrails
+    try:
+        from services.hmm_regime import load_current_hmm_state as _lean_hmm_load
+        _lean_hmm = _lean_hmm_load()
+        if _lean_hmm:
+            _lean_state = _lean_hmm.state_label
+            _lean_conf = getattr(_lean_hmm, "confidence", 0.5) or 0.5
+            if _lean_state in ("Crisis", "Deep Stress") and lean == "BULLISH":
+                lean = "NEUTRAL"
+            elif _lean_state == "Bull" and _lean_conf > 0.7 and lean == "BEARISH":
+                lean = "NEUTRAL"
+    except Exception:
+        pass
+
+    # Lean percentage: distance from 50, scaled at 0.7x
+    lean_pct = int(50 + abs(domain_avg - 50) * 0.7)
+
+    # Reversal risk integration: degrade lean if reversal risk is elevated
+    try:
+        _tb_prox = st.session_state.get("_top_bottom_proximity") or {}
+        _top_sc = _tb_prox.get("top_pct", 0)
+        _bot_sc = _tb_prox.get("bottom_pct", 0)
+        if lean == "BULLISH" and _top_sc > 40:
+            lean_pct = max(51, lean_pct - int(_top_sc * 0.15))
+        elif lean == "BEARISH" and _bot_sc > 40:
+            lean_pct = max(51, lean_pct - int(_bot_sc * 0.15))
+    except Exception:
+        pass
+
+    # Strong agreement bonus: if top 3 domains all agree (>65 or <35), expand range
+    _core3 = [macro_score, tech_score, opts_score]
+    if all(s > 65 for s in _core3) or all(s < 35 for s in _core3):
+        lean_pct = min(85, lean_pct)
+    else:
+        lean_pct = min(75, lean_pct)
+    lean_pct = max(51, lean_pct) if lean != "NEUTRAL" else 50
 
     # ── Overall uncertainty score (how uncertain, NOT how bullish) ────────────
     # Distance of each domain from 50 → lower distance = more uncertain
@@ -614,9 +664,9 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
     domains      = profile["domains"]
     unknowns     = profile["known_unknowns"]
 
-    lean_color = "#22c55e" if lean == "BULLISH" else "#ef4444"
-    lean_bg    = "#052e16" if lean == "BULLISH" else "#2d0a0a"
-    lean_arrow = "▲" if lean == "BULLISH" else "▼"
+    lean_color = "#22c55e" if lean == "BULLISH" else ("#ef4444" if lean == "BEARISH" else "#f59e0b")
+    lean_bg    = "#052e16" if lean == "BULLISH" else ("#2d0a0a" if lean == "BEARISH" else "#1a1400")
+    lean_arrow = "▲" if lean == "BULLISH" else ("▼" if lean == "BEARISH" else "◆")
 
     unc_color = "#22c55e" if unc_score < 40 else ("#f59e0b" if unc_score < 65 else "#ef4444")
 
@@ -633,7 +683,7 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
         f'<div style="background:{lean_bg};border:2px solid {lean_color}88;border-radius:8px;'
         f'padding:12px 16px;margin:10px 0 6px;display:flex;align-items:center;gap:16px;">'
         f'<div>'
-        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;margin-bottom:3px;">FORCED DIRECTIONAL LEAN</div>'
+        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;margin-bottom:3px;">{"DIRECTIONAL LEAN" if lean != "NEUTRAL" else "NO DIRECTIONAL EDGE"}</div>'
         f'<div style="font-size:22px;font-weight:900;color:{lean_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
         f'letter-spacing:0.05em;text-shadow:0 0 12px {lean_color}88;">'
         f'{lean_arrow} {lean} {lean_pct}%</div>'
@@ -703,7 +753,7 @@ def _render_genuine_uncertainty_panel(profile: dict) -> None:
 
     # ── Decision rule strip ───────────────────────────────────────────────────
     stop_pct = "−3%" if unc_score >= 65 else "−4%"
-    target   = "first resistance / prior swing high" if lean == "BULLISH" else "prior swing low"
+    target   = "first resistance / prior swing high" if lean == "BULLISH" else ("prior swing low" if lean == "BEARISH" else "nearest support/resistance")
     st.markdown(
         f'<div style="background:#0d1117;border:1px solid #7c3aed44;border-radius:6px;'
         f'padding:10px 14px;margin-top:6px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">'
@@ -981,30 +1031,53 @@ def _render_qir_dashboard() -> None:
                     _lt_lean_pct = _gu_profile["lean_pct"]
                     _lt_domains = {d["name"].lower().replace(" ", "_"): d["score"] for d in _gu_profile["domains"]}
                 else:
-                    _lt_bull = _cls.get("bullish")
-                    _lt_lean = "BULLISH" if _lt_bull else ("BEARISH" if _lt_bull is False else "NEUTRAL")
-                    _lt_lean_pct = min(75, 50 + abs((_cls.get("conviction_score") or 50) - 50))
-                    if _lt_lean == "BULLISH":
-                        try:
-                            from services.hmm_regime import load_current_hmm_state as _cal_hmm_load
-                            _cal_hmm = _cal_hmm_load()
-                            _cal_ent = getattr(_cal_hmm, "entropy", 0.0) or 0.0 if _cal_hmm else 0.0
-                            import json as _cj, os as _co
-                            _cvp = _co.path.join(_co.path.dirname(_co.path.dirname(__file__)), "data", "tactical_score_history.json")
-                            with open(_cvp) as _cvf:
-                                _cvh = _cj.load(_cvf)
-                            _cvel = float(_rc.get("macro_score") or 50) - float(_cvh[-6].get("score", 50)) if _cvh and len(_cvh) >= 6 else 0
-                            if _cal_ent > 0.75 and _cvel < -5:
+                    # Weighted lean — same logic as _build_uncertainty_profile
+                    _lt_m = float(_rc.get("macro_score") or 50)
+                    _lt_t = float((_tac or {}).get("tactical_score") or 50)
+                    _lt_o = float((_of or {}).get("options_score") or 50)
+                    _lt_s = 50.0  # sentiment unavailable outside GU
+                    _lt_e = 50.0  # event risk unavailable outside GU
+                    _lt_wavg = _lt_m * 0.30 + _lt_t * 0.25 + _lt_o * 0.20 + _lt_s * 0.15 + _lt_e * 0.10
+                    # Fast leading nudge
+                    _lt_fast = float(_rc.get("leading_score_fast") or _rc.get("leading_score") or 50)
+                    if abs(_lt_fast - _lt_m) > 10:
+                        _lt_wavg = _lt_wavg * 0.85 + _lt_fast * 0.15
+                    # Neutral zone
+                    if _lt_wavg > 53:
+                        _lt_lean = "BULLISH"
+                    elif _lt_wavg < 47:
+                        _lt_lean = "BEARISH"
+                    else:
+                        _lt_lean = "NEUTRAL"
+                    _lt_lean_pct = int(50 + abs(_lt_wavg - 50) * 0.7)
+                    # HMM guardrails
+                    try:
+                        from services.hmm_regime import load_current_hmm_state as _cal_hmm_load
+                        _cal_hmm = _cal_hmm_load()
+                        if _cal_hmm:
+                            _cal_state = _cal_hmm.state_label
+                            _cal_conf = getattr(_cal_hmm, "confidence", 0.5) or 0.5
+                            if _cal_state in ("Crisis", "Deep Stress") and _lt_lean == "BULLISH":
                                 _lt_lean = "NEUTRAL"
                                 _lt_lean_pct = 50
-                        except Exception:
-                            pass
+                            elif _cal_state == "Bull" and _cal_conf > 0.7 and _lt_lean == "BEARISH":
+                                _lt_lean = "NEUTRAL"
+                                _lt_lean_pct = 50
+                    except Exception:
+                        pass
+                    # Strong agreement bonus
+                    _lt_core3 = [_lt_m, _lt_t, _lt_o]
+                    if all(s > 65 for s in _lt_core3) or all(s < 35 for s in _lt_core3):
+                        _lt_lean_pct = min(85, _lt_lean_pct)
+                    else:
+                        _lt_lean_pct = min(75, _lt_lean_pct)
+                    _lt_lean_pct = max(51, _lt_lean_pct) if _lt_lean != "NEUTRAL" else 50
                     _lt_domains = {
-                        "macro": _rc.get("macro_score", 50),
-                        "technical": _tac.get("tactical_score", 50),
-                        "options_flow": _of.get("options_score", 50),
-                        "sentiment": 50,
-                        "event_risk": 50,
+                        "macro": _lt_m,
+                        "technical": _lt_t,
+                        "options_flow": _lt_o,
+                        "sentiment": _lt_s,
+                        "event_risk": _lt_e,
                     }
                 _lt_hmm_state = ""
                 _lt_hmm_entropy = 0.0
@@ -1244,10 +1317,9 @@ def _render_qir_dashboard() -> None:
         )
 
         # GENUINE_UNCERTAINTY: grey out the opposing side — lean-aligned panel is active, other is dimmed.
+        # NEUTRAL lean: both sides get mild dimming with equal weight.
         if _cls["pattern"] == "GENUINE_UNCERTAINTY" and _gu_profile:
-            _is_bull_lean = _gu_profile["lean"] == "BULLISH"
-            _dimmed_buy   = not _is_bull_lean
-            _dimmed_shrt  = _is_bull_lean
+            _gu_lean = _gu_profile["lean"]
 
             def _dim(html: str) -> str:
                 return html.replace(
@@ -1256,18 +1328,35 @@ def _render_qir_dashboard() -> None:
                     'background:#160a0a', 'background:#0d1117'
                 )
 
-            _buy_display  = _buy_html  if not _dimmed_buy  else (
-                f'<div style="opacity:0.35;filter:grayscale(0.7);">'
-                f'<div style="font-size:9px;color:#374151;font-weight:700;'
-                f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bearish</div>'
-                f'{_dim(_buy_html)}</div>'
-            )
-            _shrt_display = _short_html if not _dimmed_shrt else (
-                f'<div style="opacity:0.35;filter:grayscale(0.7);">'
-                f'<div style="font-size:9px;color:#374151;font-weight:700;'
-                f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bullish</div>'
-                f'{_dim(_short_html)}</div>'
-            )
+            if _gu_lean == "NEUTRAL":
+                # Both sides equally viable — mild dim, no "NOT RECOMMENDED"
+                _buy_display = (
+                    f'<div style="opacity:0.70;">'
+                    f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+                    f'letter-spacing:0.06em;margin-bottom:3px;">LEAN NEUTRAL — size down both sides</div>'
+                    f'{_buy_html}</div>'
+                )
+                _shrt_display = (
+                    f'<div style="opacity:0.70;">'
+                    f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+                    f'letter-spacing:0.06em;margin-bottom:3px;">LEAN NEUTRAL — size down both sides</div>'
+                    f'{_short_html}</div>'
+                )
+            else:
+                _dimmed_buy   = _gu_lean != "BULLISH"
+                _dimmed_shrt  = _gu_lean != "BEARISH"
+                _buy_display  = _buy_html  if not _dimmed_buy  else (
+                    f'<div style="opacity:0.35;filter:grayscale(0.7);">'
+                    f'<div style="font-size:9px;color:#374151;font-weight:700;'
+                    f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bearish</div>'
+                    f'{_dim(_buy_html)}</div>'
+                )
+                _shrt_display = _short_html if not _dimmed_shrt else (
+                    f'<div style="opacity:0.35;filter:grayscale(0.7);">'
+                    f'<div style="font-size:9px;color:#374151;font-weight:700;'
+                    f'letter-spacing:0.06em;margin-bottom:3px;">NOT RECOMMENDED — lean is bullish</div>'
+                    f'{_dim(_short_html)}</div>'
+                )
             _verdict_html += (
                 f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">'
                 f'{_buy_display}{_shrt_display}</div>'
