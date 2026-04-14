@@ -1480,6 +1480,61 @@ def _render_qir_dashboard() -> None:
                     "DRIFTING": "Slow trend (3-8pts/wk) — gradual deterioration or improvement, stay alert",
                     "STABLE": "No meaningful change (<3pts/wk) — current regime holding steady",
                 }[_v_label]
+
+                # ── Previous velocity window + acceleration ──────────────────
+                _v_accel_html = ""
+                _v_spark_html = ""
+                if len(_vhist) >= 12:
+                    # Previous 5d window: entries [-12] to [-7]
+                    _v_prev_delta = round(
+                        float(_vhist[-7].get("score", 50)) - float(_vhist[-12].get("score", 50)), 1
+                    )
+                    _v_accel = round(_v_delta - _v_prev_delta, 1)
+                    _v_ac_color = "#22c55e" if _v_accel > 2 else ("#ef4444" if _v_accel < -2 else "#64748b")
+                    _v_ac_arrow = "↑" if _v_accel > 2 else ("↓" if _v_accel < -2 else "~")
+                    _v_ac_label = ("SPEEDING UP" if _v_accel > 5 else
+                                   "SLOWING DOWN" if _v_accel < -5 else
+                                   "ACCELERATING" if _v_accel > 2 else
+                                   "DECELERATING" if _v_accel < -2 else "STEADY")
+                    _v_accel_html = (
+                        f'<div style="display:flex;justify-content:space-between;'
+                        f'align-items:center;margin-top:4px;padding-top:4px;'
+                        f'border-top:1px solid #1e293b;">'
+                        f'<span style="font-size:8px;color:#475569;">prev wk: '
+                        f'<span style="color:#64748b;">{_v_prev_delta:+.1f}</span></span>'
+                        f'<span style="font-size:8px;color:{_v_ac_color};font-weight:700;">'
+                        f'{_v_ac_arrow} {_v_accel:+.1f} · {_v_ac_label}</span>'
+                        f'</div>'
+                    )
+
+                # Mini sparkline: last 8 weekly velocity windows using unicode blocks
+                if len(_vhist) >= 12:
+                    _SPARK_CHARS = " ▁▂▃▄▅▆▇█"
+                    _spark_vals = []
+                    for _si in range(min(8, len(_vhist) // 6)):
+                        _s_end = len(_vhist) - 1 - _si * 6
+                        _s_start = _s_end - 5
+                        if _s_start >= 0:
+                            _sv = float(_vhist[_s_end].get("score", 50)) - float(_vhist[_s_start].get("score", 50))
+                            _spark_vals.insert(0, _sv)
+                    # Also add the current delta as the rightmost bar
+                    _spark_vals.append(_v_delta)
+                    if _spark_vals:
+                        _sp_max = max(abs(v) for v in _spark_vals) or 1
+                        _sp_spans = []
+                        for _sv in _spark_vals:
+                            _sp_idx = min(8, int(abs(_sv) / _sp_max * 8))
+                            _sp_char = _SPARK_CHARS[_sp_idx]
+                            _sp_col = "#22c55e" if _sv > 2 else ("#ef4444" if _sv < -2 else "#64748b")
+                            _sp_spans.append(f'<span style="color:{_sp_col};">{_sp_char}</span>')
+                        _v_spark_html = (
+                            f'<div style="font-family:monospace;font-size:12px;letter-spacing:2px;'
+                            f'margin-top:3px;" title="Weekly velocity sparkline (left=oldest)">'
+                            f'{"".join(_sp_spans)}'
+                            f'<span style="font-size:7px;color:#334155;margin-left:4px;">weekly Δ</span>'
+                            f'</div>'
+                        )
+
                 _velocity_block = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:8px 12px;margin-bottom:8px;">'
@@ -1492,6 +1547,8 @@ def _render_qir_dashboard() -> None:
                     f'<div style="background:{_v_color};width:{_v_bar_w}%;height:4px;border-radius:3px;"></div>'
                     f'</div>'
                     f'<div style="font-size:7px;color:#475569;margin-top:3px;">{_v_note}</div>'
+                    f'{_v_spark_html}'
+                    f'{_v_accel_html}'
                     f'{_cv_suffix}'
                     f'</div>'
                 )
