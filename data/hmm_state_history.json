@@ -194,5 +194,50 @@
       0.1876,
       0.0825
     ]
+  },
+  {
+    "date": "2026-04-15",
+    "state_idx": 1,
+    "state_label": "Bull",
+    "state_probabilities": [
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "confidence": 1.0,
+    "persistence": 392,
+    "log_likelihood": -0.78718,
+    "ll_zscore": -0.0,
+    "entropy": 0.0,
+    "transition_risk_1m": 0.1819,
+    "transition_risk_3m": 0.4279,
+    "transition_risk_6m": 0.6215,
+    "forecast_1m": [
+      0.0273,
+      0.8181,
+      0.0532,
+      0.0226,
+      0.0528,
+      0.0261
+    ],
+    "forecast_3m": [
+      0.0687,
+      0.5721,
+      0.1297,
+      0.0426,
+      0.127,
+      0.0599
+    ],
+    "forecast_6m": [
+      0.1053,
+      0.3785,
+      0.195,
+      0.0512,
+      0.1876,
+      0.0825
+    ]
   }
 ]
