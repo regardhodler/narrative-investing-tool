@@ -69,6 +69,7 @@ class HMMBrain:
     feature_names: list
     ll_baseline_mean: float = 0.0   # mean LL per observation at training time
     ll_baseline_std: float = 1.0    # std of rolling-window LL (for z-scoring daily LL)
+    lookback_years: int = 15        # lookback used to build feature matrix — MUST match live scoring
 
 
 @dataclass
@@ -343,6 +344,7 @@ def train_hmm(lookback_years: int = 15, max_states: int = 6,
         feature_names=feature_names,
         ll_baseline_mean=round(ll_per_obs, 6),
         ll_baseline_std=round(max(_ll_std, 1e-6), 6),
+        lookback_years=lookback_years,
     )
 
     save_hmm_brain(brain)
@@ -363,9 +365,10 @@ def load_hmm_brain() -> Optional[HMMBrain]:
     try:
         with open(_BRAIN_PATH) as f:
             d = json.load(f)
-        # Backward compat: old brains lack LL baseline fields
+        # Backward compat: old brains lack LL baseline and lookback fields
         d.setdefault("ll_baseline_mean", 0.0)
         d.setdefault("ll_baseline_std", 1.0)
+        d.setdefault("lookback_years", 15)  # default to 15 for brains trained before this field was added
         return HMMBrain(**d)
     except Exception:
         return None
@@ -470,12 +473,9 @@ def score_current_state(brain: Optional[HMMBrain] = None,
         model.covars_ = np.array(brain.covars)
 
         # Build feature matrix with same EWMA z-scoring as training.
-        # Use same 15yr window — EWMA weighting keeps the reference frame anchored
-        # to recent data while preserving tail event context.
-        _lookback = max(5, min(round((
-            pd.Timestamp(brain.training_end) - pd.Timestamp(brain.training_start)
-        ).days / 365), 20))
-        df = _build_feature_matrix(lookback_years=_lookback)
+        # Use EXACT same lookback as training — different lookback gives different
+        # rolling z-scores → different LL scale → invalid z-score comparison.
+        df = _build_feature_matrix(lookback_years=brain.lookback_years)
         for col in brain.feature_names:
             if col not in df.columns:
                 df[col] = 0.0
@@ -580,19 +580,23 @@ def score_current_state(brain: Optional[HMMBrain] = None,
 
 def load_current_hmm_state() -> Optional[HMMState]:
     """
-    Fast path: load today's HMM state from history JSON.
+    Fast path: load HMM state from history JSON.
+    Returns today's entry if available, otherwise falls back to most recent entry.
     No model inference — safe to call on every QIR refresh.
-    Returns None if no data or today has no entry.
+    Returns None only if history is completely empty.
     """
     history = _load_history()
     if not history:
         return None
     last = history[-1]
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    if last.get("date") != today:
-        return None
+    # Use latest entry regardless of date (QIR will show staleness badge)
     try:
-        return HMMState(**last)
+        state = HMMState(**last)
+        # Tag if stale (not today's data)
+        state._is_stale = last.get("date") != today
+        state._stale_date = last.get("date", "unknown")
+        return state
     except Exception:
         return None
 

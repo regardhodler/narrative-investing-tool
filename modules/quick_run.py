@@ -2246,14 +2246,18 @@ def _render_qir_dashboard() -> None:
         #   0%   = z  0.0    (perfectly normal market)
         #   22%  = z -0.10   (stress zone start)
         #   67%  = z -0.30   (crisis confirmed gate, 100% precision, 0 false alarms)
-        #   100% = z -0.448  (COVID peak — worst ever recorded)
-        # Formula: CI = min(100, abs(ll_z) / 0.448 * 100)
+        #   100% = z -0.448  (COVID peak — worst ever recorded in-sample)
+        #   >100% = post-training extremes (model scoring novel data beyond training range)
+        # Formula: CI = abs(ll_z) / 0.448 * 100  (uncapped — >100% is valid)
         def _build_ll_anchored_block() -> str:
-            # Crisis Intensity score (0-100%, anchored to empirical range)
-            _ci = min(100.0, max(0.0, abs(_tb_ll_z) / 0.448 * 100.0)) if _tb_ll_z < 0 else 0.0
+            # Crisis Intensity score — uncapped, COVID in-sample peak = 100%
+            _ci_raw = (abs(_tb_ll_z) / 0.448 * 100.0) if _tb_ll_z < 0 else 0.0
+            _ci = max(0.0, _ci_raw)
 
             # Zone thresholds in CI%
-            if _ci >= 67.0:    # LL < -0.30  → confirmed gate
+            if _ci > 100.0:    # Beyond training range — model sees novel extremes
+                _zone = 4
+            elif _ci >= 67.0:  # LL < -0.30  → confirmed gate
                 _zone = 3
             elif _ci >= 22.0:  # LL < -0.10  → stress watch
                 _zone = 2
@@ -2275,7 +2279,12 @@ def _render_qir_dashboard() -> None:
             _n_firing = sum(1 for _, _, fired in _signals if fired)
 
             # ── Zone styling ──────────────────────────────────────────────────────
-            if _zone == 3:
+            if _zone == 4:
+                _bg, _border     = "#0d001a", "#7c3aed"
+                _ci_color        = "#a855f7"
+                _label           = "BEYOND TRAINING RANGE"
+                _label_sub       = f"Model scoring post-training data — {_ci:.0f}% CI · exceeds COVID baseline"
+            elif _zone == 3:
                 _bg, _border     = "#100000", "#7f1d1d"
                 _ci_color        = "#ef4444"
                 _label           = "CRISIS CONFIRMED"
@@ -2302,11 +2311,12 @@ def _render_qir_dashboard() -> None:
                     )
                 dot  = "●" if fired else "○"
                 dcol = _ci_color if fired else "#334155"
-                tcol = ("#94a3b8" if _zone == 2 else "#ef4444") if fired else "#475569"
+                tcol = ("#94a3b8" if _zone == 2 else _ci_color) if fired else "#475569"
                 vcol = _ci_color if fired else "#334155"
-                badge_text = "STRESS" if _zone == 2 else "CONFIRMED"
+                badge_text = "STRESS" if _zone == 2 else ("EXTREME" if _zone == 4 else "CONFIRMED")
+                badge_bg   = "#1a1000" if _zone == 2 else ("#1a0028" if _zone == 4 else "#1a0000")
                 badge = (
-                    f' <span style="font-size:6px;color:{_ci_color};background:{"#1a1000" if _zone==2 else "#1a0000"};'
+                    f' <span style="font-size:6px;color:{_ci_color};background:{badge_bg};'
                     f'padding:0 3px;border-radius:2px;">{badge_text}</span>'
                 ) if fired else ""
                 return (
@@ -2328,7 +2338,14 @@ def _render_qir_dashboard() -> None:
             ]
 
             # ── Footer text ───────────────────────────────────────────────────────
-            if _zone == 3:
+            if _zone == 4:
+                _explain = (
+                    f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Model is scoring data BEYOND its training range. "
+                    f"100% = COVID worst-ever (z=-0.448 in-sample). Current reading exceeds that baseline by "
+                    f"{_ci - 100:.0f}%. This occurs when post-training market data is structurally novel to the model — "
+                    f"a stronger crisis signal than any event in the backtest history."
+                )
+            elif _zone == 3:
                 _explain = (
                     f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}) has breached the 67% confirmation gate. "
                     f"Identical signatures: Volmageddon 76%, Fed Panic 96%, COVID 100%. "
@@ -2348,6 +2365,14 @@ def _render_qir_dashboard() -> None:
                     f"Conviction signals suppressed: they fire every day alone (0% precision). "
                     f"Stress watch above 22% CI · Crisis confirmed above 67% CI · COVID was 100%."
                 )
+
+            # Bar fill capped at 100% visually — but CI number shows true value
+            _bar_fill = min(100.0, _ci)
+            # Zone 4 extra annotation above the bar
+            _beyond_badge = (
+                f'<div style="font-size:7px;color:#a855f7;font-weight:700;margin-bottom:2px;">'
+                f'⚠ {_ci:.0f}% — EXCEEDS COVID BASELINE BY {_ci-100:.0f}%</div>'
+            ) if _zone == 4 else ""
 
             return (
                 f'<div style="background:{_bg};border:1px solid {_border};border-radius:5px;'
@@ -2375,9 +2400,10 @@ def _render_qir_dashboard() -> None:
 
                 # CI progress bar with zone markers
                 f'<div style="margin-bottom:8px;">'
+                f'{_beyond_badge}'
                 f'<div style="position:relative;height:8px;background:#0a0f1a;border-radius:4px;overflow:hidden;">'
-                # Green base fill
-                f'<div style="position:absolute;left:0;top:0;height:100%;width:{_ci:.0f}%;'
+                # Fill capped at 100% visually
+                f'<div style="position:absolute;left:0;top:0;height:100%;width:{_bar_fill:.0f}%;'
                 f'background:{_ci_color};border-radius:4px;"></div>'
                 # Zone boundary at 22% (stress start)
                 f'<div style="position:absolute;left:22%;top:0;width:1px;height:100%;background:#334155;"></div>'
@@ -2702,6 +2728,12 @@ def _render_qir_dashboard() -> None:
                     f'letter-spacing:0.05em;margin-left:6px;">RETRAIN DUE</span>'
                     if _hs_retrain_due else ""
                 )
+                _hs_stale_badge = (
+                    f'<span style="background:#1e293b;color:#64748b;font-size:7px;'
+                    f'font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;">'
+                    f'as of {getattr(_hmm_s, "_stale_date", "?")} · run QIR to refresh</span>'
+                    if getattr(_hmm_s, "_is_stale", False) else ""
+                )
 
                 _trans_row = _hmm_b.transmat[_hmm_s.state_idx]
                 def _fmt_prob(v):
@@ -2843,6 +2875,7 @@ def _render_qir_dashboard() -> None:
                     f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">HMM BRAIN STATE</span>'
                     f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
                     f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
+                    f'{_hs_retrain_badge}{_hs_stale_badge}'
                     f'</div>'
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">'
                     f'<div>'

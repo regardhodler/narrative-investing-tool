@@ -1032,16 +1032,18 @@ def _render_crash_stress_test():
             )
 
             # LL-Anchored Crisis Detection — Crisis Intensity (CI%) system
-            # CI% = abs(ll_z) / 0.448 * 100  (0%=normal, 67%=gate, 100%=COVID peak)
+            # CI% = abs(ll_z) / 0.448 * 100  (0%=normal, 67%=gate, 100%=COVID peak, >100%=beyond training)
             _ll_z       = snap.get("ll_zscore", 0)
             _regime_score = snap.get("regime_score", 0)
             _entropy    = snap.get("entropy", 0)
             _conviction = snap.get("conviction", 0)
             _vix_snap   = snap.get("vix", 20)
 
-            _ci = min(100.0, max(0.0, abs(_ll_z) / 0.448 * 100.0)) if _ll_z < 0 else 0.0
+            _ci = max(0.0, (abs(_ll_z) / 0.448 * 100.0)) if _ll_z < 0 else 0.0
 
-            if _ci >= 67.0:
+            if _ci > 100.0:
+                _bt_zone = 4
+            elif _ci >= 67.0:
                 _bt_zone = 3
             elif _ci >= 22.0:
                 _bt_zone = 2
@@ -1056,7 +1058,12 @@ def _render_crash_stress_test():
             ]
             _bt_n_firing = sum(1 for _, _, fired in _bt_signals if fired)
 
-            if _bt_zone == 3:
+            if _bt_zone == 4:
+                _bt_bg, _bt_border = "#0d001a", "#7c3aed"
+                _bt_ci_color = "#a855f7"
+                _bt_label    = "BEYOND TRAINING RANGE"
+                _bt_lsub     = f"{_ci:.0f}% CI · exceeds COVID baseline"
+            elif _bt_zone == 3:
                 _bt_bg, _bt_border = "#100000", "#7f1d1d"
                 _bt_ci_color = "#ef4444"
                 _bt_label    = "CRISIS CONFIRMED"
@@ -1081,12 +1088,13 @@ def _render_crash_stress_test():
                     )
                 dot  = "●" if fired else "○"
                 dcol = _bt_ci_color if fired else "#334155"
-                tcol = ("#94a3b8" if _bt_zone == 2 else "#ef4444") if fired else "#475569"
+                tcol = ("#94a3b8" if _bt_zone == 2 else _bt_ci_color) if fired else "#475569"
                 vcol = _bt_ci_color if fired else "#334155"
-                badge_text = "STRESS" if _bt_zone == 2 else "CONFIRMED"
+                badge_text = "STRESS" if _bt_zone == 2 else ("EXTREME" if _bt_zone == 4 else "CONFIRMED")
+                badge_bg   = "#1a1000" if _bt_zone == 2 else ("#1a0028" if _bt_zone == 4 else "#1a0000")
                 badge = (
                     f' <span style="font-size:6px;color:{_bt_ci_color};'
-                    f'background:{"#1a1000" if _bt_zone==2 else "#1a0000"};'
+                    f'background:{badge_bg};'
                     f'padding:0 3px;border-radius:2px;">{badge_text}</span>'
                 ) if fired else ""
                 return (
@@ -1098,7 +1106,18 @@ def _render_crash_stress_test():
 
             _bt_sigs_html = "".join(_bt_sig_row(n, v, f) for n, v, f in _bt_signals)
 
-            if _bt_zone == 3:
+            _bt_bar_fill = min(100.0, _ci)
+            _bt_beyond_badge = (
+                f'<div style="font-size:7px;color:#a855f7;font-weight:700;margin-bottom:2px;">'
+                f'⚠ {_ci:.0f}% — EXCEEDS COVID BASELINE BY {_ci-100:.0f}%</div>'
+            ) if _bt_zone == 4 else ""
+
+            if _bt_zone == 4:
+                _bt_explain = (
+                    f"CI {_ci:.0f}% (z={_ll_z:.3f}). Beyond training range — model scoring novel data. "
+                    f"100% = COVID worst-ever in-sample. This exceeds that by {_ci-100:.0f}%."
+                )
+            elif _bt_zone == 3:
                 _bt_explain = (
                     f"CI {_ci:.0f}% (z={_ll_z:.3f}) past the 67% gate. "
                     f"Volmageddon=76%, Fed Panic=96%, COVID=100%. 0 false alarms in 3,408 days."
@@ -1133,8 +1152,9 @@ def _render_crash_stress_test():
                 f'</div></div>'
                 # Progress bar
                 f'<div style="margin-bottom:8px;">'
+                f'{_bt_beyond_badge}'
                 f'<div style="position:relative;height:8px;background:#0a0f1a;border-radius:4px;overflow:hidden;">'
-                f'<div style="position:absolute;left:0;top:0;height:100%;width:{_ci:.0f}%;background:{_bt_ci_color};border-radius:4px;"></div>'
+                f'<div style="position:absolute;left:0;top:0;height:100%;width:{_bt_bar_fill:.0f}%;background:{_bt_ci_color};border-radius:4px;"></div>'
                 f'<div style="position:absolute;left:22%;top:0;width:1px;height:100%;background:#334155;"></div>'
                 f'<div style="position:absolute;left:67%;top:0;width:2px;height:100%;background:#ef444488;"></div>'
                 f'</div>'

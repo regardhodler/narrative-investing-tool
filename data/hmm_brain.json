@@ -884,5 +884,6 @@
     "VIX"
   ],
   "ll_baseline_mean": -0.786691,
-  "ll_baseline_std": 3.396121
+  "ll_baseline_std": 3.396121,
+  "lookback_years": 15
 }
