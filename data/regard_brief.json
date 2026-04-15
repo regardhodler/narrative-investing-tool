@@ -1,11 +1,11 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-10T14:49:33",
+  "generated_at": "2026-04-14T15:13:31",
   "regime": {
     "label": "Neutral — Leaning Risk-On",
-    "score": 0.08,
+    "score": 0.12,
     "quadrant": "Transition",
-    "signal_summary": "- Term Premium: z=+1.00 ()\n- Yield Curve (3M-10Y): z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Core Inflation (PCE): z=-0.40 ()\n- Initial Jobless Claims: z=+0.37 ()\n- HY-IG Quality Spread: z=-0.36 ()\n- Fear & Greed Index: 16/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Yield Curve (3M-10Y): z=+0.76 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Global Manufacturing (EWG+FXI): z=+0.48 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Yield Curve (10Y-2Y): z=-0.39 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.39 ()\n- Fear & Greed Index: 21/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
     "score": 66,
@@ -20,10 +20,10 @@
   },
   "rate_path": {
     "top_scenario": "hold",
-    "top_prob": 0.665,
+    "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current macro regime of Neutral - Leaning Risk-On (+0.08) is being tested by emerging narratives around supply chain disruptions, particularly in the helium market, as AirGas declares force majeure on shipments due to Qatar production collapses. This development, coupled with rising yields in Japan's bond market and concerns over Taiwan's chip empire, suggests potential risks to the risk-on leaning regime. Meanwhile, Polymarket prediction markets indicate a low probability of the Fed's lower bound reaching 0% or lower before 2027, but a higher probability of inflation reaching over 5% in 2026, which could further challenge the current macro regime.",
+  "current_events_digest": "The current macro regime, Neutral - Leaning Risk-On, is being tested by various catalysts, including the decline in US oil prices to below $94/barrel, which contradicts the risk-on sentiment. However, the bullish narratives in the technology and space sectors, such as Amazon's acquisition of Globalstar, are supporting the regime. The Polymarket prediction markets also suggest a low probability of a Fed rate cut to 0% or lower before 2027, which is consistent with the current risk-on tone. Meanwhile, geopolitical risks, including the potential for an Iran leadership change and Israel's military actions, pose a threat to the regime's stability.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
@@ -136,6 +136,14 @@
       "entry_date": "2026-03-26",
       "position_size": 279,
       "thesis": "Defensive utilities"
+    },
+    {
+      "ticker": "SPY",
+      "direction": "Short",
+      "entry_price": 679.46,
+      "entry_date": "2026-04-11",
+      "position_size": 1,
+      "thesis": "GENUINE UNCERTAINTY | Sell | conf 51%"
     }
   ],
   "earnings_risk": []

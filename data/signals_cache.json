@@ -93,34 +93,31 @@
     "scenario": "hold",
     "prob_pct": 66.7
   },
+  "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.6673183618768777,
+      "prob": 0.665526225301367,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance",
-      "delta": 0.0
+      "source": "yfinance"
     },
     {
       "scenario": "cut_25",
-      "prob": 0.1519697711494535,
+      "prob": 0.1659515597053382,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance",
-      "delta": 0.0
+      "source": "yfinance"
     },
     {
       "scenario": "cut_50",
-      "prob": 0.0021653981637225718,
+      "prob": 0.002572906134776094,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance",
-      "delta": 0.0
+      "source": "yfinance"
     },
     {
       "scenario": "hike_25",
-      "prob": 0.17854646880994632,
+      "prob": 0.16594930885851863,
       "implied_rate": 3.6399993896484375,
-      "source": "yfinance",
-      "delta": 0.0
+      "source": "yfinance"
     }
   ],
   "_rate_path_probs_ts": {
