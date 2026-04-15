@@ -39,7 +39,7 @@ sys.path.insert(0, ".")
 from services.hmm_regime import _build_feature_matrix
 
 print("Building feature matrix (same pipeline as live)...")
-df = _build_feature_matrix(lookback_years=15)
+df = _build_feature_matrix(lookback_years=brain_raw.get("lookback_years", 15))  # must match brain
 
 # Ensure columns match brain
 for col in feature_names:
