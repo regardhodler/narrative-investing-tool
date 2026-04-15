@@ -1065,7 +1065,7 @@ def _build_hmm_historical_inference() -> dict | None:
         model.means_ = np.array(brain.means)
         model.covars_ = np.array(brain.covars)
 
-        df = _build_feature_matrix(lookback_years=30)
+        df = _build_feature_matrix(lookback_years=brain.lookback_years)  # must match live scoring
         for col in brain.feature_names:
             if col not in df.columns:
                 df[col] = 0.0
@@ -1093,22 +1093,33 @@ def _build_hmm_historical_inference() -> dict | None:
             softened_list.append(probs_soft.tolist())
         softened = np.array(softened_list)
 
-        # Per-date 60-day rolling log-likelihood
-        _LL_WINDOW = 60
-        ll_per_date = []
-        for i in range(len(X)):
-            start = max(0, i - _LL_WINDOW + 1)
-            window = X[start:i + 1]
-            try:
-                ll_val = float(model.score(window)) / len(window)
-            except Exception:
-                ll_val = 0.0
-            ll_per_date.append(ll_val)
+        # ── Load pre-computed LL z-scores from backtest JSON (fast path) ────────
+        # ll_gate_backtest_live_brain.py pre-computes expanding-window LL for every
+        # date using the same formula as live scoring. Load it here instead of
+        # recomputing (which takes minutes). Falls back to baseline if file missing.
+        _ll_lookup = {}  # date_str → ll_per_obs
+        _bt_json_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ll_gate_backtest_live_brain.json")
+        try:
+            if os.path.exists(_bt_json_path):
+                with open(_bt_json_path) as _f:
+                    _bt_data = json.load(_f)
+                if isinstance(_bt_data, list):
+                    for row in _bt_data:
+                        if "date" in row and "ll_per_obs" in row:
+                            _ll_lookup[row["date"]] = row["ll_per_obs"]
+        except Exception:
+            pass
 
-        dates = [str(d)[:10] for d in df.index]
+        dates_list = [str(d)[:10] for d in df.index]
+        ll_per_date = []
+        for d in dates_list:
+            if d in _ll_lookup:
+                ll_per_date.append(_ll_lookup[d])
+            else:
+                ll_per_date.append(brain.ll_baseline_mean)  # unknown dates → baseline (z=0)
 
         return {
-            "dates": dates,
+            "dates": dates_list,
             "states": [brain.state_labels[i] for i in state_idxs],
             "state_idxs": state_idxs,
             "probs": [softened[i].tolist() for i in range(len(softened))],
