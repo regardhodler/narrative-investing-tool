@@ -1,14 +1,14 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-14T15:13:31",
+  "generated_at": "2026-04-15T15:06:55",
   "regime": {
     "label": "Neutral — Leaning Risk-On",
-    "score": 0.12,
+    "score": 0.16,
     "quadrant": "Transition",
-    "signal_summary": "- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Yield Curve (3M-10Y): z=+0.76 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Global Manufacturing (EWG+FXI): z=+0.48 ()\n- Rate Expectations (2Y vs Fed Funds): z=+0.41 ()\n- Yield Curve (10Y-2Y): z=-0.39 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.39 ()\n- Fear & Greed Index: 21/100 — Extreme Fear (contrarian)"
+    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Yield Curve (3M-10Y): z=+0.66 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.52 ()\n- Fear & Greed Index: 23/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 66,
+    "score": 69,
     "label": "Favorable Entry",
     "action_bias": "Conditions support initiating or adding to risk positions on pullbacks."
   },
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current macro regime, Neutral - Leaning Risk-On, is being tested by various catalysts, including the decline in US oil prices to below $94/barrel, which contradicts the risk-on sentiment. However, the bullish narratives in the technology and space sectors, such as Amazon's acquisition of Globalstar, are supporting the regime. The Polymarket prediction markets also suggest a low probability of a Fed rate cut to 0% or lower before 2027, which is consistent with the current risk-on tone. Meanwhile, geopolitical risks, including the potential for an Iran leadership change and Israel's military actions, pose a threat to the regime's stability.",
+  "current_events_digest": "The current macro regime, characterized as Neutral - Leaning Risk-On with a score of +0.16, is supported by recent news confirming a positive outlook, such as Bank of America's strong earnings and the CEO's assessment of a 'healthy' consumer banking sector. However, potential risks and contradictions to this regime include Trump's threats to fire Fed Chair Powell, which could introduce uncertainty, and the possibility of an Iran leadership change, with a 32% chance predicted by Polymarket before the end of the year. Additionally, the recent surge in stocks like Allbirds and Snap, driven by AI-related announcements, may indicate a shift towards risk-on sentiment. The overall narrative remains cautiously optimistic, with a focus on monitoring geopolitical events and their potential impact on the market.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
@@ -144,6 +144,14 @@
       "entry_date": "2026-04-11",
       "position_size": 1,
       "thesis": "GENUINE UNCERTAINTY | Sell | conf 51%"
+    },
+    {
+      "ticker": "SPY",
+      "direction": "Long",
+      "entry_price": 686.1,
+      "entry_date": "2026-04-13",
+      "position_size": 1,
+      "thesis": "EARLY BULL | Buy | conf 56%"
     }
   ],
   "earnings_risk": []
