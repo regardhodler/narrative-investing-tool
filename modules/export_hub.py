@@ -515,27 +515,59 @@ def _build_pipeline_export() -> str:
     quadrant = ctx.get("quadrant", "unknown")
     score_mode = st.session_state.get("_rr_score_mode", "normal")
 
+    # Live HMM state
+    try:
+        from services.hmm_regime import load_current_hmm_state, load_hmm_brain
+        _hmm_live = load_current_hmm_state()
+        _hmm_brain = load_hmm_brain()
+        hmm_state_str = (
+            f"{_hmm_live.state_label} (conf={_hmm_live.confidence:.2f}, "
+            f"ll_z={getattr(_hmm_live,'ll_zscore',0):.3f})"
+        ) if _hmm_live else "unavailable"
+        hmm_brain_str = (
+            f"trained={_hmm_brain.trained_at[:10]}, "
+            f"lookback={_hmm_brain.lookback_years}yr, "
+            f"n_states={_hmm_brain.n_states}, "
+            f"ll_baseline_mean={_hmm_brain.ll_baseline_mean:.4f}, "
+            f"ll_baseline_std={_hmm_brain.ll_baseline_std:.4f}"
+        ) if _hmm_brain else "no brain found"
+    except Exception:
+        hmm_state_str = "unavailable"
+        hmm_brain_str = "unavailable"
+
     data_sources = [
         "yfinance - prices, OHLCV, options chain snapshots",
-        "FRED - rates, credit, growth, inflation, liquidity, labor",
+        "FRED - 9 series: HY spreads, IG spreads, yield curve (10y2y, 10y3m), DGS10, DGS2, DFII10, NFCI, ICSA",
         "SEC EDGAR - filings, insider Form 4, 13F holdings",
         "Google Trends - narrative momentum",
         "Congress trading feed - disclosed congressional transactions",
     ]
 
     service_layer = [
-        "services/market_data.py - batch fetch, FRED wrappers, snapshots",
-        "services/sec_client.py - EDGAR requests, CIK/ticker mapping, rate limiting",
+        "services/market_data.py - batch fetch, FRED wrappers, AssetSnapshot dataclass, z-scores",
+        "services/hmm_regime.py - GaussianHMM (6-state) trained on FRED+VIX. Brain in data/hmm_brain.json. lookback_years stored in brain and must match live scoring exactly",
+        "services/sec_client.py - EDGAR requests, CIK/ticker mapping, rate limiting (10 req/s)",
         "services/claude_client.py - all LLM synthesis, debates, valuation, plays",
-        "services/signals_cache.py - persist/reload session signals",
         "services/backtest_engine.py - backtest orchestration",
+        "services/signals_cache.py - persist/reload session signals",
         "services/forecast_tracker.py - call logging and evaluation",
         "services/telegram_client.py - outbound alert and report delivery",
+        "services/wyckoff_engine.py - Wyckoff phase detection (Accumulation/Distribution/etc)",
+        "services/elliott_wave_engine.py - Elliott Wave pattern detection",
+        "services/scoring.py - conviction score computation",
+        "services/indicators.py - technical indicators",
+        "services/portfolio_sizing.py - Kelly criterion position sizing",
+        "services/sector_rotation.py - sector rotation signals",
+        "services/turning_point.py - market turning point detection",
+        "services/whale_screener.py - large buyer/seller detection",
+        "services/qir_history.py - QIR run history persistence",
+        "services/tactical_history.py - tactical score history",
     ]
 
     module_layer = [
-        ("modules/risk_regime.py", "cross-asset macro classifier + quadrant + tactical overlay"),
-        ("modules/quick_run.py", "orchestrated multi-round intelligence run"),
+        ("modules/quick_run.py", "QIR master dashboard: LL-anchored CI% crisis detection, HMM Brain State card, conviction scoring, Elliott Wave, Wyckoff, GEX, entry signal, Kelly sizing"),
+        ("modules/risk_regime.py", "cross-asset macro classifier + quadrant + tactical overlay (17+ z-scored signals)"),
+        ("modules/backtesting.py", "historical snapshot viewer with CI% LL-anchored block, Wyckoff pill, regime overlays"),
         ("modules/fed_forecaster.py", "Fed path probabilities and implications"),
         ("modules/current_events.py", "headline/inbox context feed"),
         ("modules/stress_signals.py", "doom and stress framing"),
@@ -546,8 +578,13 @@ def _build_pipeline_export() -> str:
         ("modules/trade_journal.py", "portfolio intelligence, factor lens, debate display"),
         ("modules/signal_audit.py", "signal quality/consistency audit"),
         ("modules/forecast_accuracy.py", "signal outcome scoring + ATR outcomes"),
-        ("modules/backtesting.py", "strategy simulation + walk-forward"),
-        ("modules/export_hub.py", "briefing and pipeline exports"),
+        ("modules/export_hub.py", "briefing and pipeline exports — this file"),
+        ("modules/elliott_wave.py", "Elliott Wave analysis UI"),
+        ("modules/wyckoff.py", "Wyckoff phase analysis UI"),
+        ("modules/macro_scorecard.py", "macro signal scorecard"),
+        ("modules/tail_risk_studio.py", "tail risk analysis"),
+        ("modules/performance.py", "portfolio performance"),
+        ("modules/signal_scorecard.py", "signal performance scorecard"),
     ]
 
     qir_rounds = [
@@ -596,7 +633,45 @@ def _build_pipeline_export() -> str:
     lines.extend([
         "",
         "---",
-        "## 2) ORCHESTRATION FLOWS",
+        "## 2) LL-ANCHORED CRISIS DETECTION SYSTEM (CI%)",
+        "",
+        "This is the core crisis signal — validated against 3,408 trading days (2013–2026).",
+        "",
+        "### Mathematics",
+        "- Feature matrix: 9 FRED series + VIX, 20-day EWMA smoothed, 5yr rolling z-scored, ±3σ capped",
+        "- Model: GaussianHMM (BIC-selected, 2–6 states), full covariance, empirical transmat with Laplace smoothing",
+        "- LL scoring: model.score(X_full) / len(X) = log-likelihood per observation",
+        "- Z-score: (ll_per_obs - brain.ll_baseline_mean) / brain.ll_baseline_std",
+        "- CI%: abs(ll_zscore) / 0.448 * 100  [uncapped — COVID in-sample = 100%]",
+        "- CRITICAL: lookback_years stored in brain JSON — live scoring must use brain.lookback_years exactly",
+        "",
+        "### CI% Zones",
+        "- Zone 1 (CI < 22%):  NORMAL — conviction signals suppressed (they fire every day alone = 0% precision)",
+        "- Zone 2 (CI 22–67%): MODEL STRESS — signals visible as context (unvalidated individually)",
+        "- Zone 3 (CI ≥ 67%):  CRISIS CONFIRMED — 100% precision, 0 false alarms in 3,408 days",
+        "- Zone 4 (CI > 100%): BEYOND TRAINING RANGE — purple, model scoring post-training extremes",
+        "",
+        "### Backtested Event Anchors",
+        "- Tariff/Rate shocks (2022, 2025): CI 12–21% — correctly ignored (known regimes)",
+        "- Volmageddon (Feb 2018): CI 76% — detected (z=-0.341)",
+        "- Fed Panic (Dec 2018): CI 96% — detected 84 days early (z=-0.428)",
+        "- COVID Start (Feb 2020): CI 94% — detected 36 days early (z=-0.421)",
+        "- COVID Bottom (Mar 2020): CI 100% — peak (z=-0.448, the anchor)",
+        "- Gate threshold: z < -0.30 = 67% CI",
+        "",
+        "### Post-Retrain Workflow",
+        "1. Retrain brain (lookback_years=15 stored automatically in brain JSON)",
+        "2. Run: python ll_gate_backtest_live_brain.py",
+        "3. Check new COVID peak z-score — if changed from -0.448, update anchor in:",
+        "   - modules/quick_run.py: abs(_tb_ll_z) / 0.448 * 100",
+        "   - modules/backtesting.py: same formula",
+        "",
+        "### Current Live State",
+        f"- HMM state: {hmm_state_str}",
+        f"- Brain: {hmm_brain_str}",
+        "",
+        "---",
+        "## 3) ORCHESTRATION FLOWS",
         "",
         "### Quick Intel Run (QIR)",
     ])
@@ -614,7 +689,7 @@ def _build_pipeline_export() -> str:
         "- Coke Mode: EWMA fast-react on selected fast signals (credit, VIX, breadth).",
         "",
         "---",
-        "## 3) DATA CONTRACTS",
+        "## 4) DATA CONTRACTS",
         "",
         "### Debate Contract",
     ])
@@ -631,7 +706,7 @@ def _build_pipeline_export() -> str:
         "- _adversarial_debate: arguments, verdict, confidence, contested lean",
         "",
         "---",
-        "## 4) LIVE RUNTIME SNAPSHOT",
+        "## 5) LIVE RUNTIME SNAPSHOT",
         "",
         f"- Loaded signal keys: {len(loaded)}/{len(signal_keys)}",
         f"- Loaded: {', '.join(loaded) if loaded else '(none)'}",
@@ -640,21 +715,24 @@ def _build_pipeline_export() -> str:
         f"- Current selected narrative: {st.session_state.get('narrative', 'unknown')}",
         "",
         "---",
-        "## 5) CACHING, LIMITS, AND INTEGRITY",
+        "## 6) CACHING, LIMITS, AND INTEGRITY",
         "",
-        "- Streamlit cache used across heavy fetch/synthesis paths.",
-        "- SEC request pacing and bounded concurrency enforced in SEC client paths.",
+        "- Streamlit @st.cache_data used across heavy fetch/synthesis paths (ttl=3600 or 86400).",
+        "- SEC request pacing and bounded concurrency (ThreadPoolExecutor max_workers=5).",
         "- Session signals persisted through signals_cache for cross-module continuity.",
-        "- Export Hub serializes runtime state via services.signals_cache._serialize().",
+        "- HMM brain lookback_years stored in JSON — must equal value used in live scoring.",
+        "- LL backtest (ll_gate_backtest_live_brain.py) must be re-run after every brain retrain.",
         "",
         "---",
-        "## 6) GAP-ANALYSIS PROMPTS",
+        "## 7) GAP-ANALYSIS PROMPTS",
         "",
         "Use these prompts with this pipeline map:",
         "- Which contracts are weakly defined and should become typed schemas?",
         "- Which modules rely on stale assumptions or duplicated logic?",
         "- What monitoring and tests are missing for high-impact failure points?",
         "- Where should the pipeline add probabilistic uncertainty and calibration?",
+        "- How should the CI% system be extended to detect market bottoms (not just tops)?",
+        "- What additional FRED features would improve HMM regime discrimination?",
         "",
         "---",
         f"Deep Pipeline Map generated by Regarded Terminals | {now_str}",
@@ -823,6 +901,24 @@ def _build_pipeline_upgrade_brief() -> str:
     quadrant = rc.get("quadrant", "unknown")
     score_mode = st.session_state.get("_rr_score_mode", "normal")
 
+    # Live HMM state
+    try:
+        from services.hmm_regime import load_current_hmm_state, load_hmm_brain
+        _hmm_live = load_current_hmm_state()
+        _hmm_brain = load_hmm_brain()
+        hmm_str = (
+            f"{_hmm_live.state_label}, conf={_hmm_live.confidence:.2f}, "
+            f"ll_z={getattr(_hmm_live,'ll_zscore',0):.3f}, "
+            f"CI%={abs(getattr(_hmm_live,'ll_zscore',0))/0.448*100:.1f}%"
+        ) if _hmm_live else "unavailable"
+        brain_str = (
+            f"trained {_hmm_brain.trained_at[:10]}, "
+            f"{_hmm_brain.n_states} states, lookback={_hmm_brain.lookback_years}yr"
+        ) if _hmm_brain else "no brain"
+    except Exception:
+        hmm_str = "unavailable"
+        brain_str = "unavailable"
+
     key_signals = [
         "_regime_context", "_dominant_rate_path", "_current_events_digest", "_doom_briefing",
         "_whale_summary", "_plays_result", "_portfolio_analysis", "_factor_analysis",
@@ -838,44 +934,74 @@ def _build_pipeline_upgrade_brief() -> str:
         "Goal: get practical upgrade recommendations with implementation priority.",
         "",
         "## 1) SYSTEM STRUCTURE",
-        "- UI router: app.py (tiered navigation across drivers/research/tools/admin)",
-        "- Modules: risk_regime, quick_run, fed_forecaster, current_events, stress_signals, whale_buyers, discovery, options, valuation, trade_journal, audit, backtesting, export",
-        "- Services: market_data, sec_client, claude_client, forecast_tracker, backtest_engine, signals_cache, telegram_client",
-        "- Core state bus: streamlit session_state with cross-module signal keys",
+        "- App: Streamlit, entry point app.py, sidebar module routing, APP_PASSWORD auth gate",
+        "- Modules (25): quick_run, risk_regime, backtesting, fed_forecaster, current_events,",
+        "  stress_signals, whale_buyers, narrative_discovery, options_activity, valuation,",
+        "  trade_journal, signal_audit, forecast_accuracy, export_hub, elliott_wave,",
+        "  wyckoff, macro_scorecard, tail_risk_studio, performance, signal_scorecard, and more",
+        "- Services (30+): hmm_regime, market_data, sec_client, claude_client, backtest_engine,",
+        "  signals_cache, forecast_tracker, telegram_client, wyckoff_engine, elliott_wave_engine,",
+        "  scoring, indicators, portfolio_sizing, sector_rotation, turning_point, and more",
+        "- Utils (15): session, theme, components, signal_block, styles, auth, state_keys, etc.",
+        "- State bus: Streamlit session_state with cross-module signal keys",
         "",
-        "## 2) CRITICAL FLOWS",
-        "- Macro flow: Risk Regime -> Fed path -> QIR synthesis -> Portfolio/Valuation/Discovery consumers",
-        "- Decision flow: Discovery ideas -> Valuation -> Portfolio AI actions -> tracking/backtest",
-        "- Debate flow: 3-agent adversarial debate with contested tie-bias lean",
+        "## 2) CORE CRISIS DETECTION ENGINE (CI%)",
+        "This is the most mathematically rigorous component — validated on 3,408 days:",
         "",
-        "## 3) DEPENDENCY HOTSPOTS",
-        "- services/claude_client.py is a central dependency for synthesis and recommendations",
-        "- services/market_data.py is a central dependency for market and macro inputs",
-        "- _regime_context is a high blast-radius state key consumed by many modules",
-        "- Export Hub depends on broad state coverage to produce complete outputs",
+        "- Model: GaussianHMM (BIC-selected up to 6 states, full covariance)",
+        "- Features: 9 FRED series (HY/IG spreads, yield curve, DGS10/2, DFII10, NFCI, ICSA) + VIX",
+        "  Pipeline: raw → 20d EWMA → 5yr rolling z-score → ±3σ cap",
+        "- LL scoring: model.score(X_full) / len(X) = log-likelihood per observation (expanding window)",
+        "- CI% formula: abs(ll_zscore) / 0.448 * 100 (uncapped, COVID in-sample = 100%)",
+        "- Zones: Normal (<22%) | Stress (22–67%) | Crisis Confirmed (≥67%) | Beyond Training (>100%)",
+        "- Gate z=-0.30: 100% precision, 0 false alarms. Volmageddon 76%, Fed Panic 96%, COVID 100%",
+        "- CRITICAL BUG fixed: lookback_years now stored in brain JSON. Old bug: 14yr vs 15yr lookback",
+        "  produced z=-1.272 (false crisis) vs correct z=-0.000 (normal market)",
+        f"- Current live: {hmm_str}",
+        f"- Brain: {brain_str}",
         "",
-        "## 4) CURRENT COVERAGE SNAPSHOT",
+        "## 3) CRITICAL FLOWS",
+        "- Macro flow: Risk Regime → Fed path → QIR synthesis → Portfolio/Valuation/Discovery",
+        "- Crisis flow: FRED data → HMM score → CI% zone → conviction gate → QIR display",
+        "- Decision flow: Discovery → Valuation → Portfolio AI actions → tracking/backtest",
+        "- Debate flow: 3-agent adversarial (bear/bull/arbiter) with contested tie-bias lean",
+        "",
+        "## 4) DEPENDENCY HOTSPOTS",
+        "- services/hmm_regime.py: lookback_years must match training. Re-run backtest after retrain.",
+        "- services/claude_client.py: central dependency for synthesis and recommendations",
+        "- services/market_data.py: central dependency for market and macro inputs",
+        "- _regime_context: high blast-radius state key consumed by many modules",
+        "- CI% anchor 0.448: hardcoded COVID peak z-score — must update after brain retrain if changed",
+        "",
+        "## 5) CURRENT COVERAGE SNAPSHOT",
         f"- Loaded keys ({len(loaded)}/{len(key_signals)}): {', '.join(loaded) if loaded else '(none)'}",
         f"- Missing keys: {', '.join(missing) if missing else '(none)'}",
         "",
-        "## 5) KNOWN CONSTRAINTS",
+        "## 6) KNOWN CONSTRAINTS",
         "- Multi-source API variability and intermittent data freshness",
         "- Session-state coupling across modules",
+        "- CI% bottom detection not yet built (top detection only via LL gate)",
         "- Mixed output contracts across AI features",
         "- Need to preserve Streamlit responsiveness under heavier analysis",
+        "- HMM only detects systemic regime shifts — not sudden flash crashes",
         "",
-        "## 6) WHAT I WANT FROM YOU (OTHER AI)",
+        "## 7) WHAT I WANT FROM YOU (OTHER AI)",
         "Please answer with:",
         "1. Top 10 upgrade ideas ranked by impact x effort",
         "2. 3 highest-risk dependencies and hardening steps",
-        "3. Contract/schema improvements for session-state and AI outputs",
-        "4. Testing strategy to prevent regressions in QIR, Valuation, and Portfolio",
-        "5. Performance optimizations (cache strategy, parallelization, fallback behavior)",
-        "6. A 2-week implementation roadmap with milestones",
+        "3. How to extend the CI% system to detect market BOTTOMS (not just tops)",
+        "4. What FRED features would improve HMM regime discrimination",
+        "5. Contract/schema improvements for session-state and AI outputs",
+        "6. Testing strategy to prevent regressions in QIR, Valuation, and Portfolio",
+        "7. Performance optimizations (cache strategy, parallelization, fallback behavior)",
+        "8. A 2-week implementation roadmap with milestones",
         "",
-        "## 7) COPY-PASTE PROMPT",
+        "## 8) COPY-PASTE PROMPT",
         "Use this prompt with the brief:",
-        "\"You are a principal engineer reviewing an investment intelligence Streamlit app. Use this pipeline brief to produce a prioritized upgrade plan with concrete code-level recommendations, risk controls, and measurable success criteria.\"",
+        '\"You are a principal engineer and quant researcher reviewing an investment intelligence',
+        "Streamlit app called Regarded Terminals. Use this pipeline brief to produce a prioritized",
+        "upgrade plan with concrete code-level recommendations, mathematical improvements to the",
+        'CI% crisis detection system, and measurable success criteria.\"',
         "",
         f"Pipeline Upgrade Brief generated by Regarded Terminals | {now_str}",
     ]
