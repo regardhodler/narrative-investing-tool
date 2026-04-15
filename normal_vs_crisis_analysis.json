@@ -1,0 +1,173 @@
+{
+  "analysis_date": "2026-04-14 17:29:24",
+  "methodology": "Reconstructed HMM training data 2012-2026, classified periods, applied signal calculations",
+  "period_classification": {
+    "total_days": 3660,
+    "normal_bull_days": 1009,
+    "normal_bear_days": 2264,
+    "crisis_days": 387,
+    "crisis_definition": "Within 30 days of known crash turning points"
+  },
+  "signal_analysis": {
+    "Low conviction": {
+      "signal_name": "Low conviction",
+      "normal_bull_avg": 7.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 1.5,
+      "normal_bear_fire_rate": 0.0,
+      "crisis_avg": 0.0,
+      "crisis_fire_rate": 0.0,
+      "overall_false_positive_rate": 0.0,
+      "crisis_specificity": -1.0
+    },
+    "HMM Late Cycle state": {
+      "signal_name": "HMM Late Cycle state",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 65.0,
+      "normal_bear_fire_rate": 1.0,
+      "crisis_avg": 65.0,
+      "crisis_fire_rate": 1.0,
+      "overall_false_positive_rate": 0.5,
+      "crisis_specificity": 1.0
+    },
+    "Conviction building": {
+      "signal_name": "Conviction building",
+      "normal_bull_avg": 98.4,
+      "normal_bull_fire_rate": 1.0,
+      "normal_bear_avg": 98.4,
+      "normal_bear_fire_rate": 1.0,
+      "crisis_avg": 98.4,
+      "crisis_fire_rate": 1.0,
+      "overall_false_positive_rate": 1.0,
+      "crisis_specificity": 0.0
+    },
+    "HMM Crisis state": {
+      "signal_name": "HMM Crisis state",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 75.0,
+      "normal_bear_fire_rate": 1.0,
+      "crisis_avg": 75.0,
+      "crisis_fire_rate": 1.0,
+      "overall_false_positive_rate": 0.5,
+      "crisis_specificity": 1.0
+    },
+    "LL deteriorating": {
+      "signal_name": "LL deteriorating",
+      "normal_bull_avg": 28.6,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 28.3,
+      "normal_bear_fire_rate": 0.0,
+      "crisis_avg": 41.6,
+      "crisis_fire_rate": 0.227,
+      "overall_false_positive_rate": 0.0,
+      "crisis_specificity": 0.462
+    },
+    "Extreme LL stress": {
+      "signal_name": "Extreme LL stress",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 0.0,
+      "normal_bear_fire_rate": 0.0,
+      "crisis_avg": 34.2,
+      "crisis_fire_rate": 0.0,
+      "overall_false_positive_rate": 0.0,
+      "crisis_specificity": 0
+    },
+    "HMM Early Stress state": {
+      "signal_name": "HMM Early Stress state",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 65.0,
+      "normal_bear_fire_rate": 1.0,
+      "crisis_avg": 65.0,
+      "crisis_fire_rate": 1.0,
+      "overall_false_positive_rate": 0.5,
+      "crisis_specificity": 1.0
+    },
+    "Regime elevated": {
+      "signal_name": "Regime elevated",
+      "normal_bull_avg": 30.3,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 23.9,
+      "normal_bear_fire_rate": 0.0,
+      "crisis_avg": 22.8,
+      "crisis_fire_rate": 0.0,
+      "overall_false_positive_rate": 0.0,
+      "crisis_specificity": -0.159
+    },
+    "Regime deep negative": {
+      "signal_name": "Regime deep negative",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 60.7,
+      "normal_bear_fire_rate": 0.488,
+      "crisis_avg": 65.4,
+      "crisis_fire_rate": 0.746,
+      "overall_false_positive_rate": 0.244,
+      "crisis_specificity": 1.153
+    },
+    "Macro crushed": {
+      "signal_name": "Macro crushed",
+      "normal_bull_avg": 26.6,
+      "normal_bull_fire_rate": 0.16,
+      "normal_bear_avg": 58.7,
+      "normal_bear_fire_rate": 0.572,
+      "crisis_avg": 81.0,
+      "crisis_fire_rate": 0.774,
+      "overall_false_positive_rate": 0.366,
+      "crisis_specificity": 0.899
+    },
+    "HMM Stress state": {
+      "signal_name": "HMM Stress state",
+      "normal_bull_avg": 0.0,
+      "normal_bull_fire_rate": 0.0,
+      "normal_bear_avg": 65.0,
+      "normal_bear_fire_rate": 1.0,
+      "crisis_avg": 65.0,
+      "crisis_fire_rate": 1.0,
+      "overall_false_positive_rate": 0.5,
+      "crisis_specificity": 1.0
+    }
+  },
+  "key_findings": {
+    "high_false_positive_signals": [
+      {
+        "name": "Conviction building",
+        "fp_rate": 1.0
+      },
+      {
+        "name": "HMM Late Cycle state",
+        "fp_rate": 0.5
+      },
+      {
+        "name": "HMM Crisis state",
+        "fp_rate": 0.5
+      },
+      {
+        "name": "HMM Early Stress state",
+        "fp_rate": 0.5
+      },
+      {
+        "name": "HMM Stress state",
+        "fp_rate": 0.5
+      },
+      {
+        "name": "Macro crushed",
+        "fp_rate": 0.366
+      },
+      {
+        "name": "Regime deep negative",
+        "fp_rate": 0.244
+      }
+    ],
+    "crisis_specific_signals": [
+      {
+        "name": "Regime deep negative",
+        "crisis_specificity": 1.153
+      }
+    ],
+    "reliable_signals": []
+  }
+}

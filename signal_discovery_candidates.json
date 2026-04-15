@@ -1,0 +1,258 @@
+{
+  "signal_discovery_candidates": {
+    "methodology": "Each signal tested individually using validation_framework.py with walk-forward validation across 2019-2020, 2021-2022, 2023-2024 periods. Crisis labeling: ±30 days around 16 known turning points. Success criteria: >30% precision, <15% false positive rate, >3x crisis specificity.",
+    "data_sources": {
+      "fred_series": [
+        "BAMLH0A0HYM2",
+        "BAMLC0A0CM", 
+        "T10Y2Y",
+        "T10Y3M",
+        "DGS10",
+        "DGS2",
+        "DFII10",
+        "NFCI",
+        "ICSA"
+      ],
+      "market_data": ["VIX", "SPY", "IWM", "breadth_indicators"],
+      "existing_calculations": ["hmm_state", "regime_score", "macro_score"]
+    },
+    "vix_signals": {
+      "category": "Volatility Spike Detection",
+      "rationale": "VIX represents fear/uncertainty, spikes coincide with market stress. More stable than regime-based signals.",
+      "candidates": [
+        {
+          "name": "VIX_persistent_elevation",
+          "description": "VIX >25 for 10+ consecutive trading days",
+          "logic": "Sustained fear, not just single-day spikes. Captures extended uncertainty periods.",
+          "threshold_method": "ROC optimization on training data",
+          "expected_fire_rate": "3-8% of trading days",
+          "crisis_rationale": "Most market crashes involve sustained volatility elevation, not just single spikes",
+          "implementation": "rolling_window(VIX, 10).min() > 25",
+          "data_requirements": ["VIX daily close"],
+          "validation_priority": "HIGH"
+        },
+        {
+          "name": "VIX_crisis_spike", 
+          "description": "VIX >40 single day spike",
+          "logic": "Extreme fear threshold historically associated with crisis moments",
+          "threshold_method": "Historical analysis of VIX >40 events",
+          "expected_fire_rate": "0.5-2% of trading days", 
+          "crisis_rationale": "VIX >40 rare event, typically occurs during sharp selloffs",
+          "implementation": "VIX > 40",
+          "data_requirements": ["VIX daily close"],
+          "validation_priority": "MEDIUM"
+        },
+        {
+          "name": "VIX_term_structure_inversion",
+          "description": "VIX9D > VIX (backwardation in vol curve)",
+          "logic": "Near-term vol > long-term vol indicates acute stress",
+          "threshold_method": "Spread threshold optimization",
+          "expected_fire_rate": "5-15% of trading days",
+          "crisis_rationale": "Vol curve inversion signals immediate stress vs long-term concerns",
+          "implementation": "VIX9D - VIX > threshold",
+          "data_requirements": ["VIX", "VIX9D"],
+          "validation_priority": "LOW",
+          "data_availability": "May need alternative vol term structure proxy"
+        }
+      ]
+    },
+    "credit_signals": {
+      "category": "Credit Stress Detection", 
+      "rationale": "Credit spreads reflect funding stress and risk appetite. HY spreads particularly sensitive to crisis conditions.",
+      "candidates": [
+        {
+          "name": "HY_crisis_threshold",
+          "description": "High-yield OAS >600bp sustained",
+          "logic": "HY spreads >600bp historically mark severe stress periods", 
+          "threshold_method": "Historical percentile analysis + ROC optimization",
+          "expected_fire_rate": "5-12% of trading days",
+          "crisis_rationale": "Credit stress precedes/coincides with equity stress in most crashes",
+          "implementation": "BAMLH0A0HYM2 > 600",
+          "data_requirements": ["BAMLH0A0HYM2 (HY OAS)"],
+          "validation_priority": "HIGH"
+        },
+        {
+          "name": "HY_momentum_breakdown",
+          "description": "HY spreads widening >100bp in 5 trading days",
+          "logic": "Rapid credit deterioration signals acute stress",
+          "threshold_method": "Rate of change threshold optimization",
+          "expected_fire_rate": "3-8% of trading days",
+          "crisis_rationale": "Speed of credit deterioration matters - slow drift vs rapid breakdown",
+          "implementation": "rolling_diff(BAMLH0A0HYM2, 5) > 100",
+          "data_requirements": ["BAMLH0A0HYM2 daily"],
+          "validation_priority": "HIGH"
+        },
+        {
+          "name": "IG_HY_spread_blowout", 
+          "description": "HY-IG spread differential >400bp",
+          "logic": "Risk premium between HY and IG widens in stress",
+          "threshold_method": "Spread differential optimization",
+          "expected_fire_rate": "8-15% of trading days",
+          "crisis_rationale": "Flight to quality increases quality premium",
+          "implementation": "BAMLH0A0HYM2 - BAMLC0A0CM > 400", 
+          "data_requirements": ["BAMLH0A0HYM2", "BAMLC0A0CM"],
+          "validation_priority": "MEDIUM"
+        }
+      ]
+    },
+    "yield_curve_signals": {
+      "category": "Interest Rate Stress Detection",
+      "rationale": "Yield curve shape reflects economic expectations and Fed policy stress. Inversions historically precede recessions.",
+      "candidates": [
+        {
+          "name": "yield_curve_deep_inversion",
+          "description": "10Y-2Y yield spread <-100bp",
+          "logic": "Deep inversion indicates severe policy tightening stress",
+          "threshold_method": "Inversion depth optimization", 
+          "expected_fire_rate": "2-8% of trading days",
+          "crisis_rationale": "Deep inversions historically precede recessions and market stress",
+          "implementation": "T10Y2Y < -100",
+          "data_requirements": ["T10Y2Y"],
+          "validation_priority": "HIGH"
+        },
+        {
+          "name": "yield_curve_persistent_inversion",
+          "description": "10Y-2Y inverted for 6+ months",
+          "logic": "Sustained inversion more predictive than brief inversions",
+          "threshold_method": "Duration threshold optimization",
+          "expected_fire_rate": "5-15% of trading days during inversion cycles",
+          "crisis_rationale": "Persistent inversions indicate structural policy/growth concerns",
+          "implementation": "rolling_window(T10Y2Y < 0, 126).all()",  
+          "data_requirements": ["T10Y2Y daily"],
+          "validation_priority": "MEDIUM"
+        },
+        {
+          "name": "real_yield_spike", 
+          "description": "10Y real yield (TIPS) >3.5%",
+          "logic": "High real rates indicate tight financial conditions",
+          "threshold_method": "Real yield threshold optimization",
+          "expected_fire_rate": "3-10% of trading days",
+          "crisis_rationale": "High real rates pressure asset valuations, funding costs",
+          "implementation": "DFII10 > 3.5",
+          "data_requirements": ["DFII10"],
+          "validation_priority": "MEDIUM"
+        }
+      ]
+    },
+    "breadth_signals": {
+      "category": "Market Structure Breakdown", 
+      "rationale": "Market breadth deterioration often precedes major declines. Concentration in few names signals vulnerability.",
+      "candidates": [
+        {
+          "name": "breadth_breakdown",
+          "description": "SPX below 200MA + <30% stocks above 200MA",
+          "logic": "Index breaks long-term support while breadth deteriorates",
+          "threshold_method": "Dual condition optimization",
+          "expected_fire_rate": "5-12% of trading days",
+          "crisis_rationale": "Index can be held up by few large stocks while majority weakens",
+          "implementation": "SPX_200MA_break AND breadth_pct < 30",
+          "data_requirements": ["SPY", "breadth indicators"],
+          "validation_priority": "HIGH"
+        },
+        {
+          "name": "new_lows_domination",
+          "description": "NYSE new 52w lows > new highs for 10+ days",
+          "logic": "Sustained deterioration in individual stock performance", 
+          "threshold_method": "New lows/highs ratio + duration optimization",
+          "expected_fire_rate": "3-8% of trading days",
+          "crisis_rationale": "Market weakness spreads to individual names in bear markets",
+          "implementation": "rolling_window(new_lows > new_highs, 10).all()",
+          "data_requirements": ["NYSE new highs/lows"],
+          "validation_priority": "MEDIUM",
+          "data_availability": "Need to source NYSE breadth data"
+        },
+        {
+          "name": "small_cap_breakdown",
+          "description": "IWM/SPY ratio <0.75 (small caps underperforming)",
+          "logic": "Small caps more sensitive to economic/credit stress",
+          "threshold_method": "Relative performance threshold optimization",
+          "expected_fire_rate": "8-15% of trading days",
+          "crisis_rationale": "Small caps decline first in economic stress, credit sensitivity",
+          "implementation": "IWM_price / SPY_price < 0.75",
+          "data_requirements": ["IWM", "SPY prices"],
+          "validation_priority": "MEDIUM"
+        }
+      ]
+    },
+    "momentum_signals": {
+      "category": "Trend Breakdown Detection",
+      "rationale": "Momentum breaks often coincide with major trend changes. Acceleration changes can signal regime shifts.",
+      "candidates": [
+        {
+          "name": "momentum_acceleration_break",
+          "description": "SPY 20-day momentum acceleration <-10%",
+          "logic": "Rapid deceleration in price momentum signals trend exhaustion",
+          "threshold_method": "Momentum acceleration threshold optimization",
+          "expected_fire_rate": "5-12% of trading days", 
+          "crisis_rationale": "Trend changes often involve momentum acceleration breaks",
+          "implementation": "momentum_accel(SPY, 20) < -0.10",
+          "data_requirements": ["SPY daily prices"],
+          "validation_priority": "LOW"
+        },
+        {
+          "name": "moving_average_breakdown",
+          "description": "SPY breaks 200-day MA with volume confirmation",
+          "logic": "Long-term support break with volume indicates institutional selling",
+          "threshold_method": "Price break + volume threshold optimization",
+          "expected_fire_rate": "2-6% of trading days",
+          "crisis_rationale": "200-day MA breaks often mark major trend changes",
+          "implementation": "SPY < MA(SPY, 200) AND volume > MA(volume, 20) * 1.5",
+          "data_requirements": ["SPY price", "SPY volume"],
+          "validation_priority": "MEDIUM"
+        }
+      ]
+    },
+    "multi_asset_signals": {
+      "category": "Cross-Asset Stress Detection",
+      "rationale": "Crisis often involves multiple asset class stress. Cross-asset signals may be more robust.",
+      "candidates": [
+        {
+          "name": "flight_to_quality",
+          "description": "TLT outperforming SPY by >2% over 5 days", 
+          "logic": "Bond outperformance during equity stress (flight to safety)",
+          "threshold_method": "Relative performance threshold optimization",
+          "expected_fire_rate": "3-8% of trading days",
+          "crisis_rationale": "Flight to quality characteristic of risk-off periods",
+          "implementation": "returns(TLT, 5) - returns(SPY, 5) > 0.02",
+          "data_requirements": ["TLT", "SPY prices"],
+          "validation_priority": "LOW"
+        },
+        {
+          "name": "dollar_stress_signal",
+          "description": "DXY >105 + VIX >30 simultaneous",
+          "logic": "Strong dollar + high volatility indicates global stress",
+          "threshold_method": "Dual threshold optimization", 
+          "expected_fire_rate": "1-4% of trading days",
+          "crisis_rationale": "Dollar strength + volatility indicates global deleveraging",
+          "implementation": "DXY > 105 AND VIX > 30",
+          "data_requirements": ["DXY", "VIX"],
+          "validation_priority": "LOW"
+        }
+      ]
+    }
+  },
+  "testing_protocol": {
+    "validation_framework_usage": "Each signal tested using validation_framework.py",
+    "periods": [
+      "2019-2020 (COVID crisis)",
+      "2021-2022 (Rate shock/bear market)",
+      "2023-2024 (Recent period)"
+    ],
+    "holdout_period": "2025-2026 (reserved for final validation only)",
+    "crisis_labeling": "±30 days around 16 known turning points",
+    "success_criteria": {
+      "precision": ">30% minimum, >50% target",
+      "false_positive_rate": "<15% maximum, <10% target", 
+      "crisis_specificity": ">3x fire rate in crisis vs normal",
+      "temporal_stability": "Works across all validation periods",
+      "economic_logic": "Causally linked to market stress"
+    }
+  },
+  "implementation_notes": {
+    "signal_priority": "Test HIGH priority signals first - most likely to succeed",
+    "data_availability": "Some signals require data not currently cached (NYSE breadth, VIX9D)",
+    "threshold_optimization": "Use ROC optimization on training data, test on validation periods",
+    "single_signal_focus": "Test each signal individually before any combinations",
+    "documentation": "Document all failed signals to prevent retesting same approaches"
+  }
+}

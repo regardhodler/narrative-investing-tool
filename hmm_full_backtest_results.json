@@ -1,0 +1,226 @@
+{
+  "analysis_date": "2026-04-14 17:56:55",
+  "methodology": "Full HMM training dataset 2012-2026, proximity count method, systematic turning points",
+  "dataset_summary": {
+    "total_trading_days": 2355,
+    "date_range": "2017-04-03 to 2026-04-10",
+    "years_covered": 9.0,
+    "top_signal_fire_days": 2355,
+    "bottom_signal_fire_days": 1414,
+    "no_signal_days": 0,
+    "conflicting_signal_days": 1414
+  },
+  "cherry_picked_comparison": {
+    "original_claim": "88% accuracy on 16 handpicked crash dates",
+    "our_replication": "37.5% accuracy on 16 dates",
+    "cherry_picked_dates_tested": 16,
+    "cherry_picked_hits": 6,
+    "full_dataset_days": 2355,
+    "accuracy_difference": "Cherry-picked: 37.5% vs Full dataset: 0.0% (5-day)"
+  },
+  "overall_performance": {
+    "5_day": {
+      "top_signal_accuracy": 0.0,
+      "bottom_signal_accuracy": 0.0,
+      "combined_accuracy": 0.0,
+      "top_signals_fired": 2355,
+      "bottom_signals_fired": 1414,
+      "total_signals": 3769
+    },
+    "10_day": {
+      "top_signal_accuracy": 0.0,
+      "bottom_signal_accuracy": 0.0,
+      "combined_accuracy": 0.0,
+      "top_signals_fired": 2355,
+      "bottom_signals_fired": 1414,
+      "total_signals": 3769
+    },
+    "20_day": {
+      "top_signal_accuracy": 0.0,
+      "bottom_signal_accuracy": 0.0,
+      "combined_accuracy": 0.0,
+      "top_signals_fired": 2355,
+      "bottom_signals_fired": 1414,
+      "total_signals": 3769
+    }
+  },
+  "signal_strength_analysis": {
+    "plus_1_edge": {
+      "top_days": 2355,
+      "bottom_days": 1414,
+      "top_accuracy_5d": 0.0,
+      "bottom_accuracy_5d": 0.0
+    },
+    "plus_2_edge": {
+      "top_days": 2099,
+      "bottom_days": 71,
+      "top_accuracy_5d": 0.0,
+      "bottom_accuracy_5d": 0.0
+    },
+    "plus_3_edge": {
+      "top_days": 1225,
+      "bottom_days": 12,
+      "top_accuracy_5d": 0.0,
+      "bottom_accuracy_5d": 0.0
+    }
+  },
+  "time_period_breakdown": {
+    "2017": {
+      "trading_days": 195,
+      "top_signals": 195,
+      "bottom_signals": 185,
+      "avg_regime_score": -0.384,
+      "avg_macro_score": 50.7,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2018": {
+      "trading_days": 261,
+      "top_signals": 261,
+      "bottom_signals": 102,
+      "avg_regime_score": -0.075,
+      "avg_macro_score": 50.3,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2019": {
+      "trading_days": 261,
+      "top_signals": 261,
+      "bottom_signals": 98,
+      "avg_regime_score": -0.123,
+      "avg_macro_score": 56.8,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2020": {
+      "trading_days": 262,
+      "top_signals": 262,
+      "bottom_signals": 223,
+      "avg_regime_score": 0.312,
+      "avg_macro_score": 41.5,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2021": {
+      "trading_days": 261,
+      "top_signals": 261,
+      "bottom_signals": 165,
+      "avg_regime_score": -0.237,
+      "avg_macro_score": 62.4,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2022": {
+      "trading_days": 260,
+      "top_signals": 260,
+      "bottom_signals": 156,
+      "avg_regime_score": 0.339,
+      "avg_macro_score": 30.2,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2023": {
+      "trading_days": 260,
+      "top_signals": 260,
+      "bottom_signals": 28,
+      "avg_regime_score": 0.035,
+      "avg_macro_score": 36.7,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2024": {
+      "trading_days": 262,
+      "top_signals": 262,
+      "bottom_signals": 228,
+      "avg_regime_score": -0.289,
+      "avg_macro_score": 51.1,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2025": {
+      "trading_days": 261,
+      "top_signals": 261,
+      "bottom_signals": 186,
+      "avg_regime_score": -0.255,
+      "avg_macro_score": 57.0,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    },
+    "2026": {
+      "trading_days": 72,
+      "top_signals": 72,
+      "bottom_signals": 43,
+      "avg_regime_score": -0.23,
+      "avg_macro_score": 60.9,
+      "top_accuracy": 0.0,
+      "bottom_accuracy": 0.0
+    }
+  },
+  "false_positive_analysis": {
+    "signal_fire_rate": 100.0,
+    "no_signal_days": 0,
+    "signal_days": 2355,
+    "daily_signal_frequency": 365.2,
+    "most_common_top_signals": [
+      {
+        "signal_name": "Low conviction",
+        "fire_count": 2317,
+        "fire_rate": 98.39
+      },
+      {
+        "signal_name": "High regime entropy",
+        "fire_count": 1766,
+        "fire_rate": 74.99
+      },
+      {
+        "signal_name": "HMM Stress state",
+        "fire_count": 878,
+        "fire_rate": 37.28
+      },
+      {
+        "signal_name": "Regime elevated",
+        "fire_count": 373,
+        "fire_rate": 15.84
+      },
+      {
+        "signal_name": "HMM Late Cycle state",
+        "fire_count": 258,
+        "fire_rate": 10.96
+      }
+    ],
+    "most_common_bottom_signals": [
+      {
+        "signal_name": "Regime deep negative",
+        "fire_count": 1053,
+        "fire_rate": 44.71
+      },
+      {
+        "signal_name": "Macro crushed",
+        "fire_count": 242,
+        "fire_rate": 10.28
+      },
+      {
+        "signal_name": "HMM Crisis state",
+        "fire_count": 183,
+        "fire_rate": 7.77
+      },
+      {
+        "signal_name": "Conviction building",
+        "fire_count": 15,
+        "fire_rate": 0.64
+      },
+      {
+        "signal_name": "Velocity turning positive",
+        "fire_count": 4,
+        "fire_rate": 0.17
+      }
+    ]
+  },
+  "turning_point_performance": {
+    "systematic_peaks_identified": 325,
+    "systematic_troughs_identified": 422,
+    "systematic_peak_signal_rate": 100.0,
+    "systematic_trough_signal_rate": 61.4,
+    "cherry_picked_dates": 16
+  }
+}

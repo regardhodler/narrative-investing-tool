@@ -1,0 +1,1463 @@
+{
+  "generated": "2026-04-14",
+  "analysis_date": "2026-04-14 17:06:48",
+  "methodology": {
+    "source_function": "_calculate_top_bottom_proximity from modules/quick_run.py lines 2244-2367",
+    "threshold_definition": "Signals with strength >= 50 are considered \"firing\"",
+    "score_calculation": "Average of all signal strengths for top/bottom separately",
+    "limitations": [
+      "HY Credit spread data not available historically",
+      "AAII sentiment data not available historically",
+      "Market breadth data not available historically",
+      "Velocity calculations simplified (no 5-day history)",
+      "Wyckoff resistance/support levels not available"
+    ]
+  },
+  "historical_records": [
+    {
+      "scenario": "dotcom_2000",
+      "name": "Dot-com Bubble (2000\u20132002)",
+      "role": "PEAK",
+      "date": "2000-03-24",
+      "regime_score": -0.1395,
+      "macro_score": 43.0,
+      "tech_score": 80.0,
+      "conviction": 14.0,
+      "entropy": 0,
+      "ll_zscore": 0,
+      "hmm_state": "N/A",
+      "top_pct": 68,
+      "bottom_pct": 0,
+      "top_signals": [
+        "Low conviction",
+        "Wyckoff Distribution B (80% conf)",
+        "Wyckoff downside target $82"
+      ],
+      "bottom_signals": [],
+      "wyckoff_phase": "Distribution",
+      "wyckoff_sub": "B",
+      "wyckoff_conf": 80,
+      "spy_price": 96.72,
+      "vix": 23.3,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Low conviction",
+            "value": 40.0,
+            "threshold_met": false
+          },
+          {
+            "name": "Wyckoff Distribution B (80% conf)",
+            "value": 80,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [],
+        "top_score": 60,
+        "bottom_score": 0,
+        "top_count": 1,
+        "bottom_count": 0
+      }
+    },
+    {
+      "scenario": "dotcom_2000",
+      "name": "Dot-com Bubble (2000\u20132002)",
+      "role": "TROUGH",
+      "date": "2002-10-09",
+      "regime_score": -0.3748,
+      "macro_score": 31.3,
+      "tech_score": 25.0,
+      "conviction": 37.0,
+      "entropy": 0,
+      "ll_zscore": 0,
+      "hmm_state": "N/A",
+      "top_pct": 50,
+      "bottom_pct": 70,
+      "top_signals": [
+        "Wyckoff Distribution A (50% conf)",
+        "Wyckoff downside target $39"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building"
+      ],
+      "wyckoff_phase": "Distribution",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 50.76,
+      "vix": 42.1,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Wyckoff Distribution A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 82.456,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 34.199999999999996,
+            "threshold_met": false
+          },
+          {
+            "name": "Conviction building",
+            "value": 74.0,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 50,
+        "bottom_score": 64,
+        "top_count": 1,
+        "bottom_count": 2
+      }
+    },
+    {
+      "scenario": "gfc_2008",
+      "name": "Global Financial Crisis (2007\u20132009)",
+      "role": "PEAK",
+      "date": "2007-10-09",
+      "regime_score": 0.024,
+      "macro_score": 51.2,
+      "tech_score": 75.0,
+      "conviction": 2.0,
+      "entropy": 0.904,
+      "ll_zscore": -44.22,
+      "hmm_state": "Late Cycle",
+      "top_pct": 69,
+      "bottom_pct": 68,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "Low conviction",
+        "LL declining",
+        "HMM stress regime",
+        "SPY at Wyckoff resistance $111"
+      ],
+      "bottom_signals": [
+        "Extreme LL stress",
+        "HMM crisis/late cycle",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $115"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 111.15,
+      "vix": 16.1,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 90.8,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "LL deteriorating",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Late Cycle state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Extreme LL stress",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 89,
+        "bottom_score": 75,
+        "top_count": 4,
+        "bottom_count": 2
+      }
+    },
+    {
+      "scenario": "gfc_2008",
+      "name": "Global Financial Crisis (2007\u20132009)",
+      "role": "TROUGH",
+      "date": "2009-03-09",
+      "regime_score": -0.4149,
+      "macro_score": 29.3,
+      "tech_score": 15.0,
+      "conviction": 41.0,
+      "entropy": 0.984,
+      "ll_zscore": -148.1,
+      "hmm_state": "Late Cycle",
+      "top_pct": 86,
+      "bottom_pct": 69,
+      "top_signals": [
+        "High entropy",
+        "LL declining",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building",
+        "Extreme LL stress",
+        "HMM crisis/late cycle",
+        "Wyckoff Accumulation A (40% conf)",
+        "Wyckoff upside target $92"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 40,
+      "spy_price": 49.81,
+      "vix": 49.7,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "LL deteriorating",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Late Cycle state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 91.27799999999999,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 46.199999999999996,
+            "threshold_met": false
+          },
+          {
+            "name": "Conviction building",
+            "value": 82.0,
+            "threshold_met": true
+          },
+          {
+            "name": "Extreme LL stress",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation A (40% conf)",
+            "value": 40,
+            "threshold_met": false
+          }
+        ],
+        "top_score": 88,
+        "bottom_score": 72,
+        "top_count": 3,
+        "bottom_count": 3
+      }
+    },
+    {
+      "scenario": "eu_debt_2011",
+      "name": "EU Debt Crisis (2011)",
+      "role": "PEAK",
+      "date": "2011-04-29",
+      "regime_score": 0.1523,
+      "macro_score": 57.6,
+      "tech_score": 75.0,
+      "conviction": 15.0,
+      "entropy": 0.967,
+      "ll_zscore": -5.46,
+      "hmm_state": "Neutral",
+      "top_pct": 68,
+      "bottom_pct": 42,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "Low conviction",
+        "LL declining",
+        "SPY at Wyckoff resistance $105"
+      ],
+      "bottom_signals": [
+        "Extreme LL stress",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $111"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 104.54,
+      "vix": 14.8,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 27.413999999999998,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 35.0,
+            "threshold_met": false
+          },
+          {
+            "name": "LL deteriorating",
+            "value": 43.68,
+            "threshold_met": false
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 52,
+        "bottom_score": 50,
+        "top_count": 1,
+        "bottom_count": 1
+      }
+    },
+    {
+      "scenario": "eu_debt_2011",
+      "name": "EU Debt Crisis (2011)",
+      "role": "TROUGH",
+      "date": "2011-10-03",
+      "regime_score": -0.5957,
+      "macro_score": 20.2,
+      "tech_score": 25.0,
+      "conviction": 60.0,
+      "entropy": 0.935,
+      "ll_zscore": -14.54,
+      "hmm_state": "Early Stress",
+      "top_pct": 82,
+      "bottom_pct": 79,
+      "top_signals": [
+        "High entropy",
+        "LL declining",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building",
+        "Extreme LL stress",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $112"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 85.09,
+      "vix": 45.5,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 97.00000000000001,
+            "threshold_met": true
+          },
+          {
+            "name": "LL deteriorating",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Early Stress state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Conviction building",
+            "value": 100,
+            "threshold_met": true
+          },
+          {
+            "name": "Extreme LL stress",
+            "value": 43.62,
+            "threshold_met": false
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 87,
+        "bottom_score": 79,
+        "top_count": 3,
+        "bottom_count": 4
+      }
+    },
+    {
+      "scenario": "china_2015",
+      "name": "China Devaluation (2015\u20132016)",
+      "role": "PEAK",
+      "date": "2015-07-20",
+      "regime_score": 0.2667,
+      "macro_score": 63.3,
+      "tech_score": 80.0,
+      "conviction": 27.0,
+      "entropy": 0.716,
+      "ll_zscore": -0.25,
+      "hmm_state": "Late Cycle",
+      "top_pct": 55,
+      "bottom_pct": 62,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "HMM stress regime",
+        "Wyckoff Distribution A (50% conf)",
+        "SPY at Wyckoff resistance $178",
+        "Wyckoff downside target $168"
+      ],
+      "bottom_signals": [
+        "Conviction building",
+        "HMM crisis/late cycle"
+      ],
+      "wyckoff_phase": "Distribution",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 177.7,
+      "vix": 12.2,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 48.006,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 53.19999999999999,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Late Cycle state",
+            "value": 65,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Distribution A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Conviction building",
+            "value": 54.0,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 54,
+        "bottom_score": 54,
+        "top_count": 3,
+        "bottom_count": 1
+      }
+    },
+    {
+      "scenario": "china_2015",
+      "name": "China Devaluation (2015\u20132016)",
+      "role": "TROUGH",
+      "date": "2016-02-11",
+      "regime_score": -0.3714,
+      "macro_score": 31.4,
+      "tech_score": 25.0,
+      "conviction": 37.0,
+      "entropy": 0.7,
+      "ll_zscore": -0.95,
+      "hmm_state": "Late Cycle",
+      "top_pct": 39,
+      "bottom_pct": 73,
+      "top_signals": [
+        "LL declining",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building",
+        "HMM crisis/late cycle",
+        "Wyckoff Accumulation B (80% conf)",
+        "Wyckoff upside target $189"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "B",
+      "wyckoff_conf": 80,
+      "spy_price": 154.56,
+      "vix": 28.1,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 49.999999999999986,
+            "threshold_met": false
+          },
+          {
+            "name": "HMM Late Cycle state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 81.708,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 33.60000000000001,
+            "threshold_met": false
+          },
+          {
+            "name": "Conviction building",
+            "value": 74.0,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation B (80% conf)",
+            "value": 80,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 57,
+        "bottom_score": 67,
+        "top_count": 1,
+        "bottom_count": 3
+      }
+    },
+    {
+      "scenario": "volmageddon_2018",
+      "name": "Volmageddon + Fed Selloff (2018)",
+      "role": "PEAK",
+      "date": "2018-01-26",
+      "regime_score": 0.2592,
+      "macro_score": 63.0,
+      "tech_score": 80.0,
+      "conviction": 26.0,
+      "entropy": 0.802,
+      "ll_zscore": -0.47,
+      "hmm_state": "Late Cycle",
+      "top_pct": 57,
+      "bottom_pct": 57,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Conviction building",
+        "HMM crisis/late cycle",
+        "Wyckoff Accumulation A (50% conf)"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 252.24,
+      "vix": 11.1,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 46.656,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 70.4,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Late Cycle state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Conviction building",
+            "value": 52.0,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 61,
+        "bottom_score": 51,
+        "top_count": 2,
+        "bottom_count": 2
+      }
+    },
+    {
+      "scenario": "volmageddon_2018",
+      "name": "Volmageddon + Fed Selloff (2018)",
+      "role": "TROUGH",
+      "date": "2018-12-24",
+      "regime_score": -0.3335,
+      "macro_score": 33.3,
+      "tech_score": 15.0,
+      "conviction": 33.0,
+      "entropy": 0.744,
+      "ll_zscore": -1.19,
+      "hmm_state": "Stress",
+      "top_pct": 48,
+      "bottom_pct": 61,
+      "top_signals": [
+        "High entropy",
+        "LL declining",
+        "HMM stress regime",
+        "Wyckoff Distribution B (60% conf)"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building"
+      ],
+      "wyckoff_phase": "Distribution",
+      "wyckoff_sub": "B",
+      "wyckoff_conf": 60,
+      "spy_price": 210.18,
+      "vix": 36.1,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 58.8,
+            "threshold_met": true
+          },
+          {
+            "name": "HMM Stress state",
+            "value": 65,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Distribution B (60% conf)",
+            "value": 60,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 73.37,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 22.200000000000017,
+            "threshold_met": false
+          },
+          {
+            "name": "Conviction building",
+            "value": 66.0,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 61,
+        "bottom_score": 54,
+        "top_count": 3,
+        "bottom_count": 2
+      }
+    },
+    {
+      "scenario": "covid_2020",
+      "name": "COVID Crash (2020)",
+      "role": "PEAK",
+      "date": "2020-02-19",
+      "regime_score": 0.2039,
+      "macro_score": 60.2,
+      "tech_score": 75.0,
+      "conviction": 20.0,
+      "entropy": 0.737,
+      "ll_zscore": -0.01,
+      "hmm_state": "Early Stress",
+      "top_pct": 42,
+      "bottom_pct": 50,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "Low conviction",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Wyckoff Accumulation A (50% conf)"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 309.2,
+      "vix": 14.4,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 36.702,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 57.4,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 10.0,
+            "threshold_met": false
+          },
+          {
+            "name": "HMM Early Stress state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 42,
+        "bottom_score": 50,
+        "top_count": 2,
+        "bottom_count": 1
+      }
+    },
+    {
+      "scenario": "covid_2020",
+      "name": "COVID Crash (2020)",
+      "role": "TROUGH",
+      "date": "2020-03-23",
+      "regime_score": -0.1845,
+      "macro_score": 40.8,
+      "tech_score": 25.0,
+      "conviction": 18.0,
+      "entropy": 0.809,
+      "ll_zscore": -2.08,
+      "hmm_state": "Crisis",
+      "top_pct": 44,
+      "bottom_pct": 54,
+      "top_signals": [
+        "High entropy",
+        "Low conviction",
+        "LL declining"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "HMM crisis/late cycle",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $308"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 204.94,
+      "vix": 61.6,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 71.80000000000001,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 20.0,
+            "threshold_met": false
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 40.589999999999996,
+            "threshold_met": false
+          },
+          {
+            "name": "HMM Crisis state",
+            "value": 75,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 46,
+        "bottom_score": 55,
+        "top_count": 1,
+        "bottom_count": 2
+      }
+    },
+    {
+      "scenario": "rate_shock_2022",
+      "name": "Rate Shock Bear Market (2022)",
+      "role": "PEAK",
+      "date": "2022-01-03",
+      "regime_score": 0.1639,
+      "macro_score": 58.2,
+      "tech_score": 75.0,
+      "conviction": 16.0,
+      "entropy": 0.842,
+      "ll_zscore": 1.93,
+      "hmm_state": "Neutral",
+      "top_pct": 48,
+      "bottom_pct": 0,
+      "top_signals": [
+        "Regime positive",
+        "High entropy",
+        "Low conviction",
+        "Wyckoff Distribution A (40% conf)",
+        "SPY at Wyckoff resistance $445",
+        "Wyckoff downside target $414"
+      ],
+      "bottom_signals": [],
+      "wyckoff_phase": "Distribution",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 40,
+      "spy_price": 450.64,
+      "vix": 16.6,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 29.502,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 78.39999999999999,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 30.0,
+            "threshold_met": false
+          },
+          {
+            "name": "Wyckoff Distribution A (40% conf)",
+            "value": 40,
+            "threshold_met": false
+          }
+        ],
+        "bottom_signals": [],
+        "top_score": 44,
+        "bottom_score": 0,
+        "top_count": 1,
+        "bottom_count": 0
+      }
+    },
+    {
+      "scenario": "rate_shock_2022",
+      "name": "Rate Shock Bear Market (2022)",
+      "role": "TROUGH",
+      "date": "2022-10-12",
+      "regime_score": -0.2769,
+      "macro_score": 36.2,
+      "tech_score": 25.0,
+      "conviction": 28.0,
+      "entropy": 0.676,
+      "ll_zscore": -0.65,
+      "hmm_state": "Stress",
+      "top_pct": 37,
+      "bottom_pct": 49,
+      "top_signals": [
+        "LL declining",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $432"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 340.25,
+      "vix": 33.6,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "HMM Stress state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 60.91799999999999,
+            "threshold_met": true
+          },
+          {
+            "name": "Macro crushed",
+            "value": 4.799999999999983,
+            "threshold_met": false
+          },
+          {
+            "name": "Conviction building",
+            "value": 56.0,
+            "threshold_met": true
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 65,
+        "bottom_score": 43,
+        "top_count": 1,
+        "bottom_count": 3
+      }
+    },
+    {
+      "scenario": "carry_unwind_2024",
+      "name": "Carry Trade Unwind (2024)",
+      "role": "PEAK",
+      "date": "2024-07-16",
+      "regime_score": 0.1813,
+      "macro_score": 59.1,
+      "tech_score": 80.0,
+      "conviction": 18.0,
+      "entropy": 0.686,
+      "ll_zscore": 0.3,
+      "hmm_state": "Stress",
+      "top_pct": 50,
+      "bottom_pct": 50,
+      "top_signals": [
+        "Regime positive",
+        "Low conviction",
+        "HMM stress regime",
+        "SPY at Wyckoff resistance $550"
+      ],
+      "bottom_signals": [
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $578"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 553.22,
+      "vix": 13.2,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "Regime elevated",
+            "value": 32.634,
+            "threshold_met": false
+          },
+          {
+            "name": "High regime entropy",
+            "value": 47.20000000000001,
+            "threshold_met": false
+          },
+          {
+            "name": "Low conviction",
+            "value": 20.0,
+            "threshold_met": false
+          },
+          {
+            "name": "HMM Stress state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 41,
+        "bottom_score": 50,
+        "top_count": 1,
+        "bottom_count": 1
+      }
+    },
+    {
+      "scenario": "carry_unwind_2024",
+      "name": "Carry Trade Unwind (2024)",
+      "role": "TROUGH",
+      "date": "2024-08-05",
+      "regime_score": -0.2087,
+      "macro_score": 39.6,
+      "tech_score": 32.5,
+      "conviction": 21.0,
+      "entropy": 0.713,
+      "ll_zscore": 0.22,
+      "hmm_state": "Stress",
+      "top_pct": 40,
+      "bottom_pct": 39,
+      "top_signals": [
+        "High entropy",
+        "Low conviction",
+        "HMM stress regime"
+      ],
+      "bottom_signals": [
+        "Regime deep negative",
+        "Macro crushed",
+        "Conviction building",
+        "Wyckoff Accumulation A (50% conf)",
+        "Wyckoff upside target $578"
+      ],
+      "wyckoff_phase": "Accumulation",
+      "wyckoff_sub": "A",
+      "wyckoff_conf": 50,
+      "spy_price": 506.72,
+      "vix": 38.6,
+      "signal_analysis": {
+        "top_signals": [
+          {
+            "name": "High regime entropy",
+            "value": 52.599999999999994,
+            "threshold_met": true
+          },
+          {
+            "name": "Low conviction",
+            "value": 5.0,
+            "threshold_met": false
+          },
+          {
+            "name": "HMM Stress state",
+            "value": 65,
+            "threshold_met": true
+          }
+        ],
+        "bottom_signals": [
+          {
+            "name": "Regime deep negative",
+            "value": 45.914,
+            "threshold_met": false
+          },
+          {
+            "name": "Wyckoff Accumulation A (50% conf)",
+            "value": 50,
+            "threshold_met": true
+          }
+        ],
+        "top_score": 41,
+        "bottom_score": 48,
+        "top_count": 2,
+        "bottom_count": 1
+      }
+    }
+  ],
+  "performance_analysis": {
+    "summary": {
+      "total_records": 16,
+      "peaks": 8,
+      "troughs": 8
+    },
+    "top_signals": {
+      "individual_analysis": {
+        "Low conviction": {
+          "avg_good": 39.2,
+          "avg_bad": 12.5,
+          "effectiveness": 0.267,
+          "count_good": 6,
+          "count_bad": 2
+        },
+        "Wyckoff Distribution B (80% conf)": {
+          "avg_good": 80.0,
+          "avg_bad": 0,
+          "effectiveness": 0.8,
+          "count_good": 1,
+          "count_bad": 0
+        },
+        "Wyckoff Distribution A (50% conf)": {
+          "avg_good": 50.0,
+          "avg_bad": 50.0,
+          "effectiveness": 0.0,
+          "count_good": 1,
+          "count_bad": 1
+        },
+        "High regime entropy": {
+          "avg_good": 71.1,
+          "avg_bad": 71.7,
+          "effectiveness": -0.006,
+          "count_good": 7,
+          "count_bad": 6
+        },
+        "LL deteriorating": {
+          "avg_good": 71.8,
+          "avg_bad": 100.0,
+          "effectiveness": -0.282,
+          "count_good": 2,
+          "count_bad": 2
+        },
+        "HMM Late Cycle state": {
+          "avg_good": 65.0,
+          "avg_bad": 65.0,
+          "effectiveness": 0.0,
+          "count_good": 3,
+          "count_bad": 2
+        },
+        "Regime elevated": {
+          "avg_good": 36.8,
+          "avg_bad": 0,
+          "effectiveness": 0.368,
+          "count_good": 6,
+          "count_bad": 0
+        },
+        "HMM Early Stress state": {
+          "avg_good": 65.0,
+          "avg_bad": 65.0,
+          "effectiveness": 0.0,
+          "count_good": 1,
+          "count_bad": 1
+        },
+        "HMM Stress state": {
+          "avg_good": 65.0,
+          "avg_bad": 65.0,
+          "effectiveness": 0.0,
+          "count_good": 1,
+          "count_bad": 3
+        },
+        "Wyckoff Distribution B (60% conf)": {
+          "avg_good": 0,
+          "avg_bad": 60.0,
+          "effectiveness": -0.6,
+          "count_good": 0,
+          "count_bad": 1
+        },
+        "Wyckoff Distribution A (40% conf)": {
+          "avg_good": 40.0,
+          "avg_bad": 0,
+          "effectiveness": 0.4,
+          "count_good": 1,
+          "count_bad": 0
+        }
+      },
+      "peak_performance": {
+        "label": "Top Signals at Market Peaks",
+        "scores": [
+          60,
+          89,
+          52,
+          54,
+          61,
+          42,
+          44,
+          41
+        ],
+        "avg_score": 55.4,
+        "max_score": 89.0,
+        "min_score": 41.0,
+        "threshold_analysis": {
+          "40": {
+            "hits": 8,
+            "total": 8,
+            "hit_rate": 1.0
+          },
+          "45": {
+            "hits": 5,
+            "total": 8,
+            "hit_rate": 0.625
+          },
+          "50": {
+            "hits": 5,
+            "total": 8,
+            "hit_rate": 0.625
+          },
+          "55": {
+            "hits": 3,
+            "total": 8,
+            "hit_rate": 0.375
+          },
+          "60": {
+            "hits": 3,
+            "total": 8,
+            "hit_rate": 0.375
+          },
+          "65": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          },
+          "70": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          }
+        }
+      },
+      "trough_performance": {
+        "label": "Top Signals at Market Troughs (false positives)",
+        "scores": [
+          50,
+          88,
+          87,
+          57,
+          61,
+          46,
+          65,
+          41
+        ],
+        "avg_score": 61.9,
+        "max_score": 88.0,
+        "min_score": 41.0,
+        "threshold_analysis": {
+          "40": {
+            "hits": 8,
+            "total": 8,
+            "hit_rate": 1.0
+          },
+          "45": {
+            "hits": 7,
+            "total": 8,
+            "hit_rate": 0.875
+          },
+          "50": {
+            "hits": 6,
+            "total": 8,
+            "hit_rate": 0.75
+          },
+          "55": {
+            "hits": 5,
+            "total": 8,
+            "hit_rate": 0.625
+          },
+          "60": {
+            "hits": 4,
+            "total": 8,
+            "hit_rate": 0.5
+          },
+          "65": {
+            "hits": 3,
+            "total": 8,
+            "hit_rate": 0.375
+          },
+          "70": {
+            "hits": 2,
+            "total": 8,
+            "hit_rate": 0.25
+          }
+        }
+      }
+    },
+    "bottom_signals": {
+      "individual_analysis": {
+        "Regime deep negative": {
+          "avg_good": 72.0,
+          "avg_bad": 0,
+          "effectiveness": 0.72,
+          "count_good": 8,
+          "count_bad": 0
+        },
+        "Macro crushed": {
+          "avg_good": 40.2,
+          "avg_bad": 0,
+          "effectiveness": 0.402,
+          "count_good": 6,
+          "count_bad": 0
+        },
+        "Conviction building": {
+          "avg_good": 75.3,
+          "avg_bad": 53.0,
+          "effectiveness": 0.223,
+          "count_good": 6,
+          "count_bad": 2
+        },
+        "Extreme LL stress": {
+          "avg_good": 71.8,
+          "avg_bad": 100.0,
+          "effectiveness": -0.282,
+          "count_good": 2,
+          "count_bad": 1
+        },
+        "Wyckoff Accumulation A (50% conf)": {
+          "avg_good": 50.0,
+          "avg_bad": 50.0,
+          "effectiveness": 0.0,
+          "count_good": 4,
+          "count_bad": 5
+        },
+        "Wyckoff Accumulation A (40% conf)": {
+          "avg_good": 40.0,
+          "avg_bad": 0,
+          "effectiveness": 0.4,
+          "count_good": 1,
+          "count_bad": 0
+        },
+        "Wyckoff Accumulation B (80% conf)": {
+          "avg_good": 80.0,
+          "avg_bad": 0,
+          "effectiveness": 0.8,
+          "count_good": 1,
+          "count_bad": 0
+        },
+        "HMM Crisis state": {
+          "avg_good": 75.0,
+          "avg_bad": 0,
+          "effectiveness": 0.75,
+          "count_good": 1,
+          "count_bad": 0
+        }
+      },
+      "trough_performance": {
+        "label": "Bottom Signals at Market Troughs",
+        "scores": [
+          64,
+          72,
+          79,
+          67,
+          54,
+          55,
+          43,
+          48
+        ],
+        "avg_score": 60.2,
+        "max_score": 79.0,
+        "min_score": 43.0,
+        "threshold_analysis": {
+          "40": {
+            "hits": 8,
+            "total": 8,
+            "hit_rate": 1.0
+          },
+          "45": {
+            "hits": 7,
+            "total": 8,
+            "hit_rate": 0.875
+          },
+          "50": {
+            "hits": 6,
+            "total": 8,
+            "hit_rate": 0.75
+          },
+          "55": {
+            "hits": 5,
+            "total": 8,
+            "hit_rate": 0.625
+          },
+          "60": {
+            "hits": 4,
+            "total": 8,
+            "hit_rate": 0.5
+          },
+          "65": {
+            "hits": 3,
+            "total": 8,
+            "hit_rate": 0.375
+          },
+          "70": {
+            "hits": 2,
+            "total": 8,
+            "hit_rate": 0.25
+          }
+        }
+      },
+      "peak_performance": {
+        "label": "Bottom Signals at Market Peaks (false positives)",
+        "scores": [
+          0,
+          75,
+          50,
+          54,
+          51,
+          50,
+          0,
+          50
+        ],
+        "avg_score": 41.2,
+        "max_score": 75.0,
+        "min_score": 0.0,
+        "threshold_analysis": {
+          "40": {
+            "hits": 6,
+            "total": 8,
+            "hit_rate": 0.75
+          },
+          "45": {
+            "hits": 6,
+            "total": 8,
+            "hit_rate": 0.75
+          },
+          "50": {
+            "hits": 6,
+            "total": 8,
+            "hit_rate": 0.75
+          },
+          "55": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          },
+          "60": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          },
+          "65": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          },
+          "70": {
+            "hits": 1,
+            "total": 8,
+            "hit_rate": 0.125
+          }
+        }
+      }
+    },
+    "overall_effectiveness": {
+      "top_signal_discrimination": {
+        "avg_at_peaks": 55.4,
+        "avg_at_troughs": 61.9,
+        "discrimination_power": -6.5
+      },
+      "bottom_signal_discrimination": {
+        "avg_at_troughs": 60.2,
+        "avg_at_peaks": 41.2,
+        "discrimination_power": 19.0
+      }
+    }
+  }
+}
