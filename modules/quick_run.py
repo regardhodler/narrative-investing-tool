@@ -2977,7 +2977,20 @@ def _render_qir_dashboard() -> None:
                 except Exception:
                     pass
 
-                _hmm_html = _hmm_html + _cal_html + f'</div>'
+                _tip_html = (
+                    f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #1e3a5f;">'
+                    f'<div style="font-size:7px;color:#3b5f8a;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">💡 AFTER RETRAINING</div>'
+                    f'<div style="font-size:8px;color:#475569;line-height:1.5;">'
+                    f'Re-run the backtest to recalibrate CI% anchors:<br>'
+                    f'<span style="font-family:monospace;color:#64748b;font-size:8px;">'
+                    f'python ll_gate_backtest_live_brain.py</span><br>'
+                    f'Then update the <span style="color:#64748b;">0.448</span> anchor in '
+                    f'quick_run.py + backtesting.py if the COVID peak z-score changed.'
+                    f'</div></div>'
+                )
+                _hmm_html = _hmm_html + _cal_html + _tip_html + f'</div>'
                 _hmm_block = _hmm_html
             elif _hmm_b is None:
                 _hmm_block = (
