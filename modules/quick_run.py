@@ -3057,6 +3057,8 @@ def _render_qir_dashboard() -> None:
 
         # ── Bottom Watch card (always visible; greyed when CI% < 22) ───────────
         _bw_block = ""
+        # _ci in outer scope (same formula as inside _build_ll_anchored_block)
+        _ci = max(0.0, (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0)
         try:
             _bw_live = _ci >= 22.0 and bool(_tb_bw)
             _bw_score = (_tb_bw.get("score", 0) if _tb_bw else 0) if _bw_live else 0
@@ -3520,6 +3522,8 @@ def _render_qir_dashboard() -> None:
             _medium_parts.append(_conviction_block)
         if _kelly_block:
             _medium_parts.append(f'<div style="margin-bottom:10px;">{_kelly_block}</div>')
+        if _verdict_html:
+            _medium_parts.append(_verdict_html)
         if _lean_card:
             _medium_parts.append(_lean_card)
         _medium_parts.append(_gex_block + _signal_breakdown_block)
@@ -3584,7 +3588,6 @@ def _render_qir_dashboard() -> None:
         # ── MEDIUM: structural Kelly sizing + contextual signals ───────────────
         f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
         f'{_medium_html}'
-        f'{_verdict_html}'
         f'{_hmm_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
         f'{_bw_block if _populated else ""}'
