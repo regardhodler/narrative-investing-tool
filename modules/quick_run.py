@@ -2998,7 +2998,29 @@ def _render_qir_dashboard() -> None:
                     f'quick_run.py + backtesting.py if the COVID peak z-score changed.'
                     f'</div></div>'
                 )
-                _hmm_html = _hmm_html + _cal_html + _tip_html + f'</div>'
+
+                _state_legend_html = (
+                    f'<div style="margin-top:8px;padding:7px 8px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #0f1f2e;">'
+                    f'<div style="font-size:7px;color:#1e3a5f;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:5px;">STATE GUIDE</div>'
+                    f'<div style="font-size:8px;color:#1e3a5f;line-height:1.9;">'
+                    f'<span style="color:#22c55e;font-weight:700;">Bull</span>'
+                    f'<span style="color:#334155;"> — tight credit (HY &lt;350bp), low VIX, risk-on. Full conviction sizing ×1.10</span><br>'
+                    f'<span style="color:#94a3b8;font-weight:700;">Neutral</span>'
+                    f'<span style="color:#334155;"> — balanced, no extremes. Wait for confirmation. Baseline sizing ×1.00</span><br>'
+                    f'<span style="color:#f59e0b;font-weight:700;">Early Stress</span>'
+                    f'<span style="color:#334155;"> — spreads starting to widen, VIX creeping. Trim speculative. ×0.90</span><br>'
+                    f'<span style="color:#f97316;font-weight:700;">Stress</span>'
+                    f'<span style="color:#334155;"> — HY 400–600bp, sellers in control. Reduce equity, size down ×0.85</span><br>'
+                    f'<span style="color:#ef4444;font-weight:700;">Late Cycle</span>'
+                    f'<span style="color:#334155;"> — spreads elevated for weeks/months, economy weakening. Quality only ×0.75</span><br>'
+                    f'<span style="color:#dc2626;font-weight:700;">Crisis</span>'
+                    f'<span style="color:#334155;"> — HY &gt;600bp, credit dislocation. Capital preservation mode ×0.60</span>'
+                    f'</div></div>'
+                )
+
+                _hmm_html = _hmm_html + _cal_html + _tip_html + _state_legend_html + f'</div>'
                 _hmm_block = _hmm_html
             elif _hmm_b is None:
                 _hmm_block = (
