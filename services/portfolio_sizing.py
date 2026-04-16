@@ -724,12 +724,21 @@ def compute_qir_kelly(
 
     avg_win  = stats["avg_win_pct"]
     avg_loss = abs(stats["avg_loss_pct"])
-    if n_wins >= 1 and n_losses >= 1 and avg_loss > 0:
+    if n_wins >= 5 and n_losses >= 5 and avg_loss > 0:
+        # Enough real history on both sides — use actual win/loss ratio
         b = avg_win / avg_loss
-        b_source = "Historical"
+        b_source = f"Historical (w={n_wins}, l={n_losses})"
+    elif n_wins >= 1 and n_losses >= 1 and avg_loss > 0:
+        # Some history but not enough for full confidence — blend ATR rule with real data
+        _atr_b = 1.5  # ATR weekly ×3 target / ×2 stop = 1.5
+        _real_b = avg_win / avg_loss
+        _blend_w = min((n_wins + n_losses) / 10.0, 0.5)  # up to 50% real at 10 trades each side
+        b = _atr_b * (1 - _blend_w) + _real_b * _blend_w
+        b_source = f"ATR 2:3 rule + partial history (n={n_wins+n_losses})"
     else:
-        b = b_implied
-        b_source = f"Regime-implied ({quadrant or 'Neutral'}, {'short' if _p_dir == -1 else 'long'})"
+        # No real history yet — use ATR weekly ×3/×2 = 1.5 as bootstrap
+        b = 1.5
+        b_source = "ATR weekly 2:3 rule (bootstrap)"
 
     # ── Kelly formula ─────────────────────────────────────────────────────────
     q = 1.0 - p
