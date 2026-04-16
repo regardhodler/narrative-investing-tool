@@ -2241,6 +2241,14 @@ def _render_qir_dashboard() -> None:
         # ── AAII sentiment ─────────────────────────────────────────────────────
         _tb_aaii = st.session_state.get("_aaii_sentiment") or {}
 
+        # ── Bottom Watch signals (4-signal bottom detection) ───────────────────
+        _tb_bw = None
+        try:
+            from services.market_data import fetch_bottom_watch_signals as _fbws
+            _tb_bw = _fbws()
+        except Exception:
+            pass
+
         # ── LL-ANCHORED CRISIS DETECTION ─────────────────────────────────────────
         # Crisis Intensity (CI%) normalizes LL z-score to 0-100% scale:
         #   0%   = z  0.0    (perfectly normal market)
@@ -3013,6 +3021,104 @@ def _render_qir_dashboard() -> None:
                 f'</pre></div>'
             )
 
+
+        # ── Bottom Watch card (CI% ≥ 22 only — stress/crisis gate) ───────────
+        _bw_block = ""
+        try:
+            if _ci >= 22.0 and _tb_bw:
+                _bw_score = _tb_bw.get("score", 0)
+                _bw_active = _tb_bw.get("active", False)
+                _bw_sigs = _tb_bw.get("signals", {})
+                _bw_vals = _tb_bw.get("values", {})
+                _bw_note = _tb_bw.get("note", "")
+
+                # Color by score: 4=emerald, 3=yellow, 1-2=slate, 0=slate
+                if _bw_score == 4:
+                    _bw_color = "#10b981"   # emerald — confirmed
+                    _bw_label = "BOTTOM CONFIRMED"
+                elif _bw_score == 3:
+                    _bw_color = "#f59e0b"   # amber — watch
+                    _bw_label = "BOTTOM WATCH"
+                elif _bw_score >= 1:
+                    _bw_color = "#64748b"   # slate — early
+                    _bw_label = "EARLY SIGNALS"
+                else:
+                    _bw_color = "#334155"   # dark slate — no signal
+                    _bw_label = "NO SIGNAL"
+
+                # Signal pills row
+                _sig_cfg = [
+                    ("LL↑", "ll_recovery",  "LL Recovering"),
+                    ("VIX", "vix_elevated", "VIX Normalized"),
+                    ("HY↓", "hy_compress",  "HY Compressing"),
+                    ("VVIX", "vvix_compress", "VVIX Compressing"),
+                ]
+                _pill_html = ""
+                for _plabel, _pkey, _ptitle in _sig_cfg:
+                    _pfiring = _bw_sigs.get(_pkey, False)
+                    _pcol = "#10b981" if _pfiring else "#334155"
+                    _ptxt = "#ecfdf5" if _pfiring else "#64748b"
+                    _pill_html += (
+                        f'<span title="{_ptitle}" style="display:inline-block;background:{_pcol}22;'
+                        f'border:1px solid {_pcol};border-radius:3px;padding:1px 6px;margin-right:4px;'
+                        f'font-size:9px;color:{_ptxt};font-weight:700;">'
+                        f'{"✓ " if _pfiring else "○ "}{_plabel}</span>'
+                    )
+
+                # Values row
+                _vix_now = _bw_vals.get("vix_now")
+                _vix_peak = _bw_vals.get("vix_60d_peak")
+                _hy_now = _bw_vals.get("hy_now")
+                _vvix_now = _bw_vals.get("vvix_now")
+                _vals_parts = []
+                if _vix_now is not None:
+                    _vals_parts.append(f"VIX {_vix_now:.1f} (pk {_vix_peak:.0f})")
+                if _hy_now is not None:
+                    _vals_parts.append(f"HY {_hy_now:.2f}%")
+                if _vvix_now is not None:
+                    _vals_parts.append(f"VVIX {_vvix_now:.0f}")
+                _vals_str = " · ".join(_vals_parts) if _vals_parts else ""
+
+                # Score bar (4 segments)
+                _bar_html = ""
+                for _i in range(4):
+                    _seg_col = _bw_color if _i < _bw_score else "#1e293b"
+                    _bar_html += (
+                        f'<div style="flex:1;height:4px;background:{_seg_col};'
+                        f'border-radius:2px;margin-right:{"0" if _i==3 else "2"}px;"></div>'
+                    )
+
+                _bw_block = (
+                    f'<div style="background:#0f172a;border:1px solid {_bw_color}44;'
+                    f'border-left:3px solid {_bw_color};border-radius:6px;'
+                    f'padding:10px 14px;margin-bottom:10px;">'
+
+                    # Header
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                    f'<span style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.12em;">BOTTOM WATCH</span>'
+                    f'<span style="font-size:10px;color:{_bw_color};font-weight:800;">{_bw_score}/4</span>'
+                    f'</div>'
+
+                    # Status label
+                    f'<div style="font-size:13px;color:{_bw_color};font-weight:800;margin-bottom:5px;">{_bw_label}</div>'
+
+                    # Score bar
+                    f'<div style="display:flex;margin-bottom:8px;">{_bar_html}</div>'
+
+                    # Signal pills
+                    f'<div style="margin-bottom:7px;">{_pill_html}</div>'
+
+                    # Values
+                    + (f'<div style="font-size:9px;color:#475569;margin-bottom:5px;">{_vals_str}</div>' if _vals_str else "")
+
+                    # Note
+                    + f'<div style="border-top:1px solid #1e293b;padding-top:6px;font-size:9px;color:#64748b;">'
+                    + f'<span style="color:{_bw_color};">▸</span> {_bw_note}</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
         # ── GEX Dealer Positioning card ──────────────────────────────────────
         try:
             _rc_fresh = st.session_state.get("_regime_context") or {}
@@ -3309,7 +3415,7 @@ def _render_qir_dashboard() -> None:
 
     # ── Compose zone 2: slow signals (Kelly+HMM+GEX+lean+signal) — top_bottom rendered separately ──
     # ── SLOW: just the HMM regime brain (LL + entropy + forecasts) ──────────
-    _slow_html = _hmm_block if _populated else ""
+    _slow_html = (_hmm_block if _populated else "") + (_bw_block if _populated else "")
 
     # ── MEDIUM: structural Kelly sizing + contextual signals + entry card ────
     _medium_html = ""

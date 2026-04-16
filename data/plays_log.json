@@ -14019,5 +14019,134 @@
       "n_positions": 14,
       "verdict": "REDUCE_RISK"
     }
+  },
+  {
+    "id": "20260415_183116_21",
+    "timestamp": "2026-04-15T18:31:16.215985",
+    "feature": "Discovery Plays",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Financials",
+          "conviction": 3
+        },
+        {
+          "name": "Industrials",
+          "conviction": 2
+        },
+        {
+          "name": "Technology",
+          "conviction": 3
+        },
+        {
+          "name": "Energy",
+          "conviction": 2
+        },
+        {
+          "name": "Basic Materials",
+          "conviction": 1
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "JPM",
+          "reason": "Strong sector momentum and favorable rate environment",
+          "conviction": 3
+        },
+        {
+          "ticker": "BAC",
+          "reason": "Improving credit trends and dividend yield",
+          "conviction": 2
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Cyclical upturn and industrial growth",
+          "conviction": 2
+        },
+        {
+          "ticker": "NVDA",
+          "reason": "AI-driven growth and semiconductor trends",
+          "conviction": 3
+        },
+        {
+          "ticker": "XOM",
+          "reason": "Energy sector rebound and dividend stability",
+          "conviction": 2
+        },
+        {
+          "ticker": "MSFT",
+          "reason": "Cloud computing growth and tech sector momentum",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "HYG",
+          "reason": "High-yield bond spread compression and credit stability",
+          "conviction": 2
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term bond yield stability and low interest rate risk",
+          "conviction": 1
+        },
+        {
+          "ticker": "IEF",
+          "conviction": 1,
+          "reason": "Intermediate-term bond yield stability and moderate credit risk"
+        }
+      ],
+      "rationale": "The Neutral-Leaning Risk-On regime with strong sector breadth, equity trends, and yield curve steepening favors cyclicals like financials, industrials, and technology. The extreme fear sentiment and favorable rate environment support a contrarian buy approach, with a focus on high-conviction picks like JPM, NVDA, and HYG. The upcoming FOMC and data events warrant some caution, but the current regime and quadrant suggest a favorable entry point for selective risk assets."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-On"
+    }
+  },
+  {
+    "id": "20260415_192443_46",
+    "timestamp": "2026-04-15T19:24:43.460613",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6673183618768777,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.1519697711494535,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0021653981637225718,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.17854646880994632,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
   }
 ]

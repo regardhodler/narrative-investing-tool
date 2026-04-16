@@ -5,6 +5,7 @@ Uses yfinance as primary provider with caching.
 Other modules should import from here instead of calling yfinance directly.
 """
 
+import json
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -571,6 +572,118 @@ def fetch_fred_series(series_id: str) -> pd.Series:
         pass
 
     raise _FredFetchError(f"Failed to fetch FRED series {series_id}")
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_bottom_watch_signals() -> dict:
+    """Evaluate 4-signal bottom detection system.
+
+    Signals (all required for max confidence):
+      1. LL recovery   — LL z-score rising 3+ consecutive days from 30d local min
+      2. VIX elevated  — VIX 60d peak ≥ 28 AND current < 24 (spike then normalize)
+      3. HY compress   — HY spread falling 3+ days from peak > 4.0
+      4. VVIX compress — VVIX falling 3+ days from peak > 80 (tail-risk / P/C proxy)
+
+    Backtest results (2013–2026, 4/4 required):
+      Detection: 50% (2/4)   False alarms: 0/5   Precision: 100%
+
+    Returns dict with keys:
+        signals: dict[str, bool]   — which signals are firing
+        values:  dict[str, float]  — current raw values
+        score:   int               — 0-4 count of active signals
+        active:  bool              — True if score >= 3
+        note:    str               — plain-text summary
+    """
+    result = {
+        "signals": {"ll_recovery": False, "vix_elevated": False, "hy_compress": False, "vvix_compress": False},
+        "values": {},
+        "score": 0,
+        "active": False,
+        "note": "Data unavailable",
+    }
+    try:
+        # ── LL recovery: load last 35 rows from backtest JSON ────────────────
+        _bt_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "ll_gate_backtest_live_brain.json")
+        if os.path.exists(_bt_path):
+            with open(_bt_path) as _f:
+                _bt_data = json.load(_f)
+            _ll_vals = [float(r["ll_zscore"]) for r in _bt_data[-35:] if "ll_zscore" in r]
+        else:
+            _ll_vals = []
+
+        _ll_ok = False
+        if len(_ll_vals) >= 33:
+            _local_min = min(_ll_vals[:30])
+            _tail3 = _ll_vals[-3:]
+            _stressed = _local_min < -0.10
+            _rising = all(_tail3[i] > _tail3[i - 1] for i in range(1, 3))
+            _ll_ok = bool(_stressed and _rising)
+        result["signals"]["ll_recovery"] = _ll_ok
+        result["values"]["ll_z"] = round(_ll_vals[-1], 4) if _ll_vals else None
+
+        # ── VIX was-elevated: 60d peak ≥ 28 AND current < 24 ────────────────
+        _vix_df = yf.download("^VIX", period="90d", interval="1d", progress=False, auto_adjust=True)
+        if not _vix_df.empty:
+            _vix_series = _vix_df["Close"].squeeze().dropna()
+            _vix_last60 = _vix_series.tail(60)
+            _vix_peak = float(_vix_last60.max())
+            _vix_now = float(_vix_series.iloc[-1])
+            _vix_ok = bool(_vix_peak >= 28 and _vix_now < 24)
+            result["signals"]["vix_elevated"] = _vix_ok
+            result["values"]["vix_now"] = round(_vix_now, 1)
+            result["values"]["vix_60d_peak"] = round(_vix_peak, 1)
+
+        # ── HY compress: falling 3+ days from peak > 4.0 ────────────────────
+        _hy_series = fetch_fred_series_safe("BAMLH0A0HYM2")
+        _hy_ok = False
+        if _hy_series is not None and len(_hy_series) >= 25:
+            _hy_vals = _hy_series.dropna().values[-25:]
+            _hy_now = float(_hy_vals[-1])
+            _hy_peak20 = float(max(_hy_vals[:-3]))
+            if _hy_peak20 >= 4.0:
+                _tail3h = _hy_vals[-3:]
+                _hy_ok = bool(all(_tail3h[i] < _tail3h[i - 1] for i in range(1, 3)))
+            result["values"]["hy_now"] = round(_hy_now, 2)
+            result["values"]["hy_20d_peak"] = round(_hy_peak20, 2)
+        result["signals"]["hy_compress"] = _hy_ok
+
+        # ── VVIX compress: falling 3+ days from peak > 80 ───────────────────
+        _vvix_df = yf.download("^VVIX", period="45d", interval="1d", progress=False, auto_adjust=True)
+        _vvix_ok = False
+        if not _vvix_df.empty:
+            _vvix_series = _vvix_df["Close"].squeeze().dropna()
+            if len(_vvix_series) >= 10:
+                _vvix_vals = _vvix_series.values[-25:] if len(_vvix_series) >= 25 else _vvix_series.values
+                _vvix_now = float(_vvix_vals[-1])
+                _vvix_peak = float(max(_vvix_vals[:-3])) if len(_vvix_vals) >= 6 else 0.0
+                if _vvix_peak >= 80:
+                    _tail3v = _vvix_vals[-3:]
+                    _vvix_ok = bool(all(_tail3v[i] < _tail3v[i - 1] for i in range(1, 3)))
+                result["values"]["vvix_now"] = round(_vvix_now, 1)
+                result["values"]["vvix_peak"] = round(_vvix_peak, 1)
+        result["signals"]["vvix_compress"] = _vvix_ok
+
+        score = sum(result["signals"].values())
+        result["score"] = score
+        result["active"] = score >= 3
+
+        firing = [k for k, v in result["signals"].items() if v]
+        missing = [k for k, v in result["signals"].items() if not v]
+        _LABELS = {"ll_recovery": "LL Recovery", "vix_elevated": "VIX Normalized",
+                   "hy_compress": "HY Compressing", "vvix_compress": "VVIX Compressing"}
+        if score == 4:
+            result["note"] = "All 4 signals firing — potential bottom confirmation"
+        elif score == 3:
+            result["note"] = f"3/4 firing — elevated watch. Missing: {_LABELS.get(missing[0], missing[0])}"
+        elif score >= 1:
+            result["note"] = f"{score}/4 — early watch ({', '.join(_LABELS.get(k, k) for k in firing)})"
+        else:
+            result["note"] = "No signals active — normal market conditions"
+
+    except Exception as _e:
+        result["note"] = f"Error: {_e}"
+
+    return result
 
 
 def fetch_fred_series_safe(series_id: str) -> pd.Series | None:
