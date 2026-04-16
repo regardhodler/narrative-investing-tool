@@ -466,6 +466,56 @@ def _section_suggested_prompts() -> str:
 # Top-level export builders
 # ---------------------------------------------------------------------------
 
+def _section_qir_snapshot() -> str:
+    """Export current QIR pattern, conviction, Kelly, and Bottom Watch status."""
+    pattern = st.session_state.get("_qir_pattern")
+    conviction = st.session_state.get("_conviction_score")
+    kly = st.session_state.get("_kly") or {}
+    kelly_pct = kly.get("kelly_half_pct") if kly else st.session_state.get("_kelly_half_pct")
+    bottom_signals = st.session_state.get("_bottom_watch_signals")
+    hmm_ctx = st.session_state.get("_hmm_context")
+
+    if all(v is None for v in [pattern, conviction, kelly_pct, bottom_signals, hmm_ctx]):
+        return ""
+
+    lines = ["## QIR SNAPSHOT"]
+
+    if pattern is not None:
+        lines.append(f"- **Signal Pattern:** {pattern}")
+
+    if conviction is not None:
+        if conviction >= 75:
+            conv_label = "HIGH CONVICTION — all signal domains agree"
+        elif conviction >= 55:
+            conv_label = "MODERATE CONVICTION — majority aligned"
+        elif conviction >= 40:
+            conv_label = "LOW CONVICTION — signals mixed"
+        else:
+            conv_label = "VERY LOW CONVICTION — signals conflict or absent"
+        lines.append(f"- **Conviction × Uncertainty:** {conviction}/100 ({conv_label})")
+
+    if kelly_pct is not None:
+        viable = kelly_pct >= 0.1
+        lines.append(f"- **Long Term Kelly:** {kelly_pct:.2f}% {'(viable)' if viable else '(below threshold — negative expectancy)'}")
+
+    if bottom_signals is not None:
+        fired = [k for k, v in bottom_signals.items() if v] if isinstance(bottom_signals, dict) else []
+        total_sigs = len(bottom_signals) if isinstance(bottom_signals, dict) else 4
+        lines.append(f"- **Market Bottom Watch:** {len(fired)}/{total_sigs} signals live ({', '.join(fired) if fired else 'none'})")
+    else:
+        lines.append("- **Market Bottom Watch:** dormant (CI% < 22% or not yet computed)")
+
+    if hmm_ctx is not None and isinstance(hmm_ctx, dict):
+        state = hmm_ctx.get("state_label", "—")
+        conf = hmm_ctx.get("confidence", 0)
+        ll_z = hmm_ctx.get("ll_zscore", 0)
+        ci_pct = abs(ll_z) / 0.467 * 100 if ll_z else 0
+        lines.append(f"- **HMM State:** {state} (conf={conf:.2f}, ll_z={ll_z:.3f}, CI%={ci_pct:.1f}%)")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_markdown_export(open_trades: list) -> str:
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -473,6 +523,7 @@ def _build_markdown_export(open_trades: list) -> str:
         _section_executive_summary(open_trades),
         _section_current_events(),
         _section_regime(),
+        _section_qir_snapshot(),
         _section_rate_path(),
         _section_policy_transmission(),
         _section_regime_plays(),
@@ -565,7 +616,7 @@ def _build_pipeline_export() -> str:
     ]
 
     module_layer = [
-        ("modules/quick_run.py", "QIR master dashboard: LL-anchored CI% crisis detection, HMM Brain State card, conviction scoring, Elliott Wave, Wyckoff, GEX, entry signal, Kelly sizing"),
+        ("modules/quick_run.py", "QIR master dashboard: HMM Brain State card, LL-anchored CI% crisis detection, Market Bottom Watch (always visible; dormant CI<22 / live CI≥22), Conviction×Uncertainty card, Long Term Kelly card, Buy/Short Setup cards (LONG KELLY/SHORT KELLY badges), Lean Accuracy block, GEX + signal breakdown. 27-pattern classifier (_classify_signals) maps regime×tactical×options to named signal patterns with label/color/instruments/entry rules/tips. Options instruments removed from Buy/Short setup tiers (flow still affects Kelly via alignment multiplier)."),
         ("modules/risk_regime.py", "cross-asset macro classifier + quadrant + tactical overlay (17+ z-scored signals)"),
         ("modules/backtesting.py", "historical snapshot viewer with CI% LL-anchored block, Wyckoff pill, regime overlays"),
         ("modules/fed_forecaster.py", "Fed path probabilities and implications"),
@@ -666,6 +717,11 @@ def _build_pipeline_export() -> str:
         "   - modules/quick_run.py: abs(_tb_ll_z) / 0.448 * 100",
         "   - modules/backtesting.py: same formula",
         "",
+        "### Market Bottom Watch (linked to CI%)",
+        "- Always visible in QIR; dormant (opacity 0.55, grey) when CI% < 22, live when CI% ≥ 22",
+        "- Live state: 4 bottom signals (LL recovery, VIX-was-elevated, HY compress, VVIX compress)",
+        "- 4-tile legend: 1/4 slate → 2/4 blue → 3/4 amber → 4/4 emerald",
+        "",
         "### Current Live State",
         f"- HMM state: {hmm_state_str}",
         f"- Brain: {hmm_brain_str}",
@@ -673,7 +729,26 @@ def _build_pipeline_export() -> str:
         "---",
         "## 3) ORCHESTRATION FLOWS",
         "",
-        "### Quick Intel Run (QIR)",
+        "### QIR Signal Pattern System",
+        "- 27 named signal patterns covering all 3³ regime×tactical×options combinations",
+        "- Each pattern has: label, color, bullish flag, interpretation, buy/short instrument tiers,",
+        "  entry/risk rules, 2 tip directions (up/down)",
+        "- Pattern classifier: _classify_signals(regime_dir, tactical_dir, options_dir) → pattern name",
+        "- GENUINE_UNCERTAINTY is residual/fallback (unreachable in practice — all combos named)",
+        "- Options instruments excluded from Buy/Short setup tiers; options flow affects Kelly via",
+        "  alignment multiplier (0/4=×0.25 … 4/4=×1.00)",
+        "",
+        "### Quick Intel Run (QIR) Card Order",
+        "1. HMM Brain State card",
+        "2. LL-Anchored Crisis Detection (CI%)",
+        "3. Market Bottom Watch card (always visible)",
+        "4. Conviction × Uncertainty card",
+        "5. Long Term Kelly card (renamed from 'KELLY SIZING'; tooltip: 'your core portfolio allocation')",
+        "6. Buy/Short Setup cards (LONG KELLY / SHORT KELLY badges)",
+        "7. Lean Accuracy block",
+        "8. GEX + signal breakdown",
+        "",
+        "### Quick Intel Run (QIR) Rounds",
     ])
     lines.extend([f"- {step}" for step in qir_rounds])
 
@@ -731,7 +806,7 @@ def _build_pipeline_export() -> str:
         "- Which modules rely on stale assumptions or duplicated logic?",
         "- What monitoring and tests are missing for high-impact failure points?",
         "- Where should the pipeline add probabilistic uncertainty and calibration?",
-        "- How should the CI% system be extended to detect market bottoms (not just tops)?",
+        "- How should the 27-pattern classifier be backtested for signal accuracy?",
         "- What additional FRED features would improve HMM regime discrimination?",
         "",
         "---",
@@ -957,6 +1032,8 @@ def _build_pipeline_upgrade_brief() -> str:
         "- Gate z=-0.30: 100% precision, 0 false alarms. Volmageddon 76%, Fed Panic 96%, COVID 100%",
         "- CRITICAL BUG fixed: lookback_years now stored in brain JSON. Old bug: 14yr vs 15yr lookback",
         "  produced z=-1.272 (false crisis) vs correct z=-0.000 (normal market)",
+        "- Market Bottom Watch: always-visible QIR card. Dormant (CI%<22) → live (CI%≥22) with",
+        "  4 bottom signals: LL recovery, VIX-was-elevated, HY compress, VVIX compress",
         f"- Current live: {hmm_str}",
         f"- Brain: {brain_str}",
         "",
@@ -965,6 +1042,12 @@ def _build_pipeline_upgrade_brief() -> str:
         "- Crisis flow: FRED data → HMM score → CI% zone → conviction gate → QIR display",
         "- Decision flow: Discovery → Valuation → Portfolio AI actions → tracking/backtest",
         "- Debate flow: 3-agent adversarial (bear/bull/arbiter) with contested tie-bias lean",
+        "- QIR pattern flow: regime_dir × tactical_dir × options_dir → _classify_signals → 1 of 27",
+        "  named patterns → label/color/instruments/entry rules/tips rendered in Buy/Short Setup cards",
+        "- Kelly flow: p = Bayesian blend(history_win_rate, conviction_score, history_weight=min(n/20,0.6))",
+        "  b = avg_win%/avg_loss% from trade_journal.json; fallback: regime-implied (Goldilocks=1.6, etc.)",
+        "  multipliers: alignment(0–4 signals)×HMM_state×stress_discount → half-Kelly capped at 15%",
+        "  card: 'LONG TERM KELLY' (structural weeks/months). WHY 0% box shown when expectancy negative.",
         "",
         "## 4) DEPENDENCY HOTSPOTS",
         "- services/hmm_regime.py: lookback_years must match training. Re-run backtest after retrain.",
@@ -980,7 +1063,6 @@ def _build_pipeline_upgrade_brief() -> str:
         "## 6) KNOWN CONSTRAINTS",
         "- Multi-source API variability and intermittent data freshness",
         "- Session-state coupling across modules",
-        "- CI% bottom detection not yet built (top detection only via LL gate)",
         "- Mixed output contracts across AI features",
         "- Need to preserve Streamlit responsiveness under heavier analysis",
         "- HMM only detects systemic regime shifts — not sudden flash crashes",
