@@ -1,29 +1,29 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-15T15:06:55",
+  "generated_at": "2026-04-16T15:25:33",
   "regime": {
-    "label": "Neutral — Leaning Risk-On",
-    "score": 0.16,
-    "quadrant": "Transition",
-    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Yield Curve (3M-10Y): z=+0.66 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.52 ()\n- Fear & Greed Index: 23/100 — Extreme Fear (contrarian)"
+    "label": "Risk-On",
+    "score": 0.22,
+    "quadrant": "Reflation",
+    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.67 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Yield Curve (3M-10Y): z=+0.57 ()\n- Fear & Greed Index: 23/100 — Extreme Fear (contrarian)"
   },
   "tactical": {
-    "score": 69,
+    "score": 63,
     "label": "Favorable Entry",
     "action_bias": "Conditions support initiating or adding to risk positions on pullbacks."
   },
   "qir_pattern": {
-    "name": "GENUINE_UNCERTAINTY",
-    "interpretation": "Signals are conflicting — but uncertainty is quantified, not an excuse for inaction. A probabilistic lean is forced below. Size down to 25–40% of normal. Act small, act smart.",
-    "buy_tier": "LEAN SETUP — SIZE DOWN",
-    "short_tier": "LEAN SETUP — SIZE DOWN"
+    "name": "REGIME_ONLY_BULLISH",
+    "interpretation": "Only the macro regime is bullish — Tactical and Options Flow are flat. Macro has moved but price and options haven't followed. Wait for confirmation before committing.",
+    "buy_tier": "WATCH",
+    "short_tier": "NOT A SHORTING ENV"
   },
   "rate_path": {
     "top_scenario": "hold",
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current macro regime, characterized as Neutral - Leaning Risk-On with a score of +0.16, is supported by recent news confirming a positive outlook, such as Bank of America's strong earnings and the CEO's assessment of a 'healthy' consumer banking sector. However, potential risks and contradictions to this regime include Trump's threats to fire Fed Chair Powell, which could introduce uncertainty, and the possibility of an Iran leadership change, with a 32% chance predicted by Polymarket before the end of the year. Additionally, the recent surge in stocks like Allbirds and Snap, driven by AI-related announcements, may indicate a shift towards risk-on sentiment. The overall narrative remains cautiously optimistic, with a focus on monitoring geopolitical events and their potential impact on the market.",
+  "current_events_digest": "The current risk-on macro regime is supported by recent developments, including Charles Schwab's announcement to launch direct bitcoin and ethereum trading, which confirms the reflation narrative. Additionally, the rollout of new AI models by Anthropic and Nvidia has boosted quantum stocks, further solidifying the risk-on sentiment. However, potential risks on the horizon include a possible jet fuel shortage in Europe, as warned by the IEA, and geopolitical tensions related to Iran, with the US ready to restart war if a deal is not agreed upon. The market appears to be pricing in a low likelihood of a Fed rate cut to 0% or lower before 2027, with a 4% probability on Polymarket prediction markets.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
