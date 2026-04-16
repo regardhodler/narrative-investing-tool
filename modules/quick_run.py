@@ -1920,14 +1920,9 @@ def _render_qir_dashboard() -> None:
                         leading_score=int((_rc or {}).get("leading_score") or 50),
                     )
                     _tk_accordions = ""
-                    for _tk_idx, _tk in enumerate((_tkly["structural"], _tkly["tactical_short"], _tkly["tactical_long"])):
-                        _is_tactical = _tk_idx > 0  # index 1 and 2 are tactical legs
-                        _ci_locked = _is_tactical and _ci < 22.0
-                        _tk_col  = "#334155" if _ci_locked else _tk["color"]
+                    for _tk in (_tkly["structural"], _tkly["tactical_short"], _tkly["tactical_long"]):
+                        _tk_col  = _tk["color"]
                         _tk_half = _tk["half_pct"]
-                        _pct_str = "—" if _ci_locked else f"{_tk_half}%"
-                        _tf_str  = "CI% ≥ 22 to activate" if _ci_locked else _tk["timeframe"]
-                        _tf_col  = "#1e3a5f" if _ci_locked else "#64748b"
                         _tk_accordions += (
                             f'<details style="border-bottom:1px solid #1e293b;margin:0;">'
                             f'<summary style="list-style:none;cursor:pointer;padding:7px 8px;'
@@ -1935,8 +1930,8 @@ def _render_qir_dashboard() -> None:
                             f'<span style="font-size:10px;font-weight:700;color:{_tk_col};flex:0 0 140px;">'
                             f'{_tk["label"]}</span>'
                             f'<span style="font-size:20px;font-weight:900;color:{_tk_col};flex:0 0 60px;">'
-                            f'{_pct_str}</span>'
-                            f'<span style="font-size:8px;color:{_tf_col};">{_tf_str}</span>'
+                            f'{_tk_half}%</span>'
+                            f'<span style="font-size:8px;color:#64748b;">{_tk["timeframe"]}</span>'
                             f'</summary>'
                             f'<div style="padding:6px 12px 10px 12px;background:#0a0f1a;">'
                             f'<div style="font-size:9px;color:#94a3b8;margin-bottom:3px;">'
