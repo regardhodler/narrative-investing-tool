@@ -1,44 +1,5 @@
 [
   {
-    "run_id": "c13c1480",
-    "timestamp": "2026-04-14T09:10:19.200842",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 63.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 12,
-    "n_total": 14,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
-    "run_id": "bcfe2451",
-    "timestamp": "2026-04-14T09:18:06.740754",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 50.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 12,
-    "n_total": 14,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
-    "run_id": "c473b3e7",
-    "timestamp": "2026-04-14T10:11:02.882957",
-    "pattern": "",
-    "conviction": "MIXED",
-    "tactical_score": 67,
-    "options_score": 63.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 11,
-    "n_total": 14,
-    "engine": "\u26a1 Freeloader Mode"
-  },
-  {
     "run_id": "f70ca34f",
     "timestamp": "2026-04-14T10:28:04.504680",
     "pattern": "",
@@ -388,5 +349,44 @@
     "n_ok": 12,
     "n_total": 14,
     "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "f9eabff4",
+    "timestamp": "2026-04-15T20:52:10.739829",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 68,
+    "options_score": 46.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Reflation",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "8ebe73c5",
+    "timestamp": "2026-04-15T20:54:54.979170",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 65,
+    "options_score": 46.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Reflation",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "a2ab1edc",
+    "timestamp": "2026-04-15T21:28:20.410946",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 65,
+    "options_score": 47.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Reflation",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
   }
 ]

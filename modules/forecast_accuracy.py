@@ -252,6 +252,132 @@ def _render_log_tab():
 
 # ── Tab: Dashboard ─────────────────────────────────────────────────────────────
 
+# ── Pattern Accuracy block ─────────────────────────────────────────────────────
+
+def _render_pattern_accuracy_block():
+    """Per-QIR-pattern win rate table, read from trade_journal.json pattern_at_entry field."""
+    trades = _load_trade_journal()
+    closed = [
+        t for t in trades
+        if t.get("status") == "closed"
+        and t.get("entry_price")
+        and t.get("exit_price")
+        and t.get("pattern_at_entry")
+    ]
+    if not closed:
+        return  # silently skip — no data yet
+
+    # Aggregate by pattern
+    from collections import defaultdict
+    by_pattern: dict[str, dict] = defaultdict(lambda: {"wins": [], "losses": [], "returns": []})
+    for t in closed:
+        pat  = (t.get("pattern_at_entry") or "UNKNOWN").upper().strip()
+        ep   = float(t["entry_price"])
+        xp   = float(t["exit_price"])
+        dirn = (t.get("direction") or "Long").lower()
+        ret  = (xp - ep) / ep * 100 if dirn == "long" else (ep - xp) / ep * 100
+        by_pattern[pat]["returns"].append(ret)
+        if ret > 0:
+            by_pattern[pat]["wins"].append(ret)
+        else:
+            by_pattern[pat]["losses"].append(ret)
+
+    if not by_pattern:
+        return
+
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:20px 0 12px 0;"></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:4px;">🎯 QIR PATTERN ACCURACY</div>'
+        f'<div style="color:{COLORS["text_dim"]};font-size:11px;margin-bottom:10px;">'
+        f'When QIR fires a pattern, how often do SPY trades from that pattern win?</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Sort by sample size descending, then win rate
+    rows = []
+    for pat, d in by_pattern.items():
+        n      = len(d["returns"])
+        nw     = len(d["wins"])
+        wr     = round(nw / n * 100) if n else 0
+        avg_r  = round(sum(d["returns"]) / n, 2) if n else 0
+        avg_w  = round(sum(d["wins"]) / len(d["wins"]), 2) if d["wins"] else None
+        avg_l  = round(sum(d["losses"]) / len(d["losses"]), 2) if d["losses"] else None
+        real_b = round(avg_w / abs(avg_l), 2) if avg_w and avg_l else None
+        rows.append((pat, n, nw, wr, avg_r, avg_w, avg_l, real_b))
+
+    rows.sort(key=lambda x: (-x[1], -x[3]))  # n desc, then wr desc
+
+    # Header
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:160px 40px 60px 80px 80px 70px 70px 60px;'
+        f'gap:6px;padding:4px 8px;font-size:9px;color:{COLORS["text_dim"]};font-weight:700;'
+        f'letter-spacing:0.08em;border-bottom:1px solid {COLORS["border"]};margin-bottom:4px;">'
+        f'<div>PATTERN</div><div>n</div><div>WIN RATE</div><div>AVG RETURN</div>'
+        f'<div>AVG WIN</div><div>AVG LOSS</div><div>b RATIO</div><div>VERDICT</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    for pat, n, nw, wr, avg_r, avg_w, avg_l, real_b in rows:
+        wr_col   = COLORS["positive"] if wr >= 55 else (COLORS["yellow"] if wr >= 45 else COLORS["negative"])
+        ar_col   = COLORS["positive"] if avg_r > 0 else COLORS["negative"]
+        b_str    = f"{real_b}" if real_b else ("ATR 1.5" if n < 10 else "—")
+        verdict  = (
+            "✅ Edge" if wr >= 55 and avg_r > 0 else
+            "⚠️ Mixed" if wr >= 45 or avg_r > 0 else
+            "❌ No edge" if n >= 3 else
+            "⏳ Building"
+        )
+        verd_col = (
+            COLORS["positive"] if "Edge" in verdict else
+            COLORS["yellow"]   if "Mixed" in verdict or "Building" in verdict else
+            COLORS["negative"]
+        )
+        # Win rate bar
+        bar_w = min(wr, 100)
+        bar_html = (
+            f'<div style="background:{COLORS["surface"]};border-radius:2px;height:10px;overflow:hidden;">'
+            f'<div style="width:{bar_w}%;background:{wr_col};height:100%;border-radius:2px;"></div>'
+            f'</div>'
+        )
+
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:160px 40px 60px 80px 80px 70px 70px 60px;'
+            f'gap:6px;padding:5px 8px;font-size:11px;background:{COLORS["surface"]};'
+            f'border:1px solid {COLORS["border"]};border-radius:3px;margin-bottom:3px;align-items:center;">'
+            f'<div style="color:{COLORS["text"]};font-size:10px;font-weight:700;">{pat}</div>'
+            f'<div style="color:{COLORS["text_dim"]};">{n}</div>'
+            f'<div>'
+            f'<div style="color:{wr_col};font-size:10px;font-weight:700;margin-bottom:2px;">{wr}%</div>'
+            f'{bar_html}'
+            f'</div>'
+            f'<div style="color:{ar_col};font-weight:700;">{avg_r:+.2f}%</div>'
+            f'<div style="color:{COLORS["positive"]};">{f"+{avg_w:.2f}%" if avg_w is not None else "—"}</div>'
+            f'<div style="color:{COLORS["negative"]};">{f"{avg_l:.2f}%" if avg_l is not None else "—"}</div>'
+            f'<div style="color:{COLORS["bloomberg_orange"]};">{b_str}</div>'
+            f'<div style="color:{verd_col};font-size:10px;font-weight:700;">{verdict}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    if len(rows) > 0:
+        total_n  = sum(r[1] for r in rows)
+        total_nw = sum(r[2] for r in rows)
+        overall_wr = round(total_nw / total_n * 100) if total_n else 0
+        ov_col = COLORS["positive"] if overall_wr >= 55 else (COLORS["yellow"] if overall_wr >= 45 else COLORS["negative"])
+        st.markdown(
+            f'<div style="font-size:10px;color:{COLORS["text_dim"]};margin-top:6px;">'
+            f'Overall across all patterns: '
+            f'<span style="color:{ov_col};font-weight:700;">{overall_wr}% win rate</span>'
+            f' ({total_nw}W / {total_n - total_nw}L of {total_n} closed SPY trades)'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ── Tab: Accuracy Dashboard ────────────────────────────────────────────────────
+
 def _render_dashboard_tab():
     from services.forecast_tracker import get_stats, evaluate_pending
 
@@ -479,6 +605,9 @@ def _render_dashboard_tab():
             }.items()}
         )
         st.plotly_chart(fig, use_container_width=True)
+
+    # ── Pattern Accuracy block ────────────────────────────────────────────────
+    _render_pattern_accuracy_block()
 
     # Methodology explainer
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:20px 0 12px 0;"></div>', unsafe_allow_html=True)
@@ -979,7 +1108,264 @@ def _render_pnl_tab():
 
 
 
-# ── Main render ────────────────────────────────────────────────────────────────
+# ── Tab: SPY Trade Log ─────────────────────────────────────────────────────────
+
+def _load_trade_journal() -> list:
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "trade_journal.json")
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _save_trade_journal(trades: list) -> None:
+    import json, os
+    path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "trade_journal.json")
+    with open(path, "w") as f:
+        json.dump(trades, f, indent=2, default=str)
+
+
+def _render_spy_trade_tab():
+    import uuid
+
+    trades = _load_trade_journal()
+    spy_trades = [t for t in trades if t.get("ticker", "").upper() == "SPY"]
+
+    # ── Stats bar ──────────────────────────────────────────────────────────────
+    closed = [t for t in spy_trades if t.get("status") == "closed" and t.get("entry_price") and t.get("exit_price")]
+    wins   = []
+    losses = []
+    for t in closed:
+        ep, xp = float(t["entry_price"]), float(t["exit_price"])
+        direction = (t.get("direction") or "Long").lower()
+        ret = (xp - ep) / ep * 100 if direction == "long" else (ep - xp) / ep * 100
+        if ret > 0:
+            wins.append(ret)
+        else:
+            losses.append(ret)
+
+    n_closed   = len(closed)
+    win_rate   = round(len(wins) / n_closed * 100) if n_closed else 0
+    avg_win    = round(sum(wins) / len(wins), 2) if wins else None
+    avg_loss   = round(sum(losses) / len(losses), 2) if losses else None
+    real_b     = round(avg_win / abs(avg_loss), 2) if avg_win and avg_loss else None
+    wr_color   = COLORS["positive"] if win_rate >= 55 else (COLORS["yellow"] if win_rate >= 45 else COLORS["negative"])
+
+    cols = st.columns(6)
+    metrics = [
+        ("SPY TRADES",    str(len(spy_trades)),                              None),
+        ("CLOSED",        str(n_closed),                                     None),
+        ("WIN RATE",      f"{win_rate}%" if n_closed else "—",               wr_color),
+        ("AVG WIN",       f"+{avg_win:.2f}%" if avg_win is not None else "—", COLORS["positive"]),
+        ("AVG LOSS",      f"{avg_loss:.2f}%" if avg_loss is not None else "—", COLORS["negative"]),
+        ("REAL b RATIO",  f"{real_b}" if real_b else "ATR 1.5 (boot)",      COLORS["bloomberg_orange"]),
+    ]
+    for col, (label, val, color) in zip(cols, metrics):
+        with col:
+            st.markdown(bloomberg_metric(label, val, color), unsafe_allow_html=True)
+
+    # ATR bootstrap progress bar
+    needed = max(0, 5 - min(len(wins), len(losses)))
+    if n_closed < 10:
+        pct_done = min(100, int(n_closed / 10 * 100))
+        bar_col  = COLORS["blue"] if pct_done < 50 else COLORS["bloomberg_orange"]
+        st.markdown(
+            f'<div style="margin:8px 0 4px;">'
+            f'<div style="display:flex;justify-content:space-between;font-size:10px;color:{COLORS["text_dim"]};margin-bottom:3px;">'
+            f'<span>Kelly bootstrap progress — {n_closed}/10 closed trades</span>'
+            f'<span style="color:{COLORS["bloomberg_orange"]};">'
+            + (f"Need {needed} more on each side for real b ratio" if needed > 0 else "Real b ratio active ✓")
+            + f'</span></div>'
+            f'<div style="background:{COLORS["surface"]};border-radius:3px;height:5px;overflow:hidden;">'
+            f'<div style="width:{pct_done}%;background:{bar_col};height:100%;border-radius:3px;"></div>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 12px;"></div>', unsafe_allow_html=True)
+
+    # ── Log new trade form ─────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">📝 LOG SPY TRADE</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Auto-pull from QIR session state
+    _qir_pattern = st.session_state.get("_qir_pattern") or st.session_state.get("_last_pattern") or "—"
+    _kelly_pct   = None
+    try:
+        from services.portfolio_sizing import compute_qir_kelly, get_trade_kelly_stats
+        _kly = compute_qir_kelly(
+            st.session_state.get("_conviction_score") or 50,
+            st.session_state.get("_fear_composite") or {},
+            st.session_state.get("_regime_context") or {},
+        )
+        _kelly_pct = _kly.get("kelly_half_pct")
+    except Exception:
+        pass
+
+    if _qir_pattern != "—" or _kelly_pct is not None:
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+            f'border-left:3px solid {COLORS["bloomberg_orange"]};padding:7px 10px;border-radius:4px;'
+            f'font-size:11px;margin-bottom:10px;display:flex;gap:16px;">'
+            + (f'<span><span style="color:{COLORS["text_dim"]};">Pattern: </span>'
+               f'<span style="color:{COLORS["text"]};font-weight:700;">{_qir_pattern}</span></span>' if _qir_pattern != "—" else "")
+            + (f'<span><span style="color:{COLORS["text_dim"]};">Kelly suggested: </span>'
+               f'<span style="color:{COLORS["positive"] if _kelly_pct and _kelly_pct >= 4 else COLORS["yellow"]};font-weight:700;">'
+               f'{_kelly_pct:.1f}%</span></span>' if _kelly_pct is not None else "")
+            + f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with st.form("spy_trade_log_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            direction  = st.selectbox("Direction", ["Long", "Short"])
+            entry_date = st.date_input("Entry Date", value=datetime.now().date())
+        with c2:
+            entry_price = st.number_input("Entry Price ($)", min_value=0.01, step=0.01, format="%.2f")
+            actual_size = st.number_input("Actual Size (% of portfolio)", min_value=0.0, max_value=100.0, step=0.5, value=float(_kelly_pct or 0))
+        with c3:
+            exit_price = st.number_input("Exit Price ($ — leave 0 if still open)", min_value=0.0, step=0.01, format="%.2f")
+            exit_reason = st.selectbox("Exit Reason", ["Open", "Hit Target (ATR×3)", "Hit Stop (ATR×2)", "Manual Exit", "Time Exit"])
+
+        pattern_used = st.text_input("QIR Pattern at Entry", value=_qir_pattern if _qir_pattern != "—" else "", placeholder="e.g. BULL_CONFIRMED")
+        notes = st.text_input("Notes (optional)", placeholder="e.g. tariff news, earnings week…")
+
+        submitted = st.form_submit_button("📌 Log SPY Trade", use_container_width=True)
+        if submitted:
+            if entry_price <= 0:
+                st.error("Entry price required.")
+            else:
+                trade_id = str(uuid.uuid4())[:8].upper()
+                is_closed = exit_price > 0 and exit_reason != "Open"
+                new_trade = {
+                    "id":              trade_id,
+                    "ticker":          "SPY",
+                    "direction":       direction,
+                    "entry_price":     round(entry_price, 2),
+                    "entry_date":      str(entry_date),
+                    "exit_price":      round(exit_price, 2) if is_closed else None,
+                    "exit_reason":     exit_reason if is_closed else None,
+                    "status":          "closed" if is_closed else "open",
+                    "position_size":   round(actual_size, 2),
+                    "kelly_suggested": round(_kelly_pct, 1) if _kelly_pct is not None else None,
+                    "pattern_at_entry": pattern_used.strip() or None,
+                    "notes":           notes.strip() or None,
+                    "logged_at":       datetime.now().isoformat(),
+                }
+                trades.append(new_trade)
+                _save_trade_journal(trades)
+                st.success(f"✅ Logged SPY {'closed' if is_closed else 'open'} trade [{trade_id}]")
+                st.rerun()
+
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px;"></div>', unsafe_allow_html=True)
+
+    # ── Trade table ────────────────────────────────────────────────────────────
+    if not spy_trades:
+        st.markdown(f'<div style="color:{COLORS["text_dim"]};font-size:12px;">No SPY trades logged yet.</div>', unsafe_allow_html=True)
+        return
+
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
+        f'letter-spacing:0.08em;margin-bottom:8px;">📋 SPY TRADE HISTORY</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Header row
+    st.markdown(
+        f'<div style="display:grid;grid-template-columns:60px 55px 70px 70px 70px 55px 80px 80px 1fr;'
+        f'gap:6px;padding:4px 8px;font-size:9px;color:{COLORS["text_dim"]};font-weight:700;'
+        f'letter-spacing:0.08em;border-bottom:1px solid {COLORS["border"]};margin-bottom:4px;">'
+        f'<div>DATE</div><div>DIR</div><div>ENTRY</div><div>EXIT</div>'
+        f'<div>RETURN %</div><div>SIZE %</div><div>KELLY %</div><div>PATTERN</div><div>EXIT REASON</div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Sort newest first
+    for t in sorted(spy_trades, key=lambda x: x.get("logged_at", ""), reverse=True):
+        ep   = t.get("entry_price")
+        xp   = t.get("exit_price")
+        dirn = (t.get("direction") or "Long").lower()
+        status = t.get("status", "open")
+
+        ret_str   = "—"
+        ret_color = COLORS["text_dim"]
+        if ep and xp and status == "closed":
+            ret = (xp - ep) / ep * 100 if dirn == "long" else (ep - xp) / ep * 100
+            ret_str   = f"{ret:+.2f}%"
+            ret_color = COLORS["positive"] if ret > 0 else COLORS["negative"]
+
+        status_badge = (
+            f'<span style="color:{COLORS["positive"]};font-size:9px;font-weight:700;">CLOSED</span>'
+            if status == "closed" else
+            f'<span style="color:{COLORS["blue"]};font-size:9px;font-weight:700;">OPEN</span>'
+        )
+
+        dir_color = COLORS["positive"] if dirn == "long" else COLORS["negative"]
+        pattern   = (t.get("pattern_at_entry") or "—")[:14]
+        kelly_sug = f'{t["kelly_suggested"]:.1f}%' if t.get("kelly_suggested") is not None else "—"
+        exit_rsn  = (t.get("exit_reason") or "open").replace("Hit ", "").replace(" (ATR×3)", " 🎯").replace(" (ATR×2)", " 🛑")
+        entry_date = str(t.get("entry_date") or t.get("logged_at") or "")[:10]
+
+        st.markdown(
+            f'<div style="display:grid;grid-template-columns:60px 55px 70px 70px 70px 55px 80px 80px 1fr;'
+            f'gap:6px;padding:5px 8px;font-size:11px;background:{COLORS["surface"]};'
+            f'border:1px solid {COLORS["border"]};border-radius:3px;margin-bottom:3px;align-items:center;">'
+            f'<div style="color:{COLORS["text_dim"]};">{entry_date}</div>'
+            f'<div style="color:{dir_color};font-weight:700;">{dirn.upper()}</div>'
+            f'<div style="color:{COLORS["text"]};">${ep:.2f}</div>'
+            f'<div style="color:{COLORS["text"]};">{f"${xp:.2f}" if xp else "—"}</div>'
+            f'<div style="color:{ret_color};font-weight:700;">{ret_str}</div>'
+            f'<div style="color:{COLORS["text"]};">{t.get("position_size") or "—"}%</div>'
+            f'<div style="color:{COLORS["bloomberg_orange"]};">{kelly_sug}</div>'
+            f'<div style="color:{COLORS["text_dim"]};font-size:10px;">{pattern}</div>'
+            f'<div style="color:{COLORS["text_dim"]};font-size:10px;">{exit_rsn}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # Close open trades section
+    open_trades = [t for t in spy_trades if t.get("status") == "open"]
+    if open_trades:
+        st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px;"></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;font-weight:700;'
+            f'letter-spacing:0.08em;margin-bottom:8px;">🔓 CLOSE OPEN TRADES</div>',
+            unsafe_allow_html=True,
+        )
+        for t in open_trades:
+            tid  = t.get("id", "?")
+            ep   = t.get("entry_price", 0)
+            dirn = t.get("direction", "Long")
+            date = str(t.get("entry_date") or "")[:10]
+            with st.expander(f"SPY {dirn} @ ${ep:.2f} — entry {date} [{tid}]", expanded=False):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    close_price = st.number_input(f"Exit Price", min_value=0.01, step=0.01, format="%.2f", key=f"close_price_{tid}")
+                with c2:
+                    close_reason = st.selectbox("Exit Reason", ["Hit Target (ATR×3)", "Hit Stop (ATR×2)", "Manual Exit", "Time Exit"], key=f"close_reason_{tid}")
+                with c3:
+                    st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                    if st.button(f"Close Trade", key=f"close_btn_{tid}", use_container_width=True):
+                        for trade in trades:
+                            if trade.get("id") == tid:
+                                trade["exit_price"]  = round(close_price, 2)
+                                trade["exit_reason"] = close_reason
+                                trade["status"]      = "closed"
+                                trade["closed_at"]   = datetime.now().isoformat()
+                                break
+                        _save_trade_journal(trades)
+                        st.success(f"Trade [{tid}] closed at ${close_price:.2f}")
+                        st.rerun()
+
+
+
 
 def render():
     st.markdown(
@@ -993,10 +1379,15 @@ def render():
         unsafe_allow_html=True,
     )
 
-    tab_dash, tab_pnl, tab_log, tab_hist = st.tabs(["📊 Accuracy Dashboard", "💰 P&L Simulation", "🔮 Log Forecast", "📋 History"])
+    tab_dash, tab_spy, tab_pnl, tab_log, tab_hist = st.tabs([
+        "📊 Accuracy Dashboard", "🎯 SPY Trade Log", "💰 P&L Simulation", "🔮 Log Forecast", "📋 History"
+    ])
 
     with tab_dash:
         _render_dashboard_tab()
+
+    with tab_spy:
+        _render_spy_trade_tab()
 
     with tab_pnl:
         _render_pnl_tab()

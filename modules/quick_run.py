@@ -2543,6 +2543,44 @@ def _render_qir_dashboard() -> None:
             except Exception:
                 _streak_row_html = ""
 
+            # ── Trade Stats pill ───────────────────────────────────────
+            _kly_nw    = _kly.get("n_wins", 0)
+            _kly_nl    = _kly.get("n_losses", 0)
+            _kly_nc    = _kly.get("n_closed", 0)
+            _kly_aw    = _kly.get("avg_win_pct", 0.0)
+            _kly_al    = _kly.get("avg_loss_pct", 0.0)
+            _kly_wr    = round(_kly_nw / _kly_nc * 100) if _kly_nc else 0
+            _kly_wr_col = "#22c55e" if _kly_wr >= 55 else "#f59e0b" if _kly_wr >= 45 else "#ef4444"
+            _b_needed   = max(0, 5 - min(_kly_nw, _kly_nl))
+            _boot_pct   = min(100, int(_kly_nc / 10 * 100))
+            _boot_col   = "#4B9FFF" if _boot_pct < 50 else "#f59e0b"
+            _stats_pill_html = (
+                f'<div style="background:#080d14;border:1px solid #1e293b33;border-radius:4px;'
+                f'padding:6px 8px;margin:5px 0 4px;">'
+                f'<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:4px;">'
+                f'<span style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.08em;">TRADE STATS</span>'
+                f'<span style="font-size:9px;color:#475569;">n={_kly_nc} closed</span>'
+                + (
+                    f'<span style="font-size:9px;color:{_kly_wr_col};font-weight:700;">WR {_kly_wr}%</span>'
+                    f'<span style="font-size:9px;color:#22c55e;">+{_kly_aw:.2f}% avg win</span>'
+                    f'<span style="font-size:9px;color:#ef4444;">{_kly_al:.2f}% avg loss</span>'
+                    if _kly_nc > 0 else
+                    f'<span style="font-size:9px;color:#334155;">No closed trades yet</span>'
+                )
+                + f'</div>'
+                f'<div style="background:#0f172a;border-radius:2px;height:3px;overflow:hidden;margin-bottom:3px;">'
+                f'<div style="width:{_boot_pct}%;background:{_boot_col};height:100%;border-radius:2px;"></div>'
+                f'</div>'
+                f'<div style="font-size:8px;color:#334155;">'
+                + (
+                    f'Real b ratio active ✓ ({_kly_nw}W / {_kly_nl}L)'
+                    if _kly_nw >= 5 and _kly_nl >= 5 else
+                    f'Bootstrap: {_kly_nc}/10 trades · need {_b_needed} more per side for real b ratio'
+                )
+                + f'</div>'
+                f'</div>'
+            )
+
             if _kly_viable:
                 _kly_col  = "#22c55e" if _kly_half >= 8 else "#f59e0b" if _kly_half >= 4 else "#94a3b8"
                 _kly_cap_badge = (
@@ -2581,6 +2619,7 @@ def _render_qir_dashboard() -> None:
                     f'p={_kly_p*100:.0f}% · {_kly_psrc}'
                     f'{"  ·  stress −" + str(_kly_stress) + "%" if _kly_stress > 0 else ""}'
                     f'</div>'
+                    f'{_stats_pill_html}'
                     f'{_streak_row_html}'
                     f'<div style="border-top:1px solid #1e293b;margin:6px 0 5px;"></div>'
                     f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">SIGNAL ALIGNMENT</div>'
@@ -2625,10 +2664,8 @@ def _render_qir_dashboard() -> None:
                     f'= <span style="color:#ef4444;">{(_kly_b*_kly_p-(1-_kly_p))/_kly_b*100:.1f}%</span> → negative<br>'
                     f'<span style="color:#64748b;">To fix: raise conviction (signals align) or close more trades to build win rate history.</span>'
                     f'</div>'
-                    f'<div style="margin-top:6px;font-size:9px;color:#334155;">'
-                    f'Closed trades: {_kly.get("n_closed", 0)} · Need ~5+ wins AND losses for real b ratio'
                     f'</div>'
-                    f'</div>'
+                    f'{_stats_pill_html}'
                     f'<div style="margin-top:7px;padding-top:6px;border-top:1px solid #1e293b33;'
                     f'display:flex;align-items:center;gap:6px;">'
                     f'<span style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">KELLY SIZES →</span>'
