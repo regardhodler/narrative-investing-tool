@@ -180,6 +180,371 @@ _PATTERNS = {
             "Remove hedge if lean probability flips or regime resolves bullish"
         ),
     },
+    # ── Named GU sub-patterns: 2-of-3 agree, 1 neutral ──────────────────────
+    "MOMENTUM_BUILDING": {
+        "label": "MOMENTUM BUILDING",
+        "color": "#22c55e",
+        "bullish": True,
+        "interpretation": "Regime and Tactical both bullish — Options Flow hasn't confirmed yet. Two of three layers aligned. The trade is valid but wait for options to follow.",
+        "buy_tier": "MODERATE",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("SPY / QQQ", "Broad market — two layers agree, reduced size until options confirm"),
+            ("Sector leaders", "Highest momentum names in the current regime"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Enter at 60–70% of normal size — wait for options ≥65 to add\n"
+            "Stop: close below 20d MA\n"
+            "Target: prior swing high"
+        ),
+        "entry_short": "Two layers bullish — avoid shorts until regime breaks.",
+    },
+    "MACRO_FLOW_BULLISH": {
+        "label": "MACRO + FLOW BULLISH",
+        "color": "#22c55e",
+        "bullish": True,
+        "interpretation": "Regime and Options Flow agree bullish — Tactical is in neutral (price hasn't moved yet). Smart money and macro aligned; price action confirming is the final trigger.",
+        "buy_tier": "MODERATE",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("SPY", "Broad market — macro + flow lead, price confirmation pending"),
+            ("SPY Calls (OTM)", "Options flow is already bullish — capture the pending move with leverage"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Enter 50–70% size — wait for Tactical ≥65 to go full size\n"
+            "Stop: -4% from entry or break of regime support\n"
+            "Options flow leading → price often follows within 3–5 sessions"
+        ),
+        "entry_short": "Macro and flow are bullish — no short setup.",
+    },
+    "TACTICAL_FLOW_SURGE": {
+        "label": "TACTICAL + FLOW SURGE",
+        "color": "#f59e0b",
+        "bullish": True,
+        "interpretation": "Short-term price and Options Flow both bullish — but macro regime hasn't confirmed. Could be early in a turn or a counter-trend move. Treat as tactical, not structural.",
+        "buy_tier": "SELECTIVE",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("QQQ / SPY", "Short-duration momentum trade — not a structural long"),
+            ("High-beta names", "Amplified upside if macro confirms — tight stops required"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Tactical trade only — 40–60% size, tight stops\n"
+            "Stop: -3% from entry — exit if regime stays neutral after 5 sessions\n"
+            "Add size only when regime confirms ≥+0.3"
+        ),
+        "entry_short": "Flow and tactical are up — no short case yet.",
+    },
+    "SELLING_PRESSURE": {
+        "label": "SELLING PRESSURE",
+        "color": "#ef4444",
+        "bullish": False,
+        "interpretation": "Regime and Tactical both bearish — Options Flow hasn't confirmed yet. Bearish bias is clear; options confirmation would lock in the short case.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "MODERATE",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SH", "1× inverse S&P — hold until options confirm the bear"),
+            ("Cash", "Defensive — wait for all three layers before pressing shorts"),
+        ],
+        "entry_buy": "Two layers bearish — avoid new longs. Raise cash.",
+        "entry_short": (
+            "60–70% short size — wait for options <38 to add conviction\n"
+            "Stop: close above last swing high\n"
+            "Target: prior support level"
+        ),
+    },
+    "MACRO_FLOW_BEARISH": {
+        "label": "MACRO + FLOW BEARISH",
+        "color": "#ef4444",
+        "bullish": False,
+        "interpretation": "Regime and Options Flow both bearish — Tactical hasn't rolled over yet. Smart money hedging while price is still holding. Expect tactical to follow.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "MODERATE",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SH / SPY Puts", "Defined risk — price hasn't broken yet, wait for Tactical <38 to size up"),
+            ("Collars on longs", "Protect existing positions — don't fully exit until tactical breaks"),
+        ],
+        "entry_buy": "Macro and flow both bearish — protect longs, no new buys.",
+        "entry_short": (
+            "50–70% size — tactical breakdown is the add trigger\n"
+            "Stop: close above prior resistance\n"
+            "Price often follows flow within 3–5 sessions"
+        ),
+    },
+    "FLOW_BREAKDOWN": {
+        "label": "FLOW BREAKDOWN",
+        "color": "#f97316",
+        "bullish": False,
+        "interpretation": "Tactical price and Options Flow both bearish — macro regime hasn't confirmed the move. Could be a short-term flush or early warning of regime change. Stay defensive.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "SELECTIVE",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("Cash / SH", "Reduce exposure — wait for regime to confirm before pressing short"),
+            ("VXX small", "Vol hedge in case regime breaks — defined cost"),
+        ],
+        "entry_buy": "Flow and tactical both down — hold cash, not longs.",
+        "entry_short": (
+            "Tactical trade only — 40% size until regime breaks <-0.3\n"
+            "Stop: close above 20d MA\n"
+            "Exit if regime stays neutral — may be a washout, not a trend"
+        ),
+    },
+    # ── Named GU sub-patterns: 3-way conflict (Bull/Bear/Bear or Bear/Bull/Bear) ──
+    "DISTRIBUTION": {
+        "label": "DISTRIBUTION",
+        "color": "#ef4444",
+        "bullish": False,
+        "interpretation": "Macro regime still bullish but Tactical and Options Flow both bearish — classic distribution. Smart money selling into strength while price holds. Rotate defensive.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "STRONG",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SPY Puts (OTM)", "Distribution → price break incoming — defined risk"),
+            ("SH / SDS", "Build short in tranches as tactical stays bearish"),
+            ("Collars on longs", "Protect existing positions before the break"),
+        ],
+        "entry_buy": "Regime looks bullish but price and flow say otherwise — trust the flow.",
+        "entry_short": (
+            "Build position on weak bounces — don't short freefall\n"
+            "Stop: close above prior swing high\n"
+            "Add on each failed rally attempt"
+        ),
+    },
+    "ACCUMULATION": {
+        "label": "ACCUMULATION",
+        "color": "#22c55e",
+        "bullish": True,
+        "interpretation": "Macro regime bearish but Tactical and Options Flow both bullish — quiet accumulation against the trend. Risk: macro doesn't turn. Reward: early in a new cycle.",
+        "buy_tier": "SELECTIVE",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("SPY / QQQ", "Accumulate at reduced size — let regime confirm before going full size"),
+            ("Quality growth", "MSFT, GOOGL — least likely to re-break if macro stays bearish"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "50% size only — wait for regime to turn ≥+0.3 before adding\n"
+            "Stop: -5% from entry or regime re-breaks lower\n"
+            "This is early-cycle risk — patience required"
+        ),
+        "entry_short": "Tactical and flow are bullish — no short setup while accumulation is active.",
+    },
+    # ── Named GU sub-patterns: 1 signal only ────────────────────────────────
+    "REGIME_ONLY_BULLISH": {
+        "label": "REGIME ONLY BULLISH",
+        "color": "#64748b",
+        "bullish": True,
+        "interpretation": "Only the macro regime is bullish — Tactical and Options Flow are flat. Macro has moved but price and options haven't followed. Wait for confirmation before committing.",
+        "buy_tier": "WATCH",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("Cash-secured calls (far OTM)", "Cheap participation if macro is right — defined risk"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "20–30% size only — one layer is not a trade\n"
+            "Wait for Tactical ≥65 OR Options ≥65 before adding\n"
+            "Stop: regime breaks below +0.3"
+        ),
+        "entry_short": "Macro bullish — no short case.",
+    },
+    "REGIME_ONLY_BEARISH": {
+        "label": "REGIME ONLY BEARISH",
+        "color": "#64748b",
+        "bullish": False,
+        "interpretation": "Only the macro regime is bearish — price and options haven't confirmed. Raise cash, hold off on new longs, but don't press short until tactical joins.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "WATCH",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("Cash / reduced exposure", "Defensive posture — wait for tactical to break"),
+        ],
+        "entry_buy": "Macro bearish — raise cash, no new longs.",
+        "entry_short": (
+            "20–30% size — one layer is not enough\n"
+            "Add when Tactical <38 OR Options <38"
+        ),
+    },
+    "TACTICAL_ONLY_BULLISH": {
+        "label": "TACTICAL ONLY BULLISH",
+        "color": "#64748b",
+        "bullish": True,
+        "interpretation": "Price action is bullish short-term but macro and options are flat. Could be a short squeeze or intraday momentum. Treat as scalp, not a trend trade.",
+        "buy_tier": "SCALP ONLY",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("SPY / QQQ (small)", "Short-duration scalp — no structural backing"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Scalp only — 20–30% size, 1–3 day hold max\n"
+            "Stop: -2% hard stop\n"
+            "Exit if regime stays flat after 3 sessions"
+        ),
+        "entry_short": "Tactical up — no short setup.",
+    },
+    "TACTICAL_ONLY_BEARISH": {
+        "label": "TACTICAL ONLY BEARISH",
+        "color": "#64748b",
+        "bullish": False,
+        "interpretation": "Price action is bearish short-term but macro and flow are flat. May be profit-taking or a brief flush. Hold cash — don't chase the drop.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "SCALP ONLY",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("Cash", "Hold off — one layer is not enough for a structural short"),
+        ],
+        "entry_buy": "Tactical down — hold cash, wait for clarity.",
+        "entry_short": (
+            "Scalp only — 20% size, tight stop above recent high\n"
+            "Exit if macro or flow don't confirm within 2–3 sessions"
+        ),
+    },
+    "FLOW_ONLY_BULLISH": {
+        "label": "FLOW ONLY BULLISH",
+        "color": "#64748b",
+        "bullish": True,
+        "interpretation": "Options flow is buying protection or calls but macro and tactical are flat. Flow often leads price by 3–5 sessions — watch for regime and tactical to follow.",
+        "buy_tier": "WATCH",
+        "short_tier": "NOT A SHORTING ENV",
+        "instruments_buy": [
+            ("SPY Calls (OTM, small)", "Flow is your early warning — 20–30% size"),
+        ],
+        "instruments_short": [],
+        "entry_buy": (
+            "Small position — flow leads, price follows\n"
+            "Add when Tactical ≥65 confirms\n"
+            "Stop: flow reverses below 50"
+        ),
+        "entry_short": "Options flow bullish — no short case.",
+    },
+    "FLOW_ONLY_BEARISH": {
+        "label": "FLOW ONLY BEARISH",
+        "color": "#64748b",
+        "bullish": False,
+        "interpretation": "Options flow is buying puts / hedging but macro and price are flat. Smart money is quietly hedging — take note. May be noise or may be early warning.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "WATCH",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("Collars on longs", "Flow is hedging — protect your book without full exit"),
+        ],
+        "entry_buy": "Flow bearish — no new longs, protect existing positions.",
+        "entry_short": (
+            "Collars or small puts only — flow alone is not a directional trade\n"
+            "Add if Tactical or regime confirms"
+        ),
+    },
+    "TRUE_NEUTRAL": {
+        "label": "TRUE NEUTRAL",
+        "color": "#475569",
+        "bullish": None,
+        "interpretation": "All three layers are in the neutral zone — no signal anywhere. Market is in a holding pattern. Best action: wait. Worst action: force a trade.",
+        "buy_tier": "NO SIGNAL",
+        "short_tier": "NO SIGNAL",
+        "instruments_buy": [
+            ("Cash / T-bills", "Earn the risk-free rate while waiting for a signal"),
+        ],
+        "instruments_short": [],
+        "entry_buy": "No layer active — stay in cash. Don't create signal where there is none.",
+        "entry_short": "No layer active — no short case either.",
+    },
+    # ── Named GU sub-patterns: conflict with one neutral ─────────────────────
+    "MACRO_VS_PRICE": {
+        "label": "MACRO VS PRICE",
+        "color": "#f59e0b",
+        "bullish": None,
+        "interpretation": "Regime bullish, Tactical bearish, Options flat. Macro says buy — price says sell. Classic divergence. Wait for one to break.",
+        "buy_tier": "WATCH",
+        "short_tier": "WATCH",
+        "instruments_buy": [
+            ("Cash", "Wait — price needs to confirm macro before committing"),
+        ],
+        "instruments_short": [],
+        "entry_buy": "Wait for Tactical ≥65 before buying — price hasn't confirmed macro.",
+        "entry_short": "Wait for regime to break <-0.3 before shorting — macro hasn't broken.",
+    },
+    "MACRO_VS_FLOW": {
+        "label": "MACRO VS FLOW",
+        "color": "#f59e0b",
+        "bullish": None,
+        "interpretation": "Regime bullish, Options bearish, Tactical flat. Macro says risk-on — options crowd is hedging. Smart money and fundamentals in a standoff.",
+        "buy_tier": "WATCH",
+        "short_tier": "WATCH",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("Collars on longs", "Options are hedging — protect existing positions"),
+        ],
+        "entry_buy": "Wait for options ≥65 before adding longs — flow is warning you.",
+        "entry_short": "Regime still bullish — no outright short. Collars only.",
+    },
+    "PRICE_VS_FLOW": {
+        "label": "PRICE VS FLOW",
+        "color": "#f59e0b",
+        "bullish": None,
+        "interpretation": "Tactical bullish, Options bearish, Regime flat. Price is moving up but options crowd is hedging — short-term momentum vs smart money caution.",
+        "buy_tier": "SCALP ONLY",
+        "short_tier": "WATCH",
+        "instruments_buy": [
+            ("SPY (small)", "Tactical scalp only — options crowd is warning against size"),
+        ],
+        "instruments_short": [],
+        "entry_buy": "Scalp only — 20–30% size, tight stop, options crowd is not with you.",
+        "entry_short": "Wait for tactical to roll over before shorting.",
+    },
+    "BEAR_BOUNCE_WARNING": {
+        "label": "BEAR BOUNCE WARNING",
+        "color": "#f97316",
+        "bullish": False,
+        "interpretation": "Regime bearish, Tactical bullish, Options flat. Classic bear market bounce forming — don't chase. The trend is still down.",
+        "buy_tier": "NOT A BUYING ENV",
+        "short_tier": "MODERATE",
+        "instruments_buy": [],
+        "instruments_short": [
+            ("SH", "Build short — sell into the bounce, not the freefall"),
+            ("SPY Puts (OTM)", "Defined risk on bounce failure"),
+        ],
+        "entry_buy": "Regime is bearish — this bounce is a selling opportunity, not a buy.",
+        "entry_short": (
+            "Sell into strength — wait for tactical to roll back below 65\n"
+            "Stop: above bounce high\n"
+            "Add if options confirms <38"
+        ),
+    },
+    "FLOW_DEFIES_MACRO": {
+        "label": "FLOW DEFIES MACRO",
+        "color": "#f97316",
+        "bullish": None,
+        "interpretation": "Regime bearish, Options bullish, Tactical flat. Options market is betting on a recovery while macro says no. High risk setup — could be early bottom or a trap.",
+        "buy_tier": "WATCH",
+        "short_tier": "WATCH",
+        "instruments_buy": [
+            ("Cash-secured puts (OTM)", "Collect premium — undefined upside for option sellers if flow is right"),
+        ],
+        "instruments_short": [],
+        "entry_buy": "Flow leading macro is a high-risk bet — 20% size max, wait for tactical ≥65.",
+        "entry_short": "Options bullish — covering the macro short here is risky. Trail stops up.",
+    },
+    "FLOW_VS_PRICE": {
+        "label": "FLOW VS PRICE",
+        "color": "#f59e0b",
+        "bullish": None,
+        "interpretation": "Tactical bearish, Options bullish, Regime flat. Price is falling but options crowd is buying. Either flow is early or price is capitulating into a bottom.",
+        "buy_tier": "WATCH",
+        "short_tier": "WATCH",
+        "instruments_buy": [
+            ("Small SPY", "If flow is right — small position, price must stop falling first"),
+        ],
+        "instruments_short": [],
+        "entry_buy": "Wait for price to stabilize (Tactical ≥50) before trusting the flow signal.",
+        "entry_short": "Options crowd bullish — don't add to shorts here.",
+    },
 }
 
 
@@ -224,17 +589,48 @@ def _classify_signals(regime_ctx: dict, tac_ctx: dict, of_ctx: dict) -> dict:
     # Thresholds match existing lines 221–226 of quick_run.py
     r_bull = "Risk-On"  in regime_label or score >  0.3
     r_bear = "Risk-Off" in regime_label or score < -0.3
+    r_neut = not r_bull and not r_bear
     t_bull = tac_score >= 65
     t_bear = tac_score <  38
+    t_neut = not t_bull and not t_bear
     o_bull = of_score  >= 65
     o_bear = of_score  <  38
+    o_neut = not o_bull and not o_bear
 
+    # ── 3-of-3 named patterns ─────────────────────────────────────────────────
     if   r_bull and t_bull and o_bull: pattern = "BULLISH_CONFIRMATION"
     elif r_bear and t_bear and o_bear: pattern = "BEARISH_CONFIRMATION"
     elif r_bull and t_bear and o_bull: pattern = "PULLBACK_IN_UPTREND"
     elif r_bull and t_bull and o_bear: pattern = "OPTIONS_FLOW_DIVERGENCE"
     elif r_bear and t_bull and o_bull: pattern = "BEAR_MARKET_BOUNCE"
     elif r_bear and t_bear and o_bull: pattern = "LATE_CYCLE_SQUEEZE"
+    # ── Bull/Bear/Bear and Bear/Bull/Bear conflicts ───────────────────────────
+    elif r_bull and t_bear and o_bear: pattern = "DISTRIBUTION"
+    elif r_bear and t_bull and o_bear: pattern = "ACCUMULATION"
+    # ── 2-of-3 agree, 1 neutral ───────────────────────────────────────────────
+    elif r_bull and t_bull and o_neut: pattern = "MOMENTUM_BUILDING"
+    elif r_bull and o_bull and t_neut: pattern = "MACRO_FLOW_BULLISH"
+    elif t_bull and o_bull and r_neut: pattern = "TACTICAL_FLOW_SURGE"
+    elif r_bear and t_bear and o_neut: pattern = "SELLING_PRESSURE"
+    elif r_bear and o_bear and t_neut: pattern = "MACRO_FLOW_BEARISH"
+    elif t_bear and o_bear and r_neut: pattern = "FLOW_BREAKDOWN"
+    # ── 1 signal only ─────────────────────────────────────────────────────────
+    elif r_bull and t_neut and o_neut: pattern = "REGIME_ONLY_BULLISH"
+    elif r_bear and t_neut and o_neut: pattern = "REGIME_ONLY_BEARISH"
+    elif t_bull and r_neut and o_neut: pattern = "TACTICAL_ONLY_BULLISH"
+    elif t_bear and r_neut and o_neut: pattern = "TACTICAL_ONLY_BEARISH"
+    elif o_bull and r_neut and t_neut: pattern = "FLOW_ONLY_BULLISH"
+    elif o_bear and r_neut and t_neut: pattern = "FLOW_ONLY_BEARISH"
+    # ── Conflict with one neutral ─────────────────────────────────────────────
+    elif r_bull and t_bear and o_neut: pattern = "MACRO_VS_PRICE"
+    elif r_bull and o_bear and t_neut: pattern = "MACRO_VS_FLOW"
+    elif t_bull and o_bear and r_neut: pattern = "PRICE_VS_FLOW"
+    elif r_bear and t_bull and o_neut: pattern = "BEAR_BOUNCE_WARNING"
+    elif r_bear and o_bull and t_neut: pattern = "FLOW_DEFIES_MACRO"
+    elif t_bear and o_bull and r_neut: pattern = "FLOW_VS_PRICE"
+    # ── True neutral (all flat) ───────────────────────────────────────────────
+    elif r_neut and t_neut and o_neut: pattern = "TRUE_NEUTRAL"
+    # ── Residual genuine uncertainty (should be unreachable now) ──────────────
     else:                              pattern = "GENUINE_UNCERTAINTY"
 
     pat_meta = _PATTERNS[pattern]
