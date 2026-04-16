@@ -2602,6 +2602,37 @@ def _render_qir_dashboard() -> None:
             _kelly_block       = _kelly_html        # structural sizing → MEDIUM
             _fast_setups_html  = _triple_kelly_html  # Buy/Short Setup → FAST
             _bimodal_block     = ""
+
+            # ── Inject structural Kelly badge into Buy/Short Setup cards ────────
+            # Only for non-GU patterns (GU uses triple-kelly badges built earlier)
+            if _cls.get("pattern") != "GENUINE_UNCERTAINTY":
+                _kly_badge_col = "#22c55e" if _kly_viable and _kly_half >= 8 else (
+                    "#f59e0b" if _kly_viable and _kly_half >= 4 else (
+                    "#94a3b8" if _kly_viable else "#ef444466"
+                ))
+                if _kly_viable:
+                    _kly_badge_txt = f"{_kly_half:.1f}%"
+                    _kly_badge_note = f"half-Kelly · {_kly_psrc}"
+                else:
+                    _kly_badge_txt = "0%"
+                    _kly_badge_note = "neg expectancy — reduce size"
+                _kly_setup_badge = (
+                    f'<div style="display:flex;align-items:baseline;gap:6px;'
+                    f'background:#0a0f1a;border:1px solid {_kly_badge_col}33;border-radius:4px;'
+                    f'padding:5px 8px;margin:5px 0 6px;">'
+                    f'<span style="font-size:8px;color:{_kly_badge_col};font-weight:700;'
+                    f'letter-spacing:0.08em;">STRUCTURAL KELLY</span>'
+                    f'<span style="font-size:22px;font-weight:900;color:{_kly_badge_col};">'
+                    f'{_kly_badge_txt}</span>'
+                    f'<span style="font-size:9px;color:#475569;">of portfolio · weeks/months · {_kly_badge_note}</span>'
+                    f'</div>'
+                )
+                # Inject before closing </div> of buy/short html
+                _buy_html   = _buy_html.replace(
+                    f'{_instruments_html(_instr_buy)}{_entry_html(_entry_buy)}</div>',
+                    f'{_kly_setup_badge}{_instruments_html(_instr_buy)}{_entry_html(_entry_buy)}</div>',
+                    1,
+                )
         except Exception:
             pass
 
