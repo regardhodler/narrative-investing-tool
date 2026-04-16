@@ -3164,6 +3164,26 @@ def _render_qir_dashboard() -> None:
                     + f'VIX pill = 60d peak ≥ 28 AND now below 24 · VVIX = tail-risk proxy (P/C equivalent)'
                     + f'</div>'
 
+                    # Signal count legend
+                    + f'<div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;">'
+                    + f'<div style="background:#33415511;border:1px solid #33415544;border-radius:3px;padding:5px 6px;text-align:center;">'
+                    + f'<div style="font-size:10px;font-weight:800;color:#475569;">1/4</div>'
+                    + f'<div style="font-size:7px;color:#334155;margin-top:2px;line-height:1.4;">Early<br>noise</div>'
+                    + f'</div>'
+                    + f'<div style="background:#1e3a5f22;border:1px solid #1e3a5f55;border-radius:3px;padding:5px 6px;text-align:center;">'
+                    + f'<div style="font-size:10px;font-weight:800;color:#3b82f6;">2/4</div>'
+                    + f'<div style="font-size:7px;color:#334155;margin-top:2px;line-height:1.4;">Tentative<br>watch</div>'
+                    + f'</div>'
+                    + f'<div style="background:#f59e0b11;border:1px solid #f59e0b44;border-radius:3px;padding:5px 6px;text-align:center;">'
+                    + f'<div style="font-size:10px;font-weight:800;color:#f59e0b;">3/4</div>'
+                    + f'<div style="font-size:7px;color:#334155;margin-top:2px;line-height:1.4;">High alert<br>wait last</div>'
+                    + f'</div>'
+                    + f'<div style="background:#10b98122;border:1px solid #10b98166;border-radius:3px;padding:5px 6px;text-align:center;">'
+                    + f'<div style="font-size:10px;font-weight:800;color:#10b981;">4/4</div>'
+                    + f'<div style="font-size:7px;color:#10b98199;margin-top:2px;line-height:1.4;">Confirmed<br>0 false alarms</div>'
+                    + f'</div>'
+                    + f'</div>'
+
                     f'</div>'
                 )
             else:
