@@ -38,13 +38,11 @@ model.covars_ = np.array(brain_raw["covars"])
 sys.path.insert(0, ".")
 from services.hmm_regime import _build_feature_matrix
 
-print("Building feature matrix (extended lookback for GCF coverage)...")
-# Use brain lookback + 8yr buffer so the JSON covers pre-2013 dates (GCF 2008 etc.)
-# 5-yr rolling z-score warmup means we need brain_lookback + 5 + 3yr safety buffer.
-# Extending does NOT change z-scores for 2013+ dates (rolling window is self-contained).
-_brain_lookback = brain_raw.get("lookback_years", 15)
-_extended_lookback = max(_brain_lookback + 8, 23)
-df = _build_feature_matrix(lookback_years=_extended_lookback)
+print("Building feature matrix (same pipeline as live)...")
+# Use brain's exact lookback — same feature z-scores as live scoring.
+# LL scale is only valid for in-sample data (post-training era).
+# Pre-training dates (GCF, etc.) show Zone 0 "LL data not available" in the UI.
+df = _build_feature_matrix(lookback_years=brain_raw.get("lookback_years", 15))
 
 # Ensure columns match brain
 for col in feature_names:
@@ -123,11 +121,19 @@ print(f"  Mean: {sum(ll_vals)/len(ll_vals):.3f}")
 print(f"  Days total: {len(ll_vals)}")
 print()
 
-thresholds = [-1.0, -1.5, -2.0, -2.5, -3.0, -4.0, -5.0]
+thresholds = [-0.20, -0.30, -0.35, -0.40, -0.45]
 for t in thresholds:
     count = len([x for x in ll_vals if x < t])
     pct = count / len(ll_vals) * 100
     print(f"  Below z={t}: {count} days ({pct:.1f}%)")
+
+# Compute COVID anchor for CI% calibration
+covid_window = [r for r in results if "2020-02-15" <= r["date"] <= "2020-04-15"]
+covid_worst_z = min(r["ll_zscore"] for r in covid_window) if covid_window else None
+if covid_worst_z:
+    print(f"\n  COVID peak z: {covid_worst_z:.4f}  → anchor for CI%=100%")
+    print(f"  Gate z=-0.30 → CI% = {abs(-0.30)/abs(covid_worst_z)*100:.1f}% (target: ~67%)")
+    print(f"  ⚠  If COVID peak z changed from 0.448, update anchor in quick_run.py + backtesting.py")
 
 # ── Test against crashes ─────────────────────────────────────────────────────
 print()
@@ -146,8 +152,8 @@ crashes = [
     ("2025-04 Tariff Shock", "2025-04-07", "2025-03-01", "2025-04-14"),
 ]
 
-# Try multiple thresholds
-for threshold in [-1.5, -2.0, -2.5, -3.0]:
+# Try the actual CI% gate thresholds (signal range is ~-0.467 to +0.191)
+for threshold in [-0.25, -0.30, -0.35, -0.40, -0.45]:
     print(f"\n--- THRESHOLD: z < {threshold} ---")
     detected = 0
     missed = 0

@@ -84,13 +84,13 @@ Each module is a standalone `render()` function.
 
 ## CI% Crisis Detection System
 The LL-anchored Crisis Intensity system is the core crisis signal:
-- **Formula**: `CI% = abs(ll_zscore) / 0.448 * 100` (uncapped — COVID in-sample = 100%)
+- **Formula**: `CI% = abs(ll_zscore) / 0.467 * 100` (uncapped — COVID in-sample = 100%)
 - **Zone 1** (CI < 22%): Normal — conviction signals suppressed
 - **Zone 2** (CI 22–67%): Model Stress — signals shown as context
 - **Zone 3** (CI ≥ 67%): Crisis Confirmed — 100% precision, 0 false alarms in 3,408 days
 - **Zone 4** (CI > 100%): Beyond Training Range — purple, model seeing post-training extremes
 - **Gate**: z < -0.30 = 67% CI (Volmageddon=76%, Fed Panic=96%, COVID=100%)
-- **After retraining**: run `python ll_gate_backtest_live_brain.py` and update `0.448` anchor if COVID peak z changed
+- **After retraining**: run `python ll_gate_backtest_live_brain.py` and update `0.467` anchor if COVID peak z changed
 
 ## Key Conventions
 - All SEC requests use `SEC_HEADERS` with User-Agent and go through `_rate_limit()` (10 req/sec max)

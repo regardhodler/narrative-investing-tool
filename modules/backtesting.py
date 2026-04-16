@@ -1032,7 +1032,7 @@ def _render_crash_stress_test():
             )
 
             # LL-Anchored Crisis Detection — Crisis Intensity (CI%) system
-            # CI% = abs(ll_z) / 0.448 * 100  (0%=normal, 67%=gate, 100%=COVID peak, >100%=beyond training)
+            # CI% = abs(ll_z) / 0.467 * 100  (0%=normal, 67%=gate, 100%=COVID peak, >100%=beyond training)
             _ll_z_raw   = snap.get("ll_zscore")   # None = pre-computation range (no LL data for this date)
             _ll_z       = _ll_z_raw if _ll_z_raw is not None else 0
             _ll_missing = _ll_z_raw is None        # flag: LL not available for this snapshot date
@@ -1041,7 +1041,7 @@ def _render_crash_stress_test():
             _conviction = snap.get("conviction", 0)
             _vix_snap   = snap.get("vix", 20)
 
-            _ci = max(0.0, (abs(_ll_z) / 0.448 * 100.0)) if _ll_z < 0 else 0.0
+            _ci = max(0.0, (abs(_ll_z) / 0.467 * 100.0)) if _ll_z < 0 else 0.0
 
             if _ll_missing:
                 _bt_zone = 0  # special: no LL data

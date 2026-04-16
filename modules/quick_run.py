@@ -2246,12 +2246,12 @@ def _render_qir_dashboard() -> None:
         #   0%   = z  0.0    (perfectly normal market)
         #   22%  = z -0.10   (stress zone start)
         #   67%  = z -0.30   (crisis confirmed gate, 100% precision, 0 false alarms)
-        #   100% = z -0.448  (COVID peak — worst ever recorded in-sample)
+        #   100% = z -0.467  (COVID peak — worst ever recorded in-sample)
         #   >100% = post-training extremes (model scoring novel data beyond training range)
-        # Formula: CI = abs(ll_z) / 0.448 * 100  (uncapped — >100% is valid)
+        # Formula: CI = abs(ll_z) / 0.467 * 100  (uncapped — >100% is valid)
         def _build_ll_anchored_block() -> str:
             # Crisis Intensity score — uncapped, COVID in-sample peak = 100%
-            _ci_raw = (abs(_tb_ll_z) / 0.448 * 100.0) if _tb_ll_z < 0 else 0.0
+            _ci_raw = (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0
             _ci = max(0.0, _ci_raw)
 
             # Zone thresholds in CI%
@@ -2334,14 +2334,14 @@ def _render_qir_dashboard() -> None:
                 ("Tariff/Rate", 12, "#475569"),    # ~-0.054 to -0.092 → 12-21% CI
                 ("Volmageddon", 76, "#f59e0b"),    # -0.341 → 76% CI
                 ("Fed Panic",   96, "#f97316"),    # -0.428 → 96% CI
-                ("COVID",      100, "#ef4444"),    # -0.448 → 100% CI
+                ("COVID",      100, "#ef4444"),    # -0.467 → 100% CI
             ]
 
             # ── Footer text ───────────────────────────────────────────────────────
             if _zone == 4:
                 _explain = (
                     f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Model is scoring data BEYOND its training range. "
-                    f"100% = COVID worst-ever (z=-0.448 in-sample). Current reading exceeds that baseline by "
+                    f"100% = COVID worst-ever (z=-0.467 in-sample). Current reading exceeds that baseline by "
                     f"{_ci - 100:.0f}%. This occurs when post-training market data is structurally novel to the model — "
                     f"a stronger crisis signal than any event in the backtest history."
                 )
@@ -2986,7 +2986,7 @@ def _render_qir_dashboard() -> None:
                     f'Re-run the backtest to recalibrate CI% anchors:<br>'
                     f'<span style="font-family:monospace;color:#64748b;font-size:8px;">'
                     f'python ll_gate_backtest_live_brain.py</span><br>'
-                    f'Then update the <span style="color:#64748b;">0.448</span> anchor in '
+                    f'Then update the <span style="color:#64748b;">0.467</span> anchor in '
                     f'quick_run.py + backtesting.py if the COVID peak z-score changed.'
                     f'</div></div>'
                 )

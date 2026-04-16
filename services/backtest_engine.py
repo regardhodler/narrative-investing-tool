@@ -1065,11 +1065,7 @@ def _build_hmm_historical_inference() -> dict | None:
         model.means_ = np.array(brain.means)
         model.covars_ = np.array(brain.covars)
 
-        # Use extended lookback for GCF coverage — adds 8yr buffer beyond brain's lookback.
-        # 5-yr rolling z-score warmup uses that buffer, giving usable features from ~2008.
-        # Feature z-scores for 2013+ dates are IDENTICAL to live (rolling window is local).
-        _extended_lookback = max(brain.lookback_years + 8, 23)
-        df = _build_feature_matrix(lookback_years=_extended_lookback)
+        df = _build_feature_matrix(lookback_years=brain.lookback_years)  # same as live scoring
         for col in brain.feature_names:
             if col not in df.columns:
                 df[col] = 0.0
