@@ -1487,8 +1487,8 @@ def _render_qir_dashboard() -> None:
                 # Header row
                 f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
                 f'<div>'
-                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.12em;margin-bottom:3px;">'
-                f'CONVICTION</div>'
+                f'<div style="font-size:13px;color:#94a3b8;font-weight:800;letter-spacing:0.08em;margin-bottom:3px;">'
+                f'CONVICTION <span style="color:{_cv_color2};">×</span> UNCERTAINTY</div>'
                 f'<div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
                 f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</div>'
                 f'</div>'
@@ -1498,6 +1498,24 @@ def _render_qir_dashboard() -> None:
                 f'<div style="font-size:8px;color:#64748b;">/100</div>'
                 f'</div>'
                 f'</div>'
+                # Plain-English explanation
+                f'<div style="background:#0a0f1a;border-left:3px solid {_cv_color2}44;'
+                f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:8px;'
+                f'font-size:10px;color:#64748b;line-height:1.6;">'
+                + (
+                    f'<span style="color:#22c55e;font-weight:700;">All layers agree — strong directional edge.</span> '
+                    f'Regime, tactical, and options flow are aligned. Size up to full conviction.'
+                    if _conviction_score >= 75 else
+                    f'<span style="color:#f59e0b;font-weight:700;">Signals mostly aligned — moderate edge.</span> '
+                    f'Most layers agree but one is hesitating. Trade at normal size, watch for confirmation.'
+                    if _conviction_score >= 55 else
+                    f'<span style="color:#f97316;font-weight:700;">Weak signal — mixed layers.</span> '
+                    f'Some agreement but significant drag from conflicting inputs. Size down, use tighter stops.'
+                    if _conviction_score >= 40 else
+                    f'<span style="color:#ef4444;font-weight:700;">No edge — layers in conflict.</span> '
+                    f'Regime, tactical, or options are pulling in opposite directions. Wait or size to minimum.'
+                )
+                + f'</div>'
                 # Master bar
                 f'<div style="background:#1e293b;border-radius:3px;height:5px;margin-bottom:8px;">'
                 f'<div style="background:{_cv_color2};width:{_conviction_score}%;height:5px;border-radius:3px;"></div>'
@@ -1542,7 +1560,8 @@ def _render_qir_dashboard() -> None:
                 f'border-left:3px solid #7c3aed;border-radius:6px;padding:10px 14px;margin-bottom:10px;">'
                 f'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;">'
                 f'<div>'
-                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.12em;margin-bottom:3px;">CONVICTION</div>'
+                f'<div style="font-size:13px;color:#94a3b8;font-weight:800;letter-spacing:0.08em;margin-bottom:3px;">'
+                f'CONVICTION <span style="color:#7c3aed;">×</span> UNCERTAINTY</div>'
                 f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
                 f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏑ MEDIUM · DAYS/WEEKS</div>'
                 f'</div>'
@@ -1551,9 +1570,14 @@ def _render_qir_dashboard() -> None:
                 f'<div style="font-size:7px;color:#64748b;">GU mode</div>'
                 f'</div>'
                 f'</div>'
-                f'<div style="font-size:9px;color:#64748b;margin-bottom:6px;line-height:1.5;">'
-                f'Genuine Uncertainty active — conviction is replaced by the 5-domain uncertainty score below. '
-                f'Pattern layers disagree; no single-pattern strength can be computed.</div>'
+                # Plain-English GU explanation
+                f'<div style="background:#0a0f1a;border-left:3px solid #7c3aed44;'
+                f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:8px;'
+                f'font-size:10px;color:#64748b;line-height:1.6;">'
+                f'<span style="color:#7c3aed;font-weight:700;">Genuine Uncertainty — signals are pulling in opposite directions.</span> '
+                f'Regime, tactical, and options flow do not form a clean pattern — at least one layer is in the middle band or contradicting the others. '
+                f'Conviction score cannot be computed. Instead, the 5-domain uncertainty score below measures how much the layers disagree and sets your size.'
+                f'</div>'
                 f'<div style="display:flex;align-items:center;gap:10px;background:#0a0f1a;'
                 f'border:1px solid #1e293b;border-radius:4px;padding:6px 10px;">'
                 f'<div><div style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.08em;">UNCERTAINTY</div>'
