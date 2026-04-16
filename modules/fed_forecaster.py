@@ -707,8 +707,8 @@ def _render_dot_plot_vs_futures(final_probs: list[dict], fred_data: dict):
     # Sources: FOMC Summary of Economic Projections, March 2026
     _SEP = {
         "2026 Year-End": 3.875,   # median dot for end-2026
-        "2027 Year-End": 3.375,   # median dot for end-2027
-        "Longer Run":    2.875,   # longer-run neutral rate median
+        "2027 Year-End": 3.125,   # median dot for end-2027
+        "Longer Run":    3.000,   # longer-run neutral rate median
     }
     _SEP_DATE = "Mar 2026 SEP"
 
