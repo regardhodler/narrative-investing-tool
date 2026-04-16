@@ -1577,14 +1577,32 @@ def _render_qir_dashboard() -> None:
             return (f'<span style="background:{_tc};color:black;font-weight:800;'
                     f'font-size:9px;padding:1px 7px;border-radius:3px;">{tier}</span>')
 
+        _OPTIONS_KEYWORDS = (
+            "call", "put", "uvxy", "vxx", "collar", "straddle", "strangle",
+            "otm", "atm", "dte", "premium", "vol insurance",
+        )
+
+        def _is_options_instrument(ticker: str, desc: str) -> bool:
+            combined = (ticker + " " + desc).lower()
+            return any(kw in combined for kw in _OPTIONS_KEYWORDS)
+
         def _instruments_html(instruments):
             if not instruments:
                 return ""
+            filtered = [(t, d) for t, d in instruments if not _is_options_instrument(t, d)]
+            if not filtered:
+                return (
+                    f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
+                    f'letter-spacing:0.06em;margin:6px 0 2px;">INSTRUMENTS</div>'
+                    f'<div style="font-size:10px;color:#475569;margin-bottom:6px;font-style:italic;">'
+                    f'Options flow is the primary signal — no equity instrument suggested. '
+                    f'Monitor flow via the Options Activity module before acting.</div>'
+                )
             rows = "".join(
                 f'<div style="padding:2px 0;border-bottom:1px solid #1e293b;">'
                 f'<span style="color:#f1f5f9;font-weight:700;font-size:10px;">{t}</span>'
                 f'<span style="color:#94a3b8;font-size:10px;"> — {d}</span></div>'
-                for t, d in instruments[:4]
+                for t, d in filtered[:4]
             )
             return (f'<div style="font-size:9px;color:#f59e0b;font-weight:700;'
                     f'letter-spacing:0.06em;margin:6px 0 2px;">INSTRUMENTS</div>'
@@ -2533,11 +2551,14 @@ def _render_qir_dashboard() -> None:
                 )
                 _kelly_html = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
-                    f'padding:6px 10px;margin-bottom:8px;">'
-                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">KELLY SIZING</span>'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;">'
+                    f'<span style="font-size:13px;color:#94a3b8;font-weight:800;letter-spacing:0.08em;">LONG TERM KELLY</span>'
                     f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
                     f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
+                    f'</div>'
+                    f'<span style="font-size:8px;color:#334155;font-style:italic;white-space:nowrap;">your core portfolio allocation</span>'
                     f'</div>'
                     f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;">'
                     f'<div>'
@@ -2585,13 +2606,29 @@ def _render_qir_dashboard() -> None:
                 _kelly_html = (
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:8px 12px;margin-bottom:8px;">'
-                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-                    f'<span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;">KELLY SIZING</span>'
+                    f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;">'
+                    f'<span style="font-size:13px;color:#94a3b8;font-weight:800;letter-spacing:0.08em;">LONG TERM KELLY</span>'
                     f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
                     f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · WEEKS/MONTHS</span>'
                     f'</div>'
+                    f'<span style="font-size:8px;color:#334155;font-style:italic;white-space:nowrap;">your core portfolio allocation</span>'
+                    f'</div>'
                     f'<div style="font-size:11px;color:#ef444466;">Negative expectancy — no position suggested</div>'
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
+                    f'<div style="background:#0a0f1a;border-left:3px solid #ef444440;border-radius:3px;'
+                    f'padding:7px 10px;margin:8px 0 4px;">'
+                    f'<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:4px;">WHY 0%</div>'
+                    f'<div style="font-size:10px;color:#475569;line-height:1.6;">'
+                    f'Kelly formula: <span style="color:#94a3b8;">f = (b×p − q) / b</span><br>'
+                    f'= ({_kly_b}×{_kly_p*100:.0f}% − {(1-_kly_p)*100:.0f}%) / {_kly_b} '
+                    f'= <span style="color:#ef4444;">{(_kly_b*_kly_p-(1-_kly_p))/_kly_b*100:.1f}%</span> → negative<br>'
+                    f'<span style="color:#64748b;">To fix: raise conviction (signals align) or close more trades to build win rate history.</span>'
+                    f'</div>'
+                    f'<div style="margin-top:6px;font-size:9px;color:#334155;">'
+                    f'Closed trades: {_kly.get("n_closed", 0)} · Need ~5+ wins AND losses for real b ratio'
+                    f'</div>'
+                    f'</div>'
                     f'<div style="margin-top:7px;padding-top:6px;border-top:1px solid #1e293b33;'
                     f'display:flex;align-items:center;gap:6px;">'
                     f'<span style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">KELLY SIZES →</span>'
@@ -2603,7 +2640,7 @@ def _render_qir_dashboard() -> None:
             _fast_setups_html  = _triple_kelly_html  # Buy/Short Setup → FAST
             _bimodal_block     = ""
 
-            # ── Inject structural Kelly badge into Buy/Short Setup cards ────────
+            # ── Inject Kelly badges into Buy/Short Setup cards ────────
             # Only for non-GU patterns (GU uses triple-kelly badges built earlier)
             if _cls.get("pattern") != "GENUINE_UNCERTAINTY":
                 _kly_badge_col = "#22c55e" if _kly_viable and _kly_half >= 8 else (
@@ -2616,21 +2653,31 @@ def _render_qir_dashboard() -> None:
                 else:
                     _kly_badge_txt = "0%"
                     _kly_badge_note = "neg expectancy — reduce size"
-                _kly_setup_badge = (
-                    f'<div style="display:flex;align-items:baseline;gap:6px;'
-                    f'background:#0a0f1a;border:1px solid {_kly_badge_col}33;border-radius:4px;'
-                    f'padding:5px 8px;margin:5px 0 6px;">'
-                    f'<span style="font-size:8px;color:{_kly_badge_col};font-weight:700;'
-                    f'letter-spacing:0.08em;">STRUCTURAL KELLY</span>'
-                    f'<span style="font-size:22px;font-weight:900;color:{_kly_badge_col};">'
-                    f'{_kly_badge_txt}</span>'
-                    f'<span style="font-size:9px;color:#475569;">of portfolio · weeks/months · {_kly_badge_note}</span>'
-                    f'</div>'
-                )
-                # Inject right after "BUY SETUP" label — static string, always present
-                _buy_html = _buy_html.replace(
+
+                def _make_kelly_badge(label: str, col: str, txt: str, note: str) -> str:
+                    return (
+                        f'<div style="display:flex;align-items:baseline;gap:6px;'
+                        f'background:#0a0f1a;border:1px solid {col}33;border-radius:4px;'
+                        f'padding:5px 8px;margin:5px 0 6px;">'
+                        f'<span style="font-size:8px;color:{col};font-weight:700;'
+                        f'letter-spacing:0.08em;">{label}</span>'
+                        f'<span style="font-size:22px;font-weight:900;color:{col};">{txt}</span>'
+                        f'<span style="font-size:9px;color:#475569;">of portfolio · weeks/months · {note}</span>'
+                        f'</div>'
+                    )
+
+                _long_kelly_badge  = _make_kelly_badge("LONG KELLY",  _kly_badge_col, _kly_badge_txt, _kly_badge_note)
+                _short_kelly_badge = _make_kelly_badge("SHORT KELLY", _kly_badge_col, _kly_badge_txt, _kly_badge_note)
+
+                # _buy_html / _short_html are already baked into _verdict_html — replace there
+                _verdict_html = _verdict_html.replace(
                     '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>',
-                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>' + _kly_setup_badge,
+                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>' + _long_kelly_badge,
+                    1,
+                )
+                _verdict_html = _verdict_html.replace(
+                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">SHORT SETUP</div>',
+                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">SHORT SETUP</div>' + _short_kelly_badge,
                     1,
                 )
         except Exception:
