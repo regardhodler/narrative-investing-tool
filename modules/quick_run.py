@@ -1621,7 +1621,54 @@ def _render_qir_dashboard() -> None:
             f'<div style="border-top:1px solid #1e293b;margin:10px 0 8px;"></div>'
             f'<div style="font-size:13px;font-weight:800;color:{_verdict_color};'
             f'letter-spacing:0.04em;margin-bottom:4px;">{_verdict_label}</div>'
-            f'<div style="color:#94a3b8;font-size:11px;margin-bottom:10px;">{_verdict_interp}</div>'
+            f'<div style="color:#94a3b8;font-size:11px;margin-bottom:6px;">{_verdict_interp}</div>'
+        )
+
+        # Signal state tip — shows Regime / Tactical / Options states for this pattern
+        _SIG_STATE_TIPS = {
+            "BULLISH_CONFIRMATION":     ("↑ Bull", "↑ Bull", "↑ Bull"),
+            "BEARISH_CONFIRMATION":     ("↓ Bear", "↓ Bear", "↓ Bear"),
+            "PULLBACK_IN_UPTREND":      ("↑ Bull", "↓ Bear", "↑ Bull"),
+            "OPTIONS_FLOW_DIVERGENCE":  ("↑ Bull", "↑ Bull", "↓ Bear"),
+            "BEAR_MARKET_BOUNCE":       ("↓ Bear", "↑ Bull", "↑ Bull"),
+            "LATE_CYCLE_SQUEEZE":       ("↓ Bear", "↓ Bear", "↑ Bull"),
+            "GENUINE_UNCERTAINTY":      ("? Mix",  "? Mix",  "? Mix"),
+            "MOMENTUM_BUILDING":        ("↑ Bull", "↑ Bull", "→ Neut"),
+            "MACRO_FLOW_BULLISH":       ("↑ Bull", "→ Neut", "↑ Bull"),
+            "TACTICAL_FLOW_SURGE":      ("→ Neut", "↑ Bull", "↑ Bull"),
+            "SELLING_PRESSURE":         ("↓ Bear", "↓ Bear", "→ Neut"),
+            "MACRO_FLOW_BEARISH":       ("↓ Bear", "→ Neut", "↓ Bear"),
+            "FLOW_BREAKDOWN":           ("→ Neut", "↓ Bear", "↓ Bear"),
+            "DISTRIBUTION":             ("↑ Bull", "↓ Bear", "↓ Bear"),
+            "ACCUMULATION":             ("↓ Bear", "↑ Bull", "↓ Bear"),
+            "REGIME_ONLY_BULLISH":      ("↑ Bull", "→ Neut", "→ Neut"),
+            "REGIME_ONLY_BEARISH":      ("↓ Bear", "→ Neut", "→ Neut"),
+            "TACTICAL_ONLY_BULLISH":    ("→ Neut", "↑ Bull", "→ Neut"),
+            "TACTICAL_ONLY_BEARISH":    ("→ Neut", "↓ Bear", "→ Neut"),
+            "FLOW_ONLY_BULLISH":        ("→ Neut", "→ Neut", "↑ Bull"),
+            "FLOW_ONLY_BEARISH":        ("→ Neut", "→ Neut", "↓ Bear"),
+            "MACRO_VS_PRICE":           ("↑ Bull", "↓ Bear", "→ Neut"),
+            "MACRO_VS_FLOW":            ("↑ Bull", "→ Neut", "↓ Bear"),
+            "PRICE_VS_FLOW":            ("→ Neut", "↑ Bull", "↓ Bear"),
+            "BEAR_BOUNCE_WARNING":      ("↓ Bear", "↑ Bull", "→ Neut"),
+            "FLOW_DEFIES_MACRO":        ("↓ Bear", "→ Neut", "↑ Bull"),
+            "FLOW_VS_PRICE":            ("→ Neut", "↓ Bear", "↑ Bull"),
+            "TRUE_NEUTRAL":             ("→ Neut", "→ Neut", "→ Neut"),
+        }
+        _st = _SIG_STATE_TIPS.get(_cls["pattern"], ("?", "?", "?"))
+        def _sig_pill(label, val):
+            _c = "#22c55e" if "Bull" in val else ("#ef4444" if "Bear" in val else "#475569")
+            return (
+                f'<span style="background:{_c}18;border:1px solid {_c}44;border-radius:3px;'
+                f'padding:1px 6px;font-size:8px;font-weight:700;color:{_c};margin-right:4px;">'
+                f'{label} {val}</span>'
+            )
+        _verdict_html += (
+            f'<div style="margin-bottom:8px;">'
+            + _sig_pill("REGIME", _st[0])
+            + _sig_pill("TACTICAL", _st[1])
+            + _sig_pill("OPTIONS", _st[2])
+            + f'</div>'
         )
 
         # Conviction and leading warning are now shown in the dedicated MEDIUM conviction card.
