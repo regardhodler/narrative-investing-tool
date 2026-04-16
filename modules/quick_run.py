@@ -2627,10 +2627,10 @@ def _render_qir_dashboard() -> None:
                     f'<span style="font-size:9px;color:#475569;">of portfolio · weeks/months · {_kly_badge_note}</span>'
                     f'</div>'
                 )
-                # Inject before closing </div> of buy/short html
-                _buy_html   = _buy_html.replace(
-                    f'{_instruments_html(_instr_buy)}{_entry_html(_entry_buy)}</div>',
-                    f'{_kly_setup_badge}{_instruments_html(_instr_buy)}{_entry_html(_entry_buy)}</div>',
+                # Inject right after "BUY SETUP" label — static string, always present
+                _buy_html = _buy_html.replace(
+                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>',
+                    '<div style="font-size:9px;color:#64748b;font-weight:700;letter-spacing:0.1em;margin-bottom:4px;">BUY SETUP</div>' + _kly_setup_badge,
                     1,
                 )
         except Exception:
