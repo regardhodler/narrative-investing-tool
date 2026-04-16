@@ -2107,6 +2107,11 @@ def _render_qir_dashboard() -> None:
                     f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:5px;">SIZING CHAIN</div>'
                     f'{_build_kelly_chain(_kly, hmm_lbl=_hmm_lbl_txt, align_col=_align_mult_col)}'
                     f'{_build_kelly_ref_table(_kly.get("kelly_half_base_pct", _kly_half))}'
+                    f'<div style="margin-top:7px;padding-top:6px;border-top:1px solid #1e293b33;'
+                    f'display:flex;align-items:center;gap:6px;">'
+                    f'<span style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">KELLY SIZES →</span>'
+                    f'<span style="font-size:8px;color:#475569;letter-spacing:0.06em;">Entry Signal trigger ↓ below</span>'
+                    f'</div>'
                     f'</div>'
                 )
             else:
@@ -2120,6 +2125,11 @@ def _render_qir_dashboard() -> None:
                     f'</div>'
                     f'<div style="font-size:11px;color:#ef444466;">Negative expectancy — no position suggested</div>'
                     f'<div style="font-size:10px;color:#334155;margin-top:2px;">p={_kly_p*100:.0f}% · b={_kly_b} · {_kly_psrc}</div>'
+                    f'<div style="margin-top:7px;padding-top:6px;border-top:1px solid #1e293b33;'
+                    f'display:flex;align-items:center;gap:6px;">'
+                    f'<span style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;">KELLY SIZES →</span>'
+                    f'<span style="font-size:8px;color:#475569;letter-spacing:0.06em;">Entry Signal trigger ↓ below</span>'
+                    f'</div>'
                     f'</div>'
                 )
             _kelly_block       = _kelly_html        # structural sizing → MEDIUM
@@ -2158,6 +2168,7 @@ def _render_qir_dashboard() -> None:
             f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">ENTRY SIGNAL</span>'
             f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
             f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⏱ SLOW · MACRO+LEADING AGGREGATOR</span>'
+            f'<span style="font-size:7px;color:#334155;font-weight:600;letter-spacing:0.06em;margin-left:auto;">↑ sized by Kelly above</span>'
             f'</div>'
             f'<div style="font-size:20px;font-weight:900;color:{_er_color};'
             f'letter-spacing:0.04em;margin-bottom:8px;">{_er_icon} {_er_verb}</div>'
