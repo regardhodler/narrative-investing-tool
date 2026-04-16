@@ -1033,7 +1033,9 @@ def _render_crash_stress_test():
 
             # LL-Anchored Crisis Detection — Crisis Intensity (CI%) system
             # CI% = abs(ll_z) / 0.448 * 100  (0%=normal, 67%=gate, 100%=COVID peak, >100%=beyond training)
-            _ll_z       = snap.get("ll_zscore", 0)
+            _ll_z_raw   = snap.get("ll_zscore")   # None = pre-computation range (no LL data for this date)
+            _ll_z       = _ll_z_raw if _ll_z_raw is not None else 0
+            _ll_missing = _ll_z_raw is None        # flag: LL not available for this snapshot date
             _regime_score = snap.get("regime_score", 0)
             _entropy    = snap.get("entropy", 0)
             _conviction = snap.get("conviction", 0)
@@ -1041,7 +1043,9 @@ def _render_crash_stress_test():
 
             _ci = max(0.0, (abs(_ll_z) / 0.448 * 100.0)) if _ll_z < 0 else 0.0
 
-            if _ci > 100.0:
+            if _ll_missing:
+                _bt_zone = 0  # special: no LL data
+            elif _ci > 100.0:
                 _bt_zone = 4
             elif _ci >= 67.0:
                 _bt_zone = 3
@@ -1058,12 +1062,12 @@ def _render_crash_stress_test():
             ]
             _bt_n_firing = sum(1 for _, _, fired in _bt_signals if fired)
 
-            if _bt_zone == 4:
-                _bt_bg, _bt_border = "#0d001a", "#7c3aed"
-                _bt_ci_color = "#a855f7"
-                _bt_label    = "BEYOND TRAINING RANGE"
-                _bt_lsub     = f"{_ci:.0f}% CI · exceeds COVID baseline"
-            elif _bt_zone == 3:
+            if _bt_zone == 0:
+                _bt_bg, _bt_border = "#0d1117", "#1e293b"
+                _bt_ci_color = "#64748b"
+                _bt_label    = "LL DATA NOT AVAILABLE"
+                _bt_lsub     = "Pre-computation range — re-run ll_gate_backtest_live_brain.py to extend"
+            elif _bt_zone == 4:
                 _bt_bg, _bt_border = "#100000", "#7f1d1d"
                 _bt_ci_color = "#ef4444"
                 _bt_label    = "CRISIS CONFIRMED"
@@ -1080,7 +1084,7 @@ def _render_crash_stress_test():
                 _bt_lsub     = "HMM model fits data — no crisis signature"
 
             def _bt_sig_row(name, val, fired):
-                if _bt_zone == 1:
+                if _bt_zone in (0, 1):
                     return (
                         f'<div style="display:flex;justify-content:space-between;padding:1px 0;">'
                         f'<span style="font-size:8px;color:#1e3a5f;">○ {name}</span>'
@@ -1112,7 +1116,12 @@ def _render_crash_stress_test():
                 f'⚠ {_ci:.0f}% — EXCEEDS COVID BASELINE BY {_ci-100:.0f}%</div>'
             ) if _bt_zone == 4 else ""
 
-            if _bt_zone == 4:
+            if _bt_zone == 0:
+                _bt_explain = (
+                    "LL z-score not available for this date — outside the pre-computed backtest range. "
+                    "Re-run ll_gate_backtest_live_brain.py to generate LL scores for earlier dates."
+                )
+            elif _bt_zone == 4:
                 _bt_explain = (
                     f"CI {_ci:.0f}% (z={_ll_z:.3f}). Beyond training range — model scoring novel data. "
                     f"100% = COVID worst-ever in-sample. This exceeds that by {_ci-100:.0f}%."
@@ -1144,8 +1153,8 @@ def _render_crash_stress_test():
                 f'</div>'
                 # Big CI% + z-score + label
                 f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;">'
-                f'<span style="font-size:26px;color:{_bt_ci_color};font-weight:900;line-height:1;">{_ci:.0f}%</span>'
-                f'<span style="font-size:13px;color:{_bt_ci_color};font-weight:700;opacity:0.7;">z={_ll_z:.3f}</span>'
+                f'<span style="font-size:26px;color:{_bt_ci_color};font-weight:900;line-height:1;">{"N/A" if _bt_zone == 0 else f"{_ci:.0f}%"}</span>'
+                f'<span style="font-size:13px;color:{_bt_ci_color};font-weight:700;opacity:0.7;">{"— no LL data" if _bt_zone == 0 else f"z={_ll_z:.3f}"}</span>'
                 f'<div>'
                 f'<div style="font-size:10px;color:{_bt_ci_color};font-weight:800;">{_bt_label}</div>'
                 f'<div style="font-size:7px;color:#64748b;">{_bt_lsub}</div>'

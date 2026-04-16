@@ -1065,7 +1065,11 @@ def _build_hmm_historical_inference() -> dict | None:
         model.means_ = np.array(brain.means)
         model.covars_ = np.array(brain.covars)
 
-        df = _build_feature_matrix(lookback_years=brain.lookback_years)  # must match live scoring
+        # Use extended lookback for GCF coverage — adds 8yr buffer beyond brain's lookback.
+        # 5-yr rolling z-score warmup uses that buffer, giving usable features from ~2008.
+        # Feature z-scores for 2013+ dates are IDENTICAL to live (rolling window is local).
+        _extended_lookback = max(brain.lookback_years + 8, 23)
+        df = _build_feature_matrix(lookback_years=_extended_lookback)
         for col in brain.feature_names:
             if col not in df.columns:
                 df[col] = 0.0
@@ -1116,7 +1120,7 @@ def _build_hmm_historical_inference() -> dict | None:
             if d in _ll_lookup:
                 ll_per_date.append(_ll_lookup[d])
             else:
-                ll_per_date.append(brain.ll_baseline_mean)  # unknown dates → baseline (z=0)
+                ll_per_date.append(None)  # None = date outside backtest JSON range (pre-computation)
 
         return {
             "dates": dates_list,
@@ -1168,14 +1172,13 @@ def reconstruct_hmm_at_date(date: str, hmm_data: dict | None) -> dict | None:
     normalized_entropy = round(raw_entropy / max_entropy, 4) if max_entropy > 0 else 0.0
 
     ll_per_date = hmm_data.get("ll_per_date")
-    if ll_per_date and idx < len(ll_per_date):
+    ll_zscore: float | None = None
+    if ll_per_date and idx < len(ll_per_date) and ll_per_date[idx] is not None:
         _ll_val = ll_per_date[idx]
-    else:
-        _ll_val = hmm_data.get("ll_per_obs", 0)
-    ll_zscore = round(
-        (_ll_val - hmm_data["ll_baseline_mean"]) /
-        max(hmm_data["ll_baseline_std"], 1e-6), 3
-    )
+        ll_zscore = round(
+            (_ll_val - hmm_data["ll_baseline_mean"]) /
+            max(hmm_data["ll_baseline_std"], 1e-6), 3
+        )
 
     transmat = np.array(hmm_data["transmat"])
     prob_vec = np.array(probs)
@@ -1438,7 +1441,7 @@ def build_qir_snapshot(date: str, data: dict, hmm_data: dict | None, prev_regime
         macro_score=macro_score,
         regime_velocity=regime_velocity * 100 if regime_velocity is not None else None,  # scale to pts like QIR
         entropy=hmm["entropy"] if hmm else 0.0,
-        ll_zscore=hmm["ll_zscore"] if hmm else 0.0,
+        ll_zscore=hmm["ll_zscore"] if hmm and hmm["ll_zscore"] is not None else 0.0,
         conviction=conviction,
         hmm_state_label=hmm["state_label"] if hmm else "",
         wyckoff=wyckoff,

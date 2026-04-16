@@ -38,8 +38,13 @@ model.covars_ = np.array(brain_raw["covars"])
 sys.path.insert(0, ".")
 from services.hmm_regime import _build_feature_matrix
 
-print("Building feature matrix (same pipeline as live)...")
-df = _build_feature_matrix(lookback_years=brain_raw.get("lookback_years", 15))  # must match brain
+print("Building feature matrix (extended lookback for GCF coverage)...")
+# Use brain lookback + 8yr buffer so the JSON covers pre-2013 dates (GCF 2008 etc.)
+# 5-yr rolling z-score warmup means we need brain_lookback + 5 + 3yr safety buffer.
+# Extending does NOT change z-scores for 2013+ dates (rolling window is self-contained).
+_brain_lookback = brain_raw.get("lookback_years", 15)
+_extended_lookback = max(_brain_lookback + 8, 23)
+df = _build_feature_matrix(lookback_years=_extended_lookback)
 
 # Ensure columns match brain
 for col in feature_names:
