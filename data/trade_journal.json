@@ -231,13 +231,19 @@
     "entry_date": "2026-04-11",
     "entry_price": 679.46,
     "exit_date": null,
-    "exit_price": null,
+    "exit_price": 697.49,
     "position_size": 1,
     "signal_source": "QIR",
     "notes": "sell the rip R2 @ R2 (pivot) ($685.67)",
     "thesis": "GENUINE UNCERTAINTY | Sell | conf 51%",
     "regime_at_entry": "Neutral \u2014 Leaning Risk-On",
-    "status": "open"
+    "status": "closed",
+    "atr_at_log": 10.4571,
+    "stop_at_log": 700.37,
+    "target_at_log": 648.09,
+    "exit_reason": "Hit Stop (ATR\u00d72)",
+    "closed_at": "2026-04-15",
+    "return_pct": -2.65
   },
   {
     "id": "d1ec221f-fe05-46b4-9921-675efd1fa5ee",
@@ -252,6 +258,9 @@
     "notes": "buy setup selective, confidence low 22/100",
     "thesis": "EARLY BULL | Buy | conf 56%",
     "regime_at_entry": "Neutral \u2014 Leaning Risk-On",
-    "status": "open"
+    "status": "open",
+    "atr_at_log": 10.1479,
+    "stop_at_log": 665.8,
+    "target_at_log": 716.54
   }
 ]

@@ -4242,6 +4242,86 @@ def _render_qir_dashboard() -> None:
                 st.button("🚫 No SPY Trade", key=f"qir_spy_none_{_tac_score}", use_container_width=True,
                           disabled=True, help=f"{_verdict_label} — no clear directional edge for SPY")
 
+        # ── SPY Trade Journal quick-log ───────────────────────────────
+        with _qc1:
+            _default_dir = (
+                "Long"  if _spy_prediction == "Buy"  else
+                "Short" if _spy_prediction == "Sell" else
+                "Long"
+            )
+            with st.popover("📒 Log SPY Trade to Journal", use_container_width=True):
+                st.markdown(
+                    f'<div style="color:#f59e0b;font-size:11px;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:8px;">📒 SPY TRADE JOURNAL</div>'
+                    f'<div style="color:#94a3b8;font-size:10px;margin-bottom:10px;">'
+                    f'Logs to trade_journal.json · auto-evaluates ATR stop/target on refresh</div>',
+                    unsafe_allow_html=True,
+                )
+                import datetime as _dt
+                _ql_dir    = st.selectbox("Direction", ["Long", "Short"],
+                                          index=0 if _default_dir == "Long" else 1,
+                                          key="ql_dir")
+                _ql_price  = st.number_input("Entry Price ($)", min_value=0.01, step=0.01,
+                                             format="%.2f", key="ql_price")
+                _ql_size   = st.number_input("Size (% of portfolio)",
+                                             min_value=0.0, max_value=100.0, step=0.5,
+                                             value=float(_kly_half) if _kly_viable and _kly_half else 0.0,
+                                             key="ql_size")
+                _ql_date   = st.date_input("Entry Date", value=_dt.date.today(), key="ql_date")
+                _ql_pattern = _cls.get("pattern") or _verdict_label or ""
+                st.caption(f"Pattern: {_ql_pattern}  ·  Kelly suggested: {_kly_half if _kly_viable else 0}%")
+                if st.button("📌 Log Trade", key="ql_log_btn", type="primary", use_container_width=True):
+                    if _ql_price <= 0:
+                        st.error("Enter a price.")
+                    else:
+                        import uuid as _uuid, json as _json, os as _os
+                        from datetime import datetime as _datetime
+                        _jpath = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "trade_journal.json")
+                        try:
+                            with open(_jpath, encoding="utf-8") as _f:
+                                _trades = _json.load(_f)
+                        except Exception:
+                            _trades = []
+
+                        # Fetch ATR levels
+                        _atr_val = _stop_l = _tgt_l = None
+                        try:
+                            from services.forecast_tracker import _fetch_atr_and_history, _ATR_MULT_STOP, _ATR_MULT_TARGET
+                            _ts_e = _datetime.fromisoformat(str(_ql_date) + "T00:00:00")
+                            _ad   = _fetch_atr_and_history("SPY", _ts_e)
+                            if _ad and _ad.get("atr", 0) > 0:
+                                _a       = _ad["atr"]
+                                _atr_val = round(_a, 4)
+                                _is_s    = _ql_dir.lower() == "short"
+                                _stop_l  = round(_ql_price + _ATR_MULT_STOP * _a if _is_s else _ql_price - _ATR_MULT_STOP * _a, 2)
+                                _tgt_l   = round(_ql_price - _ATR_MULT_TARGET * _a if _is_s else _ql_price + _ATR_MULT_TARGET * _a, 2)
+                        except Exception:
+                            pass
+
+                        _tid = str(_uuid.uuid4())[:8].upper()
+                        _trades.append({
+                            "id":               _tid,
+                            "ticker":           "SPY",
+                            "direction":        _ql_dir,
+                            "entry_price":      round(_ql_price, 2),
+                            "entry_date":       str(_ql_date),
+                            "exit_price":       None,
+                            "exit_reason":      None,
+                            "status":           "open",
+                            "position_size":    round(_ql_size, 2),
+                            "kelly_suggested":  round(_kly_half, 1) if _kly_viable and _kly_half else None,
+                            "pattern_at_entry": _ql_pattern or None,
+                            "logged_at":        _datetime.now().isoformat(),
+                            "atr_at_log":       _atr_val,
+                            "stop_at_log":      _stop_l,
+                            "target_at_log":    _tgt_l,
+                        })
+                        with open(_jpath, "w", encoding="utf-8") as _f:
+                            _json.dump(_trades, _f, indent=2, default=str)
+                        _atr_note = f"  ·  Stop ${_stop_l:.2f} / Target ${_tgt_l:.2f}" if _stop_l else ""
+                        st.success(f"✅ [{_tid}] SPY {_ql_dir} logged!{_atr_note}")
+
+
     # ── Call Top / Call Bottom manual log buttons ─────────────────────────
     _tb_prox = st.session_state.get("_top_bottom_proximity")
     if _populated and _tb_prox:

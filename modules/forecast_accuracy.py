@@ -1127,8 +1127,117 @@ def _save_trade_journal(trades: list) -> None:
         json.dump(trades, f, indent=2, default=str)
 
 
+def _auto_evaluate_spy_trades() -> int:
+    """Walk OHLC history for all open SPY trades; auto-close if ATR×2 stop or ATR×3 target hit.
+
+    Returns count of trades auto-closed this run.
+    """
+    from services.forecast_tracker import _fetch_atr_and_history, _ATR_MULT_STOP, _ATR_MULT_TARGET
+
+    trades  = _load_trade_journal()
+    open_spy = [
+        t for t in trades
+        if t.get("ticker", "").upper() == "SPY"
+        and t.get("status") == "open"
+        and t.get("entry_price")
+        and t.get("entry_date")
+    ]
+    if not open_spy:
+        return 0
+
+    n_closed = 0
+    for trade in open_spy:
+        try:
+            ep     = float(trade["entry_price"])
+            is_short = (trade.get("direction") or "Long").lower() == "short"
+            ts     = datetime.fromisoformat(str(trade["entry_date"]) + "T00:00:00")
+
+            data = _fetch_atr_and_history("SPY", ts)
+            if not data or not data["closes"]:
+                continue
+
+            atr = data["atr"]
+            if not atr or atr <= 0:
+                continue
+
+            stop_dist   = _ATR_MULT_STOP   * atr
+            target_dist = _ATR_MULT_TARGET * atr
+
+            if is_short:
+                stop_level   = ep + stop_dist
+                target_level = ep - target_dist
+            else:
+                stop_level   = ep - stop_dist
+                target_level = ep + target_dist
+
+            # Store ATR levels if not already set
+            if not trade.get("atr_at_log"):
+                trade["atr_at_log"]    = round(atr, 4)
+                trade["stop_at_log"]   = round(stop_level, 2)
+                trade["target_at_log"] = round(target_level, 2)
+
+            watermark     = ep
+            trailing_stop = stop_level
+            result        = None
+
+            highs, lows, closes, dates = data["highs"], data["lows"], data["closes"], data["dates"]
+
+            for h, l, c, d in zip(highs, lows, closes, dates):
+                if is_short:
+                    if l < watermark:
+                        watermark     = l
+                        trailing_stop = watermark + stop_dist
+                    if l <= target_level:
+                        ret    = round((ep - target_level) / ep * 100, 2)
+                        result = {"exit_price": target_level, "exit_reason": "Hit Target (ATR×3)",
+                                  "exit_date": d, "return_pct": ret}
+                        break
+                    if h >= trailing_stop:
+                        ret    = round((ep - trailing_stop) / ep * 100, 2)
+                        result = {"exit_price": round(trailing_stop, 2),
+                                  "exit_reason": "Hit Stop (ATR×2)",
+                                  "exit_date": d, "return_pct": ret}
+                        break
+                else:
+                    if h > watermark:
+                        watermark     = h
+                        trailing_stop = watermark - stop_dist
+                    if h >= target_level:
+                        ret    = round((target_level - ep) / ep * 100, 2)
+                        result = {"exit_price": target_level, "exit_reason": "Hit Target (ATR×3)",
+                                  "exit_date": d, "return_pct": ret}
+                        break
+                    if l <= trailing_stop:
+                        ret    = round((trailing_stop - ep) / ep * 100, 2)
+                        result = {"exit_price": round(trailing_stop, 2),
+                                  "exit_reason": "Hit Stop (ATR×2)",
+                                  "exit_date": d, "return_pct": ret}
+                        break
+
+            if result:
+                trade["status"]     = "closed"
+                trade["exit_price"] = round(result["exit_price"], 2)
+                trade["exit_reason"]= result["exit_reason"]
+                trade["closed_at"]  = str(result["exit_date"])[:10]
+                trade["return_pct"] = result["return_pct"]
+                n_closed += 1
+
+        except Exception:
+            continue
+
+    if n_closed:
+        _save_trade_journal(trades)
+
+    return n_closed
+
+
 def _render_spy_trade_tab():
     import uuid
+
+    # Auto-evaluate open SPY trades against ATR stop/target
+    _n_auto_closed = _auto_evaluate_spy_trades()
+    if _n_auto_closed:
+        st.success(f"🔔 **{_n_auto_closed} SPY trade(s) auto-closed** — ATR stop/target triggered. See table below.")
 
     trades = _load_trade_journal()
     spy_trades = [t for t in trades if t.get("ticker", "").upper() == "SPY"]
@@ -1241,8 +1350,24 @@ def _render_spy_trade_tab():
             if entry_price <= 0:
                 st.error("Entry price required.")
             else:
-                trade_id = str(uuid.uuid4())[:8].upper()
+                trade_id  = str(uuid.uuid4())[:8].upper()
                 is_closed = exit_price > 0 and exit_reason != "Open"
+
+                # Fetch ATR at entry date to store stop/target levels
+                _atr_at_log = _stop_at_log = _target_at_log = None
+                try:
+                    from services.forecast_tracker import _fetch_atr_and_history, _ATR_MULT_STOP, _ATR_MULT_TARGET
+                    _ts_entry = datetime.fromisoformat(str(entry_date) + "T00:00:00")
+                    _atr_data = _fetch_atr_and_history("SPY", _ts_entry)
+                    if _atr_data and _atr_data.get("atr", 0) > 0:
+                        _atr = _atr_data["atr"]
+                        _is_short = direction.lower() == "short"
+                        _atr_at_log    = round(_atr, 4)
+                        _stop_at_log   = round(entry_price + _ATR_MULT_STOP * _atr if _is_short else entry_price - _ATR_MULT_STOP * _atr, 2)
+                        _target_at_log = round(entry_price - _ATR_MULT_TARGET * _atr if _is_short else entry_price + _ATR_MULT_TARGET * _atr, 2)
+                except Exception:
+                    pass
+
                 new_trade = {
                     "id":              trade_id,
                     "ticker":          "SPY",
@@ -1257,10 +1382,14 @@ def _render_spy_trade_tab():
                     "pattern_at_entry": pattern_used.strip() or None,
                     "notes":           notes.strip() or None,
                     "logged_at":       datetime.now().isoformat(),
+                    "atr_at_log":      _atr_at_log,
+                    "stop_at_log":     _stop_at_log,
+                    "target_at_log":   _target_at_log,
                 }
                 trades.append(new_trade)
                 _save_trade_journal(trades)
-                st.success(f"✅ Logged SPY {'closed' if is_closed else 'open'} trade [{trade_id}]")
+                _atr_msg = f" · ATR={_atr_at_log:.2f}, Stop=${_stop_at_log:.2f}, Target=${_target_at_log:.2f}" if _atr_at_log else ""
+                st.success(f"✅ Logged SPY {'closed' if is_closed else 'open'} trade [{trade_id}]{_atr_msg}")
                 st.rerun()
 
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px;"></div>', unsafe_allow_html=True)
@@ -1340,19 +1469,52 @@ def _render_spy_trade_tab():
             unsafe_allow_html=True,
         )
         for t in open_trades:
-            tid  = t.get("id", "?")
-            ep   = t.get("entry_price", 0)
-            dirn = t.get("direction", "Long")
-            date = str(t.get("entry_date") or "")[:10]
+            tid   = t.get("id", "?")
+            ep    = t.get("entry_price", 0)
+            dirn  = t.get("direction", "Long")
+            date  = str(t.get("entry_date") or "")[:10]
+            stop  = t.get("stop_at_log")
+            tgt   = t.get("target_at_log")
+            atr   = t.get("atr_at_log")
             with st.expander(f"SPY {dirn} @ ${ep:.2f} — entry {date} [{tid}]", expanded=False):
+                # Show auto-close levels
+                if stop and tgt:
+                    st.markdown(
+                        f'<div style="display:flex;gap:8px;margin-bottom:10px;font-size:11px;">'
+                        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["negative"]}44;'
+                        f'border-left:3px solid {COLORS["negative"]};padding:6px 10px;border-radius:4px;flex:1;">'
+                        f'<div style="color:{COLORS["negative"]};font-size:9px;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">🛑 AUTO-STOP (ATR×2)</div>'
+                        f'<div style="color:{COLORS["text"]};font-weight:700;font-size:14px;">${stop:.2f}</div>'
+                        f'</div>'
+                        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["positive"]}44;'
+                        f'border-left:3px solid {COLORS["positive"]};padding:6px 10px;border-radius:4px;flex:1;">'
+                        f'<div style="color:{COLORS["positive"]};font-size:9px;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">🎯 AUTO-TARGET (ATR×3)</div>'
+                        f'<div style="color:{COLORS["text"]};font-weight:700;font-size:14px;">${tgt:.2f}</div>'
+                        f'</div>'
+                        f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                        f'padding:6px 10px;border-radius:4px;flex:1;">'
+                        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:9px;font-weight:700;letter-spacing:0.08em;margin-bottom:2px;">ATR AT ENTRY</div>'
+                        f'<div style="color:{COLORS["text"]};font-weight:700;font-size:14px;">${atr:.2f}</div>'
+                        f'</div>'
+                        f'</div>'
+                        f'<div style="color:{COLORS["text_dim"]};font-size:10px;margin-bottom:8px;">'
+                        f'🤖 This trade auto-closes when SPY hits either level. Tab refresh triggers evaluation.</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f'<div style="color:{COLORS["text_dim"]};font-size:10px;margin-bottom:8px;">'
+                        f'⚠️ ATR levels not stored — will be computed on next refresh.</div>',
+                        unsafe_allow_html=True,
+                    )
                 c1, c2, c3 = st.columns(3)
                 with c1:
-                    close_price = st.number_input(f"Exit Price", min_value=0.01, step=0.01, format="%.2f", key=f"close_price_{tid}")
+                    close_price = st.number_input(f"Manual Exit Price", min_value=0.01, step=0.01, format="%.2f", key=f"close_price_{tid}")
                 with c2:
                     close_reason = st.selectbox("Exit Reason", ["Hit Target (ATR×3)", "Hit Stop (ATR×2)", "Manual Exit", "Time Exit"], key=f"close_reason_{tid}")
                 with c3:
                     st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
-                    if st.button(f"Close Trade", key=f"close_btn_{tid}", use_container_width=True):
+                    if st.button(f"Close Manually", key=f"close_btn_{tid}", use_container_width=True):
                         for trade in trades:
                             if trade.get("id") == tid:
                                 trade["exit_price"]  = round(close_price, 2)
@@ -1361,7 +1523,7 @@ def _render_spy_trade_tab():
                                 trade["closed_at"]   = datetime.now().isoformat()
                                 break
                         _save_trade_journal(trades)
-                        st.success(f"Trade [{tid}] closed at ${close_price:.2f}")
+                        st.success(f"Trade [{tid}] manually closed at ${close_price:.2f}")
                         st.rerun()
 
 

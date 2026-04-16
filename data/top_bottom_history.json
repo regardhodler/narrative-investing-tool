@@ -83,5 +83,25 @@
    "HY spreads historically tight (2.8%)"
   ],
   "bottom_signals": []
+ },
+ {
+  "date": "2026-04-16",
+  "top_pct": 50,
+  "bottom_pct": 0,
+  "regime_score": 0.24,
+  "velocity": 0.0,
+  "entropy": 0.0,
+  "ll_z": 0.0,
+  "conviction": 24.0,
+  "hmm_state": "Bull",
+  "wyckoff_phase": "Distribution",
+  "wyckoff_conf": 40,
+  "top_signals": [
+   "Regime elevated",
+   "Wyckoff Distribution A (40% conf)",
+   "Wyckoff downside target $641",
+   "HY spreads historically tight (2.9%)"
+  ],
+  "bottom_signals": []
  }
 ]
