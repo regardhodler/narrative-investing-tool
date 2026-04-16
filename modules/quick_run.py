@@ -3114,6 +3114,16 @@ def _render_qir_dashboard() -> None:
                     # Note
                     + f'<div style="border-top:1px solid #1e293b;padding-top:6px;font-size:9px;color:#64748b;">'
                     + f'<span style="color:{_bw_color};">▸</span> {_bw_note}</div>'
+
+                    # Tips
+                    + f'<div style="margin-top:8px;padding-top:7px;border-top:1px solid #0f172a;font-size:8px;color:#334155;line-height:1.6;">'
+                    + f'<span style="color:#1e3a5f;font-weight:700;letter-spacing:0.08em;">HOW TO READ</span><br>'
+                    + f'4/4 = confirmed, 0 false alarms since 2013 · 3/4 = watch, wait for last signal<br>'
+                    + f'Signal fires <em>after</em> price low (+8 to +66d) — confirms worst is over, not the exact tick<br>'
+                    + f'Volmageddon (pure vol shock, no credit stress) never fires HY — that\'s by design<br>'
+                    + f'VIX pill = 60d peak ≥ 28 AND now below 24 · VVIX = tail-risk proxy (P/C equivalent)'
+                    + f'</div>'
+
                     f'</div>'
                 )
         except Exception:
