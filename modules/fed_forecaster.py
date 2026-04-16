@@ -724,6 +724,16 @@ def _render_dot_plot_vs_futures(final_probs: list[dict], fred_data: dict):
 
     _futures_color = COLORS.get("green", "#22c55e") if futures_implied <= _SEP["2026 Year-End"] else COLORS.get("red", "#ef4444")
 
+    # Legend
+    st.markdown(
+        f'<div style="display:flex;gap:16px;margin-bottom:6px;font-size:10px;color:#94a3b8;">'
+        f'<span><span style="display:inline-block;width:10px;height:10px;background:#FF8811;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Fed Dot (SEP median)</span>'
+        f'<span><span style="display:inline-block;width:10px;height:10px;background:{_futures_color};border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Futures Implied</span>'
+        f'<span><span style="display:inline-block;width:10px;height:10px;background:#64748b;border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Current Rate</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
     # Chart: rate levels with implied-cut annotation in bar text
     _chart_labels = [
         _SEP_DATE + " · Longer Run",
