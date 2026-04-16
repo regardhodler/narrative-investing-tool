@@ -3055,10 +3055,17 @@ def _render_qir_dashboard() -> None:
             )
 
 
-        # ── Bottom Watch card (CI% ≥ 22 only — stress/crisis gate) ───────────
+        # ── Bottom Watch card (always visible; greyed when CI% < 22) ───────────
         _bw_block = ""
         try:
-            if _ci >= 22.0 and _tb_bw:
+            _bw_live = _ci >= 22.0 and bool(_tb_bw)
+            _bw_score = (_tb_bw.get("score", 0) if _tb_bw else 0) if _bw_live else 0
+            _bw_active = (_tb_bw.get("active", False) if _tb_bw else False) if _bw_live else False
+            _bw_sigs  = (_tb_bw.get("signals", {}) if _tb_bw else {}) if _bw_live else {}
+            _bw_vals  = (_tb_bw.get("values", {}) if _tb_bw else {}) if _bw_live else {}
+            _bw_note  = (_tb_bw.get("note", "") if _tb_bw else "") if _bw_live else ""
+
+            if _bw_live:
                 _bw_score = _tb_bw.get("score", 0)
                 _bw_active = _tb_bw.get("active", False)
                 _bw_sigs = _tb_bw.get("signals", {})
@@ -3157,6 +3164,31 @@ def _render_qir_dashboard() -> None:
                     + f'VIX pill = 60d peak ≥ 28 AND now below 24 · VVIX = tail-risk proxy (P/C equivalent)'
                     + f'</div>'
 
+                    f'</div>'
+                )
+            else:
+                # Greyed-out dormant state — always visible so you know the card exists
+                _bw_block = (
+                    f'<div style="background:#0a0f1a;border:1px solid #1e293b55;'
+                    f'border-left:3px solid #1e293b;border-radius:6px;'
+                    f'padding:10px 14px;margin-bottom:10px;opacity:0.55;">'
+                    f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+                    f'<span style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.12em;">BOTTOM WATCH</span>'
+                    f'<span style="font-size:8px;color:#1e3a5f;font-weight:700;">DORMANT · CI% &lt; 22</span>'
+                    f'</div>'
+                    f'<div style="font-size:12px;color:#334155;font-weight:700;margin-bottom:6px;">— INACTIVE —</div>'
+                    f'<div style="display:flex;gap:4px;margin-bottom:8px;">'
+                    + "".join(
+                        f'<span style="display:inline-block;background:#1e293b22;border:1px solid #1e293b;'
+                        f'border-radius:3px;padding:1px 6px;font-size:9px;color:#1e3a5f;font-weight:700;">'
+                        f'○ {lbl}</span>'
+                        for lbl in ["LL↑", "VIX", "HY↓", "VVIX"]
+                    )
+                    + f'</div>'
+                    f'<div style="border-top:1px solid #1e293b33;padding-top:6px;font-size:8px;color:#1e3a5f;line-height:1.6;">'
+                    f'Activates when CI% ≥ 22 (stress/crisis regime) · 4/4 signals = 0 false alarms since 2013<br>'
+                    f'Monitors: LL recovery · VIX normalization · HY compression · VVIX compression'
+                    f'</div>'
                     f'</div>'
                 )
         except Exception:
@@ -3458,7 +3490,7 @@ def _render_qir_dashboard() -> None:
 
     # ── Compose zone 2: slow signals (Kelly+HMM+GEX+lean+signal) — top_bottom rendered separately ──
     # ── SLOW: just the HMM regime brain (LL + entropy + forecasts) ──────────
-    _slow_html = (_hmm_block if _populated else "") + (_bw_block if _populated else "")
+    _slow_html = ""  # HMM and Bottom Watch rendered separately below
 
     # ── MEDIUM: structural Kelly sizing + contextual signals + entry card ────
     _medium_html = ""
@@ -3468,7 +3500,9 @@ def _render_qir_dashboard() -> None:
             _medium_parts.append(_conviction_block)
         if _kelly_block:
             _medium_parts.append(f'<div style="margin-bottom:10px;">{_kelly_block}</div>')
-        _medium_parts.append(_gex_block + _lean_card + _signal_breakdown_block)
+        if _lean_card:
+            _medium_parts.append(_lean_card)
+        _medium_parts.append(_gex_block + _signal_breakdown_block)
         _medium_html = "".join(_medium_parts)
 
     # ── Crash pattern alert ──────────────────────────────────────────────
@@ -3531,8 +3565,9 @@ def _render_qir_dashboard() -> None:
         f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
         f'{_medium_html}'
         f'{_verdict_html}'
-        f'{_fast_setups_html if _populated else ""}'
+        f'{_hmm_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
+        f'{_bw_block if _populated else ""}'
         # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
         f'</div>',
         unsafe_allow_html=True,
