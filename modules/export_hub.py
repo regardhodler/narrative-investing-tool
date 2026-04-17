@@ -815,6 +815,72 @@ def _build_pipeline_export() -> str:
     return "\n".join(lines)
 
 
+def _build_cross_sectional_export() -> str:
+    """Build a cross-sectional AI context snapshot from all module context dicts."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    lines = [
+        "# REGARDED TERMINALS — CROSS-SECTIONAL AI CONTEXT",
+        f"Generated: {now_str}",
+        "Source: QIR run — all module context blocks captured in one export",
+        "",
+        "---",
+        "",
+    ]
+
+    _MODULES = [
+        ("QIR / Signal State",      "_qir_ai_context"),
+        ("Risk Regime",             "_risk_regime_ai_context"),
+        ("Options Flow",            "_options_flow_ai_context"),
+        ("Wyckoff / Tactical",      "_wyckoff_ai_context"),
+        ("Stress Signals / CI%",    "_stress_signals_ai_context"),
+        ("Tail Risk Studio",        "_tail_risk_ai_context"),
+        ("Portfolio / Journal",     "_trade_journal_ai_context"),
+        ("Whale Movement",          "_whale_ai_context"),
+        ("Narrative Discovery",     "_discovery_ai_context"),
+    ]
+
+    any_data = False
+    for label, key in _MODULES:
+        ctx = st.session_state.get(key) or {}
+        if not ctx:
+            continue
+        any_data = True
+        lines.append(f"## {label}")
+        for k, v in ctx.items():
+            if isinstance(v, list):
+                lines.append(f"**{k}:**")
+                for item in v:
+                    lines.append(f"  - {item}")
+            else:
+                lines.append(f"**{k}:** {v}")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    if not any_data:
+        lines += [
+            "⚠ No AI context data found.",
+            "",
+            "Run QIR first (⚡ Quick Intel Run → RUN ALL INTEL MODULES).",
+            "After the run completes, the 🤖 AI CONTEXT LIVE badge will appear on the QIR page.",
+            "Then return here and generate this export.",
+        ]
+
+    lines += [
+        "## HOW TO USE THIS EXPORT",
+        "",
+        "Paste this document into Claude, ChatGPT, Gemini, or any AI and ask:",
+        '- "Given this cross-sectional market state, what is my highest-conviction trade?"',
+        '- "Where is my portfolio most vulnerable right now?"',
+        '- "Which signals are confirming each other and which are diverging?"',
+        '- "Given CI% and HMM state, should I be adding or reducing exposure?"',
+        "",
+        "All signal definitions are embedded above. No additional context needed.",
+    ]
+
+    return "\n".join(lines)
+
+
 def _build_pipeline_graph_json() -> str:
     """Build machine-readable dependency graph JSON for LLM/tool analysis."""
     now_iso = datetime.now().isoformat()
@@ -1452,7 +1518,81 @@ def render():
         with st.expander("Preview Brain Dump", expanded=False):
             st.code(_upgrade[:3000] + ("\n...[truncated]" if len(_upgrade) > 3000 else ""), language="markdown")
 
-    # --- Section E: Suggested prompts ---
+    # --- Section E: Cross-Sectional AI Context Export ---
+    st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">'
+        f'<span style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;letter-spacing:0.08em;">CROSS-SECTIONAL AI CONTEXT</span>'
+        + (
+            f'<span style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#052e16;color:#4ade80;border:1px solid #166534;'
+            f'padding:2px 7px;border-radius:3px;">🤖 CONTEXT LIVE</span>'
+            if st.session_state.get("_qir_ai_context") else
+            f'<span style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#1c1917;color:#57534e;border:1px solid #292524;'
+            f'padding:2px 7px;border-radius:3px;">🤖 RUN QIR FIRST</span>'
+        )
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption("All 9 module context blocks in one document — paste into any AI for full cross-sectional analysis.")
+
+    if st.button("🤖 Generate Cross-Sectional Export", key="export_cross_sectional_gen"):
+        with st.spinner("Packaging all module context blocks..."):
+            _xs_content = _build_cross_sectional_export()
+        st.session_state["_cross_sectional_content"] = _xs_content
+
+    _xs = st.session_state.get("_cross_sectional_content")
+    if _xs:
+        _xs_filename = f"regarded_terminals_ai_context_{datetime.now().strftime('%Y%m%d_%H%M')}.md"
+        _xs1, _xs2, _xs3 = st.columns([1, 1, 2])
+        with _xs1:
+            st.download_button(
+                label="💾 Download AI Context",
+                data=_xs,
+                file_name=_xs_filename,
+                mime="text/markdown",
+                key="export_cross_sectional_dl",
+            )
+        with _xs2:
+            try:
+                from services.telegram_client import is_configured as _tg_ok_xs, send_document as _tg_send_xs
+                if _tg_ok_xs():
+                    if st.button("📲 Send to Telegram", key="export_cross_sectional_tg"):
+                        with st.spinner("Sending to Telegram..."):
+                            _ok_xs = _tg_send_xs(
+                                _xs_filename, _xs,
+                                caption=f"🤖 Cross-Sectional AI Context — {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+                            )
+                        if _ok_xs:
+                            st.success("✅ Sent to Telegram")
+                        else:
+                            st.error("❌ Telegram send failed")
+                else:
+                    st.caption("📲 Telegram not configured")
+            except ImportError:
+                st.caption("📲 Telegram not configured")
+        with _xs3:
+            st.markdown(
+                f'<div style="padding:8px 0;font-size:12px;color:#888;">'
+                f'{len(_xs.splitlines())} lines · {len(_xs):,} chars · ~{len(_xs)//4:,} tokens</div>',
+                unsafe_allow_html=True,
+            )
+
+        with st.expander("Preview Cross-Sectional Context", expanded=False):
+            st.code(_xs[:3000] + ("\n...[truncated]" if len(_xs) > 3000 else ""), language="markdown")
+
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};border-left:3px solid #4285f4;'
+            f'padding:10px 14px;border-radius:0 4px 4px 0;margin-top:8px;font-size:12px;color:#bbb;">'
+            f'💡 <b>Suggested prompt:</b> <i>"Here is my full cross-sectional market state across all modules. '
+            f'What is my highest-conviction trade right now, where is my biggest risk, '
+            f'and which signals are diverging that I should watch?"</i>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    # --- Section F: Suggested prompts ---
     st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:16px 0 10px 0;"></div>', unsafe_allow_html=True)
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
@@ -1470,6 +1610,7 @@ def render():
 
     prompts = [
         ("📋 Full Briefing Analysis", "Here is my current macro intelligence briefing. Summarize the top 3 themes, highlight the most actionable signals, and give me a prioritized action plan for my portfolio."),
+        ("🤖 Cross-Sectional Analysis", "Here is my full cross-sectional market state across all modules (QIR, Risk Regime, Options Flow, Wyckoff, Stress Signals, Portfolio, Whale, Tail Risk, Discovery). What is my highest-conviction trade right now, where is my biggest risk, and which signals are diverging that I should watch?"),
         ("📊 Portfolio Risk Check", "Given this macro regime and my portfolio positions, what are the biggest risks I should be aware of and what actions should I take?"),
         ("🦢 Black Swan Exposure", "Which of my portfolio positions are most exposed to the black swan tail risks listed? Rank them by vulnerability."),
         ("🏦 Rate Path Trade", "Given the Fed rate path probabilities, which sectors and assets should I overweight or underweight?"),
