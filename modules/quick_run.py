@@ -4258,11 +4258,36 @@ def _render_qir_dashboard() -> None:
                     unsafe_allow_html=True,
                 )
                 import datetime as _dt
+                # Fetch live SPY price
+                _ql_spy_price = None
+                try:
+                    import yfinance as _yf
+                    _spy_tick = _yf.Ticker("SPY")
+                    _spy_hist = _spy_tick.history(period="1d", interval="1m")
+                    if _spy_hist is not None and not _spy_hist.empty:
+                        _ql_spy_price = round(float(_spy_hist["Close"].iloc[-1]), 2)
+                except Exception:
+                    pass
+
+                if _ql_spy_price:
+                    st.markdown(
+                        f'<div style="background:#0a0f1a;border:1px solid #22c55e33;border-left:3px solid #22c55e;'
+                        f'padding:6px 10px;border-radius:4px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
+                        f'<span style="font-size:10px;color:#64748b;font-weight:700;letter-spacing:0.08em;">SPY LIVE</span>'
+                        f'<span style="font-size:18px;font-weight:900;color:#22c55e;">${_ql_spy_price:.2f}</span>'
+                        f'<span style="font-size:9px;color:#475569;">click Use Price → fills entry below</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                    if st.button(f"Use ${_ql_spy_price:.2f} as entry", key="ql_use_live_price", use_container_width=True):
+                        st.session_state["ql_price"] = _ql_spy_price
+
                 _ql_dir    = st.selectbox("Direction", ["Long", "Short"],
                                           index=0 if _default_dir == "Long" else 1,
                                           key="ql_dir")
                 _ql_price  = st.number_input("Entry Price ($)", min_value=0.01, step=0.01,
-                                             format="%.2f", key="ql_price")
+                                             format="%.2f", key="ql_price",
+                                             value=float(st.session_state.get("ql_price") or _ql_spy_price or 0.01))
                 _ql_size   = st.number_input("Size (% of portfolio)",
                                              min_value=0.0, max_value=100.0, step=0.5,
                                              value=float(_kly_half) if _kly_viable and _kly_half else 0.0,

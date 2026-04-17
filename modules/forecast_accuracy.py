@@ -1302,6 +1302,28 @@ def _render_spy_trade_tab():
         unsafe_allow_html=True,
     )
 
+    # Fetch live SPY price
+    _live_spy = None
+    try:
+        import yfinance as _yf2
+        _sh = _yf2.Ticker("SPY").history(period="1d", interval="1m")
+        if _sh is not None and not _sh.empty:
+            _live_spy = round(float(_sh["Close"].iloc[-1]), 2)
+    except Exception:
+        pass
+
+    if _live_spy:
+        st.markdown(
+            f'<div style="background:{COLORS["surface"]};border:1px solid {COLORS["positive"]}33;'
+            f'border-left:3px solid {COLORS["positive"]};padding:7px 12px;border-radius:4px;'
+            f'margin-bottom:10px;display:flex;align-items:center;gap:12px;">'
+            f'<span style="font-size:10px;color:{COLORS["text_dim"]};font-weight:700;letter-spacing:0.08em;">SPY LIVE</span>'
+            f'<span style="font-size:20px;font-weight:900;color:{COLORS["positive"]};">${_live_spy:.2f}</span>'
+            f'<span style="font-size:10px;color:{COLORS["text_dim"]};">Use this as your entry price below</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     # Auto-pull from QIR session state
     _qir_pattern = st.session_state.get("_qir_pattern") or st.session_state.get("_last_pattern") or "—"
     _kelly_pct   = None
@@ -1336,7 +1358,8 @@ def _render_spy_trade_tab():
             direction  = st.selectbox("Direction", ["Long", "Short"])
             entry_date = st.date_input("Entry Date", value=datetime.now().date())
         with c2:
-            entry_price = st.number_input("Entry Price ($)", min_value=0.01, step=0.01, format="%.2f")
+            entry_price = st.number_input("Entry Price ($)", min_value=0.01, step=0.01, format="%.2f",
+                                          value=float(_live_spy or 0.01))
             actual_size = st.number_input("Actual Size (% of portfolio)", min_value=0.0, max_value=100.0, step=0.5, value=float(_kelly_pct or 0))
         with c3:
             exit_price = st.number_input("Exit Price ($ — leave 0 if still open)", min_value=0.0, step=0.01, format="%.2f")
