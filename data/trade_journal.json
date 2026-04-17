@@ -262,5 +262,23 @@
     "atr_at_log": 10.1479,
     "stop_at_log": 665.8,
     "target_at_log": 716.54
+  },
+  {
+    "id": "DC703CA9",
+    "ticker": "SPY",
+    "direction": "Long",
+    "entry_price": 701.55,
+    "entry_date": "2026-04-16",
+    "exit_price": null,
+    "exit_reason": null,
+    "status": "open",
+    "position_size": 4.0,
+    "kelly_suggested": 4.0,
+    "pattern_at_entry": "MOMENTUM_BUILDING",
+    "notes": "kelly suggested 4%, SPY price at ATH",
+    "logged_at": "2026-04-16T18:25:43.079315",
+    "atr_at_log": 9.5729,
+    "stop_at_log": 682.4,
+    "target_at_log": 730.27
   }
 ]

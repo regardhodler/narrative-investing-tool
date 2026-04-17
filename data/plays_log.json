@@ -14238,5 +14238,159 @@
     "meta": {
       "fed_funds_rate": 3.64
     }
+  },
+  {
+    "id": "20260416_183007_56",
+    "timestamp": "2026-04-16T18:30:07.566493",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 4\n\n* The Composite Stress Score of 18.2/100 indicates a low-stress environment, with the HY OAS at 2.85 and IG OAS at 0.80 suggesting relatively stable credit markets.\n* The 10Y-2Y Spread of 0.54 is within a normal range, indicating no significant inversion or recession concerns.\n* Regional Banks and Commercial Real Estate have shown positive 1M returns of +13.2% and +4.9%, respectively, with manageable drawdowns of -12.6% and -10.0%, suggesting stability in these sectors.\n* Distress filings have been relatively low, with 269 filings in the last 30 days, and whale exits have been moderate, with 20 positions closed or reduced, totaling $-129,883,591M.\n\nLooking forward, the current geopolitical tensions and inflation concerns may continue to influence market dynamics. The potential de-escalation of the Israel-Hezbollah conflict and the Fed's policy stasis may help maintain market stability, but the looming Japan rate hike and potential replacement of Powell with a rate-cutter may introduce new risks. Overall, the financial system stress level remains relatively low, but investors should continue to monitor these developments and their potential impact on credit markets and asset prices."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260416_183137_27",
+    "timestamp": "2026-04-16T18:31:37.275632",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 2\n\n* The Composite Stress Score of 18.2/100 indicates a low-stress environment, with no significant signs of systemic distress.\n* The 10Y-2Y Spread of 0.54 suggests a relatively stable yield curve, with no indication of an impending recession.\n* The HY OAS of 2.85 and IG OAS of 0.80 are within normal ranges, indicating that credit markets are functioning properly.\n* The Regional Banks sector has shown a strong 1M return of +13.2%, with an average drawdown of -12.6%, suggesting that this sector is not currently a source of stress.\n* The number of distress filings (269) and whale exits (20 positions, total $-129,883,591M closed/reduced) are relatively low, indicating that there are no significant signs of market stress or panic selling.\n\nLooking forward, the current geopolitical risks in the Middle East and the potential for premature easing by the Fed may introduce some uncertainty into the market. However, the current data suggests that the financial system is stable, and the stress level is low. The ongoing monitoring of the Canary Watchlist and the analysis of the stress signal data will be crucial in identifying any potential signs of stress or instability in the market."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260416_183533_77",
+    "timestamp": "2026-04-16T18:35:33.774686",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6673183618768777,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.1519697711494535,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0021653981637225718,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.17854646880994632,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260416_185748_65",
+    "timestamp": "2026-04-16T18:57:48.653754",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 4\n\n* The Composite Stress Score of 18.2/100 indicates a low-stress environment, with the HY OAS at 2.85 and IG OAS at 0.80 suggesting relatively stable credit markets.\n* The 10Y-2Y Spread of 0.54 is within a normal range, indicating no significant inversion or recession concerns.\n* The Canary Watchlist Summary shows that Regional Banks have an average 1M return of +13.2%, while Commercial Real Estate and Private Equity Exposure have average 1M returns of +4.9% and +10.9%, respectively, indicating some areas of strength.\n* Distress filings have been relatively low, with 269 filings in the last 30 days, and whale exits have been moderate, with 20 positions closed or reduced, totaling $-129,883,591M.\n\nLooking forward, the current geopolitical risks in the Middle East and the potential for de-escalation may continue to drive market volatility. The Fed's policy stasis and the potential for premature easing under a new chair may also impact market dynamics. Overall, while the current stress level is relatively low, investors should continue to monitor these factors and their potential impact on credit markets and portfolio positions."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260416_191819_17",
+    "timestamp": "2026-04-16T19:18:19.171202",
+    "feature": "Discovery Plays",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "sectors": [
+        {
+          "name": "Materials",
+          "conviction": 3
+        },
+        {
+          "name": "Energy",
+          "conviction": 3
+        },
+        {
+          "name": "Financials",
+          "conviction": 2
+        },
+        {
+          "name": "Industrials",
+          "conviction": 2
+        },
+        {
+          "name": "Consumer Discretionary",
+          "conviction": 2
+        }
+      ],
+      "stocks": [
+        {
+          "ticker": "NVDA",
+          "reason": "Heavy institutional convergence on AI semiconductors aligns with tech momentum in risk-on reflation.",
+          "conviction": 3
+        },
+        {
+          "ticker": "JPM",
+          "reason": "Financials benefit from yield curve steepening (+0.60 z-score) and cyclical rotation in favorable entry regime.",
+          "conviction": 3
+        },
+        {
+          "ticker": "AMZN",
+          "reason": "Consumer discretionary leadership (XLY +9.4% 4-week) with e-commerce trending in risk-on rally.",
+          "conviction": 2
+        },
+        {
+          "ticker": "V",
+          "reason": "Payment networks thrive on consumer spending resilience amid reflationary growth signals.",
+          "conviction": 2
+        },
+        {
+          "ticker": "CAT",
+          "reason": "Industrials capture sector rotation and corporate capex strength (+0.60 z-score).",
+          "conviction": 2
+        },
+        {
+          "ticker": "XOM",
+          "reason": "Energy commodities prioritized in reflation quadrant with post-Iran risk-on oil tailwinds.",
+          "conviction": 2
+        }
+      ],
+      "bonds": [
+        {
+          "ticker": "HYG",
+          "reason": "Tight HY spreads (2.9bps) and low system stress favor high-yield credit in risk-on reflation.",
+          "conviction": 2
+        },
+        {
+          "ticker": "SHY",
+          "reason": "Short-term treasuries provide defensive ballast ahead of FOMC and data events.",
+          "conviction": 1
+        }
+      ],
+      "rationale": "The Risk-On Reflation regime (+0.24 score) with top z-scores in sector breadth (+0.97), term premium (+0.83), and equity trends (+0.67) drives prioritization of cyclicals, commodities, and credit. Extreme Fear & Greed (23/100) acts as contrarian buy amid rising 5-session trends (high conviction). Favorable tactical entry (65/100) and bull verdict support selective positioning in regime-aligned sectors like materials and energy over long-duration bonds."
+    },
+    "meta": {
+      "overlay": null,
+      "regime": "Risk-On"
+    }
   }
 ]

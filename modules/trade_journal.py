@@ -1053,7 +1053,7 @@ def render():
                         )
                     st.markdown(
                         f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{trade["ticker"]}</span>'
-                        f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{direction} · {trade["signal_source"]}'
+                        f' <span style="color:{COLORS["text_dim"]};font-size:11px;">{direction} · {trade.get("signal_source", "manual")}'
                         f' · {trade["entry_date"]}</span>'
                         f' <span style="color:{_badge_color};font-size:11px;font-weight:600;margin-left:6px;">{_badge_text}</span>'
                         f'{_drift_badge}{_tac_badge}{_of_badge}{_narr_badge}{_earn_badge}',
@@ -1100,7 +1100,7 @@ def render():
                                 ed_dir = st.selectbox("Direction", ["Long", "Short"],
                                                       index=0 if trade["direction"] == "Long" else 1,
                                                       key=f"ed_dir_{tid}")
-                                sig_idx = _SIGNAL_SOURCES.index(trade["signal_source"]) if trade["signal_source"] in _SIGNAL_SOURCES else 0
+                                sig_idx = _SIGNAL_SOURCES.index(trade.get("signal_source", "Manual")) if trade.get("signal_source", "Manual") in _SIGNAL_SOURCES else 0
                                 ed_signal = st.selectbox("Signal Source", _SIGNAL_SOURCES,
                                                          index=sig_idx, key=f"ed_sig_{tid}")
                             with ec2:
@@ -2497,7 +2497,7 @@ def render():
                     "Shares": size,
                     "P&L": f"${pnl:+,.2f}",
                     "Return": f"{pnl_pct:+.1f}%",
-                    "Signal": t["signal_source"],
+                    "Signal": t.get("signal_source", "manual"),
                     "Regime": t.get("regime_at_entry", ""),
                     "Entry Date": t["entry_date"],
                     "Exit Date": t.get("exit_date", ""),
@@ -2529,7 +2529,7 @@ def render():
                                 ed_dir = st.selectbox("Direction", ["Long", "Short"],
                                                       index=0 if t["direction"] == "Long" else 1,
                                                       key=f"ced_dir_{tid}")
-                                sig_idx = _SIGNAL_SOURCES.index(t["signal_source"]) if t["signal_source"] in _SIGNAL_SOURCES else 0
+                                sig_idx = _SIGNAL_SOURCES.index(t.get("signal_source", "Manual")) if t.get("signal_source", "Manual") in _SIGNAL_SOURCES else 0
                                 ed_signal = st.selectbox("Signal Source", _SIGNAL_SOURCES,
                                                          index=sig_idx, key=f"ced_sig_{tid}")
                                 ed_notes = st.text_input("Notes", value=t.get("notes", ""), key=f"ced_nt_{tid}")
@@ -2608,7 +2608,7 @@ def render():
             if _ticker_currency(t["ticker"]) == "USD":
                 pnl *= _usdcad_metrics
             pnls.append(pnl)
-            signals.append(t["signal_source"])
+            signals.append(t.get("signal_source", "manual"))
             if t.get("exit_date", "").startswith(current_year):
                 ytd_pnls.append(pnl)
 

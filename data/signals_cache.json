@@ -128,7 +128,7 @@
     }
   ],
   "_rate_path_probs_ts": {
-    "__datetime__": "2026-04-16T18:23:42.630249"
+    "__datetime__": "2026-04-16T18:35:33.772655"
   },
   "_fed_plays_result": {
     "sectors": [
@@ -211,11 +211,11 @@
   "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
   "_chain_narration": "The most likely Fed rate path is to hold rates steady, with a 66.7% probability. This scenario transmits through stable short rates keeping credit spreads contained to support corporate borrowing, a flat mortgage market stabilizing housing activity without new incentives, and steady employment gains amid the reflation risk-on regime's economic momentum. Benefiting asset classes include investment-grade credit (LQD), high-yield bonds (HYG, JNK), and cyclical sectors like financials (XLF) and energy (XLE); headwinds face long-duration growth stocks (QQQ) and rate-sensitive REITs (VNQ).",
   "_chain_narration_engine": "\ud83e\udde0 Regard Mode",
-  "_doom_briefing": "**STRESS LEVEL: 2/10**\n\n- Composite Stress Score of 18.2/100 indicates low overall financial system stress.\n- HY Credit Spread (OAS) at 2.85 and IG Credit Spread at 0.80 reflect tight credit conditions with minimal widening.\n- Yield Curve 10Y-2Y spread of 0.54% shows a modestly positive slope, consistent with contained rate pressures.\n- Canary Watchlist sectors exhibit positive average 1M returns, including Regional Banks at +13.2%, Commercial Real Estate at +4.9%, Private Equity Exposure at +10.9%, and Subprime/Consumer Credit at +9.8%.\n- Drawdowns remain elevated in Private Equity Exposure at -30.8% and Subprime/Consumer Credit at -26.3%, signaling prior sector-specific vulnerabilities despite recent recovery.\n- Volatility/Fear index shows average 1M decline of -14.4% and drawdown of -25.6%, indicating reduced market fear.\n\nStress signals remain subdued with no evidence of widening spreads, negative returns, or interconnected deteriorations across canaries. Monitoring is warranted for drawdown recoveries in Private Equity Exposure and Subprime/Consumer Credit to assess potential residual fragilities. Systemic contagion risks appear absent based on current data.",
+  "_doom_briefing": "STRESS LEVEL: 4\n\n* The Composite Stress Score of 18.2/100 indicates a low-stress environment, with the HY OAS at 2.85 and IG OAS at 0.80 suggesting relatively stable credit markets.\n* The 10Y-2Y Spread of 0.54 is within a normal range, indicating no significant inversion or recession concerns.\n* The Canary Watchlist Summary shows that Regional Banks have an average 1M return of +13.2%, while Commercial Real Estate and Private Equity Exposure have average 1M returns of +4.9% and +10.9%, respectively, indicating some areas of strength.\n* Distress filings have been relatively low, with 269 filings in the last 30 days, and whale exits have been moderate, with 20 positions closed or reduced, totaling $-129,883,591M.\n\nLooking forward, the current geopolitical risks in the Middle East and the potential for de-escalation may continue to drive market volatility. The Fed's policy stasis and the potential for premature easing under a new chair may also impact market dynamics. Overall, while the current stress level is relatively low, investors should continue to monitor these factors and their potential impact on credit markets and portfolio positions.",
   "_doom_briefing_ts": {
-    "__datetime__": "2026-04-16T17:50:07.044665"
+    "__datetime__": "2026-04-16T18:57:48.652066"
   },
-  "_doom_briefing_engine": "\ud83e\udde0 Regard Mode",
+  "_doom_briefing_engine": "\u26a1 Freeloader Mode",
   "_whale_summary": "**Biggest Institutional Convergence: AI, Semiconductors, and Big Tech with Pharma Overlay**\n\nMajor institutions like BlackRock, Vanguard Group, and State Street Corp are heavily converging on AI-driven semiconductors and core Big Tech names, alongside select healthcare plays. The largest position increases underscore a clear tilt toward high-growth tech leaders, with semiconductors (NVIDIA, Micron Technology, Broadcom) and the Magnificent 7 (NVIDIA, Apple, Alphabet, Microsoft, Amazon) dominating inflows. Eli Lilly stands out as the key non-tech beneficiary, signaling conviction in innovative pharmaceuticals amid broader market rotation themes. Total disclosed increases exceed $300 billion across these top moves, reflecting passive giants doubling down on secular growth stories as of Q1 2026.\n\n**Highest Conviction Names: Alphabet, Apple, NVIDIA, and Eli Lilly**\n\nAlphabet Inc. sees the broadest conviction, with Vanguard Group adding $40,021,411M (+31.9%) and another $31,555,850M (+31.4%), State Street Corp boosting by $16,641,142M (+29.8%), and BlackRock increasing twice at $13,929,268M (+22.2%) and $10,963,671M (+20.2%)\u2014collectively over $113 billion in new exposure. Apple Inc. draws parallel firepower from BlackRock's $43,695,000M add (+24.5%) and Vanguard's $31,413,407M (+8.8%). NVIDIA Corp. garners BlackRock's blockbuster $62,211,263M increase (+37.6%), the single largest move. Eli Lilly & Co. also shows multi-manager buying via Vanguard's $26,315,408M (+42.6%) and State Street's $9,199,472M (+49.9%). These overlapping bets indicate strong alignment on AI enablers and resilient growth.\n\n**Notable Exits and Trims Signaling Potential Shifts**\n\nTrimming or outright reductions are concentrated in select tech names, potentially flagging overvaluation concerns or portfolio rebalancing. Vanguard Group cut Microsoft Corp by $16,382,612M (-4.5%) and State Street followed with $11,839,163M (-10.9%), totaling nearly $28 billion in Microsoft exits. Meta Platforms Inc. faced coordinated selling from State Street's $14,713,915M (-15.4%) and Vanguard's $9,519,262M (-6.7%). Other sharp moves include Vanguard's $13,447,777M Oracle Corp reduction (-28.3%) and $9,616,179M Netflix Inc. trim (-20.8%). No full position closures are evident, but these trims suggest caution on mature cloud/streaming plays amid AI hype.\n\n**Overall Flow Patterns and Institutional Sentiment**\n\nNet flows tilt decisively bullish on AI/semiconductor leaders and select pharma, with gross increases (~$370 billion) outpacing decreases (~$75 billion) by a 5:1 ratio among these whales. BlackRock leads aggressively with outsized adds in NVIDIA (+$62B), Apple (+$44B), and Alphabet (+$25B total), while Vanguard shows balanced growth buying offset by trims. State Street mirrors conviction in Alphabet and Lilly but pulls back from Microsoft and Meta. This pattern signals sustained institutional optimism for AI infrastructure and productivity themes into 2026, with mild derisking in high-valuation pockets like social media and legacy software\u2014positioning portfolios for continued tech-led rallies amid economic uncertainty.",
   "_whale_summary_ts": {
     "__datetime__": "2026-04-16T17:49:50.102020"
@@ -484,76 +484,73 @@
   "_factor_analysis_engine": "\ud83e\udde0 Regard Mode",
   "_trending_narratives": [
     {
-      "narrative": "Post-Iran Risk-On Rally",
-      "evidence": "S&P 500 hits record high as markets surge back from Iran shock; Goldman traders wrongfooted as Iran war upended interest rate expectations.",
+      "narrative": "Middle East De-Escalation",
+      "evidence": "Israel agrees to halt its war with Hizbollah in Lebanon [FT]; Trump says war in Iran going 'swimmingly' and 'should be ending pretty soon' [CNBC]; Oil falls as ceasefire hopes lift [CNBC].",
       "tickers": [
-        "SPY",
-        "QQQ",
-        "IWM",
-        "VTI"
+        "XLE",
+        "USO",
+        "CVX",
+        "XOM"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "geopolitical"
+    },
+    {
+      "narrative": "Netflix Leadership Transition",
+      "evidence": "Netflix co-founder Reed Hastings to exit company [CNBC]; Reed Hastings to step down from board [FT]; Stock sinks despite earnings beat [CNBC].",
+      "tickers": [
+        "NFLX",
+        "DIS",
+        "CMCSA",
+        "ROKU"
+      ],
+      "conviction": "LOW",
+      "timeframe": "short",
+      "category": "tech"
+    },
+    {
+      "narrative": "Pepsi Consumer Comeback",
+      "evidence": "Pepsi says price cuts and wellness push are bringing back customers \u2014 and the stock surges [MarketWatch].",
+      "tickers": [
+        "PEP",
+        "KO",
+        "PG",
+        "XLP"
       ],
       "conviction": "HIGH",
       "timeframe": "short",
-      "category": "macro"
+      "category": "sector"
     },
     {
-      "narrative": "Feverish Sector Rotation",
-      "evidence": "The market is seeing a feverish rotation. Here\u2019s Cramer\u2019s advice on how to play it.",
+      "narrative": "AMD Chip Dominance",
+      "evidence": "AMD has \u2018indispensable assets\u2019 \u2014 powering the stock toward its best run in two decades [MarketWatch].",
       "tickers": [
-        "IWM",
-        "XLF",
-        "XLI",
-        "XLE",
-        "VTV"
+        "AMD",
+        "NVDA",
+        "AVGO",
+        "SMH"
       ],
-      "conviction": "MEDIUM",
-      "timeframe": "short",
-      "category": "macro"
-    },
-    {
-      "narrative": "Amazon Satellite Powerhouse",
-      "evidence": "How the Globalstar purchase could turn Amazon\u2019s Leo into a satellite powerhouse.",
-      "tickers": [
-        "AMZN",
-        "GSAT",
-        "IRDM",
-        "U",
-        "ARKX"
-      ],
-      "conviction": "MEDIUM",
+      "conviction": "HIGH",
       "timeframe": "medium",
       "category": "tech"
     },
     {
       "narrative": "Live Nation Monopoly Ruling",
-      "evidence": "Live Nation stock falls as jury finds ticketing giant acted as an illegal monopoly. Here\u2019s what happens next.",
+      "evidence": "Jury finds that Live Nation is an illegal monopoly, but a breakup with Ticketmaster is unlikely [MarketWatch].",
       "tickers": [
         "LYV",
-        "MSG",
-        "TWLO",
-        "EBAY"
+        "SPOT",
+        "DKNG",
+        "PEJ"
       ],
       "conviction": "MEDIUM",
-      "timeframe": "short",
-      "category": "sector"
-    },
-    {
-      "narrative": "Spirit Airlines Liquidation Risk",
-      "evidence": "Spirit Airlines could liquidate as early as this week, sources say.",
-      "tickers": [
-        "SAVE",
-        "UAL",
-        "AAL",
-        "DAL",
-        "JBLU"
-      ],
-      "conviction": "HIGH",
       "timeframe": "short",
       "category": "sector"
     }
   ],
   "_trending_narratives_ts": {
-    "__datetime__": "2026-04-15T18:31:57.363914"
+    "__datetime__": "2026-04-16T19:38:39.548494"
   },
   "_trending_narratives_tf": "1W",
   "_auto_trending_groups": [
@@ -629,36 +626,36 @@
   },
   "_auto_trending_groups_engine": "\u26a1 Freeloader Mode",
   "_price_momentum": {
-    "ticker": "LVWD",
-    "rsi": 39.8,
-    "rsi_label": "NEUTRAL",
-    "ma_trend": "STRONG DOWNTREND",
+    "ticker": "AXTI",
+    "rsi": 83.3,
+    "rsi_label": "OVERBOUGHT",
+    "ma_trend": "UPTREND",
     "ma_signals": {
       "sma_20": {
-        "value": 0.13,
-        "above": false
+        "value": 33.25,
+        "above": true
       },
       "sma_50": {
-        "value": 0.13,
-        "above": false
+        "value": 15.65,
+        "above": true
       }
     },
-    "vol_ratio": 0.0,
-    "price": 0.11
+    "vol_ratio": 5.49,
+    "price": 81.78
   },
   "_options_sentiment": {
-    "ticker": "LYV",
-    "sentiment": "BEARISH",
-    "pc_ratio": 2.126,
-    "call_vol": 5770,
-    "put_vol": 12266
+    "ticker": "AXTI",
+    "sentiment": "BULLISH",
+    "pc_ratio": 0.718,
+    "call_vol": 14369,
+    "put_vol": 10321
   },
   "_unusual_activity_sentiment": {
-    "ticker": "LYV",
-    "sentiment": "BEARISH",
-    "call_pct": 0.0,
-    "put_pct": 100.0,
-    "flagged_contracts": 1
+    "ticker": "AXTI",
+    "sentiment": "BULLISH",
+    "call_pct": 75.0,
+    "put_pct": 25.0,
+    "flagged_contracts": 4
   },
   "_insider_net_flow": {
     "ticker": "GOOG",
@@ -788,18 +785,18 @@
     "__datetime__": "2026-04-16T17:49:20.258334"
   },
   "_portfolio_risk_snapshot": {
-    "beta": 0.41,
-    "var_95_pct": -2.62,
-    "var_99_pct": -4.23,
-    "cvar_95_pct": -3.93,
-    "var_95_dollar": -1400,
-    "total_value": 53434,
+    "beta": 0.44,
+    "var_95_pct": -2.56,
+    "var_99_pct": -4.06,
+    "cvar_95_pct": -3.78,
+    "var_95_dollar": -1442,
+    "total_value": 56241,
     "position_count": 9,
     "sector_weights": {
-      "Unknown": 91.6,
-      "Basic Materials": 8.4
+      "Unknown": 92.0,
+      "Basic Materials": 8.0
     },
-    "max_position_weight": 20.2,
+    "max_position_weight": 19.2,
     "top_position": "PHYS.TO",
     "risk_flags": [
       "\u26a0 High correlation: PSLV.TO / PHYS.TO (0.82) \u2014 limited diversification benefit"
@@ -808,35 +805,35 @@
       {
         "scenario": "2008 GFC",
         "spy_shock_pct": -57,
-        "port_impact_pct": -39.3,
-        "port_impact_dollar": -21026
+        "port_impact_pct": -43.8,
+        "port_impact_dollar": -24626
       },
       {
         "scenario": "COVID Crash",
         "spy_shock_pct": -34,
-        "port_impact_pct": -23.5,
-        "port_impact_dollar": -12542
+        "port_impact_pct": -26.1,
+        "port_impact_dollar": -14689
       },
       {
         "scenario": "2022 Rate Shock",
         "spy_shock_pct": -25,
-        "port_impact_pct": -17.3,
-        "port_impact_dollar": -9222
+        "port_impact_pct": -19.2,
+        "port_impact_dollar": -10801
       },
       {
         "scenario": "Flash Crash",
         "spy_shock_pct": -10,
-        "port_impact_pct": -6.9,
-        "port_impact_dollar": -3689
+        "port_impact_pct": -7.7,
+        "port_impact_dollar": -4320
       },
       {
         "scenario": "VIX Spike +200%",
         "spy_shock_pct": -15,
-        "port_impact_pct": -10.4,
-        "port_impact_dollar": -5533
+        "port_impact_pct": -11.5,
+        "port_impact_dollar": -6480
       }
     ],
-    "worst_stress_pct": -39.3
+    "worst_stress_pct": -43.8
   },
   "_portfolio_risk_snapshot_ts": {
     "__datetime__": "2026-04-16T17:50:28.289659"
