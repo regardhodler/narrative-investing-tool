@@ -4210,6 +4210,15 @@ def _render_qir_dashboard() -> None:
             )
 
         _qc1, _qc2, _qc3 = st.columns([3, 1, 1])
+        with _qc1:
+            st.markdown(
+                f'<div style="background:#080d14;border:1px solid #f59e0b22;border-left:2px solid #f59e0b;'
+                f'padding:5px 10px;border-radius:3px;font-size:10px;color:#64748b;line-height:1.5;">'
+                f'💡 <span style="color:#f59e0b;font-weight:700;">Daily habit:</span> '
+                f'click <span style="color:#94a3b8;font-weight:700;">📌 Log Signal</span> every time you run QIR. '
+                f'30+ logs → accuracy stats + pattern edge become meaningful.</div>',
+                unsafe_allow_html=True,
+            )
         with _qc2:
             render_log_button(
                 signal_type="regime",
@@ -4243,12 +4252,13 @@ def _render_qir_dashboard() -> None:
                           disabled=True, help=f"{_verdict_label} — no clear directional edge for SPY")
 
         # ── SPY Trade Journal quick-log ───────────────────────────────
-        with _qc1:
-            _default_dir = (
-                "Long"  if _spy_prediction == "Buy"  else
-                "Short" if _spy_prediction == "Sell" else
-                "Long"
-            )
+        _default_dir = (
+            "Long"  if _spy_prediction == "Buy"  else
+            "Short" if _spy_prediction == "Sell" else
+            "Long"
+        )
+        _ql_col, _ = st.columns([2, 3])
+        with _ql_col:
             with st.popover("📒 Log SPY Trade to Journal", use_container_width=True):
                 st.markdown(
                     f'<div style="color:#f59e0b;font-size:11px;font-weight:700;'
