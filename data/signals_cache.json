@@ -2,20 +2,20 @@
   "_regime_context": {
     "regime": "Risk-On",
     "score": 0.22,
-    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.67 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Yield Curve (3M-10Y): z=+0.57 ()\n- Fear & Greed Index: 23/100 \u2014 Extreme Fear (contrarian)",
-    "quadrant": "Reflation",
+    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.98 ()\n- Global Manufacturing (EWG+FXI): z=+0.89 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Commodity Trend (Oil + Copper): z=-0.67 ()\n- JPY Carry Risk (FXY): z=+0.65 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 21/100 \u2014 Extreme Fear (contrarian)",
+    "quadrant": "Transition",
     "macro_score": 61,
-    "leading_score": 63,
-    "leading_divergence": 2,
+    "leading_score": 64,
+    "leading_divergence": 3,
     "leading_label": "Aligned",
-    "score_5d_trend": 6,
-    "leading_5d_trend": 6,
+    "score_5d_trend": 8,
+    "leading_5d_trend": 7,
     "pts_to_risk_on": -1,
     "pts_to_risk_off": 21,
-    "velocity_label": "\u2192 Stable (+0 pts vs 2026-04-15)"
+    "velocity_label": "\u2192 Stable (-1 pts vs 2026-04-16)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-16T15:25:15.340196"
+    "__datetime__": "2026-04-17T14:54:59.253205"
   },
   "_rp_plays_result": {
     "sectors": [
@@ -32,148 +32,148 @@
         "conviction": 1
       },
       {
-        "name": "Consumer Discretionary",
-        "conviction": 2
+        "name": "Industrials",
+        "conviction": 1
       },
       {
-        "name": "Industrials",
+        "name": "Consumer Discretionary",
         "conviction": 1
       }
     ],
     "stocks": [
       {
         "ticker": "AAPL",
-        "reason": "AAPL's strong brand and growing services segment make it a compelling buy in a risk-on regime",
+        "reason": "AAPL is a strong technology stock with a history of outperforming in risk-on regimes",
         "conviction": 3
       },
       {
-        "ticker": "JPM",
-        "reason": "JPM's diversified financial services and solid balance sheet make it a moderate buy in a risk-on regime",
-        "conviction": 2
-      },
-      {
-        "ticker": "AMZN",
-        "reason": "AMZN's dominant e-commerce position and growing cloud business make it a buy in a risk-on regime",
-        "conviction": 2
-      },
-      {
-        "ticker": "MSFT",
-        "reason": "MSFT's strong cloud growth and dividend yield make it a buy in a risk-on regime",
+        "ticker": "JNJ",
+        "reason": "JNJ is a stable healthcare stock with a strong track record of dividend payments",
         "conviction": 2
       },
       {
         "ticker": "V",
-        "reason": "V's solid payment processing business and growing digital payments make it a moderate buy in a risk-on regime",
+        "reason": "V is a financial stock with a history of performing well in risk-on regimes",
         "conviction": 2
       },
       {
         "ticker": "UNH",
-        "reason": "UNH's diversified healthcare services and solid balance sheet make it a buy in a risk-on regime",
+        "reason": "UNH is a healthcare stock with a strong track record of growth",
+        "conviction": 1
+      },
+      {
+        "ticker": "MSFT",
+        "reason": "MSFT is a technology stock with a history of outperforming in risk-on regimes",
+        "conviction": 2
+      },
+      {
+        "ticker": "GS",
+        "reason": "GS is a financial stock with a history of performing well in risk-on regimes",
         "conviction": 1
       }
     ],
     "bonds": [
       {
         "ticker": "TLT",
-        "reason": "TLT's long-term Treasury bonds offer a moderate buy in a risk-on regime as a hedge against potential downturns",
-        "conviction": 2
+        "reason": "TLT is a long-term treasury bond with a low risk profile",
+        "conviction": 1
       },
       {
-        "ticker": "LQD",
-        "reason": "LQD's investment-grade corporate bonds offer a buy in a risk-on regime as a source of income",
+        "ticker": "IEF",
+        "reason": "IEF is a 7-10 year treasury bond with a moderate risk profile",
         "conviction": 1
       },
       {
         "ticker": "SHY",
-        "reason": "SHY's short-term Treasury bonds offer a buy in a risk-on regime as a low-risk source of liquidity",
+        "reason": "SHY is a 1-3 year treasury bond with a low risk profile",
         "conviction": 1
       }
     ],
-    "rationale": "The current risk-on regime, characterized by a positive aggregate score and strong sector breadth, suggests a bullish outlook for equities. The Technology sector is a strong buy due to its growth potential, while Healthcare and Consumer Discretionary are moderate buys due to their defensive characteristics. The recommended stocks offer a mix of growth, income, and defensive qualities, while the bond picks provide a hedge against potential downturns and a source of income."
+    "rationale": "The current risk-on regime with a positive aggregate score of +0.22 suggests that investors are optimistic about the market. The strong sector breadth and equity trend signals support this optimism. However, the extreme fear reading on the Fear & Greed Index suggests that there may be opportunities for contrarian buys. The suggested stocks and sectors are a mix of growth and value plays that are well-positioned to perform well in this regime. Bonds are generally less attractive in a risk-on regime, but the suggested treasury bonds provide a low-risk alternative for investors seeking to diversify their portfolios."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
     {
       "scenario": "hold",
-      "prob": 0.665526225301367,
-      "implied_rate": 3.6399993896484375,
+      "prob": 0.6649848766137512,
+      "implied_rate": 3.6350021362304688,
       "source": "yfinance"
     },
     {
       "scenario": "cut_25",
-      "prob": 0.1659515597053382,
-      "implied_rate": 3.6399993896484375,
+      "prob": 0.1752839497949782,
+      "implied_rate": 3.6350021362304688,
       "source": "yfinance"
     },
     {
       "scenario": "cut_50",
-      "prob": 0.002572906134776094,
-      "implied_rate": 3.6399993896484375,
+      "prob": 0.0028727575354480176,
+      "implied_rate": 3.6350021362304688,
       "source": "yfinance"
     },
     {
       "scenario": "hike_25",
-      "prob": 0.16594930885851863,
-      "implied_rate": 3.6399993896484375,
+      "prob": 0.15685841605582274,
+      "implied_rate": 3.6350021362304688,
       "source": "yfinance"
     }
   ],
-  "_current_events_digest": "The current risk-on macro regime is supported by recent developments, including Charles Schwab's announcement to launch direct bitcoin and ethereum trading, which confirms the reflation narrative. Additionally, the rollout of new AI models by Anthropic and Nvidia has boosted quantum stocks, further solidifying the risk-on sentiment. However, potential risks on the horizon include a possible jet fuel shortage in Europe, as warned by the IEA, and geopolitical tensions related to Iran, with the US ready to restart war if a deal is not agreed upon. The market appears to be pricing in a low likelihood of a Fed rate cut to 0% or lower before 2027, with a 4% probability on Polymarket prediction markets.",
+  "_current_events_digest": "The current risk-on macro regime (+0.22) is supported by recent market developments, including a strong week for tech stocks and declining mortgage rates. However, the declaration by Iran that the Strait of Hormuz is open to shipping, despite the US maintaining a blockade, introduces a geopolitical risk that could potentially disrupt the current regime. The market appears to be pricing in a low probability of significant Fed action, with Polymarket prediction markets indicating only a 3% chance of the Fed's lower bound reaching 0% or lower before 2027. Meanwhile, the focus on AI-driven innovations in various sectors, such as tech and grocery retail, suggests a positive outlook for growth-oriented investments.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-04-16T15:25:18.359964"
+    "__datetime__": "2026-04-17T14:55:02.821902"
   },
   "_current_events_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 63,
+    "tactical_score": 68,
     "label": "Favorable Entry",
     "action_bias": "Conditions support initiating or adding to risk positions on pullbacks.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "18.8 (-0.7 5d)",
-        "Score": 0.085,
-        "Direction": "Neutral \u2014 Leaning Risk-On"
+        "Value": "17.7 (-1.5 5d)",
+        "Score": 0.309,
+        "Direction": "Risk-On"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.886",
-        "Score": 0.76,
+        "Value": "0.864",
+        "Score": 0.907,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+5.7%/20d  +4.2%/50d",
+        "Value": "+6.6%/20d  +5.5%/50d",
         "Score": 0.4,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +3.2%  20d +6.4%",
-        "Score": 0.924,
+        "Value": "5d +4.6%  20d +8.0%",
+        "Score": 1.0,
         "Direction": "Risk-On"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "-1.77% 5d",
-        "Score": -1.0,
+        "Value": "-0.95% 5d",
+        "Score": -0.945,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:16.9 VIX:18.8 3M:21.2 6M:23.1",
-        "Score": 0.655,
+        "Value": "9D:15.2 VIX:17.7 3M:20.5 6M:22.5",
+        "Score": 0.809,
         "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "139.2 (-4.0 5d)",
-        "Score": -0.961,
+        "Value": "140.7 (-3.4 5d)",
+        "Score": -1.0,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Fear & Greed (Contrarian)",
-        "Value": "23 \u2014 Extreme Fear (+9 7d)",
-        "Score": 0.54,
+        "Value": "21 \u2014 Extreme Fear (+5 7d)",
+        "Score": 0.58,
         "Direction": "Risk-On"
       },
       {
@@ -185,11 +185,11 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-16T15:25:15.340200"
+    "__datetime__": "2026-04-17T14:54:59.253209"
   },
-  "_tactical_analysis": "The combined signal picture suggests a favorable entry condition with a score of 63/100, indicating a moderately positive risk appetite. The macro backdrop of Risk-On / Reflation further supports this notion. The VIX level and 5-day trend, currently at 18.8 (-0.7 5d), contribute a neutral score of +0.085, but the VIX term structure (VIX/VIX3M) at 0.886 yields a strong Risk-On score of +0.760. This implies that despite some short-term volatility, the overall market tone is leaning towards risk-on.\n\nThe most dominant signals right now are the SPY momentum (5d vs 20d ROC) with a score of +0.924, and the VIX term structure. The SPY momentum indicates a strong short-term uptrend, with the 5-day return at +3.2% and the 20-day return at +6.4%. The VIX term structure, with a score of +0.760, suggests that the market is pricing in lower volatility in the short term compared to the medium term, which is consistent with a risk-on environment. However, the CBOE SKEW (Tail Risk) at 139.2 (-4.0 5d) yields a Risk-Off score of -0.961, and the Breadth Trend (RSP/SPY 5d) at -1.77% 5d also indicates a Risk-Off score of -1.000, which may warrant some caution.\n\nGiven this setup, a trader should consider adding to their long positions, as the overall signal picture suggests a favorable entry condition. However, it's essential to be mindful of the potential risks indicated by the CBOE SKEW and Breadth Trend. A possible action implication could be to add 20-30% to existing long positions, while also considering a hedge of 5-10% to mitigate potential tail risks. The Fear & Greed index at 23 \u2014 Extreme Fear (+9 7d) \u2014 also supports a contrarian view, suggesting that the market may be due for a bounce. Overall, the trader should maintain a cautiously bullish stance, monitoring the signals closely for any changes in the market's risk appetite.",
+  "_tactical_analysis": "The combined signal picture suggests a favorable entry condition with a score of 68/100, indicating a moderate level of risk appetite in the short-term. The macro backdrop is characterized as Risk-On/Transition, which is supported by several key signals. The VIX level and 5-day trend (17.7, -1.5) score +0.309, indicating a moderate level of risk-on sentiment. Additionally, the VIX term structure (VIX/VIX3M: 0.864) scores +0.907, further reinforcing the risk-on narrative.\n\nThe most dominant signals right now are the SPY momentum (5d vs 20d ROC: 5d +4.6%, 20d +8.0%) with a score of +1.000, and the VIX term structure. The strong momentum reading suggests that the market is experiencing a significant upward trend, which is a key driver of the favorable entry condition. However, the CBOE SKEW (140.7, -3.4 5d) scores -1.000, indicating a high level of tail risk, which is a notable counterpoint to the overall risk-on sentiment. The Fear & Greed index (21, +5 7d) also scores +0.580, indicating extreme fear, which can be a contrarian buy signal.\n\nGiven this setup, a trader should consider adding to their long positions or holding existing ones, as the overall signal picture suggests a favorable entry condition. However, the high CBOE SKEW reading warrants some caution, and traders may want to consider hedging their positions to mitigate potential tail risk. Specifically, traders could consider adding to their positions on dips, targeting the recent highs, while also maintaining a hedge to protect against potential downside volatility. The current VIX level (17.7) and term structure (0.864) suggest that options premiums are relatively low, making it a reasonable time to establish hedges.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-16T15:25:15.340201"
+    "__datetime__": "2026-04-17T14:54:59.253210"
   },
   "_data_quality": {
     "score": 70,
@@ -205,6 +205,6 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-16T15:25:15.340202"
+    "__datetime__": "2026-04-17T14:54:59.253211"
   }
 }
