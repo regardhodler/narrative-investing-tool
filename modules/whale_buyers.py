@@ -716,6 +716,15 @@ def _render_activism_tab():
 
 def render():
     """Whale Buyers & Activism Screener module entry point."""
+    _ai_ctx = st.session_state.get("_whale_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-whale-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     tab1, tab2 = st.tabs(["🐋 13F Whale Movement", "⚡ Activism Tracker"])
     with tab1:
         _render_whale_tab()

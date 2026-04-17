@@ -358,6 +358,15 @@ def _render_trending_narratives():
 
 
 def render():
+    _ai_ctx = st.session_state.get("_discovery_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-discovery-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     st.header("NARRATIVE DISCOVERY")
 
     render_rr_score_mode_toggle(key="discovery_rr_score_mode_ui", compact=True)

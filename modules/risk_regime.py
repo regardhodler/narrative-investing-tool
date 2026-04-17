@@ -3331,6 +3331,15 @@ A Macro Risk-Off + Tactical Favorable = a bear market bounce — trade carefully
 
 
 def render():
+    _ai_ctx = st.session_state.get("_risk_regime_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-risk-regime-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     st.title("Macro Dashboard")
     st.caption("Global macro monitor — Risk-On / Risk-Off workflow")
 

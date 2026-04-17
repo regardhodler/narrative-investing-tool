@@ -469,6 +469,15 @@ def _make_wyckoff_chart(
 
 
 def render():
+    _ai_ctx = st.session_state.get("_wyckoff_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-wyckoff-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     st.title("Wyckoff Method Analysis")
 
     # ── Session state ticker (same pattern as Elliott Wave) ───────────────────

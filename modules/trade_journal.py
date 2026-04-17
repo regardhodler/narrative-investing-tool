@@ -762,6 +762,15 @@ def _render_debate_panel(debate: dict) -> None:
 
 
 def render():
+    _ai_ctx = st.session_state.get("_trade_journal_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-trade-journal-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
         f'<div style="font-size:13px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
         f'letter-spacing:0.1em;margin-bottom:12px;">MY REGARDED PORTFOLIO</div>',

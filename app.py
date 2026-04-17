@@ -70,6 +70,7 @@ with st.sidebar:
     with _t1b:
         if st.button("↗", key="nav_open_t1", help="Open selected Daily Drivers module"):
             st.session_state["_active_tier"] = 1
+            st.session_state["_close_sidebar"] = True
     _t1 = st.radio("", ["⚡ Quick Intel Run", "Discovery", "My Regarded Portfolio"],
                    key="nav_t1", label_visibility="collapsed")
 
@@ -80,6 +81,7 @@ with st.sidebar:
     with _t2b:
         if st.button("↗", key="nav_open_t2", help="Open selected Research module"):
             st.session_state["_active_tier"] = 2
+            st.session_state["_close_sidebar"] = True
     _t2 = st.radio("", ["Risk Regime", "Fed Forecaster", "Current Events",
                          "Tail Risk Studio", "Whale Movement", "Stress Signals"],
                    key="nav_t2", label_visibility="collapsed")
@@ -91,6 +93,7 @@ with st.sidebar:
     with _t3b:
         if st.button("↗", key="nav_open_t3", help="Open selected Tools module"):
             st.session_state["_active_tier"] = 3
+            st.session_state["_close_sidebar"] = True
     _t3 = st.radio("", ["Technical Analysis", "Short Squeeze Radar", "Backtesting"],
                    key="nav_t3", label_visibility="collapsed")
 
@@ -101,6 +104,7 @@ with st.sidebar:
     with _t4b:
         if st.button("↗", key="nav_open_t4", help="Open selected Admin module"):
             st.session_state["_active_tier"] = 4
+            st.session_state["_close_sidebar"] = True
     _t4 = st.radio("", ["Signal Audit", "Forecast Tracker", "Export Hub", "Alerts"],
                    key="nav_t4", label_visibility="collapsed")
 
@@ -192,6 +196,21 @@ section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="s
             label_visibility="collapsed",
             key="sub_module",
         )
+
+# --- Auto-collapse sidebar when ↗ nav button was clicked ---
+if st.session_state.pop("_close_sidebar", False):
+    import streamlit.components.v1 as _components
+    _components.html(
+        "<script>"
+        "(function(){"
+        "var d=window.parent.document;"
+        "var b=d.querySelector('[data-testid=\"stSidebarCollapseButton\"]')"
+        "||d.querySelector('section[data-testid=\"stSidebar\"] button');"
+        "if(b)b.click();"
+        "})();"
+        "</script>",
+        height=0,
+    )
 
 # --- Module routing ---
 if top_level == "⚡ Quick Intel Run":

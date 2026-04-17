@@ -192,6 +192,15 @@ def _render_impact_heatmap(all_events: dict):
 
 
 def render():
+    _ai_ctx = st.session_state.get("_tail_risk_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-tail-risk-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
         f'<div style="font-family:\'JetBrains Mono\',Consolas,monospace;'
         f'font-size:20px;font-weight:700;letter-spacing:0.06em;margin-bottom:2px;">'

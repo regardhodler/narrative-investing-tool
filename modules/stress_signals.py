@@ -465,6 +465,15 @@ def run_quick_doom(use_claude: bool = False, model: str | None = None) -> bool:
 
 
 def render():
+    _ai_ctx = st.session_state.get("_stress_signals_ai_context") or {}
+    if _ai_ctx:
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="rt-stress-signals-ai-context" style="display:none;position:absolute;width:0;height:0;overflow:hidden;">'
+            f'<pre>{_ctx_lines}</pre></div>',
+            unsafe_allow_html=True,
+        )
+
     # Pre-extract colors for f-string safety
     _dim = COLORS["text_dim"]
     _text = COLORS["text"]

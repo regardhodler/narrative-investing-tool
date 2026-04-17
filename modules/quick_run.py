@@ -3288,6 +3288,7 @@ def _render_qir_dashboard() -> None:
                     "confirmations": _confirmations if _ll_strength >= 40 else [],
                     "crisis_level": _crisis_level if _ll_strength >= 40 else "NORMAL",
                     "status_text": _status_text if _ll_strength >= 40 else "Normal market conditions",
+                    "hmm_state": _tb_hmm_label,
                 }
                 
                 # Store legacy data for backward compatibility
@@ -4416,14 +4417,50 @@ def _render_qir_dashboard() -> None:
 def render():
     _oc = COLORS["bloomberg_orange"]
 
+    # ── Hidden AI context block — read by Gemini / browser AI sidebar ─────────
+    # display:none but fully in DOM; contains structured signal state for AI
+    _ai_ctx = st.session_state.get("_qir_ai_context") or {}
+    if _ai_ctx:
+        import json as _ctx_json
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="regarded-terminals-ai-context" aria-hidden="true" '
+            f'style="display:none;position:absolute;width:0;height:0;overflow:hidden;" '
+            f'data-source="regarded-terminals-qir">'
+            f'<pre id="rt-signal-state">\n{_ctx_lines}\n</pre>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
     st.markdown(
-        f'<div style="font-size:13px;color:{_oc};font-weight:700;'
-        f'letter-spacing:0.1em;margin-bottom:2px;">⚡ QUICK INTEL RUN</div>',
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">'
+        f'<span style="font-size:13px;color:{_oc};font-weight:700;letter-spacing:0.1em;">⚡ QUICK INTEL RUN</span>'
+        + (
+            f'<span title="Structured signal state injected into DOM — Gemini/browser AI sidebar can read it now" '
+            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#052e16;color:#4ade80;border:1px solid #166534;'
+            f'padding:2px 7px;border-radius:3px;cursor:default;">'
+            f'🤖 AI CONTEXT LIVE</span>'
+            if _ai_ctx else
+            f'<span title="Run QIR to populate AI context for Gemini" '
+            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#1c1917;color:#57534e;border:1px solid #292524;'
+            f'padding:2px 7px;border-radius:3px;cursor:default;">'
+            f'🤖 AI CONTEXT —</span>'
+        )
+        + f'</div>',
         unsafe_allow_html=True,
     )
     st.caption(
         "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis + Portfolio Risk Snapshot in sequence. "
         "Navigate to Portfolio Intelligence when done."
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#334155;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-6px;margin-bottom:4px;">'
+        '💡 Tip: Open <span style="color:#4285f4;font-weight:700;">Gemini</span> in the Chrome sidebar — '
+        'after running QIR it already has your full signal state loaded.</div>',
+        unsafe_allow_html=True,
     )
 
     render_rr_score_mode_toggle(
@@ -5239,6 +5276,186 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         f"Regime: {_rc_f.get('regime','?')} | Tactical: {_tac_f.get('tactical_score','?')}/100 | Flow: {_of_f.get('options_score','?')}/100"
                     )
                 st.session_state["_qir_last_pattern"] = _new_pat_name
+
+                # ── Build AI context snapshot (read by Gemini / browser AI sidebar) ──
+                try:
+                    import datetime as _ai_dt
+                    _ai_crisis = st.session_state.get("_ll_anchored_crisis") or {}
+                    _ai_ll_z   = _ai_crisis.get("ll_zscore", 0.0) or 0.0
+                    _ai_ci     = round(max(0.0, abs(_ai_ll_z) / 0.467 * 100.0) if _ai_ll_z < 0 else 0.0, 1)
+                    _ai_zone   = (
+                        "Zone 4 · Beyond Training Range (purple)" if _ai_ci > 100.0 else
+                        "Zone 3 · Crisis Confirmed (100% precision, 0 false alarms in 3,408 days)" if _ai_ci >= 67.0 else
+                        "Zone 2 · Model Stress (context signals)" if _ai_ci >= 22.0 else
+                        "Zone 1 · Normal (conviction signals suppressed)"
+                    )
+                    _prox = st.session_state.get("_top_bottom_proximity") or {}
+                    _syn  = st.session_state.get("_macro_synopsis") or {}
+                    st.session_state["_qir_ai_context"] = {
+                        "app":            "Regarded Terminals — Narrative Investing Tool",
+                        "generated_at":   _ai_dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                        "SIGNAL_PATTERN": _new_pat_name.replace("_", " "),
+                        "buy_tier":       _new_pat["buy_tier"],
+                        "short_tier":     _new_pat["short_tier"],
+                        "pattern_interpretation": _new_pat.get("interpretation", ""),
+                        "REGIME_SCORE":   f"{_rc_f.get('score', '?')}/100",
+                        "regime_label":   _rc_f.get("regime", "?"),
+                        "regime_quadrant":_rc_f.get("quadrant", "?"),
+                        "leading_subscore": _rc_f.get("leading_score", "?"),
+                        "TACTICAL_SCORE": f"{_tac_f.get('tactical_score', '?')}/100",
+                        "tactical_label": _tac_f.get("label", "?"),
+                        "OPTIONS_FLOW_SCORE": f"{_of_f.get('options_score', '?')}/100",
+                        "options_label":  _of_f.get("label", "?"),
+                        "CI_PCT":         f"{_ai_ci}%",
+                        "ci_zone":        _ai_zone,
+                        "ll_zscore":      _ai_ll_z,
+                        "crisis_status":  _ai_crisis.get("status_text", ""),
+                        "HMM_BRAIN_STATE": _ai_crisis.get("hmm_state", _rc_f.get("regime", "?")),
+                        "hmm_confirmations": _ai_crisis.get("confirmations", []),
+                        "CONVICTION":     _syn.get("conviction", "?"),
+                        "macro_narrative":_syn.get("narrative", ""),
+                        "top_proximity_pct": _prox.get("top_pct", "?"),
+                        "bottom_proximity_pct": _prox.get("bottom_pct", "?"),
+                        "data_quality":   f"{_dq_f.get('score', '?')}/100",
+                        "CI_FORMULA":     "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
+                        "ZONE_GUIDE":     "Normal<22% | Stress 22–67% | Crisis≥67% (100% precision) | Beyond>100%",
+                        "KELLY_GUIDE":    "Half-Kelly shown — reduce by 50% in Zone 2+, 75% in Zone 3+",
+                    }
+
+                    # ── Write per-module AI context blocks (read when navigating each module) ──
+                    import datetime as _ai_dt2
+                    _ai_now = _ai_dt2.datetime.now().strftime("%Y-%m-%d %H:%M")
+                    _raw_sigs_ai = st.session_state.get("_regime_raw_signals") or {}
+
+                    # Risk Regime context
+                    st.session_state["_risk_regime_ai_context"] = {
+                        "module": "Risk Regime — Macro Risk-On/Risk-Off Dashboard",
+                        "generated_at": _ai_now,
+                        "REGIME_SCORE": f"{_rc_f.get('score','?')}/100",
+                        "regime_label": _rc_f.get("regime", "?"),
+                        "regime_quadrant": _rc_f.get("quadrant", "?"),
+                        "leading_subscore": _rc_f.get("leading_score", "?"),
+                        "composite_5d_trend": _rc_f.get("composite_trend", "?"),
+                        "leading_5d_trend": _rc_f.get("leading_trend", "?"),
+                        "macro_score": _rc_f.get("macro_score", "?"),
+                        "data_quality": f"{_dq_f.get('score','?')}/100 — {_dq_f.get('label','')}",
+                        "INTERPRETATION": (
+                            "Score>60=Risk-On · 40-60=Neutral · <40=Risk-Off · "
+                            "Leading divergence +8=early bull signal · -8=early bear signal"
+                        ),
+                    }
+
+                    # Options Flow context
+                    st.session_state["_options_flow_ai_context"] = {
+                        "module": "Options Activity — Flow Sentiment Dashboard",
+                        "generated_at": _ai_now,
+                        "OPTIONS_FLOW_SCORE": f"{_of_f.get('options_score','?')}/100",
+                        "flow_label": _of_f.get("label", "?"),
+                        "flow_bias": _of_f.get("bias", "?"),
+                        "put_call_ratio": _of_f.get("put_call_ratio", "?"),
+                        "unusual_activity": _of_f.get("unusual_summary", "?"),
+                        "INTERPRETATION": "Score>60=bullish flow · <40=bearish flow · divergence from regime=contrarian signal",
+                    }
+
+                    # Tactical (Wyckoff/Elliott) context
+                    _ai_wyk = st.session_state.get("_ll_anchored_crisis") or {}
+                    st.session_state["_wyckoff_ai_context"] = {
+                        "module": "Wyckoff Method Analysis",
+                        "generated_at": _ai_now,
+                        "TACTICAL_SCORE": f"{_tac_f.get('tactical_score','?')}/100",
+                        "tactical_label": _tac_f.get("label", "?"),
+                        "wyckoff_phase": _ai_wyk.get("wyckoff_phase", "?"),
+                        "wyckoff_confidence": f"{_ai_wyk.get('wyckoff_conf', '?')}%",
+                        "top_signals": _ai_wyk.get("top_signals", []),
+                        "bottom_signals": _ai_wyk.get("bottom_signals", []),
+                        "INTERPRETATION": (
+                            "Accumulation=base building/buy zone · Markup=uptrend · "
+                            "Distribution=top forming/reduce · Markdown=downtrend"
+                        ),
+                    }
+
+                    # Stress / Crisis context
+                    st.session_state["_stress_signals_ai_context"] = {
+                        "module": "Stress Signals — Crisis Detection Dashboard",
+                        "generated_at": _ai_now,
+                        "CI_PCT": f"{_ai_ci}%",
+                        "ci_zone": _ai_zone,
+                        "ll_zscore": _ai_ll_z,
+                        "HMM_BRAIN_STATE": _ai_wyk.get("hmm_state", "?"),
+                        "crisis_status": _ai_wyk.get("status_text", "Normal"),
+                        "gate_open": _ai_wyk.get("gate_open", False),
+                        "confirmations": _ai_wyk.get("confirmations", []),
+                        "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100",
+                        "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis≥67% (100% precision) | Beyond>100%",
+                    }
+
+                    # Whale / Activism context
+                    _whale_sum = st.session_state.get("_whale_summary", "")
+                    _activ_sum = st.session_state.get("_activism_digest", "")
+                    st.session_state["_whale_ai_context"] = {
+                        "module": "Whale Movement — 13F Institutional & Activism Tracker",
+                        "generated_at": _ai_now,
+                        "whale_summary": _whale_sum[:500] if _whale_sum else "No data",
+                        "activism_digest": _activ_sum[:500] if _activ_sum else "No data",
+                        "INTERPRETATION": "Large 13F changes signal institutional conviction. Activism=catalyst risk.",
+                    }
+
+                    # Tail Risk context
+                    _swans = st.session_state.get("_custom_swans") or {}
+                    _swan_lines = [
+                        f"{k}: {v.get('probability_pct',0):.1f}% annual · severity={v.get('severity','?')}"
+                        for k, v in list(_swans.items())[:5]
+                    ] if _swans else ["No black swan scenarios loaded"]
+                    st.session_state["_tail_risk_ai_context"] = {
+                        "module": "Tail Risk Studio — Black Swan Scenario Analysis",
+                        "generated_at": _ai_now,
+                        "black_swans": _swan_lines,
+                        "regime_for_tail": _rc_f.get("regime", "?"),
+                        "ci_pct_for_tail": f"{_ai_ci}%",
+                        "INTERPRETATION": "Scenarios with >5% annual probability warrant portfolio hedge review.",
+                    }
+
+                    # Portfolio / Trade Journal context
+                    _port_snap = st.session_state.get("_portfolio_risk_snapshot") or {}
+                    _risk_interp = st.session_state.get("_risk_matrix_interpretation") or {}
+                    st.session_state["_trade_journal_ai_context"] = {
+                        "module": "My Regarded Portfolio — Trade Journal & Risk Matrix",
+                        "generated_at": _ai_now,
+                        "portfolio_beta": _port_snap.get("beta", "?"),
+                        "portfolio_delta": _port_snap.get("delta", "?"),
+                        "open_positions": _port_snap.get("n_open", "?"),
+                        "risk_alert_level": _risk_interp.get("alert_level", "none"),
+                        "risk_summary": _risk_interp.get("summary", "")[:300],
+                        "earnings_risk": [
+                            f"{e['ticker']} in {e['days_away']}d"
+                            for e in (st.session_state.get("_qir_earnings_risk") or [])[:5]
+                        ],
+                        "INTERPRETATION": "Beta>1.2=high market risk · Alert=CRITICAL means reduce exposure immediately",
+                    }
+
+                    # Discovery / Narrative context
+                    _narratives = st.session_state.get("_trending_narratives") or []
+                    _sector_dig = st.session_state.get("_sector_regime_digest", "")
+                    _narr_lines = [
+                        f"{n.get('name','?')}: {n.get('momentum','?')} momentum · {n.get('tickers',[][:3])}"
+                        for n in _narratives[:6]
+                    ] if _narratives else ["No narrative scan data — run QIR first"]
+                    st.session_state["_discovery_ai_context"] = {
+                        "module": "Narrative Discovery — Ticker & Theme Scanner",
+                        "generated_at": _ai_now,
+                        "regime_quadrant": _rc_f.get("quadrant", "?"),
+                        "regime_label": _rc_f.get("regime", "?"),
+                        "trending_narratives": _narr_lines,
+                        "sector_regime_digest": _sector_dig[:400] if _sector_dig else "No sector data",
+                        "dominant_rate_path": st.session_state.get("_dominant_rate_path", "?"),
+                        "INTERPRETATION": (
+                            "Narratives with strong momentum in a Risk-On/Goldilocks regime = highest conviction longs. "
+                            "Fade narratives in Risk-Off regime."
+                        ),
+                    }
+
+                except Exception:
+                    pass
 
                 _tg_qir(
                     f"⚡ <b>Quick Intel Run Complete</b>\n"
