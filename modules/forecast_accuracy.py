@@ -1366,7 +1366,7 @@ def _render_spy_trade_tab():
             exit_reason = st.selectbox("Exit Reason", ["Open", "Hit Target (ATR×3)", "Hit Stop (ATR×2)", "Manual Exit", "Time Exit"])
 
         pattern_used = st.text_input("QIR Pattern at Entry", value=_qir_pattern if _qir_pattern != "—" else "", placeholder="e.g. BULL_CONFIRMED")
-        notes = st.text_input("Notes (optional)", placeholder="e.g. tariff news, earnings week…")
+        notes = st.text_area("Comments", placeholder="e.g. tariff news, earnings week, macro catalyst, why you took this trade…", height=80)
 
         submitted = st.form_submit_button("📌 Log SPY Trade", use_container_width=True)
         if submitted:
@@ -1464,11 +1464,14 @@ def _render_spy_trade_tab():
         kelly_sug = f'{t["kelly_suggested"]:.1f}%' if t.get("kelly_suggested") is not None else "—"
         exit_rsn  = (t.get("exit_reason") or "open").replace("Hit ", "").replace(" (ATR×3)", " 🎯").replace(" (ATR×2)", " 🛑")
         entry_date = str(t.get("entry_date") or t.get("logged_at") or "")[:10]
+        notes_txt  = t.get("notes") or ""
 
         st.markdown(
             f'<div style="display:grid;grid-template-columns:60px 55px 70px 70px 70px 55px 80px 80px 1fr;'
             f'gap:6px;padding:5px 8px;font-size:11px;background:{COLORS["surface"]};'
-            f'border:1px solid {COLORS["border"]};border-radius:3px;margin-bottom:3px;align-items:center;">'
+            f'border:1px solid {COLORS["border"]};border-radius:3px;'
+            f'{"margin-bottom:1px;" if notes_txt else "margin-bottom:3px;"}'
+            f'align-items:center;">'
             f'<div style="color:{COLORS["text_dim"]};">{entry_date}</div>'
             f'<div style="color:{dir_color};font-weight:700;">{dirn.upper()}</div>'
             f'<div style="color:{COLORS["text"]};">${ep:.2f}</div>'
@@ -1478,7 +1481,14 @@ def _render_spy_trade_tab():
             f'<div style="color:{COLORS["bloomberg_orange"]};">{kelly_sug}</div>'
             f'<div style="color:{COLORS["text_dim"]};font-size:10px;">{pattern}</div>'
             f'<div style="color:{COLORS["text_dim"]};font-size:10px;">{exit_rsn}</div>'
-            f'</div>',
+            f'</div>'
+            + (
+                f'<div style="padding:4px 8px 6px 8px;font-size:10px;color:{COLORS["text_dim"]};'
+                f'background:{COLORS["surface"]};border:1px solid {COLORS["border"]};'
+                f'border-top:none;border-radius:0 0 3px 3px;margin-bottom:3px;">'
+                f'💬 {notes_txt}</div>'
+                if notes_txt else ""
+            ),
             unsafe_allow_html=True,
         )
 

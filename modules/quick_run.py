@@ -4305,6 +4305,7 @@ def _render_qir_dashboard() -> None:
                 _ql_date   = st.date_input("Entry Date", value=_dt.date.today(), key="ql_date")
                 _ql_pattern = _cls.get("pattern") or _verdict_label or ""
                 st.caption(f"Pattern: {_ql_pattern}  ·  Kelly suggested: {_kly_half if _kly_viable else 0}%")
+                _ql_notes = st.text_area("Comments", placeholder="e.g. tariff risk, earnings week, macro catalyst…", height=70, key="ql_notes")
                 if st.button("📌 Log Trade", key="ql_log_btn", type="primary", use_container_width=True):
                     if _ql_price <= 0:
                         st.error("Enter a price.")
@@ -4346,6 +4347,7 @@ def _render_qir_dashboard() -> None:
                             "position_size":    round(_ql_size, 2),
                             "kelly_suggested":  round(_kly_half, 1) if _kly_viable and _kly_half else None,
                             "pattern_at_entry": _ql_pattern or None,
+                            "notes":            _ql_notes.strip() or None,
                             "logged_at":        _datetime.now().isoformat(),
                             "atr_at_log":       _atr_val,
                             "stop_at_log":      _stop_l,

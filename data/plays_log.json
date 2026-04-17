@@ -14193,5 +14193,50 @@
     "meta": {
       "fed_funds_rate": 3.64
     }
+  },
+  {
+    "id": "20260416_182342_63",
+    "timestamp": "2026-04-16T18:23:42.634140",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6673183618768777,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.1519697711494535,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0021653981637225718,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.17854646880994632,
+          "implied_rate": 3.6399993896484375,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
   }
 ]
