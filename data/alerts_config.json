@@ -15,7 +15,7 @@
     "tactical_risk_off": 38,
     "tactical_entry": 65
   },
-  "last_check": "1776396430.5801134",
+  "last_check": "1776474249.3662336",
   "last_regime": "Risk-On",
   "alert_history": [],
   "price_targets": [
@@ -26,7 +26,7 @@
       "active": true
     }
   ],
-  "current_tactical_score": 66,
+  "current_tactical_score": 67,
   "last_tactical_score": 66,
   "current_data_quality_score": 70,
   "data_quality_alerted": false

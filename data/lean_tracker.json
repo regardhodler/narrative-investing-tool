@@ -112,5 +112,24 @@
     "pattern": "MOMENTUM_BUILDING",
     "fwd_5d_spy_return": null,
     "fwd_20d_spy_return": null
+  },
+  {
+    "date": "2026-04-17",
+    "lean": "BULLISH",
+    "lean_pct": 52,
+    "domain_avg": 51.2,
+    "macro_score": 61.0,
+    "tech_score": 67.0,
+    "opts_score": 28.0,
+    "sent_score": 50.0,
+    "event_score": 50.0,
+    "regime": "Risk-On",
+    "hmm_state": "Bull",
+    "hmm_entropy": 0.0,
+    "gex_composite": 0.0,
+    "conviction_score": 33,
+    "pattern": "OPTIONS_FLOW_DIVERGENCE",
+    "fwd_5d_spy_return": null,
+    "fwd_20d_spy_return": null
   }
 ]

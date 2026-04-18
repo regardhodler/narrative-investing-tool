@@ -2477,6 +2477,16 @@ def _render_qir_dashboard() -> None:
             _kly_hmm_m    = _kly.get("hmm_multiplier", 1.0)
             _kly_sdirs    = _kly.get("signal_dirs", {})
 
+            # ── Net Kelly (signed composite) ──────────────────────────────────────
+            # Formula: 0.6 × LT_half_signed + 0.4 × (TacLong − TacShort)
+            # LT leg uses raw Kelly formula (NO floor) so it goes negative in Risk-Off.
+            # Negative result = SHORT setup; abs value = position size %.
+            _lt_full_signed = ((_kly_b * _kly_p - (1.0 - _kly_p)) / _kly_b
+                               if _kly_b > 0 else 0.0)
+            _lt_half_signed_pct  = _lt_full_signed * 0.5 * 100
+            _tac_net_pct_for_nk  = (_tac_long_kelly_pct or 0.0) - (_tac_short_kelly_pct or 0.0)
+            _net_kelly_pct       = round(0.6 * _lt_half_signed_pct + 0.4 * _tac_net_pct_for_nk, 1)
+
             _SIG_ORDER = [
                 ("options",   "Options",  "Fast"),
                 ("tactical",  "Tactical", "Med"),
@@ -2676,6 +2686,43 @@ def _render_qir_dashboard() -> None:
             _kelly_block       = _kelly_html        # structural sizing → MEDIUM
             _fast_setups_html  = _triple_kelly_html  # Buy/Short Setup → FAST
             _bimodal_block     = ""
+
+            # ── Net Kelly card (appended below LT Kelly block) ────────────────────
+            _nk_abs = abs(_net_kelly_pct)
+            if _net_kelly_pct >= 10:
+                _nk_dir, _nk_dot, _nk_col = "LONG",       "🟢", "#22c55e"
+            elif _net_kelly_pct >= 3:
+                _nk_dir, _nk_dot, _nk_col = "WEAK LONG",  "🟡", "#f59e0b"
+            elif _net_kelly_pct > -3:
+                _nk_dir, _nk_dot, _nk_col = "FLAT / CASH","⚪", "#94a3b8"
+            elif _net_kelly_pct > -10:
+                _nk_dir, _nk_dot, _nk_col = "WEAK SHORT", "🟡", "#f59e0b"
+            else:
+                _nk_dir, _nk_dot, _nk_col = "SHORT",      "🔴", "#ef4444"
+            _nk_size_str = f"{_nk_abs:.1f}%" if _nk_abs >= 0.1 else "—"
+            _net_kelly_html = (
+                f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+                f'<div style="display:flex;align-items:center;gap:6px;">'
+                f'<span style="font-size:11px;color:#64748b;font-weight:800;letter-spacing:0.08em;">NET KELLY</span>'
+                f'<span style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.06em;'
+                f'background:#0f172a;padding:1px 5px;border-radius:2px;">60% LT · 40% TAC</span>'
+                f'</div>'
+                f'<span style="font-size:7px;color:#334155;font-style:italic;">signed composite signal</span>'
+                f'</div>'
+                f'<div style="display:flex;align-items:center;gap:10px;">'
+                f'<span style="font-size:22px;font-weight:900;color:{_nk_col};">{_nk_size_str}</span>'
+                f'<div>'
+                f'<div style="font-size:12px;font-weight:800;color:{_nk_col};">{_nk_dot} {_nk_dir}</div>'
+                f'<div style="font-size:8px;color:#475569;margin-top:1px;">'
+                f'LT {_lt_half_signed_pct:+.1f}% · Tac {_tac_net_pct_for_nk:+.1f}%'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+            )
+            _kelly_block += _net_kelly_html
 
             # ── Inject Kelly badges into Buy/Short Setup cards ────────
             # Only for non-GU patterns (GU uses triple-kelly badges built earlier)
