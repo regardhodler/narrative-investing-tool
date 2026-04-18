@@ -1,18 +1,5 @@
 [
   {
-    "run_id": "8450b9d6",
-    "timestamp": "2026-04-14T12:14:23.254373",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 63,
-    "options_score": 61.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 12,
-    "n_total": 14,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
     "run_id": "88605d76",
     "timestamp": "2026-04-14T12:51:39.227960",
     "pattern": "",
@@ -379,6 +366,19 @@
   {
     "run_id": "0820a40b",
     "timestamp": "2026-04-17T19:07:27.309768",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 67,
+    "options_score": 28.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "30a3fd2a",
+    "timestamp": "2026-04-17T22:12:33.813811",
     "pattern": "",
     "conviction": "BULLISH",
     "tactical_score": 67,

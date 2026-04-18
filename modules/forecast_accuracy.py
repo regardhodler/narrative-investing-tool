@@ -1540,6 +1540,7 @@ def _render_spy_trade_tab():
                         f'⚠️ ATR levels not stored — will be computed on next refresh.</div>',
                         unsafe_allow_html=True,
                     )
+                # ── Close ────────────────────────────────────────────────────
                 c1, c2, c3 = st.columns(3)
                 with c1:
                     close_price = st.number_input(f"Manual Exit Price", min_value=0.01, step=0.01, format="%.2f", key=f"close_price_{tid}")
@@ -1558,6 +1559,77 @@ def _render_spy_trade_tab():
                         _save_trade_journal(trades)
                         st.success(f"Trade [{tid}] manually closed at ${close_price:.2f}")
                         st.rerun()
+
+                # ── Edit ─────────────────────────────────────────────────────
+                st.markdown(
+                    f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 8px;"></div>'
+                    f'<div style="font-size:10px;color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:6px;">✏️ EDIT TRADE</div>',
+                    unsafe_allow_html=True,
+                )
+                ec1, ec2, ec3, ec4 = st.columns(4)
+                with ec1:
+                    edit_dir = st.selectbox("Direction", ["Long", "Short"],
+                                            index=0 if t.get("direction", "Long") == "Long" else 1,
+                                            key=f"edit_dir_{tid}")
+                with ec2:
+                    edit_entry = st.number_input("Entry Price", min_value=0.01, step=0.01, format="%.2f",
+                                                 value=float(t.get("entry_price") or ep),
+                                                 key=f"edit_entry_{tid}")
+                with ec3:
+                    edit_size = st.number_input("Size %", min_value=0.0, max_value=100.0, step=0.5, format="%.1f",
+                                                value=float(t.get("position_size") or 0.0),
+                                                key=f"edit_size_{tid}")
+                with ec4:
+                    edit_notes = st.text_input("Notes", value=t.get("notes") or "",
+                                               key=f"edit_notes_{tid}")
+                if st.button("💾 Save Edits", key=f"edit_btn_{tid}", use_container_width=True):
+                    for trade in trades:
+                        if trade.get("id") == tid:
+                            trade["direction"]     = edit_dir
+                            trade["entry_price"]   = round(edit_entry, 2)
+                            trade["position_size"] = round(edit_size, 1)
+                            trade["notes"]         = edit_notes.strip() or None
+                            break
+                    _save_trade_journal(trades)
+                    st.success(f"Trade [{tid}] updated.")
+                    st.rerun()
+
+                # ── Delete ────────────────────────────────────────────────────
+                st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:10px 0 6px;"></div>', unsafe_allow_html=True)
+                del_confirm = st.checkbox(f"Confirm delete trade [{tid}]", key=f"del_confirm_{tid}")
+                if del_confirm:
+                    if st.button("🗑️ Delete This Trade", key=f"del_btn_{tid}", type="primary", use_container_width=True):
+                        trades = [tr for tr in trades if tr.get("id") != tid]
+                        _save_trade_journal(trades)
+                        st.warning(f"Trade [{tid}] deleted.")
+                        st.rerun()
+
+    # ── Delete a closed trade ──────────────────────────────────────────────────
+    closed_trades = [t for t in spy_trades if t.get("status") == "closed"]
+    if closed_trades:
+        st.markdown(f'<div style="border-top:1px solid {COLORS["border"]};margin:14px 0 10px;"></div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="color:{COLORS["text_dim"]};font-size:11px;font-weight:700;'
+            f'letter-spacing:0.08em;margin-bottom:8px;">🗑️ DELETE A CLOSED TRADE</div>',
+            unsafe_allow_html=True,
+        )
+        _closed_opts = {
+            f'{str(t.get("entry_date") or "")[:10]}  {t.get("direction","?")}  @${t.get("entry_price",0):.2f}  [{t.get("id","?")}]': t.get("id")
+            for t in sorted(closed_trades, key=lambda x: x.get("logged_at", ""), reverse=True)
+        }
+        dc1, dc2 = st.columns([3, 1])
+        with dc1:
+            del_sel = st.selectbox("Select closed trade to delete", list(_closed_opts.keys()), key="del_closed_sel")
+        with dc2:
+            st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+            del_closed_confirm = st.checkbox("Confirm", key="del_closed_confirm")
+        if del_closed_confirm and st.button("🗑️ Delete Selected", key="del_closed_btn", use_container_width=True):
+            del_id = _closed_opts.get(del_sel)
+            trades = [tr for tr in trades if tr.get("id") != del_id]
+            _save_trade_journal(trades)
+            st.warning(f"Trade [{del_id}] deleted.")
+            st.rerun()
 
 
 

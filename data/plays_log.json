@@ -14392,5 +14392,60 @@
       "overlay": null,
       "regime": "Risk-On"
     }
+  },
+  {
+    "id": "20260417_222150_00",
+    "timestamp": "2026-04-17T22:21:50.008611",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.666816985631845,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.14770735982148422,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0020471740759141007,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18342848047075663,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260417_224034_19",
+    "timestamp": "2026-04-17T22:40:34.195142",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 16.8/100 indicates a low-stress environment, with the 10Y-2Y Spread at 0.55 suggesting a relatively stable yield curve.\n* The HY OAS of 2.86 and IG OAS of 0.81 are within normal ranges, indicating no significant stress in the high-yield and investment-grade bond markets, with the HY OAS being 1.05 percentage points above the IG OAS.\n* The Regional Banks and Subprime / Consumer Credit sectors have shown strong 1M returns of +14.9% and +14.6%, respectively, but also exhibit average drawdowns of -10.4% and -23.0%, respectively, indicating potential volatility.\n* The number of distress filings (351) and whale exits (20 positions, total $-129,883,591M closed/reduced) are relatively low, suggesting no significant systemic concerns at present.\n\nLooking forward, the current low-stress environment may be subject to change due to the Fed's stagflation bind and the impact of the Iran War tensions on import fuel costs. The recent Fed liquidity injections and balance sheet growth may continue to fuel rallies in tech and crypto, but also pose risks of overheating and potential corrections. As such, it is essential to monitor the situation closely, particularly in light of the upcoming Bessent-Powell AI cyber meeting and potential supply chain shortages."
+    },
+    "meta": {}
   }
 ]
