@@ -714,9 +714,12 @@ def _score_to_dir(s: float) -> str:
     return "Neutral"
 
 
-@st.cache_data(ttl=3600)
 def _fetch_vix_term_structure() -> tuple[float | None, float | None]:
-    """Fetch VIX9D and VIX prices. Returns (vix9d, vix) or (None, None) on failure."""
+    """Fetch VIX9D and VIX prices. Returns (vix9d, vix) or (None, None) on failure.
+
+    Note: No caching here — runs in background thread where st.cache_data doesn't work.
+    yfinance will use its own internal cache for 1-day lookback.
+    """
     try:
         _vix9d_data = yf.download("^VIX9D", period="1d", progress=False, quiet=True)
         _vix_data = yf.download("^VIX", period="1d", progress=False, quiet=True)
