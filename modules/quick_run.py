@@ -3995,121 +3995,246 @@ def _render_qir_dashboard() -> None:
             )
 
 
-        # ── Velocity Cascade (options → shadow → primary hierarchy) ────────────
+        # ── Velocity Cascade V2 (continuous conviction scores) ─────────────────
         _cascade_block = ""
         try:
-            # FAST tier: options flow
-            _of_ctx_vc = st.session_state.get("_options_flow_context") or {}
-            _of_score_vc = _of_ctx_vc.get("options_score", 50) if _of_ctx_vc else 50
-            _of_label_vc = _of_ctx_vc.get("label", "—") if _of_ctx_vc else "—"
-            _gex_vc = st.session_state.get("_gex_profile_spx") or {}
-            _gex_zone_vc = _gex_vc.get("zone", "—") if _gex_vc else "—"
+            import math as _math
+
+            # ── Raw data collection ────────────────────────────────────────────
+            _of_ctx_vc  = st.session_state.get("_options_flow_context") or {}
+            _of_score_vc = float(_of_ctx_vc.get("options_score", 50) or 50)
+            _of_label_vc = _of_ctx_vc.get("label", "—") or "—"
+            # VIX slope signal from options context signals list
+            _of_sigs_vc = _of_ctx_vc.get("signals", []) or []
+            _vix_slope_sig = next((s for s in _of_sigs_vc if "VIX Slope" in s.get("Signal", "")), None)
+            _vix_slope_score_vc = float(_vix_slope_sig["Score"]) if _vix_slope_sig else 0.0
+            _vix_slope_val_vc = _vix_slope_sig["Value"] if _vix_slope_sig else "—"
+
+            _gex_vc     = st.session_state.get("_gex_profile_spx") or {}
+            _gex_zone_vc = _gex_vc.get("zone", "—") or "—"
             _gex_flip_vc = _gex_vc.get("gamma_flip")
-            _gex_spot_vc = _gex_vc.get("spot", 0)
+            _gex_spot_vc = float(_gex_vc.get("spot") or 0)
+            _gex_total_vc = float(_gex_vc.get("total_gex") or 0)
             _flip_pct_vc = ((float(_gex_flip_vc) - _gex_spot_vc) / _gex_spot_vc * 100.0
                             if _gex_flip_vc and _gex_spot_vc else 0.0)
+            _gex_score_vc = float(np.tanh(_gex_total_vc / 1500.0))  # [-1, +1]
 
-            # MEDIUM tier: shadow brain
-            _sh_vc = st.session_state.get("_shadow_state_obj")
+            _sh_vc       = st.session_state.get("_shadow_state_obj")
             _sh_label_vc = getattr(_sh_vc, "state_label", "—") if _sh_vc else "—"
-            _sh_ci_vc = getattr(_sh_vc, "ci_pct", 0.0) if _sh_vc else 0.0
-            _sh_crash_vc = (getattr(_sh_vc, "crash_prob_10pct", 0.0) or 0.0) if _sh_vc else 0.0
+            _sh_ci_vc    = float(getattr(_sh_vc, "ci_pct", 0.0) or 0.0) if _sh_vc else 0.0
+            _sh_crash_vc = float((getattr(_sh_vc, "crash_prob_10pct", 0.0) or 0.0)) if _sh_vc else 0.0
 
-            # SLOW tier: primary brain
+            _tac_vc      = st.session_state.get("_tactical_context") or {}
+            _tac_score_vc = float(_tac_vc.get("tactical_score", 50) or 50)
+
             _hmm_crisis_vc = st.session_state.get("_ll_anchored_crisis") or {}
-            _hmm_label_vc = _hmm_crisis_vc.get("hmm_state", "—")
-            _hmm_ci_vc = float(_hmm_crisis_vc.get("ci_pct", 0.0) or 0.0)
-            _hmm_crash_vc = float(_hmm_crisis_vc.get("crash_prob", 0.0) or 0.0)
+            _hmm_label_vc  = _hmm_crisis_vc.get("hmm_state", "—") or "—"
+            _hmm_ci_vc     = float(_hmm_crisis_vc.get("ci_pct", 0.0) or 0.0)
+            _hmm_crash_vc  = float(_hmm_crisis_vc.get("crash_prob", 0.0) or 0.0)
 
-            # Determine direction per tier: +1=bullish, -1=bearish, 0=neutral
-            _fast_dir = 1 if _of_score_vc >= 65 else (-1 if _of_score_vc < 38 else 0)
-            _med_dir = (-1 if _sh_label_vc in ("Crisis", "Strong Bear") else
-                        (1 if _sh_label_vc in ("Strong Bull", "Mild Bull") else 0)) if _sh_vc else 0
-            _slow_dir = (-1 if _hmm_label_vc in ("Crisis", "Late Cycle", "Stress") else
-                         (1 if _hmm_label_vc in ("Bull",) else 0))
+            _fg_vc = float(st.session_state.get("_fear_greed") or 50)
 
-            # Cascade status
-            if _fast_dir == -1 and _slow_dir >= 0:
-                _casc_status = "TOP FORMING"
-                _casc_color = "#ef4444"
-                _casc_icon = "⚠️"
-            elif _fast_dir == 1 and _slow_dir <= 0:
-                _casc_status = "BOTTOM FORMING"
-                _casc_color = "#22c55e"
-                _casc_icon = "🔄"
-            elif _fast_dir == _med_dir == _slow_dir == -1:
-                _casc_status = "CONFIRMED DOWNTREND"
-                _casc_color = "#dc2626"
-                _casc_icon = "🔻"
-            elif _fast_dir == _med_dir == _slow_dir == 1:
-                _casc_status = "CONFIRMED UPTREND"
-                _casc_color = "#16a34a"
-                _casc_icon = "🔺"
-            elif _fast_dir == _med_dir and _fast_dir != 0:
-                _casc_status = "FAST+MED ALIGNED · SLOW LAGGING"
-                _casc_color = "#f59e0b"
-                _casc_icon = "⏳"
+            # ── Continuous scores [-1, +1] per tier ───────────────────────────
+            # FAST (0-1d): options, VIX slope, GEX zone
+            _fast_of   = (_of_score_vc - 50.0) / 50.0
+            _fast_score = float(np.clip(
+                0.5 * _fast_of + 0.3 * _vix_slope_score_vc + 0.2 * _gex_score_vc,
+                -1.0, 1.0
+            ))
+
+            # MEDIUM (1-5d): shadow brain state + CI + tactical
+            _sh_state_map = {
+                "Strong Bull": 1.0, "Mild Bull": 0.5, "Transition": 0.0,
+                "Mild Bear": -0.5, "Strong Bear": -0.8, "Crisis": -1.0,
+            }
+            _sh_dir_score = _sh_state_map.get(_sh_label_vc, 0.0)
+            _sh_ci_score  = -float(np.tanh(_sh_ci_vc / 100.0))  # high CI = bearish
+            _tac_score_vc_norm = (_tac_score_vc - 50.0) / 50.0
+            _med_score = float(np.clip(
+                0.4 * _sh_dir_score + 0.3 * _sh_ci_score + 0.3 * _tac_score_vc_norm,
+                -1.0, 1.0
+            ))
+
+            # SLOW (5-30d): primary HMM state + CI
+            _hmm_state_map = {
+                "Bull": 1.0, "Neutral": 0.0,
+                "Late Cycle": -0.3, "Stress": -0.7, "Crisis": -1.0,
+            }
+            _hmm_dir_score = _hmm_state_map.get(_hmm_label_vc, 0.0)
+            _hmm_ci_score  = -float(np.tanh(_hmm_ci_vc / 100.0))
+            _slow_score = float(np.clip(
+                0.5 * _hmm_dir_score + 0.5 * _hmm_ci_score,
+                -1.0, 1.0
+            ))
+
+            # ── Composite conviction (fast-weighted for early detection) ───────
+            _composite = float(np.clip(
+                0.45 * _fast_score + 0.35 * _med_score + 0.20 * _slow_score,
+                -1.0, 1.0
+            ))
+            _conv_pct = int(abs(_composite) * 100)
+            if _composite > 0.15:
+                _conv_label = f"{_conv_pct}% BULLISH"
+                _conv_color = "#22c55e" if _composite > 0.5 else "#86efac"
+            elif _composite < -0.15:
+                _conv_label = f"{_conv_pct}% BEARISH"
+                _conv_color = "#ef4444" if _composite < -0.5 else "#fca5a5"
             else:
-                _casc_status = "MIXED SIGNALS"
-                _casc_color = "#64748b"
-                _casc_icon = "—"
+                _conv_label = "NEUTRAL"
+                _conv_color = "#64748b"
 
-            # Colors per tier
-            _fast_col = "#22c55e" if _fast_dir > 0 else ("#ef4444" if _fast_dir < 0 else "#f59e0b")
-            _med_col = "#22c55e" if _med_dir > 0 else ("#ef4444" if _med_dir < 0 else "#f59e0b")
-            _slow_col = "#22c55e" if _slow_dir > 0 else ("#ef4444" if _slow_dir < 0 else "#f59e0b")
+            # ── Divergence detection ──────────────────────────────────────────
+            _div_fm = abs(_fast_score - _med_score)
+            _div_fs = abs(_fast_score - _slow_score)
+            _div_ms = abs(_med_score - _slow_score)
+            _divergence = max(_div_fm, _div_fs, _div_ms)
+            _opp_signs = (_fast_score * _slow_score < 0)
 
-            _flip_col = "#22c55e" if _flip_pct_vc > 1.0 else ("#ef4444" if _flip_pct_vc < -1.0 else "#f59e0b")
-            _sh_crash_col_vc = "#22c55e" if _sh_crash_vc < 0.05 else ("#f59e0b" if _sh_crash_vc < 0.10 else "#ef4444")
+            if _fast_score < -0.3 and _slow_score > 0.0 and _divergence > 0.4:
+                _div_label = "⚠ TOP FORMING"
+                _div_color = "#ef4444"
+            elif _fast_score > 0.3 and _slow_score < 0.0 and _divergence > 0.4:
+                _div_label = "↗ BOTTOM FORMING"
+                _div_color = "#22c55e"
+            elif _divergence > 0.6 and _opp_signs:
+                _div_label = "DIVERGING"
+                _div_color = "#f59e0b"
+            elif _divergence < 0.2 and abs(_composite) > 0.3:
+                _div_label = "ALL ALIGNED"
+                _div_color = _conv_color
+            else:
+                _div_label = ""
+                _div_color = "#475569"
 
-            def _vc_row(tier_label, speed, items, border_col):
-                cells = "".join(
+            # ── Score bar helper ──────────────────────────────────────────────
+            def _score_bar(score: float, col: str) -> str:
+                """Thin horizontal bar showing score position [-1, +1]."""
+                _pct = int((score + 1.0) / 2.0 * 100)
+                _mid = 50
+                if _pct >= _mid:
+                    _left = f"{_mid}%"; _width = f"{_pct - _mid}%"; _bgcol = col
+                else:
+                    _left = f"{_pct}%"; _width = f"{_mid - _pct}%"; _bgcol = col
+                return (
+                    f'<div style="position:relative;height:3px;background:#1e293b;border-radius:2px;margin-top:3px;">'
+                    f'<div style="position:absolute;top:0;left:50%;width:1px;height:3px;background:#334155;"></div>'
+                    f'<div style="position:absolute;top:0;left:{_left};width:{_width};height:3px;'
+                    f'background:{_bgcol};border-radius:2px;"></div></div>'
+                )
+
+            # ── Confirmation progress bars ─────────────────────────────────────
+            def _confirm_bar(current: float, gate: float, label: str, col: str) -> str:
+                """Progress toward a gate threshold."""
+                _pct = min(100, int(current / gate * 100)) if gate > 0 else 0
+                return (
+                    f'<div style="font-size:7px;color:#475569;margin-top:2px;">'
+                    f'{label}: {current:.0f}% → {gate:.0f}% gate '
+                    f'<span style="color:{col};font-weight:700;">({_pct}%)</span>'
+                    f'<div style="height:2px;background:#1e293b;border-radius:1px;margin-top:1px;">'
+                    f'<div style="height:2px;width:{_pct}%;background:{col};border-radius:1px;"></div>'
+                    f'</div></div>'
+                )
+
+            # ── Tier row renderer ─────────────────────────────────────────────
+            def _vc_row_v2(tier_label: str, speed: str, score: float,
+                           metrics: list, confirm_html: str) -> str:
+                _col = ("#22c55e" if score > 0.5 else
+                        "#86efac" if score > 0.15 else
+                        "#64748b" if abs(score) <= 0.15 else
+                        "#fca5a5" if score > -0.5 else "#ef4444")
+                _score_lbl = (f"+{score:.2f}" if score >= 0 else f"{score:.2f}")
+                _cells = "".join(
                     f'<div style="text-align:center;">'
-                    f'<div style="font-size:7px;color:#475569;font-weight:700;letter-spacing:0.05em;">{lbl}</div>'
-                    f'<div style="font-size:12px;font-weight:800;color:{col};">{val}</div>'
+                    f'<div style="font-size:7px;color:#475569;font-weight:700;letter-spacing:0.04em;">{lbl}</div>'
+                    f'<div style="font-size:11px;font-weight:800;color:{mc};">{val}</div>'
                     f'</div>'
-                    for lbl, val, col in items
+                    for lbl, val, mc in metrics
                 )
                 return (
-                    f'<div style="display:grid;grid-template-columns:90px 1fr;gap:8px;'
-                    f'padding:5px 0;border-left:2px solid {border_col};padding-left:8px;">'
+                    f'<div style="border-left:2px solid {_col};padding-left:8px;margin-bottom:6px;">'
+                    f'<div style="display:grid;grid-template-columns:80px 1fr;gap:6px;align-items:start;">'
                     f'<div>'
-                    f'<div style="font-size:8px;color:{border_col};font-weight:800;letter-spacing:0.08em;">{tier_label}</div>'
+                    f'<div style="font-size:8px;color:{_col};font-weight:800;letter-spacing:0.08em;">{tier_label}</div>'
                     f'<div style="font-size:7px;color:#475569;">{speed}</div>'
+                    f'<div style="font-size:9px;font-weight:800;color:{_col};margin-top:1px;">{_score_lbl}</div>'
+                    f'{_score_bar(score, _col)}'
                     f'</div>'
-                    f'<div style="display:grid;grid-template-columns:repeat({len(items)},1fr);gap:6px;">'
-                    f'{cells}</div></div>'
+                    f'<div style="display:grid;grid-template-columns:repeat({len(metrics)},1fr);gap:4px;">'
+                    f'{_cells}</div></div>'
+                    f'{confirm_html}'
+                    f'</div>'
                 )
 
-            _fast_row = _vc_row("FAST", "0-1 days", [
-                ("OPTIONS", f"{_of_score_vc}/100", _fast_col),
-                ("GEX ZONE", _gex_zone_vc.replace(" Gamma Zone", "").replace(" Zone", "")[:8], _fast_col),
-                ("FLIP", f"{_flip_pct_vc:+.1f}%", _flip_col),
-            ], _fast_col)
-            _med_row = _vc_row("MEDIUM", "1-5 days", [
-                ("SHADOW", _sh_label_vc[:10], _med_col),
-                ("SHADOW CI", f"{_sh_ci_vc:.0f}%", _med_col),
-                ("CRASH 30D", f"{_sh_crash_vc*100:.0f}%", _sh_crash_col_vc),
-            ], _med_col)
-            _slow_row = _vc_row("SLOW", "5-30 days", [
-                ("PRIMARY", _hmm_label_vc[:10], _slow_col),
-                ("PRIMARY CI", f"{_hmm_ci_vc:.0f}%", _slow_col),
-                ("CRASH 30D", f"{_hmm_crash_vc*100:.0f}%", _slow_col),
-            ], _slow_col)
+            # Confirmation progress toward stress gates (only shown when fast is stressed)
+            _fast_confirm_html = ""
+            _fg_col = "#22c55e" if _fg_vc > 50 else "#ef4444"
+
+            _med_confirm_html = ""
+            if _fast_score < -0.3:  # fast bearish — show shadow progress to gate
+                _med_confirm_html = _confirm_bar(_sh_ci_vc, 22.0, "Shadow CI → stress gate",
+                                                 "#ef4444" if _sh_ci_vc > 22 else "#f59e0b")
+            elif _fast_score > 0.3:  # fast bullish — show shadow state
+                pass
+
+            _slow_confirm_html = ""
+            if _fast_score < -0.3:
+                _slow_confirm_html = _confirm_bar(_hmm_ci_vc, 22.0, "Primary CI → stress gate",
+                                                  "#ef4444" if _hmm_ci_vc > 22 else "#f59e0b")
+
+            _fast_row = _vc_row_v2("FAST", "0-1 days", _fast_score, [
+                ("OPTIONS", f"{_of_score_vc:.0f}/100",
+                 "#22c55e" if _of_score_vc >= 65 else ("#ef4444" if _of_score_vc < 38 else "#94a3b8")),
+                ("VIX SLOPE", _vix_slope_val_vc.split("·")[0].strip()[:12] if _vix_slope_val_vc != "—" else "—",
+                 "#22c55e" if _vix_slope_score_vc > 0.1 else ("#ef4444" if _vix_slope_score_vc < -0.1 else "#94a3b8")),
+                ("GEX ZONE", _gex_zone_vc.replace(" Gamma Zone", "").replace(" Zone", "")[:8],
+                 "#22c55e" if _gex_score_vc > 0.1 else ("#ef4444" if _gex_score_vc < -0.1 else "#94a3b8")),
+                ("F&G", f"{_fg_vc:.0f}", _fg_col),
+            ], _fast_confirm_html)
+
+            _sh_crash_col_vc = "#22c55e" if _sh_crash_vc < 0.05 else ("#f59e0b" if _sh_crash_vc < 0.10 else "#ef4444")
+            _med_row = _vc_row_v2("MEDIUM", "1-5 days", _med_score, [
+                ("SHADOW", _sh_label_vc[:10],
+                 "#22c55e" if _sh_dir_score > 0 else ("#ef4444" if _sh_dir_score < 0 else "#94a3b8")),
+                ("SHADOW CI", f"{_sh_ci_vc:.0f}%",
+                 "#22c55e" if _sh_ci_vc < 22 else ("#f59e0b" if _sh_ci_vc < 67 else "#ef4444")),
+                ("TACTICAL", f"{_tac_score_vc:.0f}/100",
+                 "#22c55e" if _tac_score_vc >= 65 else ("#ef4444" if _tac_score_vc < 38 else "#94a3b8")),
+                ("CRASH", f"{_sh_crash_vc*100:.0f}%", _sh_crash_col_vc),
+            ], _med_confirm_html)
+
+            _slow_row = _vc_row_v2("SLOW", "5-30 days", _slow_score, [
+                ("PRIMARY", _hmm_label_vc[:10],
+                 "#22c55e" if _hmm_dir_score > 0 else ("#ef4444" if _hmm_dir_score < 0 else "#94a3b8")),
+                ("PRIMARY CI", f"{_hmm_ci_vc:.0f}%",
+                 "#22c55e" if _hmm_ci_vc < 22 else ("#f59e0b" if _hmm_ci_vc < 67 else "#ef4444")),
+                ("CRASH", f"{_hmm_crash_vc*100:.0f}%",
+                 "#22c55e" if _hmm_crash_vc < 0.04 else ("#f59e0b" if _hmm_crash_vc < 0.08 else "#ef4444")),
+            ], _slow_confirm_html)
+
+            _div_badge = (
+                f'<span style="font-size:8px;font-weight:800;color:{_div_color};'
+                f'background:{_div_color}18;padding:1px 6px;border-radius:3px;'
+                f'border:1px solid {_div_color}44;margin-left:6px;">{_div_label}</span>'
+            ) if _div_label else ""
 
             _cascade_block = (
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                 f'padding:8px 12px;margin-bottom:8px;">'
-                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                # Header row: title + composite conviction
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">'
                 f'<span style="font-size:10px;color:#475569;font-weight:700;letter-spacing:0.1em;">⚡ VELOCITY CASCADE</span>'
-                f'<span style="font-size:9px;font-weight:800;color:{_casc_color};'
-                f'background:#0a0f1a;padding:2px 8px;border-radius:3px;border:1px solid {_casc_color}33;">'
-                f'{_casc_icon} {_casc_status}</span>'
+                f'<div style="display:flex;align-items:center;">'
+                f'<span style="font-size:13px;font-weight:900;color:{_conv_color};">{_conv_label}</span>'
+                f'{_div_badge}'
                 f'</div>'
+                f'</div>'
+                # Tier rows
                 f'{_fast_row}{_med_row}{_slow_row}'
-                f'<div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.4;">'
-                f'Fast diverging from Slow = early signal · All aligned = high conviction · '
-                f'Options lead by hours/days, Shadow confirms in days, Primary confirms in weeks</div>'
+                # Footer
+                f'<div style="font-size:7px;color:#334155;margin-top:4px;line-height:1.4;">'
+                f'Composite = 45% Fast + 35% Med + 20% Slow · '
+                f'Score bar shows [-1 bearish ← 0 → +1 bullish] · '
+                f'Divergence = tiers pointing opposite directions</div>'
                 f'</div>'
             )
         except Exception:
