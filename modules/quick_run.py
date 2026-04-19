@@ -3903,24 +3903,6 @@ def _render_qir_dashboard() -> None:
                     f'<span style="color:#1e4a7a;">Disagreement</span> is itself the signal '
                     f'(credit calm + price panic = liquidity flush; credit stress + price calm = slow-burn late cycle).'
                     f'</div></div>'
-                    f'<div style="margin-top:6px;padding:6px 10px;background:#0a0f1a;'
-                    f'border-radius:4px;border:1px solid #1e293b;">'
-                    f'<div style="font-size:8px;color:#1e293b;font-weight:700;'
-                    f'letter-spacing:0.08em;margin-bottom:4px;">ZONE MAP (anchor {_sh_b.ci_anchor:.3f})</div>'
-                    f'<div style="font-size:8px;line-height:2.0;">'
-                    f'<span style="color:#22c55e;font-weight:700;">Zone 1</span> '
-                    f'<span style="color:#1e3a5f;">Normal &nbsp; CI &lt; 22% &nbsp; z &gt; -0.26 &nbsp; conviction signals suppressed</span><br>'
-                    f'<span style="color:#f59e0b;font-weight:700;">Zone 2</span> '
-                    f'<span style="color:#1e3a5f;">Stress &nbsp; CI 22-67% &nbsp; z -0.26 to -0.80 &nbsp; signals shown as context</span><br>'
-                    f'<span style="color:#ef4444;font-weight:700;">Zone 3</span> '
-                    f'<span style="color:#1e3a5f;">Crisis &nbsp; CI &ge; 67% &nbsp; z &lt; -0.80 &nbsp; 95% hit rate &middot; 16% days flagged</span><br>'
-                    f'<span style="color:#a855f7;font-weight:700;">Zone 4</span> '
-                    f'<span style="color:#1e3a5f;">Beyond &nbsp; CI &gt; 100% &nbsp; z &lt; -1.19 &nbsp; beyond training range</span>'
-                    f'</div>'
-                    f'<div style="font-size:7px;color:#1e293b;margin-top:4px;line-height:1.5;">'
-                    f'89% of Zone 3 calls are false alarms standalone. '
-                    f'Mitigate: require primary brain agreement before acting on crisis calls.</div>'
-                    f'</div>'
                     f'</div>'
                 )
             elif _sh_b is None:
@@ -6698,6 +6680,55 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 st.markdown(
                     '<div style="color:#ef444466;font-size:12px;padding:8px 0;">'
                     'Shadow brain not trained yet. Click Retrain to build the SPX model.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── Zone map tips ─────────────────────────────────────────────
+            if _shb:
+                st.markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:10px 14px;margin-bottom:10px;">'
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:6px;">ZONE MAP (anchor {_shb.ci_anchor:.3f})</div>'
+                    f'<table style="border-collapse:collapse;width:100%;">'
+                    f'<tr>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#22c55e;font-weight:700;">Zone 1</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Normal</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &lt; 22%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &gt; -0.26</td>'
+                    f'<td style="padding:4px 8px;font-size:9px;color:#475569;">conviction signals suppressed</td>'
+                    f'</tr>'
+                    f'<tr>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;">Zone 2</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Stress</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-67%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z -0.26 to -0.80</td>'
+                    f'<td style="padding:4px 8px;font-size:9px;color:#475569;">signals shown as context</td>'
+                    f'</tr>'
+                    f'<tr>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#ef4444;font-weight:700;">Zone 3</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 67%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.80</td>'
+                    f'<td style="padding:4px 8px;font-size:9px;color:#475569;">95% hit rate &middot; 16% days flagged</td>'
+                    f'</tr>'
+                    f'<tr>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#a855f7;font-weight:700;">Zone 4</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Beyond</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &gt; 100%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -1.19</td>'
+                    f'<td style="padding:4px 8px;font-size:9px;color:#475569;">beyond training range</td>'
+                    f'</tr>'
+                    f'</table>'
+                    f'<div style="margin-top:8px;padding:6px 10px;background:#0a0a14;'
+                    f'border-radius:4px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:9px;color:#f59e0b;font-weight:700;margin-bottom:3px;">FALSE ALARM NOTE</div>'
+                    f'<div style="font-size:9px;color:#64748b;line-height:1.6;">'
+                    f'89% of Zone 3 calls are false alarms when used alone. '
+                    f'The shadow brain is a <span style="color:#94a3b8;font-weight:600;">confirmation signal</span>, '
+                    f'not standalone. Require primary brain (credit/yield) agreement before acting on crisis calls.</div>'
+                    f'</div>'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
 
