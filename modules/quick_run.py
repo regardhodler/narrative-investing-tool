@@ -4709,49 +4709,47 @@ def render():
 
     # ── Hidden AI context block — read by Gemini / browser AI sidebar ─────────
     # display:none but fully in DOM; contains structured signal state for AI
-    _ai_ctx = st.session_state.get("_qir_ai_context") or {}
-    if _ai_ctx:
-        import json as _ctx_json
-        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
-        st.markdown(
-            f'<div id="regarded-terminals-ai-context" aria-hidden="true" '
-            f'style="display:none;position:absolute;width:0;height:0;overflow:hidden;" '
-            f'data-source="regarded-terminals-qir">'
-            f'<pre id="rt-signal-state">\n{_ctx_lines}\n</pre>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-
-    st.markdown(
-        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">'
-        f'<span style="font-size:13px;color:{_oc};font-weight:700;letter-spacing:0.1em;">⚡ QUICK INTEL RUN</span>'
-        + (
-            f'<span title="Structured signal state injected into DOM — Gemini/browser AI sidebar can read it now" '
-            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
-            f'background:#052e16;color:#4ade80;border:1px solid #166534;'
-            f'padding:2px 7px;border-radius:3px;cursor:default;">'
-            f'🤖 AI CONTEXT LIVE</span>'
-            if _ai_ctx else
-            f'<span title="Run QIR to populate AI context for Gemini" '
-            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
-            f'background:#1c1917;color:#57534e;border:1px solid #292524;'
-            f'padding:2px 7px;border-radius:3px;cursor:default;">'
-            f'🤖 AI CONTEXT —</span>'
-        )
-        + f'</div>',
-        unsafe_allow_html=True,
-    )
-    st.caption(
-        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis + Portfolio Risk Snapshot in sequence. "
-        "Navigate to Portfolio Intelligence when done."
-    )
-    st.markdown(
-        '<div style="font-size:10px;color:#334155;font-family:\'JetBrains Mono\',Consolas,monospace;'
-        'margin-top:-6px;margin-bottom:4px;">'
-        '💡 Tip: Open <span style="color:#4285f4;font-weight:700;">Gemini</span> in the Chrome sidebar — '
-        'after running QIR it already has your full signal state loaded.</div>',
-        unsafe_allow_html=True,
-    )
+    _of_ctx = st.session_state.get("_options_flow_context") or {}
+    # Ensure _gex_block is always defined
+    if '_gex_block' not in locals():
+        _gex_block = ""
+    if _of_ctx:
+        _os_val   = _of_ctx.get("options_score", 50)
+        _of_label = _of_ctx.get("label", "")
+        _of_bias  = _of_ctx.get("action_bias", "")
+        _of_color = "#22c55e" if _os_val >= 65 else ("#f59e0b" if _os_val >= 38 else "#ef4444")
+        _of_bg    = "#0c1a0c" if _os_val >= 65 else ("#1a1200" if _os_val >= 38 else "#1a0000")
+        with st.expander(f"\ud83d\udcca Options Flow \u2014 {_of_label} ({_os_val}/100)", expanded=True):
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
+                f'<span style="background:{_of_color};color:black;font-weight:800;font-size:11px;'
+                f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_of_label.upper()}</span>'
+                f'<span style="color:{_of_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                f'font-size:12px;font-weight:700;">{_os_val}/100</span>'
+                f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_of_bias}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+            if _gex_block:
+                st.markdown(_gex_block, unsafe_allow_html=True)
+            _of_sigs = _of_ctx.get("signals", [])
+            if _of_sigs:
+                _of_sigs_html = ""
+                for _sr in _of_sigs:
+                    _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
+                    _arrow = "\u25b2" if _sr["Score"] > 0.1 else ("\u25bc" if _sr["Score"] < -0.1 else "\u25c6")
+                    _of_sigs_html += (
+                        f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
+                        f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
+                        f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
+                        f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
+                    )
+                st.markdown(f'<div style="margin-bottom:8px;">{_of_sigs_html}</div>', unsafe_allow_html=True)
+            _vix_lv = _of_ctx.get("vix_level", "?")
+            _vix_rg = _of_ctx.get("vix_regime", "Normal")
+            _mode   = _of_ctx.get("scoring_mode", "static")
+            _n_hist = _of_ctx.get("n_pc_hist", 0)
+            st.caption(f"VIX {_vix_lv} \u00b7 {_vix_rg} regime \u00b7 {_mode} \u00b7 {_n_hist} samples in history")
 
     render_rr_score_mode_toggle(
         key="qir_rr_score_mode_ui",
