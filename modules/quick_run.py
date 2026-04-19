@@ -2965,7 +2965,7 @@ def _render_qir_dashboard() -> None:
         # Crisis Intensity (CI%) normalizes LL z-score to 0-100% scale:
         #   0%   = z  0.0    (perfectly normal market)
         #   22%  = z -0.10   (stress zone start)
-        #   67%  = z -0.30   (crisis confirmed gate, 100% precision, 0 false alarms)
+        #   67%  = z -0.30   (crisis gate open, 9.25% crash prob = 3x baseline)
         #   100% = z -0.467  (COVID peak — worst ever recorded in-sample)
         #   >100% = post-training extremes (model scoring novel data beyond training range)
         # Formula: CI = abs(ll_z) / 0.467 * 100  (uncapped — >100% is valid)
@@ -3008,7 +3008,7 @@ def _render_qir_dashboard() -> None:
                 _bg, _border     = "#100000", "#7f1d1d"
                 _ci_color        = "#ef4444"
                 _label           = "CRISIS CONFIRMED"
-                _label_sub       = "100% validated · 0 false alarms · 3,408 days backtested"
+                _label_sub       = "9.25% crash prob at gate (3x baseline) · 3,408 days backtested"
             elif _zone == 2:
                 _bg, _border     = "#0f0e00", "#78350f"
                 _ci_color        = "#f59e0b"
@@ -3077,7 +3077,7 @@ def _render_qir_dashboard() -> None:
                     f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Stress detected but below 67% gate. "
                     f"Historical misses (2022 bear, tariffs) peaked at 12-21% CI — well below here. "
                     f"{_n_firing}/5 conviction signals shown as context. "
-                    f"67% is the validated confirmation threshold (100% precision)."
+                    f"67% is the crisis gate threshold (9.25% crash prob = 3x baseline)."
                 )
             else:
                 _explain = (
@@ -4032,7 +4032,7 @@ def _render_qir_dashboard() -> None:
                     # Tips
                     + f'<div style="margin-top:8px;padding-top:7px;border-top:1px solid #0f172a;font-size:8px;color:#334155;line-height:1.6;">'
                     + f'<span style="color:#1e3a5f;font-weight:700;letter-spacing:0.08em;">HOW TO READ</span><br>'
-                    + f'4/4 = confirmed, 0 false alarms since 2013 · 3/4 = watch, wait for last signal<br>'
+                    + f'4/4 = confirmed (9% crash prob = 3x baseline) · 3/4 = watch, wait for last signal<br>'
                     + f'Signal fires <em>after</em> price low (+8 to +66d) — confirms worst is over, not the exact tick<br>'
                     + f'Volmageddon (pure vol shock, no credit stress) never fires HY — that\'s by design<br>'
                     + f'VIX pill = 60d peak ≥ 28 AND now below 24 · VVIX = tail-risk proxy (P/C equivalent)'
@@ -4054,7 +4054,7 @@ def _render_qir_dashboard() -> None:
                     + f'</div>'
                     + f'<div style="background:#10b98122;border:1px solid #10b98166;border-radius:3px;padding:5px 6px;text-align:center;">'
                     + f'<div style="font-size:10px;font-weight:800;color:#10b981;">4/4</div>'
-                    + f'<div style="font-size:7px;color:#10b98199;margin-top:2px;line-height:1.4;">Confirmed<br>0 false alarms</div>'
+                    + f'<div style="font-size:7px;color:#10b98199;margin-top:2px;line-height:1.4;">Confirmed<br>3x baseline risk</div>'
                     + f'</div>'
                     + f'</div>'
 
@@ -4080,7 +4080,7 @@ def _render_qir_dashboard() -> None:
                     )
                     + f'</div>'
                     f'<div style="border-top:1px solid #1e293b33;padding-top:6px;font-size:8px;color:#1e3a5f;line-height:1.6;">'
-                    f'Activates when CI% ≥ 22 (stress/crisis regime) · 4/4 signals = 0 false alarms since 2013<br>'
+                    f'Activates when CI% ≥ 22 (stress/crisis regime) · 4/4 signals = 9% crash prob (3x baseline)<br>'
                     f'Monitors: LL recovery · VIX normalization · HY compression · VVIX compression'
                     f'</div>'
                     f'</div>'
@@ -5575,7 +5575,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     _ai_ci     = round(max(0.0, abs(_ai_ll_z) / 0.467 * 100.0) if _ai_ll_z < 0 else 0.0, 1)
                     _ai_zone   = (
                         "Zone 4 · Beyond Training Range (purple)" if _ai_ci > 100.0 else
-                        "Zone 3 · Crisis Confirmed (100% precision, 0 false alarms in 3,408 days)" if _ai_ci >= 67.0 else
+                        "Zone 3 · Crisis Gate Open (9.25% crash prob = 3x baseline)" if _ai_ci >= 67.0 else
                         "Zone 2 · Model Stress (context signals)" if _ai_ci >= 22.0 else
                         "Zone 1 · Normal (conviction signals suppressed)"
                     )
@@ -5608,7 +5608,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "bottom_proximity_pct": _prox.get("bottom_pct", "?"),
                         "data_quality":   f"{_dq_f.get('score', '?')}/100",
                         "CI_FORMULA":     "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
-                        "ZONE_GUIDE":     "Normal<22% | Stress 22–67% | Crisis≥67% (100% precision) | Beyond>100%",
+                        "ZONE_GUIDE":     "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
                         "KELLY_GUIDE":    "Half-Kelly shown — reduce by 50% in Zone 2+, 75% in Zone 3+",
                         "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
                         "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
@@ -5690,7 +5690,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "gate_open": _ai_wyk.get("gate_open", False),
                         "confirmations": _ai_wyk.get("confirmations", []),
                         "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100",
-                        "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis≥67% (100% precision) | Beyond>100%",
+                        "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
                         "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
                         "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
                         "SHADOW_LL_ZSCORE": getattr(st.session_state.get("_shadow_state_obj"), "ll_zscore", "?"),
@@ -5826,7 +5826,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         _ai_ci2     = round(max(0.0, abs(_ai_ll_z2) / 0.467 * 100.0) if _ai_ll_z2 < 0 else 0.0, 1)
         _ai_zone2   = (
             "Zone 4 · Beyond Training Range" if _ai_ci2 > 100.0 else
-            "Zone 3 · Crisis Confirmed (100% precision)" if _ai_ci2 >= 67.0 else
+            "Zone 3 · Crisis Gate Open (9.25% crash prob = 3x baseline)" if _ai_ci2 >= 67.0 else
             "Zone 2 · Model Stress" if _ai_ci2 >= 22.0 else
             "Zone 1 · Normal"
         )
@@ -5846,7 +5846,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             "HMM_BRAIN_STATE": _ai_crisis2.get("hmm_state", _rc_f2.get("regime", "?")),
             "data_quality": f"{_dq_f2.get('score','?')}/100",
             "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
-            "ZONE_GUIDE": "Normal<22% | Stress 22–67% | Crisis≥67% (100% precision) | Beyond>100%",
+            "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
         }
 
         # Enrich with pattern + synopsis (may fail on partial runs — safe to skip)
@@ -6621,21 +6621,21 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Normal</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &lt; 22%</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &gt; -0.10</td>'
-                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">conviction signals suppressed</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">~3% crash prob &middot; signals suppressed</td>'
                 f'</tr>'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;">Zone 2</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Model Stress</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-67%</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z -0.10 to -0.30</td>'
-                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">signals shown as context</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">~6% crash prob &middot; signals as context</td>'
                 f'</tr>'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#ef4444;font-weight:700;">Zone 3</td>'
-                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis Confirmed</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis Gate</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 67%</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.30</td>'
-                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">100% precision &middot; 0 false alarms in 3,408d</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">9.25% crash prob (3x baseline)</td>'
                 f'</tr>'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#a855f7;font-weight:700;">Zone 4</td>'
