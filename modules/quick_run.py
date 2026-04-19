@@ -3698,20 +3698,6 @@ def _render_qir_dashboard() -> None:
                 except Exception:
                     pass
 
-                _tip_html = (
-                    f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
-                    f'border-radius:4px;border:1px solid #1e3a5f;">'
-                    f'<div style="font-size:7px;color:#3b5f8a;font-weight:700;'
-                    f'letter-spacing:0.08em;margin-bottom:2px;">💡 AFTER RETRAINING</div>'
-                    f'<div style="font-size:8px;color:#475569;line-height:1.5;">'
-                    f'Re-run the backtest to recalibrate CI% anchors:<br>'
-                    f'<span style="font-family:monospace;color:#64748b;font-size:8px;">'
-                    f'python ll_gate_backtest_live_brain.py</span><br>'
-                    f'Then update the <span style="color:#64748b;">0.467</span> anchor in '
-                    f'quick_run.py + backtesting.py if the COVID peak z-score changed.'
-                    f'</div></div>'
-                )
-
                 _state_legend_html = (
                     f'<div style="margin-top:8px;padding:7px 8px;background:#0a0f1a;'
                     f'border-radius:4px;border:1px solid #0f1f2e;">'
@@ -3733,7 +3719,7 @@ def _render_qir_dashboard() -> None:
                     f'</div></div>'
                 )
 
-                _hmm_html = _hmm_html + _cal_html + _tip_html + _state_legend_html + f'</div>'
+                _hmm_html = _hmm_html + _cal_html + _state_legend_html + f'</div>'
                 _hmm_block = _hmm_html
             elif _hmm_b is None:
                 _hmm_block = (
@@ -6595,6 +6581,59 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                                 st.rerun()
                             else:
                                 st.error("Scoring failed — check console for details.")
+            # ── Zone map + retrain tip ────────────────────────────────────
+            st.markdown(
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:10px 14px;margin-bottom:10px;">'
+                f'<div style="font-size:9px;color:#475569;font-weight:700;'
+                f'letter-spacing:0.1em;margin-bottom:6px;">CI% ZONE MAP (anchor 0.467)</div>'
+                f'<table style="border-collapse:collapse;width:100%;">'
+                f'<tr>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#22c55e;font-weight:700;">Zone 1</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Normal</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &lt; 22%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &gt; -0.10</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">conviction signals suppressed</td>'
+                f'</tr>'
+                f'<tr>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;">Zone 2</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Model Stress</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-67%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z -0.10 to -0.30</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">signals shown as context</td>'
+                f'</tr>'
+                f'<tr>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#ef4444;font-weight:700;">Zone 3</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis Confirmed</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 67%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.30</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">100% precision &middot; 0 false alarms in 3,408d</td>'
+                f'</tr>'
+                f'<tr>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#a855f7;font-weight:700;">Zone 4</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Beyond Training</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &gt; 100%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.467</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">post-training extremes (COVID = 100%)</td>'
+                f'</tr>'
+                f'</table>'
+                f'<div style="font-size:9px;color:#334155;margin-top:6px;">Volmageddon = 76% &middot; '
+                f'Fed Panic = 96% &middot; COVID = 100%</div>'
+                f'</div>'
+                f'<div style="background:#0a0f1a;border:1px solid #1e3a5f;border-radius:5px;'
+                f'padding:10px 14px;margin-bottom:10px;">'
+                f'<div style="font-size:9px;color:#3b82f6;font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:4px;">AFTER RETRAINING</div>'
+                f'<div style="font-size:9px;color:#64748b;line-height:1.7;">'
+                f'Re-run the backtest to recalibrate CI% anchors:<br>'
+                f'<span style="font-family:monospace;color:#94a3b8;font-size:9px;">'
+                f'python ll_gate_backtest_live_brain.py</span><br>'
+                f'Then update the <span style="color:#94a3b8;font-weight:600;">0.467</span> anchor in '
+                f'quick_run.py + backtesting.py if the COVID peak z-score changed.</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
         except ImportError:
             st.error("hmmlearn not installed. Run: pip install hmmlearn")
         except Exception as _hmm_e:
@@ -6807,6 +6846,25 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                                 st.rerun()
                             else:
                                 st.error("Shadow scoring failed — check console for details.")
+            # ── Retrain tip ───────────────────────────────────────────────
+            st.markdown(
+                f'<div style="background:#0a0f1a;border:1px solid #1e3a5f;border-radius:5px;'
+                f'padding:10px 14px;margin-bottom:10px;">'
+                f'<div style="font-size:9px;color:#3b82f6;font-weight:700;'
+                f'letter-spacing:0.08em;margin-bottom:4px;">AFTER RETRAINING</div>'
+                f'<div style="font-size:9px;color:#64748b;line-height:1.7;">'
+                f'Re-run the CI anchor sweep to verify the gate threshold:<br>'
+                f'<span style="font-family:monospace;color:#94a3b8;font-size:9px;">'
+                f'python tools/sweep_shadow_anchor.py</span><br>'
+                f'Then update the <span style="color:#94a3b8;font-weight:600;">1.194</span> anchor in '
+                f'services/hmm_shadow.py + data/hmm_shadow_brain.json if the optimal z-gate changed.<br>'
+                f'Also re-run calibration: '
+                f'<span style="font-family:monospace;color:#94a3b8;font-size:9px;">'
+                f'python tools/backtest_shadow_ci.py</span></div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
         except ImportError:
             st.error("statsmodels not installed. Run: pip install statsmodels>=0.14.0")
         except Exception as _shm_e:
