@@ -113,6 +113,8 @@ _SIGNAL_KEYS = [
     # QIR Earnings Risk (held positions with earnings ≤21 days, computed in Round 5)
     "_qir_earnings_risk",
     "_qir_earnings_risk_ts",
+    # QIR Debate payload (full assembled context fed to adversarial debate)
+    "_qir_debate_signals_text",
     # Forecast Accuracy Tracker
     "_forecast_log",
     "_forecast_log_ts",

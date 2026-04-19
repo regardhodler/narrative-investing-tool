@@ -474,8 +474,10 @@ def _section_qir_snapshot() -> str:
     kelly_pct = kly.get("kelly_half_pct") if kly else st.session_state.get("_kelly_half_pct")
     bottom_signals = st.session_state.get("_bottom_watch_signals")
     hmm_ctx = st.session_state.get("_hmm_context")
+    ll_crisis = st.session_state.get("_ll_anchored_crisis") or {}
+    shadow = st.session_state.get("_shadow_state_obj")
 
-    if all(v is None for v in [pattern, conviction, kelly_pct, bottom_signals, hmm_ctx]):
+    if all(v is None for v in [pattern, conviction, kelly_pct, bottom_signals, hmm_ctx, ll_crisis, shadow]):
         return ""
 
     lines = ["## QIR SNAPSHOT"]
@@ -512,8 +514,42 @@ def _section_qir_snapshot() -> str:
         ci_pct = abs(ll_z) / 0.467 * 100 if ll_z else 0
         lines.append(f"- **HMM State:** {state} (conf={conf:.2f}, ll_z={ll_z:.3f}, CI%={ci_pct:.1f}%)")
 
+    # Prefer LL-anchored crisis block + shadow brain when available (new QIR wiring)
+    if ll_crisis:
+        _hmm_lbl = ll_crisis.get("hmm_state", "—")
+        _hmm_llz = float(ll_crisis.get("ll_zscore", 0.0) or 0.0)
+        _hmm_ci = ll_crisis.get("ci_pct")
+        if _hmm_ci is None:
+            _hmm_ci = abs(_hmm_llz) / 0.467 * 100 if _hmm_llz < 0 else 0.0
+        lines.append(f"- **HMM Learn Brain:** {_hmm_lbl} (ll_z={_hmm_llz:+.2f}, CI%={float(_hmm_ci):.1f}%)")
+
+    if shadow is not None:
+        _s_lbl = getattr(shadow, "state_label", "—")
+        _s_llz = float(getattr(shadow, "ll_zscore", 0.0) or 0.0)
+        _s_ci = float(getattr(shadow, "ci_pct", 0.0) or 0.0)
+        _s_cr = float(getattr(shadow, "crash_prob_10pct", 0.0) or 0.0)
+        lines.append(
+            f"- **HMM Shadow Brain:** {_s_lbl} (ll_z={_s_llz:+.2f}, CI%={_s_ci:.1f}%, crash>10%={_s_cr*100:.0f}%)"
+        )
+
+    _dbt_payload = st.session_state.get("_qir_debate_signals_text")
+    if _dbt_payload:
+        lines.append(f"- **QIR Debate Payload:** loaded ({len(_dbt_payload):,} chars)")
+
     lines.append("")
     return "\n".join(lines)
+
+
+def _section_qir_debate_payload() -> str:
+    """Export the full QIR debate payload assembled in Quick Run (includes HMM + shadow lines)."""
+    payload = st.session_state.get("_qir_debate_signals_text")
+    if not payload:
+        return ""
+    return (
+        "## QIR DEBATE PAYLOAD\n"
+        "(This is the exact text fed to Adversarial Debate when available.)\n\n"
+        f"{payload}\n"
+    )
 
 
 def _build_markdown_export(open_trades: list) -> str:
@@ -524,6 +560,7 @@ def _build_markdown_export(open_trades: list) -> str:
         _section_current_events(),
         _section_regime(),
         _section_qir_snapshot(),
+        _section_qir_debate_payload(),
         _section_rate_path(),
         _section_policy_transmission(),
         _section_regime_plays(),
@@ -829,6 +866,7 @@ def _build_cross_sectional_export() -> str:
 
     _MODULES = [
         ("QIR / Signal State",      "_qir_ai_context"),
+        ("QIR Debate Payload",      "_qir_debate_signals_text"),
         ("Risk Regime",             "_risk_regime_ai_context"),
         ("Options Flow",            "_options_flow_ai_context"),
         ("Wyckoff / Tactical",      "_wyckoff_ai_context"),
@@ -927,7 +965,7 @@ def _build_pipeline_graph_json() -> str:
         "_regime_context", "_rate_path_probs", "_dominant_rate_path", "_rp_plays_result",
         "_fed_plays_result", "_current_events_digest", "_doom_briefing", "_whale_summary",
         "_plays_result", "_portfolio_analysis", "_factor_analysis", "_sim_verdict",
-        "_adversarial_debate", "_portfolio_risk_snapshot",
+        "_adversarial_debate", "_portfolio_risk_snapshot", "_qir_debate_signals_text",
     ]
 
     nodes = []
@@ -1186,6 +1224,7 @@ _READINESS_ITEMS = [
     ("Current Events",        "_current_events_digest_ts", "Generate News Digest in Risk Regime"),
     ("Factor AI Analysis",    "_factor_analysis_ts",       "Run Analyze Factors in My Regarded Portfolio"),
     ("Pre-Trade Verdict",     None,                        "Run Pre-Trade Simulator + Get AI Verdict"),
+    ("QIR Debate Payload",    None,                        "Run QIR once to build debate payload"),
 ]
 
 _STALE_THRESHOLD_H = 6
@@ -1212,6 +1251,9 @@ def _check_item(label: str, ts_key, run_hint: str, open_trades: list):
         ts = None
     elif label == "Pre-Trade Verdict":
         has = bool(st.session_state.get("_sim_verdict"))
+        ts = None
+    elif label == "QIR Debate Payload":
+        has = bool(st.session_state.get("_qir_debate_signals_text"))
         ts = None
     else:
         val = st.session_state.get(ts_key) if ts_key else None
