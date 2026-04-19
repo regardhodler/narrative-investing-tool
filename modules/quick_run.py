@@ -1892,6 +1892,7 @@ def _render_qir_dashboard() -> None:
         _signal_breakdown_block = ""
         _ll_anchored_block = ""
         _hmm_block        = ""
+        _shadow_block     = ""
         _gex_block        = ""
         _lean_card        = ""
         _fast_setups_html = ""
@@ -2683,7 +2684,78 @@ def _render_qir_dashboard() -> None:
                     f'</div>'
                     f'</div>'
                 )
-            _kelly_block       = _kelly_html        # structural sizing → MEDIUM
+            # ── Shadow Kelly pill (SPX price-brain sibling) ──────────────────
+            _shadow_kelly_html = ""
+            try:
+                from services.portfolio_sizing import compute_shadow_kelly as _compute_shadow_kelly
+                from services.hmm_shadow import load_current_shadow_state as _sh_load_ks
+                from services.hmm_regime import get_state_color as _sh_get_color
+                _sh_state_for_kelly = _sh_load_ks()
+                _sh_label_for_kelly = getattr(_sh_state_for_kelly, "state_label", None)
+                _sh_crash_for_kelly = getattr(_sh_state_for_kelly, "crash_prob_10pct", 0.0) or 0.0
+
+                _skly = _compute_shadow_kelly(
+                    _conviction_score,
+                    st.session_state.get("_fear_composite") or {},
+                    st.session_state.get("_regime_context") or {},
+                    options_score=(st.session_state.get("_options_flow_context") or {}).get("options_score"),
+                    tactical_score=(st.session_state.get("_tactical_context") or {}).get("tactical_score"),
+                    shadow_state_label=_sh_label_for_kelly,
+                    shadow_crash_prob=_sh_crash_for_kelly,
+                )
+                _skly_half = _skly["kelly_half_pct"]
+                _skly_full = _skly["kelly_full_pct"]
+                _skly_rmul = _skly.get("shadow_regime_multiplier", 1.0)
+                _skly_cpen = _skly.get("crash_prob_penalty_pct", 0.0)
+                _skly_col  = "#22c55e" if _skly_half >= 8 else "#f59e0b" if _skly_half >= 4 else "#94a3b8"
+                _skly_delta = round(_skly_half - _kly_half, 1) if _kly_viable else None
+                _skly_delta_txt = ""
+                if _skly_delta is not None:
+                    _d_col = "#22c55e" if _skly_delta > 0 else ("#ef4444" if _skly_delta < 0 else "#64748b")
+                    _skly_delta_txt = (
+                        f'<span style="font-size:9px;color:{_d_col};font-weight:700;">'
+                        f'Δ vs QIR Kelly: {_skly_delta:+.1f}pp</span>'
+                    )
+                _sh_label_display = _sh_label_for_kelly or "N/A"
+                _shadow_kelly_html = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-left:3px solid {_skly_col};'
+                    f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+                    f'<span style="font-size:12px;color:#94a3b8;font-weight:800;letter-spacing:0.08em;">'
+                    f'SHADOW KELLY</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">SPX PRICE BRAIN</span>'
+                    f'{_skly_delta_txt}'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:4px;">'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">HALF-KELLY</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:{_skly_col};">{_skly_half}%</div>'
+                    f'<div style="font-size:9px;color:#475569;">portfolio</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">SHADOW REGIME</div>'
+                    f'<div style="font-size:14px;font-weight:900;color:{_sh_get_color(_sh_label_display)};">'
+                    f'{_sh_label_display}</div>'
+                    f'<div style="font-size:9px;color:#475569;">×{_skly_rmul:.2f} multiplier</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;margin-bottom:1px;">CRASH PENALTY</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:#94a3b8;">−{_skly_cpen:.0f}%</div>'
+                    f'<div style="font-size:9px;color:#475569;">from 30d crash prob</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="font-size:8px;color:#334155;line-height:1.5;">'
+                    f'Same Bayesian p + win/loss b as QIR Kelly. Differs only in the final regime multiplier '
+                    f'(SPX-based 6-regime map) and a crash-probability penalty from the Shadow backtest. '
+                    f'Compare side-by-side — disagreement is informative.'
+                    f'</div>'
+                    f'</div>'
+                )
+            except Exception:
+                _shadow_kelly_html = ""
+
+            _kelly_block       = _kelly_html + _shadow_kelly_html   # structural sizing → MEDIUM
             _fast_setups_html  = _triple_kelly_html  # Buy/Short Setup → FAST
             _bimodal_block     = ""
 
@@ -3685,6 +3757,206 @@ def _render_qir_dashboard() -> None:
             )
 
 
+        # ── Shadow HMM Brain (SPX price brain) ────────────────────────────────
+        _shadow_block = ""
+        try:
+            from services.hmm_shadow import (
+                load_current_shadow_state, load_shadow_brain,
+            )
+            from services.hmm_regime import (
+                get_state_color, get_state_arrow, get_state_tips,
+            )
+            _sh_s = load_current_shadow_state()
+            _sh_b = load_shadow_brain()
+            if _sh_s is not None and _sh_b is not None:
+                _sh_col = get_state_color(_sh_s.state_label)
+                _sh_arr = get_state_arrow(_sh_s.state_label)
+                _sh_conf = int(_sh_s.confidence * 100)
+                _sh_pers = _sh_s.persistence
+                _sh_z = getattr(_sh_s, "ll_zscore", 0.0) or 0.0
+                _sh_ci = getattr(_sh_s, "ci_pct", 0.0) or 0.0
+                _sh_crash = getattr(_sh_s, "crash_prob_10pct", 0.0) or 0.0
+                _sh_exp_dd = getattr(_sh_s, "expected_drawdown_pct", 0.0) or 0.0
+                _sh_ret = getattr(_sh_s, "daily_return_pct", 0.0) or 0.0
+
+                _sh_trained = _sh_b.trained_at[:10] if _sh_b.trained_at else "—"
+                _sh_retrain_due = False
+                try:
+                    from datetime import datetime as _sh_dt_mod, timezone as _sh_tz
+                    _sh_dt = _sh_dt_mod.fromisoformat(_sh_b.trained_at.replace("Z", "+00:00"))
+                    _sh_days_since = (_sh_dt_mod.now(_sh_tz.utc) - _sh_dt).days
+                    _sh_retrain_due = _sh_days_since >= 90
+                except Exception:
+                    pass
+                _sh_retrain_badge = (
+                    f'<span style="background:#92400e;color:#fcd34d;font-size:8px;'
+                    f'font-weight:700;padding:1px 6px;border-radius:3px;'
+                    f'letter-spacing:0.05em;margin-left:6px;">RETRAIN DUE</span>'
+                    if _sh_retrain_due else ""
+                )
+                _sh_stale_badge = (
+                    f'<span style="background:#1e293b;color:#64748b;font-size:7px;'
+                    f'font-weight:700;padding:1px 5px;border-radius:3px;margin-left:6px;">'
+                    f'as of {getattr(_sh_s, "_stale_date", "?")} · run QIR to refresh</span>'
+                    if getattr(_sh_s, "_is_stale", False) else ""
+                )
+
+                _sh_ll_col = "#22c55e" if _sh_z > -0.26 else ("#f59e0b" if _sh_z > -0.80 else ("#ef4444" if _sh_z > -1.194 else "#a855f7"))
+                _sh_ll_label = "Normal" if _sh_z > -0.26 else ("Stress" if _sh_z > -0.80 else ("CRISIS GATE" if _sh_z > -1.194 else "BEYOND"))
+                _sh_crash_col = "#22c55e" if _sh_crash < 0.20 else ("#f59e0b" if _sh_crash < 0.55 else "#ef4444")
+                _sh_ci_col = "#22c55e" if _sh_ci < 22 else ("#f59e0b" if _sh_ci < 67 else "#ef4444")
+
+                _sh_trans_row = _sh_b.transmat[_sh_s.state_idx]
+                def _sh_fmt_prob(v):
+                    pct = v * 100
+                    if pct >= 1:
+                        return f"{pct:.0f}%"
+                    elif pct > 0:
+                        return "<1%"
+                    return "0%"
+                _sh_trans_cells = "".join(
+                    f'<span style="font-size:9px;color:#64748b;">'
+                    f'{_sh_b.state_labels[j][:4]} '
+                    f'<span style="color:#94a3b8;">{_sh_fmt_prob(_sh_trans_row[j])}</span>'
+                    f'</span>  '
+                    for j in range(_sh_b.k_regimes)
+                )
+
+                _shadow_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-left:3px solid {_sh_col};border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                    f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">'
+                    f'SHADOW BRAIN <span style="color:#64748b;font-size:10px;">(SPX price · 1960→now)</span>'
+                    f'</span>'
+                    f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                    f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">⚡ PRICE-RETURN REGIME</span>'
+                    f'{_sh_retrain_badge}{_sh_stale_badge}'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">REGIME</div>'
+                    f'<div style="font-size:20px;font-weight:900;color:{_sh_col};'
+                    f'font-family:\'JetBrains Mono\',Consolas,monospace;">{_sh_arr}</div>'
+                    f'<div style="font-size:11px;font-weight:700;color:{_sh_col};">{_sh_s.state_label}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">CONFIDENCE</div>'
+                    f'<div style="font-size:28px;font-weight:900;color:#94a3b8;">{_sh_conf}%</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:2px;">PERSISTENCE</div>'
+                    f'<div style="font-size:28px;font-weight:900;color:#94a3b8;">{_sh_pers}d</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">'
+                    f'→ {_sh_trans_cells}'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:3px;">'
+                    f'{_sh_b.k_regimes}-regime MarkovRegression · trained {_sh_trained} · '
+                    f'window {_sh_b.training_start}–{_sh_b.training_end}</div>'
+                    f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;'
+                    f'margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">LOG-LIKELIHOOD</div>'
+                    f'<div style="font-size:16px;font-weight:900;color:{_sh_ll_col};">{_sh_z:+.2f}z</div>'
+                    f'<div style="font-size:9px;color:{_sh_ll_col};font-weight:600;">{_sh_ll_label}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">CI%</div>'
+                    f'<div style="font-size:16px;font-weight:900;color:{_sh_ci_col};">{_sh_ci:.0f}%</div>'
+                    f'<div style="font-size:9px;color:#64748b;">anchor {_sh_b.ci_anchor:.3f}</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">CRASH PROB 30D</div>'
+                    f'<div style="font-size:16px;font-weight:900;color:{_sh_crash_col};">'
+                    f'{_sh_crash*100:.0f}%</div>'
+                    f'<div style="font-size:9px;color:#64748b;">≥10% drawdown</div>'
+                    f'</div>'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">EXP DRAWDOWN</div>'
+                    f'<div style="font-size:16px;font-weight:900;color:#94a3b8;">'
+                    f'{_sh_exp_dd:+.1f}%</div>'
+                    f'<div style="font-size:9px;color:#64748b;">if triggered</div>'
+                    f'</div>'
+                    f'</div>'
+                    f'<div style="margin-top:6px;padding-top:6px;border-top:1px solid #1e293b;'
+                    f'font-size:10px;color:#64748b;line-height:1.6;">'
+                    f'<span style="color:{_sh_col};font-weight:700;">Today: </span>'
+                    f'SPX {_sh_ret:+.2f}% · {get_state_tips(_sh_s.state_label)}</div>'
+                    f'<div style="margin-top:8px;padding:6px 10px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:8px;color:#1e293b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:4px;">WHY A SECOND BRAIN</div>'
+                    f'<div style="font-size:8px;color:#1e3a5f;line-height:1.7;">'
+                    f'The credit brain above sees spreads, yields, VIX — not price. '
+                    f'The shadow brain sees only SPX log returns. '
+                    f'<span style="color:#1e4a7a;">Agreement</span> = high-conviction regime call. '
+                    f'<span style="color:#1e4a7a;">Disagreement</span> is itself the signal '
+                    f'(credit calm + price panic = liquidity flush; credit stress + price calm = slow-burn late cycle).'
+                    f'</div></div>'
+                    f'<div style="margin-top:6px;padding:6px 10px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:8px;color:#1e293b;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:4px;">ZONE MAP (anchor {_sh_b.ci_anchor:.3f})</div>'
+                    f'<div style="font-size:8px;line-height:2.0;">'
+                    f'<span style="color:#22c55e;font-weight:700;">Zone 1</span> '
+                    f'<span style="color:#1e3a5f;">Normal &nbsp; CI &lt; 22% &nbsp; z &gt; -0.26 &nbsp; conviction signals suppressed</span><br>'
+                    f'<span style="color:#f59e0b;font-weight:700;">Zone 2</span> '
+                    f'<span style="color:#1e3a5f;">Stress &nbsp; CI 22-67% &nbsp; z -0.26 to -0.80 &nbsp; signals shown as context</span><br>'
+                    f'<span style="color:#ef4444;font-weight:700;">Zone 3</span> '
+                    f'<span style="color:#1e3a5f;">Crisis &nbsp; CI &ge; 67% &nbsp; z &lt; -0.80 &nbsp; 95% hit rate &middot; 16% days flagged</span><br>'
+                    f'<span style="color:#a855f7;font-weight:700;">Zone 4</span> '
+                    f'<span style="color:#1e3a5f;">Beyond &nbsp; CI &gt; 100% &nbsp; z &lt; -1.19 &nbsp; beyond training range</span>'
+                    f'</div>'
+                    f'<div style="font-size:7px;color:#1e293b;margin-top:4px;line-height:1.5;">'
+                    f'89% of Zone 3 calls are false alarms standalone. '
+                    f'Mitigate: require primary brain agreement before acting on crisis calls.</div>'
+                    f'</div>'
+                    f'</div>'
+                )
+            elif _sh_b is None:
+                _shadow_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">SHADOW BRAIN</div>'
+                    f'<div style="font-size:11px;color:#ef444466;">'
+                    f'Not trained yet — run <span style="font-family:monospace;">python tools/train_hmm_shadow.py</span> '
+                    f'then <span style="font-family:monospace;">python tools/backtest_shadow_ci.py</span></div>'
+                    f'</div>'
+                )
+            else:
+                _shadow_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">SHADOW BRAIN</div>'
+                    f'<div style="font-size:11px;color:#f59e0b;">'
+                    f'Brain loaded but no state scored yet — run '
+                    f'<span style="font-family:monospace;">python -c "from services.hmm_shadow import score_current_shadow_state; score_current_shadow_state()"</span>'
+                    f'</div></div>'
+                )
+        except Exception as _sh_exc:
+            import traceback as _sh_tb
+            _shadow_block = (
+                f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:11px;color:#ef4444;font-weight:700;">SHADOW BRAIN ERROR</div>'
+                f'<pre style="font-size:9px;color:#f87171;white-space:pre-wrap;">'
+                f'{"".join(_sh_tb.format_exception(type(_sh_exc), _sh_exc, _sh_exc.__traceback__))}'
+                f'</pre></div>'
+            )
+
+
         # ── Bottom Watch card (always visible; greyed when CI% < 22) ───────────
         _bw_block = ""
         # _ci in outer scope (same formula as inside _build_ll_anchored_block)
@@ -4219,6 +4491,7 @@ def _render_qir_dashboard() -> None:
         f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
         f'{_medium_html}'
         f'{_hmm_block if _populated else ""}'
+        f'{_shadow_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
         f'{_bw_block if _populated else ""}'
         # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
@@ -6344,6 +6617,169 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             st.error("hmmlearn not installed. Run: pip install hmmlearn")
         except Exception as _hmm_e:
             st.error(f"HMM section error: {_hmm_e}")
+
+    # ── Shadow Brain (SPX price) — maintenance section ────────────────────────
+    with st.expander("🧠 Shadow Brain (SPX price)", expanded=False):
+        try:
+            from services.hmm_shadow import (
+                load_shadow_brain as _load_sh_brain,
+                train_shadow_hmm as _train_sh,
+                score_current_shadow_state as _score_sh,
+            )
+            from services.hmm_regime import get_state_color as _sh_col
+            _shb = _load_sh_brain()
+            if _shb:
+                _shb_trained = _shb.trained_at[:10]
+                _shb_bic_txt = f"{_shb.bic:,.0f}" if _shb.bic else "—"
+                st.markdown(
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                    f'padding:10px 14px;margin-bottom:10px;">'
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">CURRENT BRAIN</div>'
+                    f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">STATES</div>'
+                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_shb.k_regimes}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">BIC</div>'
+                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_shb_bic_txt}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">TRAINED</div>'
+                    f'<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-top:4px;">{_shb_trained}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">WINDOW</div>'
+                    f'<div style="font-size:9px;font-weight:700;color:#64748b;margin-top:4px;">{_shb.training_start}<br>→ {_shb.training_end}</div></div>'
+                    f'</div>'
+                    f'<div style="font-size:9px;color:#475569;">State labels: '
+                    f'{" | ".join(_shb.state_labels)}</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">'
+                    f'Features: ^GSPC daily log returns (single-series · {_shb.n_obs or "?"} obs)</div>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:2px;">'
+                    f'Model: MarkovRegression · switching_variance=True · CI anchor {_shb.ci_anchor:.4f}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                # Transition matrix
+                _shtm = _shb.transmat
+                _shn  = _shb.k_regimes
+                _sh_rows_html = ""
+                for i in range(_shn):
+                    def _sh_fmt_tm(v):
+                        pct = v * 100
+                        if pct >= 1:
+                            return f"{pct:.1f}%"
+                        elif pct > 0:
+                            return "<1%"
+                        return "0%"
+                    _sh_row_cells = "".join(
+                        f'<td style="padding:3px 8px;font-size:10px;color:#94a3b8;'
+                        f'background:rgba(255,255,255,{float(_shtm[i][j])*0.15:.2f});'
+                        f'text-align:center;">{_sh_fmt_tm(_shtm[i][j])}</td>'
+                        for j in range(_shn)
+                    )
+                    _shs_col = _sh_col(_shb.state_labels[i])
+                    _sh_rows_html += (
+                        f'<tr><td style="padding:3px 8px;font-size:9px;color:{_shs_col};'
+                        f'font-weight:700;white-space:nowrap;">{_shb.state_labels[i]}</td>'
+                        f'{_sh_row_cells}</tr>'
+                    )
+                _sh_col_headers = "".join(
+                    f'<th style="padding:3px 8px;font-size:8px;color:#475569;'
+                    f'font-weight:700;text-align:center;">{lbl[:4]}</th>'
+                    for lbl in _shb.state_labels
+                )
+                st.markdown(
+                    f'<div style="font-size:9px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">TRANSITION MATRIX</div>'
+                    f'<table style="border-collapse:collapse;background:#0a0a14;'
+                    f'border-radius:4px;overflow:hidden;">'
+                    f'<thead><tr><th style="padding:3px 8px;"></th>{_sh_col_headers}</tr></thead>'
+                    f'<tbody>{_sh_rows_html}</tbody></table>'
+                    f'<div style="font-size:9px;color:#334155;margin-top:4px;">'
+                    f'Row = current state → columns = next-day probability</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div style="color:#ef444466;font-size:12px;padding:8px 0;">'
+                    'Shadow brain not trained yet. Click Retrain to build the SPX model.</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # ── Retrain due check ────────────────────────────────────────
+            _sh_retrain_due = False
+            _sh_days_since  = None
+            if _shb:
+                try:
+                    from datetime import datetime, timezone as _tz
+                    _sh_dt = datetime.fromisoformat(_shb.trained_at.replace("Z", "+00:00"))
+                    _sh_days_since = (datetime.now(_tz.utc) - _sh_dt).days
+                    _sh_retrain_due = _sh_days_since >= 90
+                except Exception:
+                    pass
+
+            if _sh_retrain_due:
+                st.markdown(
+                    f'<div style="background:#1a0a00;border:1px solid #f59e0b;border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;">'
+                    f'<span style="font-size:18px;">⏰</span>'
+                    f'<div>'
+                    f'<div style="font-size:11px;font-weight:700;color:#f59e0b;">Quarterly retrain due</div>'
+                    f'<div style="font-size:10px;color:#92400e;">'
+                    f'Last trained {_sh_days_since} days ago — click Retrain Shadow to refresh</div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+            _sh_retrain_label = "🔄 Retrain Shadow" if not _sh_retrain_due else "🔄 Retrain Shadow ⚠️"
+            _sh_retrain_help = (
+                f"Quarterly retrain due — {_sh_days_since}d since last train"
+                if _sh_retrain_due else
+                "Fit MarkovRegression on ^GSPC 1960→now (~2–5 min), then recalibrate CI anchor + crash bins."
+            )
+
+            _shc1, _shc2 = st.columns([1, 2])
+            with _shc1:
+                if st.button(_sh_retrain_label, key="btn_shadow_retrain", use_container_width=True,
+                             help=_sh_retrain_help, type="primary" if _sh_retrain_due else "secondary"):
+                    try:
+                        with st.spinner("Fitting MarkovRegression on ^GSPC 1960→now..."):
+                            _sh_new_brain = _train_sh()
+                        with st.spinner("Calibrating CI anchor + crash bins on full history..."):
+                            import subprocess, sys as _sys
+                            _cp = subprocess.run(
+                                [_sys.executable, "tools/backtest_shadow_ci.py"],
+                                capture_output=True, text=True,
+                            )
+                            if _cp.returncode != 0 and "calibration written" not in (_cp.stdout or ""):
+                                st.warning(f"Calibration exit code {_cp.returncode} — check console. stderr: {_cp.stderr[:400]}")
+                        with st.spinner("Scoring today's state..."):
+                            _sh_new_state = _score_sh(log_to_history=True)
+                        _sh_lbl = _sh_new_state.state_label if _sh_new_state else "unknown"
+                        st.toast(
+                            f"✅ Shadow retrained — {_sh_new_brain.k_regimes} regimes "
+                            f"(BIC {_sh_new_brain.bic:,.0f}) · Today: {_sh_lbl}",
+                            icon="🧠",
+                        )
+                        st.rerun()
+                    except Exception as _se:
+                        st.error(f"Shadow retrain failed: {_se}")
+            with _shc2:
+                if st.button("📍 Score Today (Shadow)", key="btn_shadow_score", use_container_width=True,
+                             help="Extend the fitted model with today's return and log to history (no refit)."):
+                    if _shb is None:
+                        st.warning("Train the Shadow brain first (Retrain Shadow).")
+                    else:
+                        with st.spinner("Scoring today's Shadow state..."):
+                            _sh_ts = _score_sh(log_to_history=True)
+                            if _sh_ts:
+                                st.toast(
+                                    f"📍 {_sh_ts.state_label} · {int(_sh_ts.confidence*100)}% confidence "
+                                    f"· {_sh_ts.persistence}d persistence",
+                                    icon="🧠",
+                                )
+                                st.rerun()
+                            else:
+                                st.error("Shadow scoring failed — check console for details.")
+        except ImportError:
+            st.error("statsmodels not installed. Run: pip install statsmodels>=0.14.0")
+        except Exception as _shm_e:
+            st.error(f"Shadow section error: {_shm_e}")
 
     # ── Data Flow Legend ───────────────────────────────────────────────────────
     with st.expander("📊 Data Flow", expanded=False):

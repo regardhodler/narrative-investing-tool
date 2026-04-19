@@ -1,0 +1,100 @@
+[
+  {
+    "date": "2026-04-18",
+    "state_idx": 3,
+    "state_label": "Mild Bear",
+    "state_probabilities": [
+      0.0214,
+      0.0786,
+      0.1504,
+      0.7141,
+      0.0341,
+      0.0014
+    ],
+    "confidence": 0.7141,
+    "persistence": 24,
+    "daily_return_pct": 1.1969,
+    "log_likelihood": -1.830595,
+    "ll_zscore": -0.6353,
+    "ci_pct": 141.87,
+    "crash_prob_10pct": 0.0925,
+    "expected_drawdown_pct": -15.7,
+    "entropy": 0.5201,
+    "transition_risk_1m": 0.5329,
+    "transition_risk_3m": 0.6953,
+    "transition_risk_6m": 0.7647,
+    "forecast_1m": [
+      0.1499,
+      0.0264,
+      0.2631,
+      0.4671,
+      0.0785,
+      0.015
+    ],
+    "forecast_3m": [
+      0.2472,
+      0.0331,
+      0.3476,
+      0.3047,
+      0.0517,
+      0.0157
+    ],
+    "forecast_6m": [
+      0.2899,
+      0.036,
+      0.3841,
+      0.2353,
+      0.0403,
+      0.0144
+    ]
+  },
+  {
+    "date": "2026-04-19",
+    "state_idx": 3,
+    "state_label": "Mild Bear",
+    "state_probabilities": [
+      0.0214,
+      0.0786,
+      0.1504,
+      0.7141,
+      0.0341,
+      0.0014
+    ],
+    "confidence": 0.7141,
+    "persistence": 24,
+    "daily_return_pct": 1.1969,
+    "log_likelihood": -1.830595,
+    "ll_zscore": -0.6353,
+    "ci_pct": 53.21,
+    "crash_prob_10pct": 0.0585,
+    "expected_drawdown_pct": -14.61,
+    "entropy": 0.5201,
+    "transition_risk_1m": 0.5329,
+    "transition_risk_3m": 0.6953,
+    "transition_risk_6m": 0.7647,
+    "forecast_1m": [
+      0.1499,
+      0.0264,
+      0.2631,
+      0.4671,
+      0.0785,
+      0.015
+    ],
+    "forecast_3m": [
+      0.2472,
+      0.0331,
+      0.3476,
+      0.3047,
+      0.0517,
+      0.0157
+    ],
+    "forecast_6m": [
+      0.2899,
+      0.036,
+      0.3841,
+      0.2353,
+      0.0403,
+      0.0144
+    ]
+  }
+]
