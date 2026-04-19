@@ -806,6 +806,11 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
     # ── Signal 2: Gamma Zone (weight 1.5) ─────────────────────────────────────
     sig2_score    = 0.0
     gamma_display = "N/A (neutral)"
+    _gex_delta = 0.0
+    _gex_call_wall = None
+    _gex_put_wall = None
+    _gex_flip = None
+    _gex_total = 0.0
     if gamma_data:
         zone = gamma_data.get("zone", "")
         if "Positive" in zone:
@@ -814,9 +819,14 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         elif "Negative" in zone:
             sig2_score    = -0.6
             gamma_display = "Negative (amplifying)"
-        gflip = gamma_data.get("gamma_flip")
-        if gflip and spot_price:
-            gamma_display += f" · flip ${gflip:.0f}"
+        _gex_delta = float(gamma_data.get("dealer_net_delta", 0.0) or 0.0)
+        _gex_call_wall = gamma_data.get("call_wall")
+        _gex_put_wall = gamma_data.get("put_wall")
+        _gex_flip = gamma_data.get("gamma_flip")
+        _gex_total = float(gamma_data.get("total_gex", 0.0) or 0.0)
+        if _gex_flip and spot_price:
+            gamma_display += f" · flip ${float(_gex_flip):.0f}"
+        gamma_display += f" · Δ {_gex_delta:+.3f}"
 
     # ── Signal 3: IV Skew (weight 2.0 / VIX-adaptive) ────────────────────────
     sig3_score   = 0.0
@@ -926,11 +936,55 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         except Exception:
             pass
 
-    # ── Aggregate ─────────────────────────────────────────────────────────────
+    # ── Aggregate (base score) ───────────────────────────────────────────────
     scores  = [sig1_score, sig2_score, sig3_score, sig4_score]
     weights = [weights_dict["pc"], weights_dict["gamma"], weights_dict["skew"], weights_dict["unusual"]]
-    agg     = float(np.average(scores, weights=weights))
-    options_score = int(round((agg + 1.0) * 50))
+    agg_base = float(np.average(scores, weights=weights))
+
+    # ── Dynamic GEX overlay (zone strength + dealer delta + wall asymmetry) ──
+    # Keep legacy score as base; GEX only modulates conviction and direction.
+    _overlay_points = 0.0
+    _agg_final = agg_base
+    if gamma_data and spot_price and spot_price > 0:
+        _zone = str(gamma_data.get("zone", ""))
+        _zone_sign = 1.0 if "Positive" in _zone else (-1.0 if "Negative" in _zone else 0.0)
+        _zone_strength = float(np.tanh(abs(_gex_total) / 1500.0))  # normalize total GEX magnitude
+
+        # Positive gamma dampens edge; negative gamma amplifies edge.
+        _edge = agg_base
+        if _zone_sign > 0:
+            _edge_adj = _edge * (1.0 - 0.25 * _zone_strength)
+        elif _zone_sign < 0:
+            _edge_adj = _edge * (1.0 + 0.35 * _zone_strength)
+        else:
+            _edge_adj = _edge
+
+        # Wall asymmetry: put wall closer than call wall = bullish support bias.
+        _wall_bias = 0.0
+        if _gex_call_wall and _gex_put_wall:
+            _d_call = abs(float(_gex_call_wall) - spot_price)
+            _d_put = abs(float(_gex_put_wall) - spot_price)
+            _den = _d_call + _d_put
+            if _den > 1e-9:
+                _wall_bias = float((_d_call - _d_put) / _den)
+
+        _dir_nudge = 0.12 * float(np.tanh(3.0 * _clamp_of(_gex_delta))) + 0.08 * _clamp_of(_wall_bias)
+
+        # Near flip, damp conviction slightly (regime-switch risk is higher).
+        _flip_dampen = 1.0
+        if _gex_flip:
+            _flip_dist_pct = abs(float(_gex_flip) - spot_price) / spot_price
+            _flip_prox = _clamp_of(1.0 - (_flip_dist_pct / 0.02))  # within ~2%
+            _flip_dampen = 1.0 - 0.20 * max(0.0, _flip_prox)
+
+        _agg_final = _clamp_of((_edge_adj + _dir_nudge) * _flip_dampen)
+
+        # Cap overlay impact so GEX cannot dominate the base options flow score.
+        _overlay_points = max(-10.0, min(10.0, (_agg_final - agg_base) * 50.0))
+        _agg_final = _clamp_of(agg_base + _overlay_points / 50.0)
+        gamma_display += f" · GEX adj {_overlay_points:+.1f}pts"
+
+    options_score = int(round((_agg_final + 1.0) * 50))
     options_score = max(0, min(100, options_score))
 
     if options_score >= 65:
@@ -959,12 +1013,15 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         "action_bias":   action_bias,
         "signals":       signal_rows,
         "pc_ratio":      round(pc_ratio, 3),
-        "raw_score":     round(agg, 3),
+        "raw_score":     round(_agg_final, 3),
+        "raw_score_base": round(agg_base, 3),
+        "gex_overlay_points": round(_overlay_points, 2),
         "vix_level":     round(vix, 1),
         "vix_regime":    vix_regime,
         "n_pc_hist":     n_pc,
         "n_skew_hist":   _n_skew,
-        "scoring_mode":  "z-score adaptive" if (n_pc >= 5) else "static (warming up)",
+        "scoring_mode":  ("z-score adaptive + dynamic gex overlay" if (n_pc >= 5)
+                           else "static (warming up) + dynamic gex overlay"),
     }
 
 
@@ -1044,5 +1101,13 @@ def run_quick_options_flow(use_claude: bool = False, model: str | None = None) -
         "put_iv":   [strike_map[s]["put_iv"]   for s in strikes],
         "expiries": selected,
     }
-    # Gamma skipped in background thread (doubly cached, unreliable) — scores as neutral
-    return _build_options_flow_dashboard(spy_chain, gamma_data=None)
+    # Add GEX overlay if available; bypass Streamlit cache wrapper in background thread.
+    gamma_data = None
+    try:
+        from services.market_data import fetch_gex_profile as _fgp
+        _fgp_fn = getattr(_fgp, "__wrapped__", _fgp)
+        gamma_data = _fgp_fn("SPY", 2)
+    except Exception:
+        gamma_data = None
+
+    return _build_options_flow_dashboard(spy_chain, gamma_data=gamma_data)

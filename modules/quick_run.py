@@ -4398,7 +4398,7 @@ def _render_qir_dashboard() -> None:
             _medium_parts.append(_verdict_html)
         if _lean_card:
             _medium_parts.append(_lean_card)
-        _medium_parts.append(_gex_block + _signal_breakdown_block)
+        _medium_parts.append(_signal_breakdown_block)
         _medium_html = "".join(_medium_parts)
 
     # ── Crash pattern alert ──────────────────────────────────────────────
@@ -6385,6 +6385,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     f'</div>',
                     unsafe_allow_html=True,
                 )
+                if _gex_block:
+                    st.markdown(_gex_block, unsafe_allow_html=True)
                 _of_sigs = _of_ctx.get("signals", [])
                 if _of_sigs:
                     _of_sigs_html = ""
