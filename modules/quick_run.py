@@ -3229,7 +3229,7 @@ def _render_qir_dashboard() -> None:
                 + _build_early_warning_pill()
                 +
                 # Footer
-                f'<div style="font-size:7px;color:#475569;margin-top:4px;line-height:1.4;">{_explain}</div>'
+                f'<div style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.5;">{_explain}</div>'
                 f'</div>'
             )
         
@@ -3922,6 +3922,19 @@ def _render_qir_dashboard() -> None:
                     f'letter-spacing:0.08em;margin-bottom:3px;">LOG-LIKELIHOOD</div>'
                     f'<div style="font-size:16px;font-weight:900;color:{_sh_ll_col};">{_sh_z:+.2f}z</div>'
                     f'<div style="font-size:9px;color:{_sh_ll_col};font-weight:600;">{_sh_ll_label}</div>'
+                    # LL progress bar (similar to LL-anchored crisis detection)
+                    f'<div style="position:relative;height:6px;background:#0a0f1a;border-radius:3px;'
+                    f'margin-top:4px;overflow:hidden;">'
+                    # Fill from -1.194 (left) to 0 (right) on z-score scale
+                    f'<div style="position:absolute;left:0;top:0;height:100%;background:#0a0f1a;'
+                    f'width:calc(((-1.194 - {_sh_z}) / 1.194) * 100%);border-radius:3px;"></div>'
+                    f'<div style="position:absolute;left:0;top:0;height:100%;background:{_sh_ll_col};'
+                    f'width:calc(((-1.194 + {_sh_z}) / 1.194) * 100%);border-radius:3px;"></div>'
+                    # Gate markers: -0.26 (Normal), -0.80 (Stress), -1.194 (Crisis)
+                    f'<div style="position:absolute;left:21.8%;top:0;width:1px;height:100%;background:#334155;"></div>'
+                    f'<div style="position:absolute;left:67.2%;top:0;width:1px;height:100%;background:#334155;"></div>'
+                    f'<div style="position:absolute;left:100%;top:0;width:1px;height:100%;background:#64748b;"></div>'
+                    f'</div>'
                     f'</div>'
                     f'<div>'
                     f'<div style="font-size:8px;color:#64748b;font-weight:700;'
