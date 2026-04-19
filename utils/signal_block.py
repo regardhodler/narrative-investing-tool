@@ -159,6 +159,40 @@ def build_macro_block() -> str:
             f"Tactical regime: {tac.get('label','?')} | score {tac.get('tactical_score','?')}/100"
         )
 
+    # ── Crisis engines: HMM learn brain + shadow brain ───────────────────────
+    llc = st.session_state.get("_ll_anchored_crisis") or {}
+    hmm_label = llc.get("hmm_state") or rc.get("regime", "?") if rc else llc.get("hmm_state", "?")
+    hmm_conf = llc.get("hmm_conf")
+    hmm_persist = llc.get("hmm_persistence")
+    hmm_llz = llc.get("ll_zscore")
+    hmm_ci = llc.get("ci_pct")
+    if hmm_label or hmm_llz is not None:
+        _hmm_line = f"HMM learn brain: {hmm_label or '?'}"
+        if hmm_conf is not None:
+            _hmm_line += f" | confidence {float(hmm_conf)*100:.0f}%"
+        if hmm_persist is not None:
+            _hmm_line += f" | persistence {int(hmm_persist)}d"
+        if hmm_llz is not None:
+            _hmm_line += f" | ll_z {float(hmm_llz):+.2f}"
+        if hmm_ci is not None:
+            _hmm_line += f" | CI {float(hmm_ci):.1f}%"
+        lines.append(_hmm_line)
+
+    sh = st.session_state.get("_shadow_state_obj")
+    if sh is not None:
+        sh_label = getattr(sh, "state_label", "?")
+        sh_llz = getattr(sh, "ll_zscore", None)
+        sh_ci = getattr(sh, "ci_pct", None)
+        sh_crash = getattr(sh, "crash_prob_10pct", None)
+        _sh_line = f"HMM shadow brain: {sh_label or '?'}"
+        if sh_llz is not None:
+            _sh_line += f" | ll_z {float(sh_llz):+.2f}"
+        if sh_ci is not None:
+            _sh_line += f" | CI {float(sh_ci):.1f}%"
+        if sh_crash is not None:
+            _sh_line += f" | 30d crash prob>10% {float(sh_crash)*100:.0f}%"
+        lines.append(_sh_line)
+
     # ── VIX curve ─────────────────────────────────────────────────────────────
     vc = st.session_state.get("_vix_curve") or {}
     if vc:

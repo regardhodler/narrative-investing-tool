@@ -5439,6 +5439,41 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     )
                     _sig_parts.append(f"BLACK SWANS: {_bs_summary}")
 
+                # ── HMM + Shadow Brain context (explicitly include both brains) ──
+                _llc = st.session_state.get("_ll_anchored_crisis") or {}
+                _hmm_lbl = _llc.get("hmm_state", "") or (_rc.get("regime", "") if _rc else "")
+                _hmm_conf = _llc.get("hmm_conf", None)
+                _hmm_persist = _llc.get("hmm_persistence", None)
+                _hmm_llz = _llc.get("ll_zscore", None)
+                _hmm_ci = _llc.get("ci_pct", None)
+                _hmm_confirms = _llc.get("confirmations", []) or []
+                _shadow = st.session_state.get("_shadow_state_obj")
+                _shadow_lbl = getattr(_shadow, "state_label", "") if _shadow else ""
+                _shadow_llz = getattr(_shadow, "ll_zscore", None) if _shadow else None
+                _shadow_ci = getattr(_shadow, "ci_pct", None) if _shadow else None
+                _shadow_crash = getattr(_shadow, "crash_prob_10pct", None) if _shadow else None
+                _hmm_line = f"HMM LEARN BRAIN: {_hmm_lbl or '?'}"
+                if _hmm_conf is not None:
+                    _hmm_line += f" | confidence {float(_hmm_conf) * 100:.0f}%"
+                if _hmm_persist is not None:
+                    _hmm_line += f" | persistence {int(_hmm_persist)}d"
+                if _hmm_llz is not None:
+                    _hmm_line += f" | ll_z {float(_hmm_llz):+.2f}"
+                if _hmm_ci is not None:
+                    _hmm_line += f" | CI {float(_hmm_ci):.1f}%"
+                _sig_parts.append(_hmm_line)
+                if _hmm_confirms:
+                    _sig_parts.append("HMM CONFIRMATIONS: " + ", ".join(str(x) for x in _hmm_confirms[:4]))
+                if _shadow_lbl or _shadow_llz is not None:
+                    _sh_line = f"SHADOW BRAIN: {_shadow_lbl or '?'}"
+                    if _shadow_llz is not None:
+                        _sh_line += f" | ll_z {float(_shadow_llz):+.2f}"
+                    if _shadow_ci is not None:
+                        _sh_line += f" | CI {float(_shadow_ci):.1f}%"
+                    if _shadow_crash is not None:
+                        _sh_line += f" | 30d crash prob>{'{'}10%{'}'} {float(_shadow_crash) * 100:.0f}%"
+                    _sig_parts.append(_sh_line)
+
                 # ── Macro calendar context ────────────────────────────────
                 try:
                     from services.fed_forecaster import get_next_fomc, get_next_cpi, get_next_nfp
@@ -5462,6 +5497,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     _sig_parts.append(f"EARNINGS RISK: {', '.join(_er_parts)}")
 
                 _signals_text_for_debate = "\n\n".join(_sig_parts)
+                st.session_state["_qir_debate_signals_text"] = _signals_text_for_debate
                 _synopsis = _gen_synopsis(_signals_text_for_debate, use_claude=_use_claude, model=_cl_model)
                 _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
                     else ("🧠 Regard Mode" if _use_claude else "⚡ Freeloader Mode")
@@ -5530,6 +5566,53 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     st.info("ℹ️ No held positions with earnings in the next 21 days")
             except Exception as _er_e:
                 st.warning(f"⚠ Earnings Risk scan failed: {_er_e}")
+
+        # ── Debate payload refresh: include full QIR context after all rounds ──
+        try:
+            _dbt_parts = []
+            _snap_d = st.session_state.get("_portfolio_risk_snapshot") or {}
+            _risk_i = st.session_state.get("_risk_matrix_interpretation") or {}
+            if _snap_d:
+                _dbt_parts.append(
+                    "PORTFOLIO RISK SNAPSHOT: "
+                    f"beta {_snap_d.get('beta', '?')} | "
+                    f"delta {_snap_d.get('delta', '?')} | "
+                    f"open positions {_snap_d.get('n_open', '?')}"
+                )
+            if _risk_i:
+                _dbt_parts.append(
+                    "RISK MATRIX INTERPRETATION: "
+                    f"alert {_risk_i.get('alert_level', 'none')} | "
+                    f"{(_risk_i.get('summary', '') or '')[:240]}"
+                )
+            _er_live = st.session_state.get("_qir_earnings_risk") or []
+            if _er_live:
+                _dbt_parts.append(
+                    "EARNINGS RISK (live): " + ", ".join(
+                        f"{e['ticker']} in {e['days_away']}d"
+                        + (f" (±{e['expected_move_pct']:.1f}%)" if e.get("expected_move_pct") else "")
+                        for e in _er_live[:6]
+                    )
+                )
+            _llc2 = st.session_state.get("_ll_anchored_crisis") or {}
+            _shadow2 = st.session_state.get("_shadow_state_obj")
+            _dbt_parts.append(
+                "CRISIS ENGINES: "
+                f"HMM={_llc2.get('hmm_state', '?')} "
+                f"(ll_z={float(_llc2.get('ll_zscore', 0.0)):+.2f}, CI={float(_llc2.get('ci_pct', 0.0)):.1f}%) | "
+                f"Shadow={getattr(_shadow2, 'state_label', '?')} "
+                f"(ll_z={float(getattr(_shadow2, 'll_zscore', 0.0)):+.2f}, "
+                f"CI={float(getattr(_shadow2, 'ci_pct', 0.0)):.1f}%, "
+                f"crash>{'{'}10%{'}'}={float(getattr(_shadow2, 'crash_prob_10pct', 0.0))*100:.0f}%)"
+            )
+            _base_dbt = st.session_state.get("_qir_debate_signals_text", "")
+            _extra_dbt = "\n\n".join([p for p in _dbt_parts if p])
+            if _extra_dbt:
+                st.session_state["_qir_debate_signals_text"] = (
+                    (_base_dbt + "\n\n" + _extra_dbt) if _base_dbt else _extra_dbt
+                )[:12000]
+        except Exception:
+            pass
 
         # ── Store completion result for persistent display (outside button handler) ─
         _n_ok = sum(1 for v in _results.values() if v)
@@ -6013,7 +6096,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         _dbt_engine = _dbt_tier
         from services.claude_client import generate_adversarial_debate as _gen_dbt_sa
         from utils.signal_block import build_macro_block as _build_dbt_sa
-        _dbt_sigs = _build_dbt_sa()
+        _dbt_sigs = st.session_state.get("_qir_debate_signals_text") or _build_dbt_sa()
         if _dbt_sigs and _dbt_sigs != "NO_REGIME_DATA":
             with st.spinner("⚔️ Debate — Sir Doomburger 🐻 vs Sir Fukyerputs 🐂..."):
                 try:
