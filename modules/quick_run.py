@@ -4459,8 +4459,8 @@ def _render_qir_dashboard() -> None:
         f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
         f'{_medium_html}'
         f'{_hmm_block if _populated else ""}'
-        f'{_shadow_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
+        f'{_shadow_block if _populated else ""}'
         f'{_bw_block if _populated else ""}'
         # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
         f'</div>',
