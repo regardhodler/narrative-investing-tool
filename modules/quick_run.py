@@ -4713,43 +4713,15 @@ def render():
     # Ensure _gex_block is always defined
     if '_gex_block' not in locals():
         _gex_block = ""
+    # Don't render the Options Flow expander here — this block is for hidden AI context only.
+    # The visible Options Flow expander is rendered later in the QIR layout after Round 1 completes.
     if _of_ctx:
-        _os_val   = _of_ctx.get("options_score", 50)
-        _of_label = _of_ctx.get("label", "")
-        _of_bias  = _of_ctx.get("action_bias", "")
-        _of_color = "#22c55e" if _os_val >= 65 else ("#f59e0b" if _os_val >= 38 else "#ef4444")
-        _of_bg    = "#0c1a0c" if _os_val >= 65 else ("#1a1200" if _os_val >= 38 else "#1a0000")
-        with st.expander(f"\ud83d\udcca Options Flow \u2014 {_of_label} ({_os_val}/100)", expanded=True):
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'
-                f'<span style="background:{_of_color};color:black;font-weight:800;font-size:11px;'
-                f'padding:3px 10px;border-radius:4px;letter-spacing:0.06em;">{_of_label.upper()}</span>'
-                f'<span style="color:{_of_color};font-family:\'JetBrains Mono\',Consolas,monospace;'
-                f'font-size:12px;font-weight:700;">{_os_val}/100</span>'
-                f'<span style="color:{COLORS["text_dim"]};font-size:11px;">{_of_bias}</span>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            if _gex_block:
-                st.markdown(_gex_block, unsafe_allow_html=True)
-            _of_sigs = _of_ctx.get("signals", [])
-            if _of_sigs:
-                _of_sigs_html = ""
-                for _sr in _of_sigs:
-                    _sc = "#22c55e" if _sr["Score"] > 0.2 else ("#ef4444" if _sr["Score"] < -0.2 else "#94a3b8")
-                    _arrow = "\u25b2" if _sr["Score"] > 0.1 else ("\u25bc" if _sr["Score"] < -0.1 else "\u25c6")
-                    _of_sigs_html += (
-                        f'<div style="color:{_sc};font-family:\'JetBrains Mono\',Consolas,monospace;'
-                        f'font-size:11px;padding:1px 0;">{_arrow} {_sr["Signal"]}: '
-                        f'<span style="color:{COLORS["text"]}">{_sr["Value"]}</span>'
-                        f'<span style="color:#475569;"> ({_sr["Direction"]})</span></div>'
-                    )
-                st.markdown(f'<div style="margin-bottom:8px;">{_of_sigs_html}</div>', unsafe_allow_html=True)
-            _vix_lv = _of_ctx.get("vix_level", "?")
-            _vix_rg = _of_ctx.get("vix_regime", "Normal")
-            _mode   = _of_ctx.get("scoring_mode", "static")
-            _n_hist = _of_ctx.get("n_pc_hist", 0)
-            st.caption(f"VIX {_vix_lv} \u00b7 {_vix_rg} regime \u00b7 {_mode} \u00b7 {_n_hist} samples in history")
+        # store a minimal hidden snapshot for the AI context; avoid UI here
+        st.session_state.setdefault("_options_flow_ai_snapshot", {
+            "options_score": _of_ctx.get("options_score"),
+            "label": _of_ctx.get("label"),
+            "action_bias": _of_ctx.get("action_bias"),
+        })
 
     render_rr_score_mode_toggle(
         key="qir_rr_score_mode_ui",
