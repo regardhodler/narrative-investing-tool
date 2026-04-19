@@ -3754,6 +3754,8 @@ def _render_qir_dashboard() -> None:
             )
             _sh_s = load_current_shadow_state()
             _sh_b = load_shadow_brain()
+            if _sh_s is not None:
+                st.session_state["_shadow_state_obj"] = _sh_s
             if _sh_s is not None and _sh_b is not None:
                 _sh_col = get_state_color(_sh_s.state_label)
                 _sh_arr = get_state_arrow(_sh_s.state_label)
@@ -5608,6 +5610,20 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "CI_FORMULA":     "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
                         "ZONE_GUIDE":     "Normal<22% | Stress 22–67% | Crisis≥67% (100% precision) | Beyond>100%",
                         "KELLY_GUIDE":    "Half-Kelly shown — reduce by 50% in Zone 2+, 75% in Zone 3+",
+                        "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
+                        "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
+                        "SHADOW_LL_ZSCORE": getattr(st.session_state.get("_shadow_state_obj"), "ll_zscore", "?"),
+                        "SHADOW_CRASH_PROB_30D": f"{(getattr(st.session_state.get('_shadow_state_obj'), 'crash_prob_10pct', 0) or 0)*100:.0f}%",
+                        "SHADOW_GUIDE": "Shadow CI anchor 1.194 · Zone 3 at z<-0.80 · 95% hit rate · confirmation signal only",
+                        "BRAIN_AGREEMENT": (
+                            "AGREE" if (
+                                _ai_crisis.get("hmm_state", "").lower() in ("crisis", "stress", "late cycle") and
+                                getattr(st.session_state.get("_shadow_state_obj"), "state_label", "").lower() in ("crisis", "strong bear")
+                            ) or (
+                                _ai_crisis.get("hmm_state", "").lower() in ("bull", "neutral") and
+                                getattr(st.session_state.get("_shadow_state_obj"), "state_label", "").lower() in ("mild bull", "strong bull")
+                            ) else "DISAGREE — investigate divergence"
+                        ),
                     }
 
                     # ── Write per-module AI context blocks (read when navigating each module) ──
@@ -5675,6 +5691,18 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "confirmations": _ai_wyk.get("confirmations", []),
                         "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100",
                         "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis≥67% (100% precision) | Beyond>100%",
+                        "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
+                        "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
+                        "SHADOW_LL_ZSCORE": getattr(st.session_state.get("_shadow_state_obj"), "ll_zscore", "?"),
+                        "BRAIN_AGREEMENT": (
+                            "AGREE" if (
+                                _ai_crisis.get("hmm_state", "").lower() in ("crisis", "stress", "late cycle") and
+                                getattr(st.session_state.get("_shadow_state_obj"), "state_label", "").lower() in ("crisis", "strong bear")
+                            ) or (
+                                _ai_crisis.get("hmm_state", "").lower() in ("bull", "neutral") and
+                                getattr(st.session_state.get("_shadow_state_obj"), "state_label", "").lower() in ("mild bull", "strong bull")
+                            ) else "DISAGREE — investigate divergence"
+                        ),
                     }
 
                     # Whale / Activism context
