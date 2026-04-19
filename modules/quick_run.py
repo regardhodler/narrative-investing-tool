@@ -4398,7 +4398,7 @@ def _render_qir_dashboard() -> None:
             _medium_parts.append(_verdict_html)
         if _lean_card:
             _medium_parts.append(_lean_card)
-        _medium_parts.append(_signal_breakdown_block)
+        _medium_parts.append(_gex_block + _signal_breakdown_block)
         _medium_html = "".join(_medium_parts)
 
     # ── Crash pattern alert ──────────────────────────────────────────────
@@ -4709,19 +4709,49 @@ def render():
 
     # ── Hidden AI context block — read by Gemini / browser AI sidebar ─────────
     # display:none but fully in DOM; contains structured signal state for AI
-    _of_ctx = st.session_state.get("_options_flow_context") or {}
-    # Ensure _gex_block is always defined
-    if '_gex_block' not in locals():
-        _gex_block = ""
-    # Don't render the Options Flow expander here — this block is for hidden AI context only.
-    # The visible Options Flow expander is rendered later in the QIR layout after Round 1 completes.
-    if _of_ctx:
-        # store a minimal hidden snapshot for the AI context; avoid UI here
-        st.session_state.setdefault("_options_flow_ai_snapshot", {
-            "options_score": _of_ctx.get("options_score"),
-            "label": _of_ctx.get("label"),
-            "action_bias": _of_ctx.get("action_bias"),
-        })
+    _ai_ctx = st.session_state.get("_qir_ai_context") or {}
+    if _ai_ctx:
+        import json as _ctx_json
+        _ctx_lines = "\n".join(f"  {k}: {v}" for k, v in _ai_ctx.items())
+        st.markdown(
+            f'<div id="regarded-terminals-ai-context" aria-hidden="true" '
+            f'style="display:none;position:absolute;width:0;height:0;overflow:hidden;" '
+            f'data-source="regarded-terminals-qir">'
+            f'<pre id="rt-signal-state">\n{_ctx_lines}\n</pre>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:2px;">'
+        f'<span style="font-size:13px;color:{_oc};font-weight:700;letter-spacing:0.1em;">⚡ QUICK INTEL RUN</span>'
+        + (
+            f'<span title="Structured signal state injected into DOM — Gemini/browser AI sidebar can read it now" '
+            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#052e16;color:#4ade80;border:1px solid #166534;'
+            f'padding:2px 7px;border-radius:3px;cursor:default;">'
+            f'🤖 AI CONTEXT LIVE</span>'
+            if _ai_ctx else
+            f'<span title="Run QIR to populate AI context for Gemini" '
+            f'style="font-size:8px;font-weight:700;letter-spacing:0.1em;'
+            f'background:#1c1917;color:#57534e;border:1px solid #292524;'
+            f'padding:2px 7px;border-radius:3px;cursor:default;">'
+            f'🤖 AI CONTEXT —</span>'
+        )
+        + f'</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Runs Risk Regime + Fed Rate Path + Policy Transmission + Current Events + Doom Briefing + Whale Activity + Black Swans + Macro Synopsis + Portfolio Risk Snapshot in sequence. "
+        "Navigate to Portfolio Intelligence when done."
+    )
+    st.markdown(
+        '<div style="font-size:10px;color:#334155;font-family:\'JetBrains Mono\',Consolas,monospace;'
+        'margin-top:-6px;margin-bottom:4px;">'
+        '💡 Tip: Open <span style="color:#4285f4;font-weight:700;">Gemini</span> in the Chrome sidebar — '
+        'after running QIR it already has your full signal state loaded.</div>',
+        unsafe_allow_html=True,
+    )
 
     render_rr_score_mode_toggle(
         key="qir_rr_score_mode_ui",
@@ -6355,8 +6385,6 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     f'</div>',
                     unsafe_allow_html=True,
                 )
-                if _gex_block:
-                    st.markdown(_gex_block, unsafe_allow_html=True)
                 _of_sigs = _of_ctx.get("signals", [])
                 if _of_sigs:
                     _of_sigs_html = ""
