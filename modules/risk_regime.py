@@ -3661,7 +3661,8 @@ def render():
             )
 
         # ── Yield Curve & Credit Deep Dive ────────────────────────────────
-        with st.expander("📐 Yield Curve & Credit Deep Dive", expanded=False):
+        st.markdown('<div style="margin-top:12px;"></div>', unsafe_allow_html=True)
+        if True:
             _yc_val_a    = macro.get("yc_val")
             _yc3m_val_a  = macro.get("yc3m_val")
             _cs_hy_val_a = macro.get("cs_hy_val")
