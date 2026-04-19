@@ -1,31 +1,5 @@
 [
   {
-    "run_id": "c27fd922",
-    "timestamp": "2026-04-14T20:55:03.811290",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 67,
-    "options_score": 39.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 12,
-    "n_total": 14,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
-    "run_id": "fbb8a1a2",
-    "timestamp": "2026-04-14T20:58:17.781134",
-    "pattern": "",
-    "conviction": "BULLISH",
-    "tactical_score": 64,
-    "options_score": 40.0,
-    "regime_label": "Neutral \u2014 Leaning Risk-On",
-    "quadrant": "Transition",
-    "n_ok": 12,
-    "n_total": 14,
-    "engine": "\ud83e\udde0 Regard Mode"
-  },
-  {
     "run_id": "2d99c2b2",
     "timestamp": "2026-04-14T21:07:40.877833",
     "pattern": "",
@@ -386,6 +360,32 @@
     "regime_label": "Risk-On",
     "quadrant": "Transition",
     "n_ok": 11,
+    "n_total": 14,
+    "engine": "\ud83e\udde0 Regard Mode"
+  },
+  {
+    "run_id": "def98591",
+    "timestamp": "2026-04-19T13:25:40.494893",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 69,
+    "options_score": 53.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
+    "n_total": 14,
+    "engine": "\u26a1 Freeloader Mode"
+  },
+  {
+    "run_id": "d8b503d8",
+    "timestamp": "2026-04-19T13:34:28.222435",
+    "pattern": "",
+    "conviction": "BULLISH",
+    "tactical_score": 69,
+    "options_score": 53.0,
+    "regime_label": "Risk-On",
+    "quadrant": "Transition",
+    "n_ok": 12,
     "n_total": 14,
     "engine": "\ud83e\udde0 Regard Mode"
   }

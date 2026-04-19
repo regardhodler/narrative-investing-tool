@@ -3228,8 +3228,10 @@ def _render_qir_dashboard() -> None:
                 # Early warning pre-gate (options + shadow stress before primary catches up)
                 + _build_early_warning_pill()
                 +
-                # Footer
-                f'<div style="font-size:9px;color:#64748b;margin-top:4px;line-height:1.5;">{_explain}</div>'
+                # Footer — explanation text (larger, more visible)
+                f'<div style="font-size:10px;color:#cbd5e1;margin-top:6px;line-height:1.6;'
+                f'padding:6px 8px;background:#0a0f1a22;border-radius:3px;border-left:2px solid {_border};">'
+                f'{_explain}</div>'
                 f'</div>'
             )
         
@@ -3859,6 +3861,7 @@ def _render_qir_dashboard() -> None:
 
                 _sh_ll_col = "#22c55e" if _sh_z > -0.26 else ("#f59e0b" if _sh_z > -0.80 else ("#ef4444" if _sh_z > -1.194 else "#a855f7"))
                 _sh_ll_label = "Normal" if _sh_z > -0.26 else ("Stress" if _sh_z > -0.80 else ("CRISIS GATE" if _sh_z > -1.194 else "BEYOND"))
+                _sh_ll_bar_pct = min(100.0, max(0.0, ((-_sh_z) / 1.194) * 100.0)) if _sh_z else 0.0
                 _sh_crash_col = "#22c55e" if _sh_crash < 0.20 else ("#f59e0b" if _sh_crash < 0.55 else "#ef4444")
                 _sh_ci_col = "#22c55e" if _sh_ci < 22 else ("#f59e0b" if _sh_ci < 67 else "#ef4444")
 
@@ -3922,19 +3925,13 @@ def _render_qir_dashboard() -> None:
                     f'letter-spacing:0.08em;margin-bottom:3px;">LOG-LIKELIHOOD</div>'
                     f'<div style="font-size:16px;font-weight:900;color:{_sh_ll_col};">{_sh_z:+.2f}z</div>'
                     f'<div style="font-size:9px;color:{_sh_ll_col};font-weight:600;">{_sh_ll_label}</div>'
-                    # LL progress bar (similar to LL-anchored crisis detection)
-                    f'<div style="position:relative;height:6px;background:#0a0f1a;border-radius:3px;'
-                    f'margin-top:4px;overflow:hidden;">'
-                    # Fill from -1.194 (left) to 0 (right) on z-score scale
-                    f'<div style="position:absolute;left:0;top:0;height:100%;background:#0a0f1a;'
-                    f'width:calc(((-1.194 - {_sh_z}) / 1.194) * 100%);border-radius:3px;"></div>'
-                    f'<div style="position:absolute;left:0;top:0;height:100%;background:{_sh_ll_col};'
-                    f'width:calc(((-1.194 + {_sh_z}) / 1.194) * 100%);border-radius:3px;"></div>'
-                    # Gate markers: -0.26 (Normal), -0.80 (Stress), -1.194 (Crisis)
-                    f'<div style="position:absolute;left:21.8%;top:0;width:1px;height:100%;background:#334155;"></div>'
-                    f'<div style="position:absolute;left:67.2%;top:0;width:1px;height:100%;background:#334155;"></div>'
-                    f'<div style="position:absolute;left:100%;top:0;width:1px;height:100%;background:#64748b;"></div>'
-                    f'</div>'
+                    f'<div style="position:relative;height:5px;background:#1e293b;border-radius:2px;'
+                    f'margin-top:3px;overflow:hidden;border:1px solid #334155;">'
+                    f'<div style="position:absolute;left:0;top:0;height:100%;width:{_sh_ll_bar_pct}%;'
+                    f'background:{_sh_ll_col};border-radius:2px;"></div>'
+                    # Gate markers at -0.26 (21.8%) and -0.80 (67.2%)
+                    f'<div style="position:absolute;left:21.8%;top:0;width:1px;height:100%;background:#334155;opacity:0.5;"></div>'
+                    f'<div style="position:absolute;left:67.2%;top:0;width:1px;height:100%;background:#334155;opacity:0.5;"></div>'
                     f'</div>'
                     f'<div>'
                     f'<div style="font-size:8px;color:#64748b;font-weight:700;'
