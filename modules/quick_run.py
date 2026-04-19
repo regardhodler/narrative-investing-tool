@@ -2382,6 +2382,28 @@ def _render_qir_dashboard() -> None:
                 f'HMM ×regime state{_cap_note}</div>'
             )
 
+        # ── Initialize Kelly vars (will be set inside try block; defaults if exception occurs) ──
+        _kly_half = 0.0
+        _kly_viable = False
+        _kly_full = 0.0
+        _kly_p = 0.5
+        _kly_b = 1.0
+        _kly_psrc = ""
+        _kly_bsrc = ""
+        _kly_stress = 0.0
+        _kly_cap = False
+        _kly_n_agree = 0
+        _kly_n_total = 0
+        _kly_align_m = 1.0
+        _kly_hmm_m = 1.0
+        _kly_sdirs = {}
+        _triple_kelly_html = ""
+        _tac_short_kelly_pct = 0.0
+        _tac_long_kelly_pct = 0.0
+        _net_kelly_pct = 0.0
+        _lt_full_signed = 0.0
+        _lt_half_signed_pct = 0.0
+
         try:
             from services.portfolio_sizing import compute_qir_kelly as _compute_kelly, compute_triple_kelly as _compute_triple_kelly
             try:
