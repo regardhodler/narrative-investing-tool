@@ -803,7 +803,7 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
     if n_pc >= 5:
         pc_display += f" [z={z_pc:+.1f}, n={n_pc}]"
 
-    # ── Signal 2: Gamma Zone (weight 1.5) ─────────────────────────────────────
+    # ── Signal 2: Gamma Zone (weight 1.5) — graduated by GEX magnitude ────────
     sig2_score    = 0.0
     gamma_display = "N/A (neutral)"
     _gex_delta = 0.0
@@ -812,18 +812,21 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
     _gex_flip = None
     _gex_total = 0.0
     if gamma_data:
-        zone = gamma_data.get("zone", "")
-        if "Positive" in zone:
-            sig2_score    = 0.4
-            gamma_display = "Positive (stabilizing)"
-        elif "Negative" in zone:
-            sig2_score    = -0.6
-            gamma_display = "Negative (amplifying)"
         _gex_delta = float(gamma_data.get("dealer_net_delta", 0.0) or 0.0)
         _gex_call_wall = gamma_data.get("call_wall")
         _gex_put_wall = gamma_data.get("put_wall")
         _gex_flip = gamma_data.get("gamma_flip")
         _gex_total = float(gamma_data.get("total_gex", 0.0) or 0.0)
+        # Graduated scoring: tanh maps GEX magnitude to [-1, +1] continuously
+        # +3000M → +1.0, +500M → +0.32, -500M → -0.32, -3000M → -1.0
+        _gex_z = float(np.tanh(_gex_total / 1500.0))
+        sig2_score = _gex_z * 0.6  # scale to [-0.6, +0.6]
+        if _gex_z > 0.05:
+            gamma_display = f"Positive (stabilizing · {_gex_z:+.2f})"
+        elif _gex_z < -0.05:
+            gamma_display = f"Negative (amplifying · {_gex_z:+.2f})"
+        else:
+            gamma_display = f"Neutral ({_gex_z:+.2f})"
         if _gex_flip and spot_price:
             gamma_display += f" · flip ${float(_gex_flip):.0f}"
         gamma_display += f" · Δ {_gex_delta:+.3f}"
@@ -936,9 +939,31 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         except Exception:
             pass
 
+    # ── Signal 5: IBKR Level 2 Depth (weight 1.0, optional) ────────────────
+    sig5_score = 0.0
+    sig5_available = False
+    l2_display = "N/A (IBKR not connected)"
+    try:
+        from services.ibkr_client import fetch_market_depth
+        _l2 = fetch_market_depth("SPY", num_rows=10)
+        if _l2 is not None:
+            sig5_available = True
+            sig5_score = _clamp_of(_l2["imbalance"])
+            _l2_n_large = _l2.get("n_large_orders", 0)
+            _l2_depth_1pct = _l2.get("depth_ratio_1pct", 0)
+            l2_display = (
+                f"imbalance {_l2['imbalance']:+.3f} · depth@1% {_l2_depth_1pct:+.3f}"
+                f" · {_l2_n_large} large orders"
+            )
+    except Exception:
+        pass
+
     # ── Aggregate (base score) ───────────────────────────────────────────────
     scores  = [sig1_score, sig2_score, sig3_score, sig4_score]
     weights = [weights_dict["pc"], weights_dict["gamma"], weights_dict["skew"], weights_dict["unusual"]]
+    if sig5_available:
+        scores.append(sig5_score)
+        weights.append(1.0)
     agg_base = float(np.average(scores, weights=weights))
 
     # ── Dynamic GEX overlay (zone strength + dealer delta + wall asymmetry) ──
@@ -951,11 +976,13 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         _zone_strength = float(np.tanh(abs(_gex_total) / 1500.0))  # normalize total GEX magnitude
 
         # Positive gamma dampens edge; negative gamma amplifies edge.
+        # Deeply negative gamma (>2σ GEX) gets stronger amplification (0.50 vs 0.35).
         _edge = agg_base
         if _zone_sign > 0:
             _edge_adj = _edge * (1.0 - 0.25 * _zone_strength)
         elif _zone_sign < 0:
-            _edge_adj = _edge * (1.0 + 0.35 * _zone_strength)
+            _neg_amp = 0.35 + 0.15 * _zone_strength  # 0.35 at mild, 0.50 at extreme
+            _edge_adj = _edge * (1.0 + _neg_amp * _zone_strength)
         else:
             _edge_adj = _edge
 
@@ -1005,7 +1032,7 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         {"Signal": "Gamma Zone",           "Value": gamma_display,   "Score": round(sig2_score, 3), "Direction": _score_to_dir(sig2_score)},
         {"Signal": "IV Skew (put/call)",   "Value": skew_display,    "Score": round(sig3_score, 3), "Direction": _score_to_dir(sig3_score)},
         {"Signal": "Unusual Activity",     "Value": unusual_display, "Score": round(sig4_score, 3), "Direction": _score_to_dir(sig4_score)},
-    ]
+    ] + ([{"Signal": "L2 Depth (IBKR)",     "Value": l2_display,      "Score": round(sig5_score, 3), "Direction": _score_to_dir(sig5_score)}] if sig5_available else [])
 
     return {
         "options_score": options_score,

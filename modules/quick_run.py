@@ -2455,6 +2455,8 @@ def _render_qir_dashboard() -> None:
                         f'</div>'
                     )
 
+            _sh_for_kelly = st.session_state.get("_shadow_state_obj")
+            _sh_label_kelly = getattr(_sh_for_kelly, "state_label", None) if _sh_for_kelly else None
             _kly = _compute_kelly(
                 _conviction_score,
                 st.session_state.get("_fear_composite") or {},
@@ -2462,6 +2464,7 @@ def _render_qir_dashboard() -> None:
                 options_score=(st.session_state.get("_options_flow_context") or {}).get("options_score"),
                 tactical_score=(st.session_state.get("_tactical_context") or {}).get("tactical_score"),
                 hmm_state_label=_hmm_label_for_kelly,
+                shadow_state_label=_sh_label_kelly,
             )
             _kly_half   = _kly["kelly_half_pct"]
             _kly_full   = _kly["kelly_full_pct"]
@@ -2969,6 +2972,46 @@ def _render_qir_dashboard() -> None:
         #   100% = z -0.467  (COVID peak — worst ever recorded in-sample)
         #   >100% = post-training extremes (model scoring novel data beyond training range)
         # Formula: CI = abs(ll_z) / 0.467 * 100  (uncapped — >100% is valid)
+        def _build_early_warning_pill() -> str:
+            """Pre-gate warning when faster signals detect stress before primary brain."""
+            try:
+                _ew_of = st.session_state.get("_options_flow_context") or {}
+                _ew_of_score = _ew_of.get("options_score", 50) if _ew_of else 50
+                _ew_sh = st.session_state.get("_shadow_state_obj")
+                _ew_sh_ci = getattr(_ew_sh, "ci_pct", 0.0) if _ew_sh else 0.0
+                _ew_sh_label = getattr(_ew_sh, "state_label", "") if _ew_sh else ""
+                _ew_primary_ci = max(0.0, (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0)
+
+                # DIP WARNING: options bearish + shadow stressed + primary calm
+                if _ew_of_score < 35 and _ew_sh_ci > 22 and _ew_primary_ci < 22:
+                    return (
+                        f'<div style="margin-top:6px;padding:5px 10px;background:#451a03;'
+                        f'border:1px solid #f59e0b;border-radius:4px;">'
+                        f'<div style="font-size:9px;color:#fcd34d;font-weight:800;letter-spacing:0.06em;">'
+                        f'⚡ EARLY WARNING — DIP FORMING</div>'
+                        f'<div style="font-size:8px;color:#f59e0b;margin-top:2px;line-height:1.5;">'
+                        f'Options bearish ({_ew_of_score}/100) + Shadow stressed (CI {_ew_sh_ci:.0f}%) '
+                        f'· Primary brain has not confirmed yet (CI {_ew_primary_ci:.0f}%)</div>'
+                        f'</div>'
+                    )
+
+                # BOTTOM WARNING: options bullish + shadow transitioning + primary still stressed
+                if (_ew_of_score >= 65 and _ew_primary_ci >= 22
+                        and _ew_sh_label in ("Transition", "Mild Bull", "Strong Bull")):
+                    return (
+                        f'<div style="margin-top:6px;padding:5px 10px;background:#052e16;'
+                        f'border:1px solid #22c55e;border-radius:4px;">'
+                        f'<div style="font-size:9px;color:#4ade80;font-weight:800;letter-spacing:0.06em;">'
+                        f'🔄 EARLY WARNING — BOTTOM FORMING</div>'
+                        f'<div style="font-size:8px;color:#22c55e;margin-top:2px;line-height:1.5;">'
+                        f'Options bullish ({_ew_of_score}/100) + Shadow transitioning ({_ew_sh_label}) '
+                        f'· Primary brain still stressed (CI {_ew_primary_ci:.0f}%)</div>'
+                        f'</div>'
+                    )
+            except Exception:
+                pass
+            return ""
+
         def _build_ll_anchored_block() -> str:
             # Crisis Intensity score — uncapped, COVID in-sample peak = 100%
             _ci_raw = (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0
@@ -3160,6 +3203,9 @@ def _render_qir_dashboard() -> None:
                 f'{_sigs_html}'
                 f'</div>'
 
+                # Early warning pre-gate (options + shadow stress before primary catches up)
+                + _build_early_warning_pill()
+                +
                 # Footer
                 f'<div style="font-size:7px;color:#475569;margin-top:4px;line-height:1.4;">{_explain}</div>'
                 f'</div>'
@@ -3927,6 +3973,126 @@ def _render_qir_dashboard() -> None:
             )
 
 
+        # ── Velocity Cascade (options → shadow → primary hierarchy) ────────────
+        _cascade_block = ""
+        try:
+            # FAST tier: options flow
+            _of_ctx_vc = st.session_state.get("_options_flow_context") or {}
+            _of_score_vc = _of_ctx_vc.get("options_score", 50) if _of_ctx_vc else 50
+            _of_label_vc = _of_ctx_vc.get("label", "—") if _of_ctx_vc else "—"
+            _gex_vc = st.session_state.get("_gex_profile_spx") or {}
+            _gex_zone_vc = _gex_vc.get("zone", "—") if _gex_vc else "—"
+            _gex_flip_vc = _gex_vc.get("gamma_flip")
+            _gex_spot_vc = _gex_vc.get("spot", 0)
+            _flip_pct_vc = ((float(_gex_flip_vc) - _gex_spot_vc) / _gex_spot_vc * 100.0
+                            if _gex_flip_vc and _gex_spot_vc else 0.0)
+
+            # MEDIUM tier: shadow brain
+            _sh_vc = st.session_state.get("_shadow_state_obj")
+            _sh_label_vc = getattr(_sh_vc, "state_label", "—") if _sh_vc else "—"
+            _sh_ci_vc = getattr(_sh_vc, "ci_pct", 0.0) if _sh_vc else 0.0
+            _sh_crash_vc = (getattr(_sh_vc, "crash_prob_10pct", 0.0) or 0.0) if _sh_vc else 0.0
+
+            # SLOW tier: primary brain
+            _hmm_crisis_vc = st.session_state.get("_ll_anchored_crisis") or {}
+            _hmm_label_vc = _hmm_crisis_vc.get("hmm_state", "—")
+            _hmm_ci_vc = float(_hmm_crisis_vc.get("ci_pct", 0.0) or 0.0)
+            _hmm_crash_vc = float(_hmm_crisis_vc.get("crash_prob", 0.0) or 0.0)
+
+            # Determine direction per tier: +1=bullish, -1=bearish, 0=neutral
+            _fast_dir = 1 if _of_score_vc >= 65 else (-1 if _of_score_vc < 38 else 0)
+            _med_dir = (-1 if _sh_label_vc in ("Crisis", "Strong Bear") else
+                        (1 if _sh_label_vc in ("Strong Bull", "Mild Bull") else 0)) if _sh_vc else 0
+            _slow_dir = (-1 if _hmm_label_vc in ("Crisis", "Late Cycle", "Stress") else
+                         (1 if _hmm_label_vc in ("Bull",) else 0))
+
+            # Cascade status
+            if _fast_dir == -1 and _slow_dir >= 0:
+                _casc_status = "TOP FORMING"
+                _casc_color = "#ef4444"
+                _casc_icon = "⚠️"
+            elif _fast_dir == 1 and _slow_dir <= 0:
+                _casc_status = "BOTTOM FORMING"
+                _casc_color = "#22c55e"
+                _casc_icon = "🔄"
+            elif _fast_dir == _med_dir == _slow_dir == -1:
+                _casc_status = "CONFIRMED DOWNTREND"
+                _casc_color = "#dc2626"
+                _casc_icon = "🔻"
+            elif _fast_dir == _med_dir == _slow_dir == 1:
+                _casc_status = "CONFIRMED UPTREND"
+                _casc_color = "#16a34a"
+                _casc_icon = "🔺"
+            elif _fast_dir == _med_dir and _fast_dir != 0:
+                _casc_status = "FAST+MED ALIGNED · SLOW LAGGING"
+                _casc_color = "#f59e0b"
+                _casc_icon = "⏳"
+            else:
+                _casc_status = "MIXED SIGNALS"
+                _casc_color = "#64748b"
+                _casc_icon = "—"
+
+            # Colors per tier
+            _fast_col = "#22c55e" if _fast_dir > 0 else ("#ef4444" if _fast_dir < 0 else "#f59e0b")
+            _med_col = "#22c55e" if _med_dir > 0 else ("#ef4444" if _med_dir < 0 else "#f59e0b")
+            _slow_col = "#22c55e" if _slow_dir > 0 else ("#ef4444" if _slow_dir < 0 else "#f59e0b")
+
+            _flip_col = "#22c55e" if _flip_pct_vc > 1.0 else ("#ef4444" if _flip_pct_vc < -1.0 else "#f59e0b")
+            _sh_crash_col_vc = "#22c55e" if _sh_crash_vc < 0.05 else ("#f59e0b" if _sh_crash_vc < 0.10 else "#ef4444")
+
+            def _vc_row(tier_label, speed, items, border_col):
+                cells = "".join(
+                    f'<div style="text-align:center;">'
+                    f'<div style="font-size:7px;color:#475569;font-weight:700;letter-spacing:0.05em;">{lbl}</div>'
+                    f'<div style="font-size:12px;font-weight:800;color:{col};">{val}</div>'
+                    f'</div>'
+                    for lbl, val, col in items
+                )
+                return (
+                    f'<div style="display:grid;grid-template-columns:90px 1fr;gap:8px;'
+                    f'padding:5px 0;border-left:2px solid {border_col};padding-left:8px;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:{border_col};font-weight:800;letter-spacing:0.08em;">{tier_label}</div>'
+                    f'<div style="font-size:7px;color:#475569;">{speed}</div>'
+                    f'</div>'
+                    f'<div style="display:grid;grid-template-columns:repeat({len(items)},1fr);gap:6px;">'
+                    f'{cells}</div></div>'
+                )
+
+            _fast_row = _vc_row("FAST", "0-1 days", [
+                ("OPTIONS", f"{_of_score_vc}/100", _fast_col),
+                ("GEX ZONE", _gex_zone_vc.replace(" Gamma Zone", "").replace(" Zone", "")[:8], _fast_col),
+                ("FLIP", f"{_flip_pct_vc:+.1f}%", _flip_col),
+            ], _fast_col)
+            _med_row = _vc_row("MEDIUM", "1-5 days", [
+                ("SHADOW", _sh_label_vc[:10], _med_col),
+                ("SHADOW CI", f"{_sh_ci_vc:.0f}%", _med_col),
+                ("CRASH 30D", f"{_sh_crash_vc*100:.0f}%", _sh_crash_col_vc),
+            ], _med_col)
+            _slow_row = _vc_row("SLOW", "5-30 days", [
+                ("PRIMARY", _hmm_label_vc[:10], _slow_col),
+                ("PRIMARY CI", f"{_hmm_ci_vc:.0f}%", _slow_col),
+                ("CRASH 30D", f"{_hmm_crash_vc*100:.0f}%", _slow_col),
+            ], _slow_col)
+
+            _cascade_block = (
+                f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+                f'<span style="font-size:10px;color:#475569;font-weight:700;letter-spacing:0.1em;">⚡ VELOCITY CASCADE</span>'
+                f'<span style="font-size:9px;font-weight:800;color:{_casc_color};'
+                f'background:#0a0f1a;padding:2px 8px;border-radius:3px;border:1px solid {_casc_color}33;">'
+                f'{_casc_icon} {_casc_status}</span>'
+                f'</div>'
+                f'{_fast_row}{_med_row}{_slow_row}'
+                f'<div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.4;">'
+                f'Fast diverging from Slow = early signal · All aligned = high conviction · '
+                f'Options lead by hours/days, Shadow confirms in days, Primary confirms in weeks</div>'
+                f'</div>'
+            )
+        except Exception:
+            pass
+
         # ── Bottom Watch card (always visible; greyed when CI% < 22) ───────────
         _bw_block = ""
         # _ci in outer scope (same formula as inside _build_ll_anchored_block)
@@ -4463,6 +4629,7 @@ def _render_qir_dashboard() -> None:
         f'{_hmm_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
         f'{_shadow_block if _populated else ""}'
+        f'{_cascade_block if _populated else ""}'
         f'{_bw_block if _populated else ""}'
         # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
         f'</div>',

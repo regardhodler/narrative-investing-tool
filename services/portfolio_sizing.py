@@ -663,6 +663,7 @@ def compute_qir_kelly(
     options_score: int | None = None,
     tactical_score: int | None = None,
     hmm_state_label: str | None = None,
+    shadow_state_label: str | None = None,
 ) -> dict:
     """Compute dynamic half-Kelly position size for the QIR dashboard.
 
@@ -773,23 +774,50 @@ def compute_qir_kelly(
         _macro_raw = float(_rc.get("score", 0.5)) * 100.0
     _regime_dir = _to_dir(int(_macro_raw))
 
+    # Shadow brain direction: Crisis/Strong Bear = bearish, Mild/Strong Bull = bullish
+    _shadow_dir = None
+    if shadow_state_label:
+        if shadow_state_label in ("Crisis", "Strong Bear"):
+            _shadow_dir = -1
+        elif shadow_state_label in ("Strong Bull", "Mild Bull"):
+            _shadow_dir = 1
+        elif shadow_state_label in ("Transition", "Mild Bear"):
+            _shadow_dir = 0
+
     _signal_dirs: dict[str, int | None] = {
         "options":   _to_dir(options_score),
         "tactical":  _to_dir(tactical_score),
         "regime":    _regime_dir,
+        "shadow":    _shadow_dir,
         "conviction": _verdict_dir,
     }
 
-    _n_total = sum(1 for v in _signal_dirs.values() if v is not None)
-    _n_agree = sum(1 for v in _signal_dirs.values() if v is not None and v == _verdict_dir)
+    # Velocity-weighted alignment: faster signals weighted higher for signal quality
+    _velocity_weights = {
+        "options": 2.0,     # fastest — 0-1 day
+        "shadow": 1.5,      # medium — 1-5 days
+        "tactical": 1.0,    # medium — days/weeks
+        "regime": 1.0,      # slow — weeks
+        "conviction": 1.0,  # composite
+    }
 
-    _alignment = _n_agree / _n_total if _n_total > 0 else 0.5
+    _weighted_agree = 0.0
+    _weighted_total = 0.0
+    for k, v in _signal_dirs.items():
+        if v is not None:
+            w = _velocity_weights.get(k, 1.0)
+            _weighted_total += w
+            if v == _verdict_dir:
+                _weighted_agree += w
 
-    # Alignment multiplier — neutral verdict skips alignment penalty
+    _alignment = _weighted_agree / _weighted_total if _weighted_total > 0 else 0.5
+
+    # Alignment multiplier — velocity-weighted continuous scale
     if _verdict_dir == 0:
         _align_mult = 0.75
     else:
-        _align_mult = {0: 0.25, 1: 0.50, 2: 0.75, 3: 0.90}.get(_n_agree, 1.00)
+        # Map alignment ratio [0, 1] to multiplier [0.25, 1.00]
+        _align_mult = 0.25 + 0.75 * _alignment
 
     kelly_half = kelly_half * _align_mult
 
@@ -979,4 +1007,172 @@ def compute_triple_kelly(
             "color":     "#f59e0b",
             "note":      f"Momentum {leading_score}/100 · uncertainty penalty ×{_uncert_penalty:.2f}",
         },
+    }
+
+
+# ── Shadow Kelly (SPX price-brain sibling of compute_qir_kelly) ──────────────
+
+_SHADOW_HMM_MULT: dict[str, float] = {
+    "Strong Bull": 1.15,
+    "Mild Bull":   1.05,
+    "Transition":  0.95,
+    "Mild Bear":   0.80,
+    "Strong Bear": 0.65,
+    "Crisis":      0.50,
+}
+
+
+def compute_shadow_kelly(
+    conviction_score: int,
+    fear_composite: dict,
+    regime_ctx: dict,
+    options_score: int | None = None,
+    tactical_score: int | None = None,
+    shadow_state_label: str | None = None,
+    shadow_crash_prob: float | None = None,   # 0-1
+) -> dict:
+    """Shadow Kelly — SPX price-brain analog of compute_qir_kelly().
+
+    Mirrors compute_qir_kelly's shape (Bayesian p from conviction + trade journal,
+    regime-implied or historical b, stress discount, alignment multiplier) so the
+    two numbers are directly comparable. Differences:
+      - Shadow-specific 6-regime multiplier map (Strong Bull 1.15 → Crisis 0.50).
+      - Crash-probability penalty: kelly *= max(0, 1 - crash_prob * 0.5).
+
+    Returns dict with the same keys as compute_qir_kelly plus:
+      shadow_regime_multiplier, crash_prob_penalty_pct.
+    """
+    stats = get_trade_kelly_stats()
+    n_closed = stats["n_closed"]
+    n_wins   = stats["n_wins"]
+    n_losses = stats["n_losses"]
+
+    # ── p: Bayesian shrinkage ─────────────────────────────────────────────────
+    shrink_weight  = 5.0
+    p_hist_shrunk  = (n_wins + shrink_weight * 0.5) / (n_closed + shrink_weight)
+    history_weight = min(n_closed / 20.0, 0.6)
+    p_conviction   = max(0.01, min(0.99, (conviction_score if conviction_score is not None else 50) / 100.0))
+    p = p_hist_shrunk * history_weight + p_conviction * (1.0 - history_weight)
+
+    if n_closed == 0:
+        p_source = "Conviction only"
+    else:
+        p_source = f"Historical (n={n_closed}) + Conviction"
+
+    # ── b: win/loss ratio — regime-implied depending on verdict direction ────
+    quadrant = (regime_ctx or {}).get("quadrant", "")
+    b_implied = _REGIME_B_IMPLIED.get(quadrant, 1.2)
+
+    _p_dir = 1 if p > 0.55 else (-1 if p < 0.45 else 0)
+    if _p_dir == -1:
+        b_implied = _SHORT_B_IMPLIED.get(quadrant, 1.2)
+
+    avg_win  = stats["avg_win_pct"]
+    avg_loss = abs(stats["avg_loss_pct"])
+    if n_wins >= 5 and n_losses >= 5 and avg_loss > 0:
+        b = avg_win / avg_loss
+        b_source = f"Historical (w={n_wins}, l={n_losses})"
+    elif n_wins >= 1 and n_losses >= 1 and avg_loss > 0:
+        _atr_b = 1.5
+        _real_b = avg_win / avg_loss
+        _blend_w = min((n_wins + n_losses) / 10.0, 0.5)
+        b = _atr_b * (1 - _blend_w) + _real_b * _blend_w
+        b_source = f"ATR 2:3 rule + partial history (n={n_wins+n_losses})"
+    else:
+        b = 1.5
+        b_source = "ATR weekly 2:3 rule (bootstrap)"
+
+    # ── Kelly formula ─────────────────────────────────────────────────────────
+    q = 1.0 - p
+    kelly_full = (b * p - q) / b if b > 0 else 0.0
+    kelly_half = max(kelly_full * 0.5, 0.0)
+
+    # ── Stress discount ───────────────────────────────────────────────────────
+    fear_score      = float((fear_composite or {}).get("score", 50))
+    stress_discount = (fear_score / 100.0) * 0.30
+    kelly_half      = max(kelly_half - stress_discount * kelly_half, 0.0)
+
+    kelly_half_base = kelly_half
+
+    # ── Cross-timeframe alignment ─────────────────────────────────────────────
+    _verdict_dir = 1 if p > 0.55 else (-1 if p < 0.45 else 0)
+
+    def _to_dir(score: int | None, neutral_band: int = 10) -> int | None:
+        if score is None:
+            return None
+        if score >= 50 + neutral_band:
+            return 1
+        if score <= 50 - neutral_band:
+            return -1
+        return 0
+
+    _rc = regime_ctx or {}
+    _macro_raw = _rc.get("macro_score")
+    if _macro_raw is None:
+        _macro_raw = float(_rc.get("score", 0.5)) * 100.0
+    _regime_dir = _to_dir(int(_macro_raw))
+
+    _signal_dirs: dict[str, int | None] = {
+        "options":    _to_dir(options_score),
+        "tactical":   _to_dir(tactical_score),
+        "regime":     _regime_dir,
+        "conviction": _verdict_dir,
+    }
+
+    _n_total = sum(1 for v in _signal_dirs.values() if v is not None)
+    _n_agree = sum(1 for v in _signal_dirs.values() if v is not None and v == _verdict_dir)
+    _alignment = _n_agree / _n_total if _n_total > 0 else 0.5
+
+    if _verdict_dir == 0:
+        _align_mult = 0.75
+    else:
+        _align_mult = {0: 0.25, 1: 0.50, 2: 0.75, 3: 0.90}.get(_n_agree, 1.00)
+
+    kelly_half = kelly_half * _align_mult
+
+    # ── Shadow regime multiplier ─────────────────────────────────────────────
+    _shadow_mult = 1.00
+    if shadow_state_label:
+        for key, mult in _SHADOW_HMM_MULT.items():
+            if key.lower() in shadow_state_label.lower():
+                _shadow_mult = mult
+                break
+    kelly_half = kelly_half * _shadow_mult
+
+    # ── Crash-probability penalty ────────────────────────────────────────────
+    _crash_prob = max(0.0, min(1.0, float(shadow_crash_prob or 0.0)))
+    _crash_penalty = max(0.0, 1.0 - _crash_prob * 0.5)
+    kelly_half = kelly_half * _crash_penalty
+
+    # ── Cap at 15% ────────────────────────────────────────────────────────────
+    capped = kelly_half > 0.15
+    kelly_half = min(kelly_half, 0.15)
+
+    return {
+        "kelly_half_pct":           round(kelly_half * 100, 1),
+        "kelly_full_pct":           round(max(kelly_full, 0.0) * 100, 1),
+        "kelly_half_raw_pct":       round(max(kelly_full * 0.5, 0.0) * 100, 1),
+        "p":                        round(p, 3),
+        "b":                        round(b, 2),
+        "p_source":                 p_source,
+        "b_source":                 b_source,
+        "n_closed":                 n_closed,
+        "n_wins":                   stats.get("n_wins", 0),
+        "n_losses":                 stats.get("n_losses", 0),
+        "avg_win_pct":              round(stats.get("avg_win_pct", 0.0), 2),
+        "avg_loss_pct":             round(stats.get("avg_loss_pct", 0.0), 2),
+        "stress_discount_pct":      round(stress_discount * 100, 1),
+        "fear_score":               round(fear_score, 1),
+        "capped":                   capped,
+        "viable":                   round(kelly_half * 100, 1) >= 0.1,
+        "alignment_score":          round(_alignment * 100),
+        "n_signals_agree":          _n_agree,
+        "n_signals_total":          _n_total,
+        "align_multiplier":         round(_align_mult, 2),
+        "shadow_regime_multiplier": round(_shadow_mult, 2),
+        "shadow_state_label":       shadow_state_label or "",
+        "shadow_crash_prob":        round(_crash_prob, 4),
+        "crash_prob_penalty_pct":   round((1.0 - _crash_penalty) * 100, 1),
+        "signal_dirs":              _signal_dirs,
+        "kelly_half_base_pct":      round(kelly_half_base * 100, 1),
     }
