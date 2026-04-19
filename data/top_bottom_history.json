@@ -125,5 +125,49 @@
   "bottom_signals": [
    "Conviction building"
   ]
+ },
+ {
+  "date": "2026-04-18",
+  "top_pct": 49,
+  "bottom_pct": 62,
+  "regime_score": 0.22,
+  "velocity": -3.0,
+  "entropy": 0.0,
+  "ll_z": 0.0,
+  "conviction": 31.0,
+  "hmm_state": "Bull",
+  "wyckoff_phase": "Distribution",
+  "wyckoff_conf": 40,
+  "top_signals": [
+   "Regime elevated",
+   "Wyckoff Distribution A (40% conf)",
+   "Wyckoff downside target $641",
+   "HY spreads historically tight (2.9%)"
+  ],
+  "bottom_signals": [
+   "Conviction building"
+  ]
+ },
+ {
+  "date": "2026-04-19",
+  "top_pct": 49,
+  "bottom_pct": 62,
+  "regime_score": 0.22,
+  "velocity": -3.0,
+  "entropy": 0.0,
+  "ll_z": 0.0,
+  "conviction": 31.0,
+  "hmm_state": "Bull",
+  "wyckoff_phase": "Distribution",
+  "wyckoff_conf": 40,
+  "top_signals": [
+   "Regime elevated",
+   "Wyckoff Distribution A (40% conf)",
+   "Wyckoff downside target $641",
+   "HY spreads historically tight (2.9%)"
+  ],
+  "bottom_signals": [
+   "Conviction building"
+  ]
  }
 ]

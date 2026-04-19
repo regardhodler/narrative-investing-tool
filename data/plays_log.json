@@ -14447,5 +14447,86 @@
       "briefing": "STRESS LEVEL: 4\n* The Composite Stress Score of 16.8/100 indicates a low-stress environment, with the 10Y-2Y Spread at 0.55 suggesting a relatively stable yield curve.\n* The HY OAS of 2.86 and IG OAS of 0.81 are within normal ranges, indicating no significant stress in the high-yield and investment-grade bond markets, with the HY OAS being 1.05 percentage points above the IG OAS.\n* The Regional Banks and Subprime / Consumer Credit sectors have shown strong 1M returns of +14.9% and +14.6%, respectively, but also exhibit average drawdowns of -10.4% and -23.0%, respectively, indicating potential volatility.\n* The number of distress filings (351) and whale exits (20 positions, total $-129,883,591M closed/reduced) are relatively low, suggesting no significant systemic concerns at present.\n\nLooking forward, the current low-stress environment may be subject to change due to the Fed's stagflation bind and the impact of the Iran War tensions on import fuel costs. The recent Fed liquidity injections and balance sheet growth may continue to fuel rallies in tech and crypto, but also pose risks of overheating and potential corrections. As such, it is essential to monitor the situation closely, particularly in light of the upcoming Bessent-Powell AI cyber meeting and potential supply chain shortages."
     },
     "meta": {}
+  },
+  {
+    "id": "20260418_200156_49",
+    "timestamp": "2026-04-18T20:01:56.494592",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.666816985631845,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.14770735982148422,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0020471740759141007,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.18342848047075663,
+          "implied_rate": 3.6425018310546875,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.7
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260418_214533_32",
+    "timestamp": "2026-04-18T21:45:33.327143",
+    "feature": "Doom Briefing",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "briefing": "STRESS LEVEL: 2\n\n* The Composite Stress Score of 16.8/100 indicates a low-stress environment, with the HY OAS at 2.86 and IG OAS at 0.81 suggesting relatively stable credit markets.\n* The 10Y-2Y Spread of 0.55 is within a normal range, indicating no significant inversion or recession concerns.\n* The Regional Banks sector has shown a strong 1M return of +14.9%, with an average drawdown of -10.4%, indicating resilience in the banking system.\n* The Subprime / Consumer Credit sector has a high average 1M return of +14.6%, but also a significant average drawdown of -23.0%, warranting continued monitoring of consumer credit health.\n\nLooking forward, the current low-stress environment may be susceptible to changes in the geopolitical landscape, particularly with regards to the US-Iran escalations and their impact on energy prices. The recent surge in March CPI to 3.3% headline and 2.6% core may also lead to a reevaluation of inflation risks and monetary policy. However, with the S&P 500 and Nasdaq at record highs, market sentiment remains optimistic, and the Polymarket pricing of low odds (18%) for 2026 inflation >5% suggests that the market is not currently pricing in a high-inflation scenario."
+    },
+    "meta": {}
+  },
+  {
+    "id": "20260418_214655_10",
+    "timestamp": "2026-04-18T21:46:55.103538",
+    "feature": "Tail Risk Studio",
+    "engine": "\ud83e\udde0 Regard Mode",
+    "data": {
+      "Closure of the straight of hormuz": {
+        "probability_pct": 2.5,
+        "narrative": "Closure of the Strait of Hormuz would disrupt ~20% of global oil supply, triggering a sharp spike in oil prices and reigniting inflation fears worldwide. Equities would plunge in a risk-off environment amid growth concerns and supply chain disruptions, while safe-haven assets like gold and USD rally. Bonds face upward pressure on yields from inflation, hurting long positions but benefiting shorts.",
+        "asset_impacts": {
+          "spy": "strongly bearish",
+          "qqq": "strongly bearish",
+          "iwm": "strongly bearish",
+          "bonds_long": "bearish",
+          "bonds_short": "strongly bullish",
+          "gold": "bullish",
+          "oil": "strongly bullish",
+          "usd": "bullish"
+        },
+        "_engine_tier": "\ud83e\udde0 Regard Mode"
+      }
+    },
+    "meta": {
+      "event": "Closure of the straight of hormuz"
+    }
   }
 ]

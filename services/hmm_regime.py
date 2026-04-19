@@ -608,6 +608,13 @@ def get_hmm_state_history() -> list[dict]:
 # ── Summary helpers for QIR display ──────────────────────────────────────────
 
 _STATE_COLORS = {
+    # Shadow-brain-specific labels (listed first — substring match picks the first hit)
+    "Strong Bull": "#16a34a",
+    "Mild Bull":   "#4ade80",
+    "Transition":  "#94a3b8",
+    "Mild Bear":   "#f97316",
+    "Strong Bear": "#ef4444",
+    # Credit-brain labels
     "Bull":        "#22c55e",
     "Neutral":     "#94a3b8",
     "Early Stress":"#f59e0b",
@@ -617,6 +624,11 @@ _STATE_COLORS = {
 }
 
 _STATE_ARROWS = {
+    "Strong Bull": "▲▲",
+    "Mild Bull":   "▲",
+    "Transition":  "→",
+    "Mild Bear":   "▼",
+    "Strong Bear": "▼▼",
     "Bull":        "▲",
     "Neutral":     "→",
     "Early Stress":"↘",
@@ -626,6 +638,31 @@ _STATE_ARROWS = {
 }
 
 _STATE_TIPS = {
+    "Strong Bull": (
+        "SPX price brain: Strong Bull regime. Mean return is solidly positive, "
+        "variance is low. Historical analog: 2017, 2021 melt-up phases. "
+        "Momentum strategies work, dip-buying rewarded. Full sizing appropriate."
+    ),
+    "Mild Bull": (
+        "SPX price brain: Mild Bull regime. Positive drift but modest. "
+        "Historical analog: steady-grind years. Normal position sizing, "
+        "don't chase breakouts — trend is your friend but accelerations are rare."
+    ),
+    "Transition": (
+        "SPX price brain: Transition regime — neither bull nor bear dominates. "
+        "Mean return near zero, moderate variance. Chop/range-bound tape. "
+        "Wait for the next regime signal before adding directional risk."
+    ),
+    "Mild Bear": (
+        "SPX price brain: Mild Bear regime. Negative drift but not dislocation. "
+        "Historical analog: slow grindy declines (2015-2016, 2018 Q4 pre-pivot). "
+        "Reduce beta exposure, trim cyclicals. Not time to buy weakness yet."
+    ),
+    "Strong Bear": (
+        "SPX price brain: Strong Bear regime. Large negative drift, sellers in control. "
+        "Historical analog: 2022 grinding bear, 2008 pre-Lehman. "
+        "Defensive posture — raise cash, prefer quality, avoid catching knives."
+    ),
     "Bull": (
         "Risk-on. Stay invested and let winners run. "
         "Momentum strategies work best here — buying dips is rewarded. "

@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-04-18T16:43:32.400902+00:00",
+  "training_start": "1960-01-05",
+  "training_end": "2026-04-17",
+  "anchor_doc": 0.467,
+  "anchor_empirical": 0.4478,
+  "chosen_anchor": 0.4478,
+  "n_obs_total": 16681,
+  "buckets": [
+    {
+      "label": "Normal",
+      "z_lo": 0.5,
+      "z_hi": 999.0,
+      "ci_lo_pct": 111.7,
+      "ci_hi_pct": 999.0,
+      "n_obs": 5974,
+      "prob_10pct": 0.0194,
+      "expected_drawdown_pct": -14.81
+    },
+    {
+      "label": "Low stress",
+      "z_lo": -0.18,
+      "z_hi": 0.5,
+      "ci_lo_pct": 40.2,
+      "ci_hi_pct": 111.7,
+      "n_obs": 5622,
+      "prob_10pct": 0.0585,
+      "expected_drawdown_pct": -14.61
+    },
+    {
+      "label": "Model stress",
+      "z_lo": -0.3,
+      "z_hi": -0.18,
+      "ci_lo_pct": 67.0,
+      "ci_hi_pct": 40.2,
+      "n_obs": 579,
+      "prob_10pct": 0.0604,
+      "expected_drawdown_pct": -15.97
+    },
+    {
+      "label": "Crisis gate",
+      "z_lo": -999.0,
+      "z_hi": -0.3,
+      "ci_lo_pct": 999.0,
+      "ci_hi_pct": 67.0,
+      "n_obs": 4506,
+      "prob_10pct": 0.0925,
+      "expected_drawdown_pct": -15.7
+    }
+  ]
+}

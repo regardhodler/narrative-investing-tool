@@ -1,0 +1,94 @@
+{
+  "generated_at": "2026-04-18T22:00:47.478248+00:00",
+  "crisis_gate": {
+    "spx_only_full": {
+      "label": "SPX-only (full 1960->)",
+      "gate_z": -0.3,
+      "n_obs": 16682,
+      "n_episodes": 41,
+      "n_crisis_calls": 4507,
+      "hits": 41,
+      "hit_rate": 1.0,
+      "false_alarms": 4078,
+      "false_alarm_rate": 0.9048,
+      "precision": 0.0952,
+      "avg_early_warning_days": 15.6
+    },
+    "spx_only_1990": {
+      "label": "SPX-only (1990-> window)",
+      "gate_z": -0.3,
+      "n_obs": 9140,
+      "n_episodes": 25,
+      "n_crisis_calls": 2821,
+      "hits": 25,
+      "hit_rate": 1.0,
+      "false_alarms": 2518,
+      "false_alarm_rate": 0.8926,
+      "precision": 0.1074,
+      "avg_early_warning_days": 15.0
+    },
+    "macro_variant": {
+      "label": "SPX+VIX+Yield (1990->)",
+      "gate_z": -0.3,
+      "n_obs": 9140,
+      "n_episodes": 25,
+      "n_crisis_calls": 2680,
+      "hits": 25,
+      "hit_rate": 1.0,
+      "false_alarms": 2379,
+      "false_alarm_rate": 0.8877,
+      "precision": 0.1123,
+      "avg_early_warning_days": 14.6
+    }
+  },
+  "loosened_gate": {
+    "spx_only_full": {
+      "label": "SPX-only (full 1960->)",
+      "gate_z": -0.18,
+      "n_obs": 16682,
+      "n_episodes": 41,
+      "n_crisis_calls": 5086,
+      "hits": 41,
+      "hit_rate": 1.0,
+      "false_alarms": 4622,
+      "false_alarm_rate": 0.9088,
+      "precision": 0.0912,
+      "avg_early_warning_days": 16.0
+    },
+    "spx_only_1990": {
+      "label": "SPX-only (1990-> window)",
+      "gate_z": -0.18,
+      "n_obs": 9140,
+      "n_episodes": 25,
+      "n_crisis_calls": 3158,
+      "hits": 25,
+      "hit_rate": 1.0,
+      "false_alarms": 2834,
+      "false_alarm_rate": 0.8974,
+      "precision": 0.1026,
+      "avg_early_warning_days": 15.7
+    },
+    "macro_variant": {
+      "label": "SPX+VIX+Yield (1990->)",
+      "gate_z": -0.18,
+      "n_obs": 9140,
+      "n_episodes": 25,
+      "n_crisis_calls": 3088,
+      "hits": 25,
+      "hit_rate": 1.0,
+      "false_alarms": 2758,
+      "false_alarm_rate": 0.8931,
+      "precision": 0.1069,
+      "avg_early_warning_days": 15.6
+    }
+  },
+  "correlation": {
+    "spx_vs_macro_ll_zscore": 0.8959,
+    "crisis_jaccard": 0.8161
+  },
+  "bic": {
+    "spx_only": 41080.3,
+    "macro_variant": 23495.8
+  },
+  "verdict": "TIE"
+}

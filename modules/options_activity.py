@@ -714,6 +714,21 @@ def _score_to_dir(s: float) -> str:
     return "Neutral"
 
 
+@st.cache_data(ttl=3600)
+def _fetch_vix_term_structure() -> tuple[float | None, float | None]:
+    """Fetch VIX9D and VIX prices. Returns (vix9d, vix) or (None, None) on failure."""
+    try:
+        _vix9d_data = yf.download("^VIX9D", period="1d", progress=False, quiet=True)
+        _vix_data = yf.download("^VIX", period="1d", progress=False, quiet=True)
+        if not _vix9d_data.empty and not _vix_data.empty:
+            _vix9d_price = float(_vix9d_data["Close"].iloc[-1])
+            _vix_price = float(_vix_data["Close"].iloc[-1])
+            return _vix9d_price, _vix_price
+    except Exception:
+        pass
+    return None, None
+
+
 def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> dict:
     """4-signal Options Flow Sentiment score (0-100) for SPY — hours-to-days timeframe.
 
@@ -939,24 +954,18 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         except Exception:
             pass
 
-    # ── Signal 5: IBKR Level 2 Depth (weight 1.0, optional) ────────────────
+    # ── Signal 5: VIX Term Structure Slope (weight 1.0, optional) ──────────
     sig5_score = 0.0
     sig5_available = False
-    l2_display = "N/A (IBKR not connected)"
-    try:
-        from services.ibkr_client import fetch_market_depth
-        _l2 = fetch_market_depth("SPY", num_rows=10)
-        if _l2 is not None:
-            sig5_available = True
-            sig5_score = _clamp_of(_l2["imbalance"])
-            _l2_n_large = _l2.get("n_large_orders", 0)
-            _l2_depth_1pct = _l2.get("depth_ratio_1pct", 0)
-            l2_display = (
-                f"imbalance {_l2['imbalance']:+.3f} · depth@1% {_l2_depth_1pct:+.3f}"
-                f" · {_l2_n_large} large orders"
-            )
-    except Exception:
-        pass
+    vix_slope_display = "N/A"
+    _vix9d_price, _vix_price = _fetch_vix_term_structure()
+    if _vix9d_price and _vix_price and _vix_price > 0:
+        _vix_ratio = _vix9d_price / _vix_price
+        sig5_available = True
+        # >1.0 = backwardation (fear/bearish), <1.0 = contango (calm/bullish)
+        sig5_score = float(-1.0 * np.clip((_vix_ratio - 1.0) / 0.15, -1.0, 1.0))
+        _slope_label = "Backwardation" if _vix_ratio > 1.02 else ("Contango" if _vix_ratio < 0.98 else "Flat")
+        vix_slope_display = f"{_vix_ratio:.3f} ({_slope_label}) · VIX9D {_vix9d_price:.1f} / VIX {_vix_price:.1f}"
 
     # ── Aggregate (base score) ───────────────────────────────────────────────
     scores  = [sig1_score, sig2_score, sig3_score, sig4_score]
@@ -1032,7 +1041,7 @@ def _build_options_flow_dashboard(spy_chain: dict, gamma_data: dict | None) -> d
         {"Signal": "Gamma Zone",           "Value": gamma_display,   "Score": round(sig2_score, 3), "Direction": _score_to_dir(sig2_score)},
         {"Signal": "IV Skew (put/call)",   "Value": skew_display,    "Score": round(sig3_score, 3), "Direction": _score_to_dir(sig3_score)},
         {"Signal": "Unusual Activity",     "Value": unusual_display, "Score": round(sig4_score, 3), "Direction": _score_to_dir(sig4_score)},
-    ] + ([{"Signal": "L2 Depth (IBKR)",     "Value": l2_display,      "Score": round(sig5_score, 3), "Direction": _score_to_dir(sig5_score)}] if sig5_available else [])
+    ] + ([{"Signal": "VIX Slope (9D/VIX)",  "Value": vix_slope_display, "Score": round(sig5_score, 3), "Direction": _score_to_dir(sig5_score)}] if sig5_available else [])
 
     return {
         "options_score": options_score,
