@@ -718,9 +718,19 @@ def _fetch_vix_term_structure() -> tuple[float | None, float | None]:
     """Fetch VIX9D and VIX prices. Returns (vix9d, vix) or (None, None) on failure.
 
     Note: No caching here — runs in background thread where st.cache_data doesn't work.
-    yfinance will use its own internal cache for 1-day lookback.
+    Uses fast_info for speed; falls back to history if needed.
     """
     try:
+        # Try fast_info first (instant, cached by yfinance)
+        _vix9d_t = yf.Ticker("^VIX9D")
+        _vix_t = yf.Ticker("^VIX")
+        _vix9d_price = getattr(_vix9d_t.info, "currentPrice", None) or _vix9d_t.fast_info.get("lastPrice")
+        _vix_price = getattr(_vix_t.info, "currentPrice", None) or _vix_t.fast_info.get("lastPrice")
+
+        if _vix9d_price and _vix_price:
+            return float(_vix9d_price), float(_vix_price)
+
+        # Fallback to history if fast_info failed
         _vix9d_data = yf.download("^VIX9D", period="1d", progress=False, quiet=True)
         _vix_data = yf.download("^VIX", period="1d", progress=False, quiet=True)
         if not _vix9d_data.empty and not _vix_data.empty:
