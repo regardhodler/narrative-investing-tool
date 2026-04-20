@@ -1,29 +1,29 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-17T14:55:18",
+  "generated_at": "2026-04-20T15:16:37",
   "regime": {
     "label": "Risk-On",
     "score": 0.22,
-    "quadrant": "Transition",
-    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.98 ()\n- Global Manufacturing (EWG+FXI): z=+0.89 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Commodity Trend (Oil + Copper): z=-0.67 ()\n- JPY Carry Risk (FXY): z=+0.65 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 21/100 — Extreme Fear (contrarian)"
+    "quadrant": "Reflation",
+    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.83 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.72 ()\n- JPY Carry Risk (FXY): z=+0.71 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 29/100 — Fear (contrarian)"
   },
   "tactical": {
-    "score": 68,
-    "label": "Favorable Entry",
-    "action_bias": "Conditions support initiating or adding to risk positions on pullbacks."
+    "score": 59,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
-    "name": "MOMENTUM_BUILDING",
-    "interpretation": "Regime and Tactical both bullish — Options Flow hasn't confirmed yet. Two of three layers aligned. The trade is valid but wait for options to follow.",
-    "buy_tier": "MODERATE",
+    "name": "REGIME_ONLY_BULLISH",
+    "interpretation": "Only the macro regime is bullish — Tactical and Options Flow are flat. Macro has moved but price and options haven't followed. Wait for confirmation before committing.",
+    "buy_tier": "WATCH",
     "short_tier": "NOT A SHORTING ENV"
   },
   "rate_path": {
     "top_scenario": "hold",
-    "top_prob": 0.665,
+    "top_prob": 0.652,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime (+0.22) is supported by recent market developments, including a strong week for tech stocks and declining mortgage rates. However, the declaration by Iran that the Strait of Hormuz is open to shipping, despite the US maintaining a blockade, introduces a geopolitical risk that could potentially disrupt the current regime. The market appears to be pricing in a low probability of significant Fed action, with Polymarket prediction markets indicating only a 3% chance of the Fed's lower bound reaching 0% or lower before 2027. Meanwhile, the focus on AI-driven innovations in various sectors, such as tech and grocery retail, suggests a positive outlook for growth-oriented investments.",
+  "current_events_digest": "The current risk-on macro regime, with a score of +0.22, is supported by recent news, including the potential IPO of Jersey Mike's and Eli Lilly's $7 billion acquisition of Kelonia, which suggest a continued appetite for growth and investment. However, the Iran crisis and its potential impact on markets, as highlighted by the FT's statement that the crisis has not yet peaked, introduces a note of caution and uncertainty. The Polymarket prediction markets also indicate a low probability of extreme events, such as the Fed's lower bound reaching 0% or inflation exceeding 5% in 2026, which further supports the reflation narrative. Despite this, the whipsawing of markets in response to Iran war news, as noted by CNBC, flags the potential for ongoing volatility.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
@@ -139,19 +139,27 @@
     },
     {
       "ticker": "SPY",
-      "direction": "Short",
-      "entry_price": 679.46,
-      "entry_date": "2026-04-11",
-      "position_size": 1,
-      "thesis": "GENUINE UNCERTAINTY | Sell | conf 51%"
-    },
-    {
-      "ticker": "SPY",
       "direction": "Long",
       "entry_price": 686.1,
       "entry_date": "2026-04-13",
       "position_size": 1,
       "thesis": "EARLY BULL | Buy | conf 56%"
+    },
+    {
+      "ticker": "SPY",
+      "direction": "Long",
+      "entry_price": 701.55,
+      "entry_date": "2026-04-16",
+      "position_size": 4.0,
+      "thesis": ""
+    },
+    {
+      "ticker": "SPY",
+      "direction": "Long",
+      "entry_price": 710.05,
+      "entry_date": "2026-04-17",
+      "position_size": 9.2,
+      "thesis": ""
     }
   ],
   "earnings_risk": []
