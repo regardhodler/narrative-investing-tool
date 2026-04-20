@@ -302,11 +302,9 @@ def _section_factor_exposure(open_trades) -> str:
         try:
             _tks = [t["ticker"] for t in open_trades if t.get("status") == "open"]
             if _tks:
-                import yfinance as yf
-                _raw = yf.download(_tks, period="2d", interval="1d", progress=False, auto_adjust=True)
-                if hasattr(_raw.columns, "levels"):
-                    _closes = _raw["Close"].iloc[-1].to_dict()
-                    _live = {str(k).upper(): float(v) for k, v in _closes.items() if v == v}
+                from services.market_data import fetch_batch_safe
+                _snaps = fetch_batch_safe({t: t for t in _tks}, period="2d", interval="1d")
+                _live = {t.upper(): s.latest_price for t, s in _snaps.items() if s.latest_price}
         except Exception:
             pass
         _total_pv = sum(

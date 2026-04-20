@@ -4719,6 +4719,68 @@ def _render_qir_dashboard() -> None:
         _medium_parts = []
         if _conviction_block:
             _medium_parts.append(_conviction_block)
+
+        # ── Contagion block (confirmatory signal, after conviction) ───────────
+        try:
+            from services.market_data import fetch_correlation_matrix as _fcm
+            import numpy as _np
+            _corr_uni = ("SPY", "QQQ", "TLT", "GLD", "UUP", "HYG", "^VIX", "USO", "EEM")
+            _corr_30 = _fcm(_corr_uni, period="1mo")
+            _corr_90 = _fcm(_corr_uni, period="3mo")
+            if _corr_30 is not None and not _corr_30.empty:
+                _cmask = _np.ones(_corr_30.shape, dtype=bool)
+                _np.fill_diagonal(_cmask, False)
+                _c_score = min(100.0, _np.abs(_corr_30.values[_cmask]).mean() / 0.8 * 100.0)
+                _c_color = ("#ff1744" if _c_score >= 80 else
+                            "#ef4444" if _c_score >= 60 else
+                            "#f59e0b" if _c_score >= 30 else "#00c853")
+                _c_label = ("CRISIS" if _c_score >= 80 else
+                            "CONTAGION RISK" if _c_score >= 60 else
+                            "ELEVATED" if _c_score >= 30 else "HEALTHY")
+                _c_note = ("Everything correlated — validate all QIR signals before acting" if _c_score >= 80 else
+                           "Broad risk-off selling — cross-check QIR conviction" if _c_score >= 60 else
+                           "Markets starting to move together — stay alert" if _c_score >= 30 else
+                           "Assets behaving independently — normal conditions")
+                # Top shifted pair
+                _c_shift_html = ""
+                if _corr_90 is not None and not _corr_90.empty:
+                    _c_tks = list(_corr_30.columns)
+                    _c_max_d, _c_max_pair = 0.0, ""
+                    for _ci in range(len(_c_tks)):
+                        for _cj in range(_ci + 1, len(_c_tks)):
+                            _cd = abs(_corr_30.iloc[_ci, _cj] - _corr_90.iloc[_ci, _cj])
+                            if _cd > _c_max_d:
+                                _c_max_d = _cd
+                                _c_max_pair = f"{_c_tks[_ci]}/{_c_tks[_cj]}"
+                                _c_max_cur = _corr_30.iloc[_ci, _cj]
+                    if _c_max_pair and _c_max_d >= 0.2:
+                        _c_shift_html = (
+                            f'<span style="font-size:8px;color:#64748b;margin-left:10px;">'
+                            f'Biggest shift: <span style="color:#94a3b8;">{_c_max_pair}</span>'
+                            f' Δ{_c_max_d:+.2f} (now {_c_max_cur:.2f})</span>'
+                        )
+                _medium_parts.append(
+                    f'<div style="background:#0f172a;border:1px solid {_c_color}33;'
+                    f'border-left:3px solid {_c_color};border-radius:5px;'
+                    f'padding:8px 12px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">'
+                    f'<div>'
+                    f'<div style="font-size:8px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:2px;">CONTAGION INDEX</div>'
+                    f'<div style="font-size:22px;font-weight:900;color:{_c_color};line-height:1;">'
+                    f'{_c_score:.0f}</div>'
+                    f'</div>'
+                    f'<div style="flex:1;">'
+                    f'<span style="background:{_c_color}22;color:{_c_color};font-size:9px;'
+                    f'font-weight:700;padding:2px 8px;border-radius:10px;'
+                    f'border:1px solid {_c_color}44;">{_c_label}</span>'
+                    f'<div style="font-size:9px;color:#64748b;margin-top:4px;">{_c_note}</div>'
+                    f'{_c_shift_html}'
+                    f'</div>'
+                    f'</div>'
+                )
+        except Exception:
+            pass
+
         if _kelly_block:
             _medium_parts.append(f'<div style="margin-bottom:10px;">{_kelly_block}</div>')
         if _verdict_html:
@@ -5125,11 +5187,10 @@ def render():
 
     # ── VIX live ticker ────────────────────────────────────────────────────────
     try:
-        import yfinance as _yf
+        from services.market_data import fetch_ohlcv_single as _fetch_ohlcv
         @st.cache_data(ttl=120)
         def _fetch_vix_change():
-            _v = _yf.Ticker("^VIX")
-            _h = _v.history(period="2d", interval="1d")
+            _h = _fetch_ohlcv("^VIX", period="2d", interval="1d")
             if _h is None or len(_h) < 2:
                 return None, None, None
             _prev = float(_h["Close"].iloc[-2])

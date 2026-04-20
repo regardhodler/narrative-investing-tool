@@ -1,0 +1,21 @@
+[
+  {
+    "date": "2026-04-19",
+    "contagion_score": 73.0,
+    "zone": "CONTAGION RISK",
+    "top_shifts": [
+      {
+        "pair": "TLT/^VIX",
+        "delta": -0.3,
+        "cur": -0.49,
+        "base": -0.18
+      },
+      {
+        "pair": "USO/UUP",
+        "delta": 0.33,
+        "cur": 0.71,
+        "base": 0.38
+      }
+    ]
+  }
+]

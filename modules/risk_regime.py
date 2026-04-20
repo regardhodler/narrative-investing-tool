@@ -26,14 +26,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
-import yfinance as yf
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from services.market_data import (
     fetch_batch_safe, AssetSnapshot,
     fetch_fred_series_safe, fetch_options_chain_snapshot_safe,
-    warm_fred_cache,
+    warm_fred_cache, get_yf_info_safe, fetch_ohlcv_single,
 )
 from utils.theme import COLORS, apply_dark_layout, bloomberg_metric
 from utils.components import render_rr_score_mode_toggle
@@ -1027,7 +1026,7 @@ def _fetch_spy_pe() -> float:
     """Fetch SPY trailing P/E with 2s timeout, falling back to hardcoded value."""
     import concurrent.futures
     def _do_fetch():
-        info = yf.Ticker("SPY").info
+        info = get_yf_info_safe("SPY")
         val = info.get("trailingPE") or info.get("forwardPE")
         if val is not None:
             return float(val)
@@ -2559,11 +2558,14 @@ from services.sector_rotation import (
 def _fetch_spy_returns_hist(start: str, end: str) -> pd.DataFrame:
     """Fetch SPY daily closes for a date range (used by regime signal history)."""
     try:
-        raw = yf.download("SPY", start=start, end=end, interval="1d",
-                          progress=False, auto_adjust=True)
-        if raw.empty:
+        df = fetch_ohlcv_single("SPY", period="5y", interval="1d")
+        if df is None or df.empty:
             return pd.DataFrame()
-        close = raw["Close"]["SPY"] if isinstance(raw.columns, pd.MultiIndex) else raw["Close"]
+        close = df["Close"]
+        # Filter to the requested date range
+        close = close.loc[close.index >= pd.Timestamp(start)]
+        if end:
+            close = close.loc[close.index <= pd.Timestamp(end)]
         return close.pct_change().dropna().rename("spy_return")
     except Exception:
         return pd.DataFrame()

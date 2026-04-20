@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
 
+from services.market_data import fetch_ohlcv_single
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
 
@@ -298,12 +298,5 @@ def _resample_4h(df: pd.DataFrame) -> pd.DataFrame:
 
 @st.cache_data(ttl=900)
 def _get_price_data(ticker: str, period: str, interval: str = "1d") -> pd.DataFrame | None:
-    """Fetch OHLCV data from yfinance."""
-    try:
-        stock = yf.Ticker(ticker)
-        df = stock.history(period=period, interval=interval)
-        if df.empty:
-            return None
-        return df
-    except Exception:
-        return None
+    """Fetch OHLCV data via shared data layer."""
+    return fetch_ohlcv_single(ticker, period=period, interval=interval)

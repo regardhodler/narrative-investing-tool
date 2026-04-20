@@ -16,8 +16,8 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import yfinance as yf
 
+from services.market_data import fetch_ohlcv_single
 from utils.theme import COLORS, apply_dark_layout
 
 _REGIME_HISTORY_PATH = os.path.join(
@@ -62,6 +62,7 @@ _ASSET_REGIME_ALIGNMENT = {
 @st.cache_data(ttl=900)
 def _fetch_price_data() -> dict:
     """Fetch recent price history for scorecard assets + macro tickers."""
+    import yfinance as yf  # local import: 12-ticker batch, 15min TTL not covered by shared layer
     tickers = ["GLD", "SLV", "XLU", "TLT", "XLE", "FCX", "VXX",
                "USO", "SPY", "^VIX", "^TNX", "HYG"]
     try:

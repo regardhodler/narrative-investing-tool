@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
+import yfinance as yf  # used for start/end date price fetching in _fetch_prices
 
+from services.market_data import fetch_ohlcv_single
 from utils.journal import load_journal
 from utils.theme import COLORS, apply_dark_layout
 
@@ -23,9 +24,9 @@ def _ticker_currency_perf(ticker: str) -> str:
 @st.cache_data(ttl=3600)
 def _get_usdcad_perf() -> float:
     try:
-        raw = yf.download("USDCAD=X", period="5d", interval="1d", progress=False, auto_adjust=True)
-        if raw is not None and not raw.empty:
-            close = raw["Close"]
+        df = fetch_ohlcv_single("USDCAD=X", period="5d", interval="1d")
+        if df is not None and not df.empty:
+            close = df["Close"]
             if isinstance(close, pd.DataFrame):
                 close = close.iloc[:, 0]
             rate = float(close.dropna().iloc[-1])

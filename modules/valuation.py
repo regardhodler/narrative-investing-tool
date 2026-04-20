@@ -3,8 +3,9 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import yfinance as yf
+import yfinance as yf  # kept for: options volume, institutional_holders, _collect_signals retry loop
 
+from services.market_data import fetch_ohlcv_single, get_yf_info_safe
 from utils.session import get_ticker
 from utils.theme import COLORS, apply_dark_layout
 from utils.components import render_rr_score_mode_toggle, render_intel_health_bar, apply_confidence_penalty
@@ -982,12 +983,10 @@ def _collect_signals(ticker: str) -> dict:
             # Relative strength vs SPY (1-month)
             rs_vs_spy = None
             try:
-                import yfinance as _yf
-                spy_hist = _yf.download("SPY", period="1mo", interval="1d",
-                                        progress=False, auto_adjust=True)
-                if not spy_hist.empty:
+                spy_hist = fetch_ohlcv_single("SPY", period="1mo", interval="1d")
+                if spy_hist is not None and not spy_hist.empty:
                     spy_close = spy_hist["Close"]
-                    if isinstance(spy_close.columns if hasattr(spy_close, 'columns') else None, object):
+                    if isinstance(spy_close, pd.DataFrame):
                         spy_close = spy_close.iloc[:, 0]
                     spy_ret = float(spy_close.iloc[-1] / spy_close.iloc[0] - 1) * 100
                     stock_1m = close.iloc[-1] / close.iloc[-22] - 1 if len(close) >= 22 else None
@@ -2248,7 +2247,7 @@ def _detect_sector_profile(info: dict) -> str:
 def _get_risk_free_rate() -> float:
     """5-year average of 10-year US Treasury yield."""
     try:
-        tnx = yf.download("^TNX", period="5y", interval="1mo", progress=False, auto_adjust=True)
+        tnx = fetch_ohlcv_single("^TNX", period="5y", interval="1mo")
         if tnx is not None and not tnx.empty:
             close = tnx["Close"]
             if isinstance(close, pd.DataFrame):
@@ -2269,8 +2268,7 @@ def _compute_dcf(ticker: str, growth_adj: float = 0.0, wacc_adj: float = 0.0, tg
     Returns dict with all intermediate values for display.
     """
     try:
-        stock = yf.Ticker(ticker)
-        info = stock.info or {}
+        info = get_yf_info_safe(ticker) or {}
     except Exception:
         return None
 

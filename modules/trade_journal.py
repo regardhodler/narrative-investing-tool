@@ -5,8 +5,10 @@ import os
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-import yfinance as yf
+import yfinance as yf  # kept for: start/end date price fetches, chart downloads
 from datetime import date
+
+from services.market_data import fetch_ohlcv_single, get_yf_info_safe
 from utils.journal import load_journal, add_trade, close_trade, delete_trade, update_trade
 from utils.theme import COLORS, apply_dark_layout
 from utils.ai_tier import render_ai_tier_selector
@@ -30,9 +32,9 @@ def _ticker_currency(ticker: str) -> str:
 def _get_usdcad() -> float:
     """Fetch live USD/CAD spot rate (cached 1 hr). Falls back to 1.36 if unavailable."""
     try:
-        raw = yf.download("USDCAD=X", period="5d", interval="1d", progress=False, auto_adjust=True)
-        if raw is not None and not raw.empty:
-            close = raw["Close"]
+        df = fetch_ohlcv_single("USDCAD=X", period="5d", interval="1d")
+        if df is not None and not df.empty:
+            close = df["Close"]
             if isinstance(close, pd.DataFrame):
                 close = close.iloc[:, 0]
             rate = float(close.dropna().iloc[-1])
@@ -88,9 +90,8 @@ def _fetch_risk_prices(tickers: tuple, period: str = "1y") -> pd.DataFrame:
 @st.cache_data(ttl=86400)
 def _fetch_sector(ticker: str) -> str:
     """Fetch sector from yfinance .info. Returns 'Unknown' on failure."""
-    import yfinance as yf
     try:
-        info = yf.Ticker(ticker).info
+        info = get_yf_info_safe(ticker)
         return info.get("sector") or info.get("industryDisp") or "Unknown"
     except Exception:
         return "Unknown"
@@ -815,8 +816,7 @@ def render():
             default_price = 0.0
             if ticker:
                 try:
-                    tk = yf.Ticker(ticker)
-                    hist = tk.history(period="1d", auto_adjust=True)
+                    hist = fetch_ohlcv_single(ticker, period="5d", interval="1d")
                     if hist is not None and not hist.empty:
                         default_price = round(float(hist["Close"].iloc[-1]), 2)
                 except Exception:

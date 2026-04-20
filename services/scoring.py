@@ -12,9 +12,14 @@ Scores each ticker 0-100 across six categories using free data sources:
 
 import numpy as np
 import pandas as pd
-import yfinance as yf
 import streamlit as st
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from services.market_data import (
+    fetch_ohlcv_single,
+    get_yf_info_safe,
+    fetch_options_chain_snapshot_safe,
+)
 
 
 def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
@@ -25,11 +30,9 @@ def _clamp(val: float, lo: float = 0.0, hi: float = 100.0) -> float:
 def _fetch_technicals(ticker: str) -> dict:
     """Score technicals 0-100 based on SMA positioning, RSI, and momentum."""
     try:
-        df = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
+        df = fetch_ohlcv_single(ticker, period="1y", interval="1d")
         if df is None or df.empty:
             return {"score": 50, "details": {}}
-        if isinstance(df.columns, pd.MultiIndex):
-            df = df.droplevel("Ticker", axis=1)
         close = df["Close"].dropna()
         if len(close) < 50:
             return {"score": 50, "details": {}}
@@ -91,8 +94,7 @@ def _fetch_technicals(ticker: str) -> dict:
 def _fetch_fundamentals(ticker: str) -> dict:
     """Score fundamentals 0-100 based on P/E, growth, margins."""
     try:
-        tk = yf.Ticker(ticker)
-        info = tk.info or {}
+        info = get_yf_info_safe(ticker) or {}
         score = 50  # neutral default
 
         # P/E ratio (0-35 pts) — lower is better, negative = 0
@@ -179,15 +181,12 @@ def _fetch_insider_score(ticker: str) -> dict:
 def _fetch_options_score(ticker: str) -> dict:
     """Score options sentiment 0-100 based on P/C ratio."""
     try:
-        tk = yf.Ticker(ticker)
-        expiries = list(tk.options or [])
-        if not expiries:
+        snap = fetch_options_chain_snapshot_safe(ticker, max_expiries=1)
+        if not snap:
             return {"score": 50, "details": {}}
 
-        # Use nearest expiry
-        chain = tk.option_chain(expiries[0])
-        call_oi = chain.calls["openInterest"].sum() if chain.calls is not None else 0
-        put_oi = chain.puts["openInterest"].sum() if chain.puts is not None else 0
+        call_oi = sum(snap.get("call_oi") or [])
+        put_oi = sum(snap.get("put_oi") or [])
 
         if call_oi == 0 and put_oi == 0:
             return {"score": 50, "details": {}}
@@ -219,7 +218,7 @@ def _fetch_options_score(ticker: str) -> dict:
 def _fetch_short_interest(ticker: str) -> dict:
     """Score short interest 0-100 — high short float = squeeze potential (contrarian bullish)."""
     try:
-        info = yf.Ticker(ticker).info or {}
+        info = get_yf_info_safe(ticker) or {}
         short_pct = info.get("shortPercentOfFloat") or 0.0
         days_to_cover = info.get("shortRatio") or 0.0
 
@@ -391,7 +390,7 @@ def fetch_short_interest_history(ticker: str) -> pd.DataFrame:
 
         # Compute short % float using yfinance shares float
         try:
-            info = yf.Ticker(ticker).info or {}
+            info = get_yf_info_safe(ticker) or {}
             float_shares = info.get("floatShares") or info.get("sharesOutstanding") or 0
             if float_shares:
                 df["short_pct_float"] = (df["short_interest"] / float_shares * 100).clip(0, 100)
@@ -415,7 +414,7 @@ def scan_short_interest(tickers: tuple) -> list[dict]:
     """
     def _fetch(t: str) -> dict:
         try:
-            info = yf.Ticker(t).info or {}
+            info = get_yf_info_safe(t) or {}
             short_pct = info.get("shortPercentOfFloat") or 0.0
             days_to_cover = info.get("shortRatio") or 0.0
             price = info.get("currentPrice") or info.get("regularMarketPrice") or 0.0
