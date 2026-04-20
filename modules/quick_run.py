@@ -1621,6 +1621,40 @@ def _render_qir_dashboard() -> None:
         _leading_warning   = _cls.get("leading_warning")
         _conviction_comps  = _cls.get("conviction_components") or {}
 
+        # ── Kritzman contagion adjustment (Skulls, FAJ 2010) ─────────────────
+        # Calm Sharpe +0.41 vs turbulent -0.58 → crisis signal value = 0.41/(0.41+0.58)
+        _kritzman_mult = 1.0
+        _kritzman_label = ""
+        _raw_conviction = _conviction_score
+        try:
+            from services.market_data import fetch_correlation_matrix as _fcm_k
+            import numpy as _np_k
+            _k_corr = _fcm_k(("SPY","QQQ","TLT","GLD","UUP","HYG","^VIX","USO","EEM"), period="1mo")
+            if _k_corr is not None and not _k_corr.empty:
+                _k_mask = ~_np_k.eye(len(_k_corr), dtype=bool)
+                _k_score = min(100.0, _np_k.abs(_k_corr.values[_k_mask]).mean() / 0.8 * 100.0)
+                if _k_score >= 80:
+                    _kritzman_mult = 0.41
+                elif _k_score >= 60:
+                    _kritzman_mult = 0.60
+                elif _k_score >= 30:
+                    _kritzman_mult = 0.80
+                if _kritzman_mult < 1.0:
+                    _kritzman_label = f"×{_kritzman_mult:.2f} (contagion {_k_score:.0f})"
+                    if _conviction_score is not None:
+                        _conviction_score = int(round(_conviction_score * _kritzman_mult))
+                        # Re-derive size label from adjusted score
+                        if _conviction_score >= 75:
+                            _conviction_size_label = "50% SIZE"
+                        elif _conviction_score >= 55:
+                            _conviction_size_label = "40% SIZE"
+                        elif _conviction_score >= 40:
+                            _conviction_size_label = "30% SIZE"
+                        else:
+                            _conviction_size_label = "20% SIZE"
+        except Exception:
+            pass
+
         # Entry signal recommendation (leading vs lagging synthesis)
         _leading_s = int(_rc.get("leading_score") or 50)
         _macro_s   = int(_rc.get("macro_score") or 50)
@@ -1956,7 +1990,10 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
                 f'<div style="text-align:right;">'
                 f'<div style="font-size:28px;font-weight:900;color:{_cv_color2};line-height:1;">'
-                f'{_conviction_score}</div>'
+                + (f'<span style="color:#64748b;font-size:18px;">{_raw_conviction}</span>'
+                   f'<span style="color:#a78bfa;font-size:16px;margin:0 4px;">→</span>'
+                   f'{_conviction_score}' if _kritzman_mult < 1.0 else f'{_conviction_score}')
+                + f'</div>'
                 f'<div style="font-size:8px;color:#64748b;">/100</div>'
                 f'</div>'
                 f'</div>'
@@ -2003,7 +2040,10 @@ def _render_qir_dashboard() -> None:
                 f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:3px;'
                 f'padding:2px 7px;font-size:8px;color:{_hmm_pill_c};">'
                 f'HMM ×{_hmm_mult_v:.2f}</div>'
-                f'</div>'
+                + (f'<div style="background:#0a0f1a;border:1px solid #7c3aed44;border-radius:3px;'
+                   f'padding:2px 7px;font-size:8px;color:#a78bfa;letter-spacing:0.05em;">'
+                   f'KRITZMAN {_kritzman_label}</div>' if _kritzman_label else '')
+                + f'</div>'
                 f'<div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.7;">'
                 f'<b style="color:#3b4f6b;">Conviction</b> = how strong the pattern signal is (signal amplitude). '
                 f'High → size up. Low → reduce exposure regardless of direction. '

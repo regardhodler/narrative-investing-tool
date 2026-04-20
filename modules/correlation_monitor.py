@@ -276,6 +276,26 @@ def render():
     col_score, col_map = st.columns([1, 3])
     with col_score:
         score = _contagion_score(corr)
+
+        # Auto-log once per calendar day (session-key guard)
+        _today = datetime.now().strftime("%Y-%m-%d")
+        if st.session_state.get("_corr_last_logged") != _today:
+            _c30 = fetch_correlation_matrix(_UNIVERSE, period="1mo")
+            _c90 = fetch_correlation_matrix(_UNIVERSE, period="3mo")
+            _auto_shifts = []
+            if _c30 is not None and _c90 is not None:
+                _tks = list(_c30.columns)
+                for _i, _t1 in enumerate(_tks):
+                    for _t2 in _tks[_i + 1:]:
+                        _d = _c30.loc[_t1, _t2] - _c90.loc[_t1, _t2]
+                        if abs(_d) >= 0.3:
+                            _auto_shifts.append({"pair": f"{_t1}/{_t2}", "delta": round(_d, 2),
+                                                  "cur": round(_c30.loc[_t1, _t2], 2),
+                                                  "base": round(_c90.loc[_t1, _t2], 2)})
+            _zone_label, _ = _contagion_zone(score)
+            _log_snapshot(score, _zone_label, _auto_shifts)
+            st.session_state["_corr_last_logged"] = _today
+
         _render_contagion_card(score)
     with col_map:
         _render_heatmap(corr)
