@@ -4035,6 +4035,7 @@ def _render_qir_dashboard() -> None:
         _cascade_block = ""
         try:
             import math as _math
+            import numpy as np
 
             # ── Raw data collection ────────────────────────────────────────────
             _of_ctx_vc  = st.session_state.get("_options_flow_context") or {}
