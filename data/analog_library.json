@@ -1,0 +1,159 @@
+{
+  "_meta": {
+    "description": "Curated historical macro regimes with realized return numbers. Used by second_order_thesis module to ground LLM-picked analogs in actual data instead of vibes. Each entry is keyed by a short slug. The LLM returns a slug (or free-form analog name that we best-match against this library); the app looks up real numbers.",
+    "source_notes": "Returns are approximate peak-to-peak or start-to-peak for the dominant theme of each regime, drawn from published index/sector performance data. Max drawdown is the deepest intra-period trough.",
+    "updated": "2026-04-20"
+  },
+  "analogs": {
+    "1999_telco_capex": {
+      "name": "1999 telco capex euphoria",
+      "period": "1998-1999",
+      "theme": "fiber/telecom infrastructure build-out",
+      "return_pct": 180,
+      "duration_months": 18,
+      "max_drawdown": -78,
+      "hit_rate": "4 of 10",
+      "note": "Dominant names rallied ~2-3x then collapsed 80%+ in 2000-02. Lesson: capex cycles overshoot then correct violently. Survivors were diversified (VZ) not pure plays."
+    },
+    "2019_semis_cycle": {
+      "name": "2019 semiconductor upcycle",
+      "period": "2019-2021",
+      "theme": "5G + cloud capex inflection",
+      "return_pct": 135,
+      "duration_months": 24,
+      "max_drawdown": -28,
+      "hit_rate": "7 of 10",
+      "note": "Broad semis (SOXX) doubled. High-quality leaders (NVDA, AMD, AVGO) 3-5x. Clean cycle — no blowup — because end-demand was real."
+    },
+    "2003_2007_commodities": {
+      "name": "2003-07 commodity supercycle",
+      "period": "2003-2007",
+      "theme": "China-driven industrial metals/energy",
+      "return_pct": 220,
+      "duration_months": 48,
+      "max_drawdown": -65,
+      "hit_rate": "6 of 10",
+      "note": "Oil $25 → $140. Copper 3x. Miners 4-5x. Ended in 2008 crash but fundamentals were real. 3rd/4th-order plays (drillers, service cos, shipping) outperformed primaries."
+    },
+    "2009_qe1_reflation": {
+      "name": "Post-GFC QE1 reflation",
+      "period": "2009-2011",
+      "theme": "liquidity-driven risk asset reflation",
+      "return_pct": 110,
+      "duration_months": 24,
+      "max_drawdown": -19,
+      "hit_rate": "8 of 10",
+      "note": "Everything rallied. High-beta, low-quality most of all. 4th-order plays (small-cap leverage) delivered 5-10x. Lesson: in policy reflation, size the junk tail."
+    },
+    "2016_2018_tax_cut": {
+      "name": "2017 tax cut + synchronized growth",
+      "period": "2016-2018",
+      "theme": "fiscal stimulus + global growth",
+      "return_pct": 55,
+      "duration_months": 24,
+      "max_drawdown": -20,
+      "hit_rate": "6 of 10",
+      "note": "Buyback machine. Financials and cyclicals led. Ended in Q4 2018 vol spike. Regime template for rates-up-but-growth-also-up."
+    },
+    "2020_covid_stimulus": {
+      "name": "2020-21 COVID stimulus wave",
+      "period": "2020-2021",
+      "theme": "unprecedented fiscal + monetary stimulus",
+      "return_pct": 200,
+      "duration_months": 18,
+      "max_drawdown": -34,
+      "hit_rate": "5 of 10",
+      "note": "SPAC/ARK/crypto 3-10x then 70-90% drawdown. High-quality compounders (MSFT, GOOGL) cleaner 2x. Lesson: stimulus-driven moves are violent both ways; position sizing matters more than picking."
+    },
+    "1970s_commodity_stagflation": {
+      "name": "1970s commodity stagflation",
+      "period": "1973-1980",
+      "theme": "oil shocks + wage-price spiral",
+      "return_pct": 145,
+      "duration_months": 84,
+      "max_drawdown": -48,
+      "hit_rate": "4 of 10",
+      "note": "Gold 20x, oil 10x, but SPX flat real. Nominal winners were commodities, real-asset proxies. Equities outside energy/materials were a trap. Template for stagflation regimes."
+    },
+    "1980s_productivity_disinflation": {
+      "name": "1980s disinflation + productivity boom",
+      "period": "1982-1989",
+      "theme": "Volcker victory + Reagan capex cycle",
+      "return_pct": 230,
+      "duration_months": 84,
+      "max_drawdown": -34,
+      "hit_rate": "7 of 10",
+      "note": "Long-duration assets dominated. Tech emergence (MSFT, ORCL IPO-era). LBO wave on cyclicals. Template for rates-down-in-expansion."
+    },
+    "1995_1999_dotcom": {
+      "name": "1995-99 internet build-out",
+      "period": "1995-1999",
+      "theme": "first-wave internet infrastructure",
+      "return_pct": 400,
+      "duration_months": 60,
+      "max_drawdown": -83,
+      "hit_rate": "3 of 10",
+      "note": "Pure plays 10-50x then -80 to -95%. Picks-and-shovels (CSCO, INTC, SUN) 5-10x, still took 60%+ drawdowns. Quality (MSFT) held better. Template for secular tech booms."
+    },
+    "2011_2012_qe2_euro_crisis": {
+      "name": "2011-12 Europe crisis + QE2",
+      "period": "2011-2012",
+      "theme": "sovereign debt fear + liquidity response",
+      "return_pct": 22,
+      "duration_months": 18,
+      "max_drawdown": -21,
+      "hit_rate": "5 of 10",
+      "note": "Choppy. Winners were US-centric high-quality + defensive yield. Avoid European financials, EM. Template for late-cycle fear without crash."
+    },
+    "2014_2016_oil_crash": {
+      "name": "2014-16 oil crash + EM pain",
+      "period": "2014-2016",
+      "theme": "oil supply glut + dollar strength",
+      "return_pct": -55,
+      "duration_months": 24,
+      "max_drawdown": -75,
+      "hit_rate": "2 of 10",
+      "note": "Energy -55%, high-yield -20%, EM -30%. Dollar hoarders and bond-proxy quality won. Classic deflation-scare template."
+    },
+    "2022_inflation_shock": {
+      "name": "2022 inflation + rate shock",
+      "period": "2022",
+      "theme": "Fed tightening cycle + inflation persistence",
+      "return_pct": -25,
+      "duration_months": 12,
+      "max_drawdown": -28,
+      "hit_rate": "3 of 10",
+      "note": "Long-duration tech -35 to -70%. Energy +60%. Classic value > growth rotation. 2nd-order: drillers, shipping, defense. Template for hiking regimes."
+    },
+    "2023_ai_mania_onset": {
+      "name": "2023 AI capex awakening",
+      "period": "2023-2024",
+      "theme": "generative AI infrastructure capex",
+      "return_pct": 195,
+      "duration_months": 18,
+      "max_drawdown": -22,
+      "hit_rate": "6 of 10",
+      "note": "NVDA +800%, AI-adjacent semis 2-3x, then power/grid 2nd-order emerged. 3rd-order (cooling, utilities) starting to rerate. Closest real-time analog for current regime."
+    },
+    "2001_2002_bear": {
+      "name": "2001-02 post-dotcom bear",
+      "period": "2001-2002",
+      "theme": "capex bust + corporate scandal",
+      "return_pct": -49,
+      "duration_months": 24,
+      "max_drawdown": -49,
+      "hit_rate": "2 of 10",
+      "note": "Tech -78%, SPX -49%. Gold, healthcare, defense held. Template for capex-cycle unwinds. Second-order plays (suppliers) got crushed worst."
+    },
+    "2006_2007_housing_peak": {
+      "name": "2006-07 housing/credit peak",
+      "period": "2006-2007",
+      "theme": "leveraged consumer + shadow banking",
+      "return_pct": 18,
+      "duration_months": 18,
+      "max_drawdown": -57,
+      "hit_rate": "3 of 10",
+      "note": "Late-cycle meltup, then 2008 crash. Lesson: positive returns in final innings can look like opportunity but mask brittleness. Template for euphoria-gating."
+    }
+  }
+}

@@ -190,7 +190,7 @@ section[data-testid="stSidebar"] div:has(#disc-sub-anchor) ~ div [data-testid="s
         sub_module = st.radio(
             "Discovery Modules",
             [
-                "Narrative Discovery", "Options Activity", "Price Action",
+                "Narrative Discovery", "Second Order Thesis", "Options Activity", "Price Action",
                 "EDGAR Scanner", "Institutional (13F)", "Insider & Congress", "Valuation",
             ],
             label_visibility="collapsed",
@@ -247,7 +247,8 @@ elif top_level == "Discovery":
         height=0,
     )
     _sub_icons = {
-        "Narrative Discovery": "📡", "Options Activity": "📊", "Price Action": "📈",
+        "Narrative Discovery": "📡", "Second Order Thesis": "🎯",
+        "Options Activity": "📊", "Price Action": "📈",
         "EDGAR Scanner": "📋", "Institutional (13F)": "🐋",
         "Insider & Congress": "🏛", "Valuation": "💹",
     }
@@ -279,6 +280,8 @@ elif top_level == "Discovery":
         )
     if sub_module == "Narrative Discovery":
         from modules.narrative_discovery import render; render()
+    elif sub_module == "Second Order Thesis":
+        from modules.second_order_thesis import render; render()
     elif sub_module == "Price Action":
         from modules.narrative_pulse import render; render()
     elif sub_module == "EDGAR Scanner":

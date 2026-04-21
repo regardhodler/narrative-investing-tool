@@ -2804,3 +2804,470 @@ def generate_adversarial_debate(
         "contested_bias": _contested_bias,
         "contested_bias_reason": _contested_bias_reason,
     }
+
+
+# ── Nth-Order Thesis Builder ─────────────────────────────────────────────────
+
+def _nth_order_system_prompt() -> str:
+    return (
+        "You are a senior discretionary macro PM at a hedge fund in the tradition "
+        "of Bridgewater, Scion, and Appaloosa. You do not write consensus research. "
+        "Your edge comes from mapping primary narratives to 2nd, 3rd, and 4th-order "
+        "beneficiaries before the crowd prices them, and from steel-manning every "
+        "bear case before you size a position. You write structured JSON only — no "
+        "markdown fences, no preamble, no explanation outside the schema."
+    )
+
+
+def _nth_order_user_prompt(primary: str, regime_ctx: dict, contagion_score: float | None) -> str:
+    hmm = regime_ctx.get("hmm_state", "Unknown")
+    ci_pct = regime_ctx.get("ci_pct")
+    macro_score = regime_ctx.get("macro_score")
+    events_digest = (regime_ctx.get("events_digest") or "").strip()
+    events_sentiment = regime_ctx.get("events_sentiment") or {}
+    events_ts = regime_ctx.get("events_ts")
+
+    sent = events_sentiment.get("sentiment")
+    unc = events_sentiment.get("uncertainty")
+    theme = events_sentiment.get("dominant_theme", "")
+    risk_events = events_sentiment.get("risk_events", []) or []
+
+    ctx_lines = [f"Primary narrative: {primary}"]
+    ctx_lines.append(f"HMM regime state: {hmm}")
+    if ci_pct is not None:
+        ctx_lines.append(f"CI% (crisis intensity): {ci_pct:.1f}%")
+    macro_regime = regime_ctx.get("macro_regime", "")
+    macro_factors = regime_ctx.get("macro_factors") or {}
+    macro_trigger = regime_ctx.get("macro_trigger", "")
+    macro_trigger_conf = regime_ctx.get("macro_trigger_confidence", "")
+    macro_actions = regime_ctx.get("macro_actions") or []
+    if macro_regime:
+        ctx_lines.append(f"Macro regime label: {macro_regime}")
+    if macro_score is not None:
+        ctx_lines.append(f"Macro composite score: {macro_score}")
+    if macro_factors:
+        factors_str = ", ".join(f"{k}={v}" for k, v in macro_factors.items())
+        ctx_lines.append(f"Macro factor breakdown: {factors_str}")
+    if macro_trigger:
+        ctx_lines.append(f"Macro trigger signal: {macro_trigger} (confidence: {macro_trigger_conf})")
+    if macro_actions:
+        ctx_lines.append("Macro regime actions: " + "; ".join(str(a) for a in macro_actions[:4]))
+    if contagion_score is not None:
+        ctx_lines.append(f"Contagion score: {contagion_score}")
+    if sent is not None:
+        ctx_lines.append(f"Events sentiment: {sent:+.2f} (uncertainty {unc or 0:.2f})")
+    if theme:
+        ctx_lines.append(f"Dominant tape theme: {theme}")
+    if risk_events:
+        ctx_lines.append("Active risk events: " + "; ".join(str(r) for r in risk_events[:4]))
+    if events_digest:
+        _ed = events_digest[:1500]
+        ctx_lines.append(f"Current events digest:\n{_ed}")
+    if events_ts:
+        ctx_lines.append(f"News digest timestamp: {events_ts}")
+
+    ctx_blk = "\n".join(ctx_lines)
+
+    return f"""CONTEXT:
+{ctx_blk}
+
+TASK:
+Given the primary narrative above and the current regime + tape context, produce
+a hedge-fund-grade research note that maps the narrative to 2nd, 3rd, and
+4th-order beneficiaries. The output MUST contain AT LEAST ONE play per order
+level (2, 3, and 4). 4th-order plays may be moonshot tails.
+
+For each play:
+- Produce a NON-CONSENSUS view that differs from what sell-side is writing
+- Include a numbered catalyst path with rough timing
+- Give upside and downside as RANGES (e.g. [30, 60]) reflecting genuine uncertainty
+- Provide a HISTORICAL ANALOG (one of: 1999_telco_capex, 2019_semis_cycle,
+  2003_2007_commodities, 2009_qe1_reflation, 2016_2018_tax_cut, 2020_covid_stimulus,
+  1970s_commodity_stagflation, 1980s_productivity_disinflation, 1995_1999_dotcom,
+  2011_2012_qe2_euro_crisis, 2014_2016_oil_crash, 2022_inflation_shock,
+  2023_ai_mania_onset, 2001_2002_bear, 2006_2007_housing_peak) — pick the closest
+- STEEL-MAN the bear case
+- Provide `evidence_against`: 2-3 data points TRUE TODAY that argue against the
+  thesis (actual current refuting data, not hypotheticals). If you cannot find
+  any, say so explicitly with a single item "no disconfirming evidence found".
+- 2-3 forward data points to watch
+- 3-5 specific tickers
+- Vehicle notes (ETFs, options structures)
+- `moonshot`: true only for >5x tail candidates
+
+Ensure the plays are COHERENT with the current regime (HMM + CI% + events
+sentiment). Do not propose high-beta tails in Crisis regime. Do not propose
+defensive yield in Goldilocks.
+
+Return ONLY valid JSON with this exact schema:
+{{
+  "primary": "{primary}",
+  "primary_thesis": "one-line what's really driving the narrative",
+  "regime_template": {{
+    "analog_slug": "one of the slugs listed above",
+    "analog_name": "free-form name",
+    "reasoning": "1-2 sentences why this period rhymes with today"
+  }},
+  "orders": [
+    {{
+      "order": 2,
+      "name": "theme name",
+      "consensus_view": "what sell-side/media believes",
+      "non_consensus_view": "what we believe differently",
+      "catalyst_path": ["step 1 with rough timing", "step 2", "step 3"],
+      "upside_pct_range": [lo, hi],
+      "downside_pct_range": [lo, hi],
+      "duration_months": integer,
+      "bear_case": "steel-manned bear case",
+      "evidence_against": ["data point 1 true today", "data point 2"],
+      "data_points": ["forward metric 1", "forward metric 2"],
+      "tickers": ["TICKER1", "TICKER2", "TICKER3"],
+      "vehicles": "ETF / options notes",
+      "moonshot": false
+    }},
+    {{ "order": 3, ... }},
+    {{ "order": 4, ... }}
+  ],
+  "what_would_kill_it": "one-line thesis-level kill switch"
+}}"""
+
+
+def _single_nth_run(
+    prompt: str,
+    system: str,
+    model: str,
+    use_claude: bool,
+    temperature: float,
+    max_tokens: int = 2400,
+) -> dict:
+    """Make a single LLM call and parse JSON out. Returns {} on failure."""
+    import re as _re
+
+    def _parse_json(text: str) -> dict:
+        if not text:
+            return {}
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+            text = text.strip()
+        m = _re.search(r"\{.*\}", text, _re.DOTALL)
+        if not m:
+            return {}
+        try:
+            return json.loads(m.group())
+        except json.JSONDecodeError:
+            return {}
+
+    try:
+        if use_claude and _is_xai_model(model) and os.getenv("XAI_API_KEY"):
+            raw = _call_xai(
+                [{"role": "user", "content": prompt}],
+                model, max_tokens, temperature, system=system, json_mode=True,
+            )
+            return _parse_json(raw)
+
+        if use_claude and os.getenv("ANTHROPIC_API_KEY"):
+            import anthropic as _ant
+            _client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+            _msg = _client.messages.create(
+                model=model,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return _parse_json(_msg.content[0].text.strip())
+
+        # Groq fallback
+        api_key = os.getenv("GROQ_API_KEY", "")
+        if not api_key:
+            return {}
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "response_format": {"type": "json_object"},
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        return _parse_json(resp.json()["choices"][0]["message"]["content"].strip())
+    except Exception:
+        return {}
+
+
+def _merge_nth_runs(runs: list[dict]) -> dict:
+    """Merge N runs into a single thesis with conviction + variance.
+
+    Ticker conviction = frac of runs that proposed the ticker (at any order).
+    Upside/downside ranges = min..max across runs for each matching play name.
+    Takes the most-voted analog_slug.
+    """
+    valid = [r for r in runs if r and r.get("orders")]
+    if not valid:
+        return {}
+    n = len(valid)
+
+    # Pick primary/primary_thesis/kill-switch from the first (they should be similar)
+    merged = {
+        "primary":            valid[0].get("primary", ""),
+        "primary_thesis":     valid[0].get("primary_thesis", ""),
+        "what_would_kill_it": valid[0].get("what_would_kill_it", ""),
+    }
+
+    # Analog slug: majority vote
+    slug_votes: dict[str, int] = {}
+    for r in valid:
+        slug = (r.get("regime_template") or {}).get("analog_slug", "")
+        if slug:
+            slug_votes[slug] = slug_votes.get(slug, 0) + 1
+    top_slug = max(slug_votes, key=slug_votes.get) if slug_votes else ""
+    # Take reasoning from the first run that voted the winning slug
+    top_reasoning = ""
+    top_name = ""
+    for r in valid:
+        rt = r.get("regime_template") or {}
+        if rt.get("analog_slug") == top_slug:
+            top_reasoning = rt.get("reasoning", "")
+            top_name = rt.get("analog_name", "")
+            break
+    merged["regime_template"] = {
+        "analog_slug": top_slug,
+        "analog_name": top_name,
+        "reasoning":   top_reasoning,
+    }
+
+    # Aggregate plays by (order, name-key). Use first 3 words of name as key.
+    def _name_key(nm: str) -> str:
+        return " ".join((nm or "").lower().split()[:3])
+
+    agg: dict[tuple, dict] = {}
+    for r in valid:
+        for play in r.get("orders") or []:
+            try:
+                order = int(play.get("order", 2))
+            except Exception:
+                order = 2
+            key = (order, _name_key(play.get("name", "")))
+            if key not in agg:
+                agg[key] = {
+                    "order":              order,
+                    "name":               play.get("name", ""),
+                    "consensus_views":    [],
+                    "non_consensus_views": [],
+                    "catalyst_paths":     [],
+                    "upside_los":         [],
+                    "upside_his":         [],
+                    "downside_los":       [],
+                    "downside_his":       [],
+                    "durations":          [],
+                    "bear_cases":         [],
+                    "evidence_against":   [],
+                    "data_points":        [],
+                    "tickers":            [],
+                    "vehicles_list":      [],
+                    "moonshot_votes":     0,
+                    "appearances":        0,
+                }
+            bucket = agg[key]
+            bucket["appearances"] += 1
+            bucket["consensus_views"].append(play.get("consensus_view", ""))
+            bucket["non_consensus_views"].append(play.get("non_consensus_view", ""))
+            bucket["catalyst_paths"].append(play.get("catalyst_path") or [])
+            up = play.get("upside_pct_range") or [0, 0]
+            dn = play.get("downside_pct_range") or [0, 0]
+            if up:
+                bucket["upside_los"].append(float(up[0]))
+                bucket["upside_his"].append(float(up[-1]))
+            if dn:
+                bucket["downside_los"].append(float(dn[0]))
+                bucket["downside_his"].append(float(dn[-1]))
+            try:
+                bucket["durations"].append(int(play.get("duration_months", 12)))
+            except Exception:
+                pass
+            bucket["bear_cases"].append(play.get("bear_case", ""))
+            bucket["evidence_against"].extend(play.get("evidence_against") or [])
+            bucket["data_points"].extend(play.get("data_points") or [])
+            bucket["tickers"].extend([t.upper() for t in (play.get("tickers") or []) if t])
+            if play.get("vehicles"):
+                bucket["vehicles_list"].append(play["vehicles"])
+            if play.get("moonshot"):
+                bucket["moonshot_votes"] += 1
+
+    # Flatten
+    plays_out: list[dict] = []
+    for key, b in agg.items():
+        # Ticker conviction: frac of runs that included this ticker for this play
+        tk_counter: dict[str, int] = {}
+        for t in b["tickers"]:
+            tk_counter[t] = tk_counter.get(t, 0) + 1
+        # Keep tickers that appeared in ≥ 2 runs OR in single-run plays keep all
+        if b["appearances"] >= 2:
+            tickers = sorted(
+                [t for t, c in tk_counter.items() if c >= 2],
+                key=lambda x: -tk_counter[x],
+            )
+            if not tickers:  # fallback: keep the top-voted
+                tickers = sorted(tk_counter, key=lambda x: -tk_counter[x])[:3]
+        else:
+            tickers = list(dict.fromkeys(b["tickers"]))[:5]
+
+        conviction_pct = int(round(b["appearances"] / n * 100))
+
+        def _lo(lst): return min(lst) if lst else 0
+        def _hi(lst): return max(lst) if lst else 0
+        def _avg_int(lst): return int(round(sum(lst) / len(lst))) if lst else 0
+
+        def _first_nonempty(lst):
+            for item in lst:
+                if item:
+                    return item
+            return ""
+
+        def _unique_keep_order(items):
+            out = []
+            seen = set()
+            for x in items:
+                if x and x not in seen:
+                    out.append(x)
+                    seen.add(x)
+            return out
+
+        plays_out.append({
+            "order":              b["order"],
+            "name":               b["name"],
+            "consensus_view":     _first_nonempty(b["consensus_views"]),
+            "non_consensus_view": _first_nonempty(b["non_consensus_views"]),
+            "catalyst_path":      _first_nonempty(b["catalyst_paths"]) or [],
+            "upside_pct_range":   [_lo(b["upside_los"]), _hi(b["upside_his"])],
+            "downside_pct_range": [_lo(b["downside_los"]), _hi(b["downside_his"])],
+            "duration_months":    _avg_int(b["durations"]),
+            "bear_case":          _first_nonempty(b["bear_cases"]),
+            "evidence_against":   _unique_keep_order(b["evidence_against"])[:4],
+            "data_points":        _unique_keep_order(b["data_points"])[:4],
+            "tickers":            tickers[:5],
+            "vehicles":           _first_nonempty(b["vehicles_list"]),
+            "moonshot":           b["moonshot_votes"] >= max(1, n // 2),
+            "conviction_pct":     conviction_pct,
+        })
+
+    # Sort: order asc, then conviction desc
+    plays_out.sort(key=lambda p: (p["order"], -p["conviction_pct"]))
+    merged["orders"] = plays_out
+    return merged
+
+
+def generate_nth_order_thesis(
+    primary_narrative: str,
+    regime_ctx: dict,
+    contagion_score: float | None = None,
+    qir_snapshot: dict | None = None,
+    n_runs: int = 5,
+    use_claude: bool = True,
+    model: str | None = None,
+) -> dict:
+    """Generate a hedge-fund-grade 2nd/3rd/4th-order thesis via N-run ensemble.
+
+    Returns a merged thesis dict with per-play conviction_pct (self-consistency).
+    Does NOT compute regime_alignment, crowding, probability_score, or Kelly —
+    those are added in the module layer using quantitative data. This function
+    only produces the structural output and conviction.
+    """
+    if not primary_narrative:
+        return {}
+
+    system = _nth_order_system_prompt()
+    prompt = _nth_order_user_prompt(primary_narrative, regime_ctx or {}, contagion_score)
+
+    _model = model or "claude-sonnet-4-6"
+
+    # N-run ensemble — parallel for speed
+    from concurrent.futures import ThreadPoolExecutor
+    runs: list[dict] = []
+    n = max(1, min(int(n_runs), 7))
+    # Spread temperatures around 0.5 to get variance without chaos
+    temps = [0.3, 0.5, 0.6, 0.4, 0.55, 0.5, 0.45][:n]
+    try:
+        with ThreadPoolExecutor(max_workers=min(n, 5)) as ex:
+            futures = [
+                ex.submit(_single_nth_run, prompt, system, _model, use_claude, t, 6000)
+                for t in temps
+            ]
+            for f in futures:
+                try:
+                    r = f.result(timeout=180)
+                    if r:
+                        runs.append(r)
+                except Exception:
+                    continue
+    except Exception:
+        # Fallback to serial
+        for t in temps:
+            r = _single_nth_run(prompt, system, _model, use_claude, t, 6000)
+            if r:
+                runs.append(r)
+
+    if not runs:
+        return {}
+
+    merged = _merge_nth_runs(runs)
+    if not merged:
+        return {}
+
+    # Enrich regime_template with library lookup
+    try:
+        from services.thesis_tracker import match_analog
+        rt = merged.get("regime_template", {}) or {}
+        slug = rt.get("analog_slug") or ""
+        analog_hit = None
+        if slug:
+            # Try direct slug lookup
+            import json as _json, os as _os
+            _lib_path = _os.path.join(
+                _os.path.dirname(_os.path.dirname(__file__)), "data", "analog_library.json"
+            )
+            try:
+                with open(_lib_path) as _f:
+                    _lib = _json.load(_f)
+                if slug in (_lib.get("analogs") or {}):
+                    analog_hit = dict(_lib["analogs"][slug])
+                    analog_hit["slug"] = slug
+            except Exception:
+                analog_hit = None
+        if not analog_hit:
+            analog_hit = match_analog(rt.get("analog_name", "") or slug)
+        if analog_hit:
+            rt["analog_return_pct"]    = analog_hit.get("return_pct")
+            rt["analog_duration_months"] = analog_hit.get("duration_months")
+            rt["analog_max_drawdown"]  = analog_hit.get("max_drawdown")
+            rt["analog_hit_rate"]      = analog_hit.get("hit_rate")
+            rt["analog_note"]          = analog_hit.get("note")
+            rt["analog_period"]        = analog_hit.get("period")
+            if not rt.get("analog_name"):
+                rt["analog_name"] = analog_hit.get("name", "")
+        merged["regime_template"] = rt
+    except Exception:
+        pass
+
+    from datetime import datetime as _dt
+    merged["generated_at"]     = _dt.utcnow().isoformat()
+    merged["regime_snapshot"]  = {
+        "hmm_state":        (regime_ctx or {}).get("hmm_state"),
+        "ci_pct":           (regime_ctx or {}).get("ci_pct"),
+        "macro_score":      (regime_ctx or {}).get("macro_score"),
+        "contagion_score":  contagion_score,
+        "events_sentiment": ((regime_ctx or {}).get("events_sentiment") or {}).get("sentiment"),
+        "dominant_theme":   ((regime_ctx or {}).get("events_sentiment") or {}).get("dominant_theme"),
+    }
+    merged["n_runs"]           = len(runs)
+    return merged
+
