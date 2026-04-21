@@ -4744,7 +4744,7 @@ def _render_qir_dashboard() -> None:
 
         # ── Kritzman contagion adjustment banner ──────────────────────────────
         if _kritzman_label and _conviction_score is not None:
-            _adj_conviction = int(round(_raw_conviction * _kritzman_mult))
+            _adj_conviction = int(round(_conviction_score * _kritzman_mult))
             _k_banner = (
                 f'<div style="background:#0a0512;border:1px solid #7c3aed44;'
                 f'border-left:3px solid #7c3aed;border-radius:6px;'
