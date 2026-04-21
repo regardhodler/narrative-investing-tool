@@ -1,14 +1,14 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-20T15:16:37",
+  "generated_at": "2026-04-21T15:11:46",
   "regime": {
     "label": "Risk-On",
-    "score": 0.22,
+    "score": 0.24,
     "quadrant": "Reflation",
-    "signal_summary": "- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.83 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.72 ()\n- JPY Carry Risk (FXY): z=+0.71 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 29/100 — Fear (contrarian)"
+    "signal_summary": "- Global Manufacturing (EWG+FXI): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 33/100 — Fear (contrarian)"
   },
   "tactical": {
-    "score": 59,
+    "score": 60,
     "label": "Neutral / Hold",
     "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
@@ -20,10 +20,10 @@
   },
   "rate_path": {
     "top_scenario": "hold",
-    "top_prob": 0.652,
+    "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime, with a score of +0.22, is supported by recent news, including the potential IPO of Jersey Mike's and Eli Lilly's $7 billion acquisition of Kelonia, which suggest a continued appetite for growth and investment. However, the Iran crisis and its potential impact on markets, as highlighted by the FT's statement that the crisis has not yet peaked, introduces a note of caution and uncertainty. The Polymarket prediction markets also indicate a low probability of extreme events, such as the Fed's lower bound reaching 0% or inflation exceeding 5% in 2026, which further supports the reflation narrative. Despite this, the whipsawing of markets in response to Iran war news, as noted by CNBC, flags the potential for ongoing volatility.",
+  "current_events_digest": "The current risk-on macro regime continues to be supported by positive earnings reports, such as UnitedHealth's quarterly beat, and expanding partnerships in the tech sector, like Amazon and Anthropic's chip collaboration. However, geopolitical tensions, particularly surrounding Iran, pose a threat to this regime, with oil prices potentially impacted by the ongoing conflict. The market appears to be pricing in a low probability of extreme outcomes, such as the Fed's lower bound reaching 0% or inflation exceeding 5% in 2026, according to Polymarket prediction markets. Despite these risks, the overall tone remains bullish, with the reflation quadrant supporting growth-oriented assets.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
