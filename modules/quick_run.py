@@ -1625,7 +1625,6 @@ def _render_qir_dashboard() -> None:
         # Calm Sharpe +0.41 vs turbulent -0.58 → crisis signal value = 0.41/(0.41+0.58)
         _kritzman_mult = 1.0
         _kritzman_label = ""
-        _raw_conviction = _conviction_score
         try:
             from services.market_data import fetch_correlation_matrix as _fcm_k
             import numpy as _np_k
@@ -1641,17 +1640,6 @@ def _render_qir_dashboard() -> None:
                     _kritzman_mult = 0.80
                 if _kritzman_mult < 1.0:
                     _kritzman_label = f"×{_kritzman_mult:.2f} (contagion {_k_score:.0f})"
-                    if _conviction_score is not None:
-                        _conviction_score = int(round(_conviction_score * _kritzman_mult))
-                        # Re-derive size label from adjusted score
-                        if _conviction_score >= 75:
-                            _conviction_size_label = "50% SIZE"
-                        elif _conviction_score >= 55:
-                            _conviction_size_label = "40% SIZE"
-                        elif _conviction_score >= 40:
-                            _conviction_size_label = "30% SIZE"
-                        else:
-                            _conviction_size_label = "20% SIZE"
         except Exception:
             pass
 
@@ -4755,7 +4743,8 @@ def _render_qir_dashboard() -> None:
             _medium_parts.append(_conviction_block)
 
         # ── Kritzman contagion adjustment banner ──────────────────────────────
-        if _kritzman_label and _raw_conviction is not None:
+        if _kritzman_label and _conviction_score is not None:
+            _adj_conviction = int(round(_raw_conviction * _kritzman_mult))
             _k_banner = (
                 f'<div style="background:#0a0512;border:1px solid #7c3aed44;'
                 f'border-left:3px solid #7c3aed;border-radius:6px;'
@@ -4769,9 +4758,9 @@ def _render_qir_dashboard() -> None:
                 f'Contagion {_k_score:.0f} → signal value ratio {_kritzman_mult:.2f}x</div>'
                 f'</div>'
                 f'<div style="text-align:right;">'
-                f'<span style="font-size:20px;font-weight:900;color:#64748b;">{_raw_conviction}</span>'
+                f'<span style="font-size:20px;font-weight:900;color:#64748b;">{_conviction_score}</span>'
                 f'<span style="font-size:14px;color:#a78bfa;margin:0 6px;">→</span>'
-                f'<span style="font-size:20px;font-weight:900;color:#a78bfa;">{_conviction_score}</span>'
+                f'<span style="font-size:20px;font-weight:900;color:#a78bfa;">{_adj_conviction}</span>'
                 f'<div style="font-size:8px;color:#64748b;">adj conviction</div>'
                 f'</div>'
                 f'</div>'
