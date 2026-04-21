@@ -1990,10 +1990,7 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
                 f'<div style="text-align:right;">'
                 f'<div style="font-size:28px;font-weight:900;color:{_cv_color2};line-height:1;">'
-                + (f'<span style="color:#64748b;font-size:18px;">{_raw_conviction}</span>'
-                   f'<span style="color:#a78bfa;font-size:16px;margin:0 4px;">→</span>'
-                   f'{_conviction_score}' if _kritzman_mult < 1.0 else f'{_conviction_score}')
-                + f'</div>'
+                f'{_conviction_score}</div>'
                 f'<div style="font-size:8px;color:#64748b;">/100</div>'
                 f'</div>'
                 f'</div>'
@@ -2040,10 +2037,7 @@ def _render_qir_dashboard() -> None:
                 f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:3px;'
                 f'padding:2px 7px;font-size:8px;color:{_hmm_pill_c};">'
                 f'HMM ×{_hmm_mult_v:.2f}</div>'
-                + (f'<div style="background:#0a0f1a;border:1px solid #7c3aed44;border-radius:3px;'
-                   f'padding:2px 7px;font-size:8px;color:#a78bfa;letter-spacing:0.05em;">'
-                   f'KRITZMAN {_kritzman_label}</div>' if _kritzman_label else '')
-                + f'</div>'
+                f'</div>'
                 f'<div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.7;">'
                 f'<b style="color:#3b4f6b;">Conviction</b> = how strong the pattern signal is (signal amplitude). '
                 f'High → size up. Low → reduce exposure regardless of direction. '
@@ -4759,6 +4753,31 @@ def _render_qir_dashboard() -> None:
         _medium_parts = []
         if _conviction_block:
             _medium_parts.append(_conviction_block)
+
+        # ── Kritzman contagion adjustment banner ──────────────────────────────
+        if _kritzman_label and _raw_conviction is not None:
+            _k_banner = (
+                f'<div style="background:#0a0512;border:1px solid #7c3aed44;'
+                f'border-left:3px solid #7c3aed;border-radius:6px;'
+                f'padding:8px 14px;margin-bottom:10px;'
+                f'font-family:\'JetBrains Mono\',Consolas,monospace;">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;">'
+                f'<div>'
+                f'<div style="font-size:9px;color:#7c3aed;font-weight:700;letter-spacing:0.1em;margin-bottom:3px;">'
+                f'KRITZMAN TURBULENCE ADJ · SKULLS (FAJ 2010)</div>'
+                f'<div style="font-size:10px;color:#94a3b8;">'
+                f'Contagion {_k_score:.0f} → signal value ratio {_kritzman_mult:.2f}x</div>'
+                f'</div>'
+                f'<div style="text-align:right;">'
+                f'<span style="font-size:20px;font-weight:900;color:#64748b;">{_raw_conviction}</span>'
+                f'<span style="font-size:14px;color:#a78bfa;margin:0 6px;">→</span>'
+                f'<span style="font-size:20px;font-weight:900;color:#a78bfa;">{_conviction_score}</span>'
+                f'<div style="font-size:8px;color:#64748b;">adj conviction</div>'
+                f'</div>'
+                f'</div>'
+                f'</div>'
+            )
+            _medium_parts.append(_k_banner)
 
         # ── Contagion block (confirmatory signal, after conviction) ───────────
         try:
