@@ -1,14 +1,14 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-21T15:11:46",
+  "generated_at": "2026-04-22T15:11:49",
   "regime": {
     "label": "Risk-On",
     "score": 0.24,
     "quadrant": "Reflation",
-    "signal_summary": "- Global Manufacturing (EWG+FXI): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 33/100 — Fear (contrarian)"
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+0.97 ()\n- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Commodity Trend (Oil + Copper): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.75 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 32/100 — Fear (contrarian)"
   },
   "tactical": {
-    "score": 60,
+    "score": 59,
     "label": "Neutral / Hold",
     "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime continues to be supported by positive earnings reports, such as UnitedHealth's quarterly beat, and expanding partnerships in the tech sector, like Amazon and Anthropic's chip collaboration. However, geopolitical tensions, particularly surrounding Iran, pose a threat to this regime, with oil prices potentially impacted by the ongoing conflict. The market appears to be pricing in a low probability of extreme outcomes, such as the Fed's lower bound reaching 0% or inflation exceeding 5% in 2026, according to Polymarket prediction markets. Despite these risks, the overall tone remains bullish, with the reflation quadrant supporting growth-oriented assets.",
+  "current_events_digest": "The current risk-on macro regime is being supported by various catalysts, including the potential Spirit Airlines rescue package and Palantir's $300 million deal with the USDA, which suggest a continued emphasis on growth and investment. However, rising oil prices due to Iran's actions in the Strait of Hormuz and output declines in industries such as airlines and chemicals may pose a threat to this reflation narrative. The market's expectations for inflation, as reflected in the Polymarket prediction markets, remain relatively muted, with only a 16% chance of inflation reaching above 5% in 2026. Meanwhile, the Iran leadership change predictions and recent geopolitical tensions in the region warrant close monitoring as potential risk events.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",

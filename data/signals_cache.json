@@ -2,20 +2,20 @@
   "_regime_context": {
     "regime": "Risk-On",
     "score": 0.24,
-    "signal_summary": "- Global Manufacturing (EWG+FXI): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.99 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 33/100 \u2014 Fear (contrarian)",
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+0.97 ()\n- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Commodity Trend (Oil + Copper): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.75 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 32/100 \u2014 Fear (contrarian)",
     "quadrant": "Reflation",
     "macro_score": 62,
     "leading_score": 62,
     "leading_divergence": 0,
     "leading_label": "Aligned",
-    "score_5d_trend": 0,
-    "leading_5d_trend": -1,
+    "score_5d_trend": 3,
+    "leading_5d_trend": 0,
     "pts_to_risk_on": -2,
     "pts_to_risk_off": 22,
-    "velocity_label": "\u2192 Stable (+0 pts vs 2026-04-20)"
+    "velocity_label": "\u2192 Stable (-1 pts vs 2026-04-21)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-21T15:11:26.588115"
+    "__datetime__": "2026-04-22T15:11:31.401772"
   },
   "_rp_plays_result": {
     "sectors": [
@@ -24,72 +24,72 @@
         "conviction": 3
       },
       {
-        "name": "Healthcare",
+        "name": "Energy",
         "conviction": 2
       },
       {
-        "name": "Financials",
-        "conviction": 1
+        "name": "Materials",
+        "conviction": 2
       },
       {
         "name": "Industrials",
         "conviction": 1
       },
       {
-        "name": "Consumer Discretionary",
+        "name": "Financials",
         "conviction": 1
       }
     ],
     "stocks": [
       {
         "ticker": "AAPL",
-        "reason": "AAPL is a strong player in the Technology sector with a history of outperforming in Risk-On regimes",
+        "reason": "AAPL is a leader in the Technology sector, which is poised for growth in a Risk-On environment",
         "conviction": 3
       },
       {
-        "ticker": "JNJ",
-        "reason": "JNJ is a stable Healthcare stock with a strong track record of dividend payments",
+        "ticker": "XOM",
+        "reason": "XOM is a strong Energy stock with a history of performing well in Risk-On regimes",
         "conviction": 2
       },
       {
-        "ticker": "V",
-        "reason": "V is a Financials stock with a strong brand and growing payment processing business",
+        "ticker": "BHP",
+        "reason": "BHP is a Materials stock with a diverse portfolio of commodities, making it a good fit for a Risk-On environment",
+        "conviction": 2
+      },
+      {
+        "ticker": "UNP",
+        "reason": "UNP is an Industrials stock with a strong track record of growth, making it a good buy in a Risk-On regime",
         "conviction": 1
       },
       {
-        "ticker": "UNH",
-        "reason": "UNH is a well-managed Healthcare stock with a diverse range of businesses",
-        "conviction": 2
+        "ticker": "JPM",
+        "reason": "JPM is a Financials stock with a strong balance sheet and a history of performing well in Risk-On environments",
+        "conviction": 1
       },
       {
         "ticker": "MSFT",
-        "reason": "MSFT is a Technology stock with a strong cloud computing business and growing dividend payments",
-        "conviction": 3
-      },
-      {
-        "ticker": "PG",
-        "reason": "PG is a Consumer Staples stock with a strong track record of dividend payments and stable cash flows",
-        "conviction": 1
+        "reason": "MSFT is a Technology stock with a strong growth profile, making it a good fit for a Risk-On regime",
+        "conviction": 2
       }
     ],
     "bonds": [
       {
-        "ticker": "TSLA 2.00% 2028",
-        "reason": "TSLA bonds offer a relatively high yield in a Risk-On regime with a strong Technology sector",
+        "ticker": "TLT",
+        "reason": "TLT is a long-term Treasury bond, which can provide a safe haven in a Risk-On environment",
+        "conviction": 1
+      },
+      {
+        "ticker": "HYG",
+        "reason": "HYG is a high-yield bond ETF, which can provide a higher return in a Risk-On environment",
         "conviction": 2
       },
       {
-        "ticker": "AAPL 2.50% 2029",
-        "reason": "AAPL bonds offer a stable and secure investment with a strong Technology company",
-        "conviction": 2
-      },
-      {
-        "ticker": "JPM 2.25% 2027",
-        "reason": "JPM bonds offer a relatively high yield with a strong Financials company",
+        "ticker": "LQD",
+        "reason": "LQD is an investment-grade bond ETF, which can provide a stable return in a Risk-On environment",
         "conviction": 1
       }
     ],
-    "rationale": "The current Risk-On regime with a positive aggregate score of +0.24 suggests a favorable environment for equities, particularly in the Technology and Healthcare sectors. The strong signal from Global Manufacturing and Sector Breadth also supports this view. However, the negative Consumer Sentiment signal and the upcoming macro events, including the FOMC meeting and CPI release, warrant some caution and a balanced portfolio with a mix of strong and moderate buys."
+    "rationale": "The current Risk-On regime, with an aggregate score of +0.24, suggests that investors are optimistic about the market and willing to take on more risk. The strong Equity Trend and Sector Breadth signals support this view, as do the positive Commodity Trend and Term Premium signals. Given this environment, we recommend buying Technology and Energy stocks, as well as Materials and Industrials stocks, as they are likely to perform well in a Risk-On regime. We also recommend buying high-yield bonds, such as HYG, as they can provide a higher return in a Risk-On environment."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
@@ -118,62 +118,62 @@
       "source": "yfinance"
     }
   ],
-  "_current_events_digest": "The current risk-on macro regime continues to be supported by positive earnings reports, such as UnitedHealth's quarterly beat, and expanding partnerships in the tech sector, like Amazon and Anthropic's chip collaboration. However, geopolitical tensions, particularly surrounding Iran, pose a threat to this regime, with oil prices potentially impacted by the ongoing conflict. The market appears to be pricing in a low probability of extreme outcomes, such as the Fed's lower bound reaching 0% or inflation exceeding 5% in 2026, according to Polymarket prediction markets. Despite these risks, the overall tone remains bullish, with the reflation quadrant supporting growth-oriented assets.",
+  "_current_events_digest": "The current risk-on macro regime is being supported by various catalysts, including the potential Spirit Airlines rescue package and Palantir's $300 million deal with the USDA, which suggest a continued emphasis on growth and investment. However, rising oil prices due to Iran's actions in the Strait of Hormuz and output declines in industries such as airlines and chemicals may pose a threat to this reflation narrative. The market's expectations for inflation, as reflected in the Polymarket prediction markets, remain relatively muted, with only a 16% chance of inflation reaching above 5% in 2026. Meanwhile, the Iran leadership change predictions and recent geopolitical tensions in the region warrant close monitoring as potential risk events.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-04-21T15:11:29.903659"
+    "__datetime__": "2026-04-22T15:11:34.113785"
   },
   "_current_events_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 60,
+    "tactical_score": 59,
     "label": "Neutral / Hold",
     "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "19.2 (+0.8 5d)",
-        "Score": -0.165,
+        "Value": "19.1 (+0.9 5d)",
+        "Score": -0.169,
         "Direction": "Neutral \u2014 Leaning Risk-Off"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.895",
-        "Score": 0.7,
+        "Value": "0.899",
+        "Score": 0.673,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+5.1%/20d  +4.7%/50d",
+        "Value": "+5.2%/20d  +5.1%/50d",
         "Score": 0.4,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +1.7%  20d +7.8%",
-        "Score": 0.299,
-        "Direction": "Risk-On"
+        "Value": "5d +1.4%  20d +8.6%",
+        "Score": 0.122,
+        "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "+0.18% 5d",
-        "Score": 0.176,
+        "Value": "+0.12% 5d",
+        "Score": 0.124,
         "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:18.5 VIX:19.2 3M:21.4 6M:23.3",
-        "Score": 0.489,
+        "Value": "9D:17.8 VIX:19.1 3M:21.2 6M:23.1",
+        "Score": 0.557,
         "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "141.9 (-8.0 5d)",
+        "Value": "140.9 (+1.7 5d)",
         "Score": -1.0,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Fear & Greed (Contrarian)",
-        "Value": "33 \u2014 Fear (+12 7d)",
-        "Score": 0.34,
+        "Value": "32 \u2014 Fear (+9 7d)",
+        "Score": 0.36,
         "Direction": "Risk-On"
       },
       {
@@ -185,11 +185,11 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-21T15:11:26.588119"
+    "__datetime__": "2026-04-22T15:11:31.401776"
   },
-  "_tactical_analysis": "The combined signal picture suggests a Neutral/Hold stance with a score of 60/100, indicating a mixed short-term risk appetite. The VIX level and 5-day trend (19.2, +0.8) are leaning Risk-Off, but this is offset by the VIX term structure (0.895) and SPY vs 20d/50d MA (+5.1%/+4.7%) which are firmly Risk-On. The VIX Curve (9D:18.5, VIX:19.2, 3M:21.4, 6M:23.3) with a score of +0.489 also supports a Risk-On stance. However, the CBOE SKEW (141.9, -8.0 5d) is a significant Risk-Off signal, scoring -1.000.\n\nThe most dominant signals right now are the VIX term structure (0.895) and the CBOE SKEW (141.9). The VIX term structure is indicating a strong Risk-On sentiment, as the current VIX is below its 3-month counterpart. On the other hand, the CBOE SKEW is warning of potential tail risk, which could lead to a sudden increase in volatility. The Fear & Greed index (33, +12 7d) is also noteworthy, as it is indicating a level of fear that could be a contrarian buy signal, scoring +0.340. The SPY Momentum (5d: +1.7%, 20d: +7.8%) with a score of +0.299 and the Breadth Trend (RSP/SPY 5d: +0.18%) with a score of +0.176 are also supporting the Risk-On case.\n\nGiven this setup, a trader should exercise caution and hold their current positions. The Neutral/Hold stance suggests that the market is not clearly trending in either direction, and the mixed signals do not warrant a significant increase or decrease in exposure. The dominant Risk-On signals (VIX term structure, SPY vs MA, VIX Curve) are balanced by the significant Risk-Off signal (CBOE SKEW), making it prudent to maintain a neutral stance. Traders may consider hedging their positions to mitigate potential tail risk, but adding or reducing exposure is not recommended at this time.",
+  "_tactical_analysis": "The combined signal picture suggests a Neutral/Hold stance with a score of 59/100, indicating a mixed outlook for short-term risk appetite. The Risk-On/Reflation macro backdrop is somewhat at odds with the tactical signals, which are leaning slightly Risk-Off due to the elevated VIX level (19.1) and its 5-day trend (+0.9). However, the VIX term structure (0.899) and the SPY's performance relative to its 20-day and 50-day moving averages (+5.2% and +5.1%, respectively) are firmly in Risk-On territory.\n\nThe most dominant signals right now are the VIX term structure (score +0.673) and the VIX Curve (score +0.557), which are both indicating a Risk-On environment. The VIX term structure, in particular, is noteworthy, as a reading below 1.0 suggests that the market is pricing in relatively low volatility in the short term compared to the medium term. Additionally, the Fear & Greed index (32) is in the \"Fear\" zone, which is a contrarian bullish signal (score +0.360). On the other hand, the CBOE SKEW (140.9) is elevated, indicating a high level of tail risk and a Risk-Off signal (score -1.000).\n\nGiven this setup, a trader should exercise caution and maintain a Neutral/Hold position. The conflicting signals suggest that the market is in a state of flux, and it's unclear whether the Risk-On or Risk-Off narrative will dominate in the short term. As such, it's not advisable to add to positions or take on excessive risk. Instead, traders should hold existing positions and monitor the signals closely for any changes in the market's risk appetite. If the VIX level and term structure continue to indicate a Risk-On environment, and the Fear & Greed index remains in the \"Fear\" zone, it may be possible to add to positions or initiate new longs. However, if the CBOE SKEW continues to rise and the VIX level increases, it may be necessary to reduce positions or implement hedges to mitigate potential losses.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-21T15:11:26.588120"
+    "__datetime__": "2026-04-22T15:11:31.401777"
   },
   "_data_quality": {
     "score": 70,
@@ -205,6 +205,6 @@
     "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-21T15:11:26.588120"
+    "__datetime__": "2026-04-22T15:11:31.401778"
   }
 }
