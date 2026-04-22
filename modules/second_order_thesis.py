@@ -1040,6 +1040,12 @@ def render():
                 "Run Current Events module first to refresh the digest for this session."
             )
 
+    # Consume pending narrative load (from Saved searches) BEFORE the widget is
+    # instantiated — Streamlit forbids mutating a widget's key after creation.
+    _pending = st.session_state.pop("_nth_pending_narrative", None)
+    if _pending is not None:
+        st.session_state["_nth_narrative_input"] = _pending
+
     # Input row
     col_a, col_b = st.columns([3, 2])
     with col_a:
@@ -1053,8 +1059,8 @@ def render():
         use_claude, model = render_ai_tier_selector(
             key="_nth_ai_tier",
             label="AI engine",
-            default=1,
-            recommendation="🧠 Regard default to save cost · switch to 👑 Highly Regarded for high-conviction theses",
+            default=2,
+            recommendation="👑 Highly Regarded (Claude Haiku 4.5) default · drop to 🧠 Regard for quick checks",
         )
 
     col_btn1, col_btn2, _ = st.columns([1, 1, 3])
@@ -1091,7 +1097,7 @@ def render():
                     )
                 with _c2:
                     if st.button("Load", key=f"_load_cached_{_key}", use_container_width=True):
-                        st.session_state["_nth_narrative_input"] = _key
+                        st.session_state["_nth_pending_narrative"] = _key
                         st.session_state[f"_nth_thesis_{_key}"] = _entry.get("thesis")
                         st.rerun()
                 with _c3:
