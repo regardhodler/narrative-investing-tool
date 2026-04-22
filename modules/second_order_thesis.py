@@ -12,6 +12,8 @@ and existing persisted files. The module contributes its own output to
 """
 from __future__ import annotations
 
+import json
+import os
 import streamlit as st
 from datetime import datetime, timedelta, date
 from html import escape
@@ -20,6 +22,55 @@ from utils.session import get_narrative, set_ticker
 from utils.theme import COLORS
 from utils.ai_tier import render_ai_tier_selector
 from utils.journal import add_trade
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Persistent on-disk thesis cache — survives restarts, avoids re-running LLM
+# ─────────────────────────────────────────────────────────────────────────────
+
+_THESIS_CACHE_FILE = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "data", "nth_thesis_cache.json"
+)
+
+
+def _load_disk_cache() -> dict:
+    if not os.path.exists(_THESIS_CACHE_FILE):
+        return {}
+    try:
+        with open(_THESIS_CACHE_FILE, "r", encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def _save_disk_cache(cache: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_THESIS_CACHE_FILE), exist_ok=True)
+        with open(_THESIS_CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f, indent=2, default=str)
+    except Exception:
+        pass
+
+
+def _cache_put(narrative_key: str, thesis: dict, engine_label: str) -> None:
+    cache = _load_disk_cache()
+    cache[narrative_key] = {
+        "saved_at":    datetime.utcnow().isoformat(),
+        "engine":      engine_label,
+        "thesis":      thesis,
+    }
+    _save_disk_cache(cache)
+
+
+def _cache_get(narrative_key: str) -> dict | None:
+    return _load_disk_cache().get(narrative_key)
+
+
+def _cache_delete(narrative_key: str) -> None:
+    cache = _load_disk_cache()
+    if narrative_key in cache:
+        cache.pop(narrative_key)
+        _save_disk_cache(cache)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -456,6 +507,130 @@ def _render_regime_template(rt: dict):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Ticker quick-card (shown inside st.popover)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _render_ticker_quick_card(ticker: str) -> None:
+    """Compact Bloomberg-style fundamentals card rendered inside a popover."""
+    from services.market_data import fetch_ticker_fundamentals, get_yf_info_safe
+
+    def _fmt(v, fmt="{:.1f}", suffix="", prefix=""):
+        if v is None or (isinstance(v, float) and v != v):
+            return '<span style="color:#475569;">—</span>'
+        try:
+            return f"{prefix}{fmt.format(float(v))}{suffix}"
+        except Exception:
+            return '<span style="color:#475569;">—</span>'
+
+    info = get_yf_info_safe(ticker) or {}
+    fund = fetch_ticker_fundamentals(ticker) or {}
+
+    name = info.get("longName") or info.get("shortName") or ticker
+    sector = info.get("sector") or ""
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    w52_lo = info.get("fiftyTwoWeekLow")
+    w52_hi = info.get("fiftyTwoWeekHigh")
+    prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+    day_chg = ((price - prev_close) / prev_close * 100) if price and prev_close else None
+    desc = (info.get("longBusinessSummary") or "")[:240]
+
+    pe_t  = fund.get("pe_trailing")
+    pe_f  = fund.get("pe_forward")
+    pb    = fund.get("pb_ratio")
+    peg   = fund.get("peg")
+    ps    = fund.get("ps_ratio")
+    ev_eb = fund.get("ev_ebitda")
+    roe   = fund.get("roe")
+    fcfy  = fund.get("fcf_yield")
+    de    = fund.get("debt_to_equity")
+    tgt   = fund.get("target_mean")
+    n_an  = fund.get("analyst_count")
+
+    arrow = "▲" if (day_chg or 0) >= 0 else "▼"
+    chg_color = "#22c55e" if (day_chg or 0) >= 0 else "#ef4444"
+    implied_up = ((tgt - price) / price * 100) if tgt and price and price > 0 else None
+
+    price_str = f"${price:,.2f}" if price else "—"
+    chg_str = (
+        f'<span style="color:{chg_color};font-weight:700;">{arrow} {day_chg:+.1f}%</span>'
+        if day_chg is not None else ""
+    )
+    range_str = (
+        f'52w: <span style="color:#94a3b8;">${w52_lo:.2f} – ${w52_hi:.2f}</span>'
+        if w52_lo and w52_hi else ""
+    )
+
+    tgt_str = ""
+    if tgt:
+        n_str = f" (n={n_an})" if n_an else ""
+        up_str = f' → <span style="color:{"#22c55e" if (implied_up or 0)>0 else "#ef4444"};font-weight:700;">{implied_up:+.1f}%</span>' if implied_up is not None else ""
+        tgt_str = (
+            f'<div style="font-family:{MONO};font-size:11px;margin-top:6px;">'
+            f'<span style="color:{COLORS["text_dim"]};">STREET TARGET</span> '
+            f'<span style="color:{COLORS["text"]};font-weight:700;">${tgt:.2f}{n_str}</span>{up_str}</div>'
+        )
+
+    desc_html = (
+        f'<div style="font-family:{MONO};font-size:11px;color:{COLORS["text_dim"]};'
+        f'line-height:1.5;margin-top:8px;padding-top:8px;'
+        f'border-top:1px dashed {COLORS["border"]};">{escape(desc)}{"…" if len(desc)==240 else ""}</div>'
+    ) if desc else ""
+
+    def _cell(label, val_html):
+        return (
+            f'<div style="min-width:80px;">'
+            f'<div style="font-size:9px;color:{COLORS["text_dim"]};letter-spacing:0.06em;">{label}</div>'
+            f'<div style="font-size:13px;color:{COLORS["text"]};font-weight:700;">{val_html}</div>'
+            f'</div>'
+        )
+
+    st.markdown(
+        f'<div style="font-family:{MONO};padding:4px 0 8px 0;">'
+        # Header
+        f'<div style="font-size:15px;font-weight:700;color:{COLORS["text"]};">{escape(name)}'
+        f'{"  <span style=\"font-size:11px;color:" + COLORS["text_dim"] + ";font-weight:400;\">· " + escape(sector) + "</span>" if sector else ""}'
+        f'</div>'
+        # Price row
+        f'<div style="font-size:12px;margin-top:2px;">'
+        f'<span style="color:{COLORS["text"]};font-weight:700;">{price_str}</span> '
+        f'{chg_str}{"  " if chg_str else ""}{range_str}</div>'
+        # Divider
+        f'<div style="border-top:1px solid {COLORS["border"]};margin:8px 0;"></div>'
+        # Multiples grid row 1
+        f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+        f'{_cell("PE (ttm)", _fmt(pe_t))}'
+        f'{_cell("PE (fwd)", _fmt(pe_f))}'
+        f'{_cell("PB", _fmt(pb))}'
+        f'</div>'
+        f'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;">'
+        f'{_cell("PEG", _fmt(peg))}'
+        f'{_cell("PS", _fmt(ps))}'
+        f'{_cell("EV/EBITDA", _fmt(ev_eb, "{:.1f}x"))}'
+        f'</div>'
+        # Divider
+        f'<div style="border-top:1px solid {COLORS["border"]};margin:8px 0;"></div>'
+        # Quality row
+        f'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+        f'{_cell("ROE", _fmt(roe, "{:.1f}%"))}'
+        f'{_cell("FCF yield", _fmt(fcfy, "{:.1f}%"))}'
+        f'{_cell("D/E", _fmt(de))}'
+        f'</div>'
+        f'{tgt_str}{desc_html}'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button(
+        "Set as active ticker →",
+        key=f"_quick_set_{ticker}_{id(ticker)}",
+        use_container_width=True,
+        type="primary",
+    ):
+        set_ticker(ticker)
+        st.toast(f"Active ticker set to {ticker}", icon="🎯")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Play card
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -629,9 +804,8 @@ def _render_play_card(play: dict, key_prefix: str):
             cols = st.columns(min(len(tickers), 5))
             for i, tk in enumerate(tickers[:5]):
                 with cols[i]:
-                    if st.button(tk, key=f"{key_prefix}_tk_{i}_{tk}", use_container_width=True):
-                        set_ticker(tk)
-                        st.toast(f"Active ticker set to {tk}", icon="🎯")
+                    with st.popover(tk, use_container_width=True):
+                        _render_ticker_quick_card(tk)
         if vehicles_note:
             st.markdown(
                 f'<div style="font-family:{MONO};font-size:11px;color:{COLORS["text_dim"]};'
@@ -846,6 +1020,33 @@ def render():
     regime_ctx = _build_regime_ctx()
     _render_context_strip(regime_ctx, narrative)
 
+    # QIR freshness check — upstream regime aggregator
+    try:
+        from services.qir_history import load_qir_history
+        _qir_hist = load_qir_history()
+    except Exception:
+        _qir_hist = []
+    _qir_hours: float | None = None
+    if _qir_hist:
+        try:
+            _qir_ts = _qir_hist[0].get("timestamp", "")
+            _qir_dt = datetime.fromisoformat(_qir_ts.replace("Z", "+00:00"))
+            _qir_now = datetime.now(_qir_dt.tzinfo) if _qir_dt.tzinfo else datetime.utcnow()
+            _qir_hours = (_qir_now - _qir_dt).total_seconds() / 3600.0
+        except Exception:
+            _qir_hours = None
+    if not _qir_hist:
+        st.error(
+            "🚨 **No QIR run found.** Run the Quick Intel Run module first — it aggregates the "
+            "regime signals (HMM, CI%, conviction, tactical score) that anchor this thesis. "
+            "Without it, the nth-order mapping is flying blind."
+        )
+    elif _qir_hours is not None and _qir_hours > 12:
+        st.warning(
+            f"⏱ QIR last run **{_qir_hours:.1f}h ago**. Regime context may be stale — "
+            "consider rerunning QIR before building the thesis for best signal quality."
+        )
+
     # Stale news warning / one-click refresh
     hours = _events_freshness_hours(regime_ctx.get("events_ts"))
     if hours is None or hours > 24:
@@ -868,8 +1069,8 @@ def render():
         use_claude, model = render_ai_tier_selector(
             key="_nth_ai_tier",
             label="AI engine",
-            default=2,
-            recommendation="👑 Highly Regarded recommended — ensemble runs benefit from top-tier reasoning",
+            default=1,
+            recommendation="🧠 Regard default to save cost · switch to 👑 Highly Regarded for high-conviction theses",
         )
 
     col_btn1, col_btn2, _ = st.columns([1, 1, 3])
@@ -878,8 +1079,69 @@ def render():
     with col_btn2:
         force_refresh = st.button("Force Refresh", use_container_width=True)
 
-    cache_key = f"_nth_thesis_{(narrative_input or '').strip().lower()}"
+    # Recent searches — one-click load of previously cached theses
+    _disk_cache = _load_disk_cache()
+    if _disk_cache:
+        with st.expander(f"📁 Saved searches ({len(_disk_cache)})", expanded=False):
+            _entries = sorted(
+                _disk_cache.items(),
+                key=lambda kv: kv[1].get("saved_at", ""),
+                reverse=True,
+            )
+            for _key, _entry in _entries[:20]:
+                try:
+                    _ts = datetime.fromisoformat(_entry.get("saved_at", ""))
+                    _ago_h = (datetime.utcnow() - _ts).total_seconds() / 3600.0
+                    _ago = f"{_ago_h:.1f}h" if _ago_h < 24 else f"{_ago_h/24:.1f}d"
+                except Exception:
+                    _ago = "?"
+                _eng = _entry.get("engine", "")
+                _c1, _c2, _c3 = st.columns([4, 1, 1])
+                with _c1:
+                    st.markdown(
+                        f'<div style="font-family:{MONO};font-size:12px;color:{COLORS["text"]};padding-top:6px;">'
+                        f'<span style="color:{COLORS["bloomberg_orange"]};font-weight:700;">{escape(_key)}</span>'
+                        f'<span style="color:{COLORS["text_dim"]};"> · {_ago} ago{f" · {escape(_eng)}" if _eng else ""}</span>'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+                with _c2:
+                    if st.button("Load", key=f"_load_cached_{_key}", use_container_width=True):
+                        st.session_state["_nth_narrative_input"] = _key
+                        st.session_state[f"_nth_thesis_{_key}"] = _entry.get("thesis")
+                        st.rerun()
+                with _c3:
+                    if st.button("🗑", key=f"_del_cached_{_key}", use_container_width=True, help="Delete"):
+                        _cache_delete(_key)
+                        st.session_state.pop(f"_nth_thesis_{_key}", None)
+                        st.rerun()
+
+    narrative_key = (narrative_input or "").strip().lower()
+    cache_key = f"_nth_thesis_{narrative_key}"
     thesis = st.session_state.get(cache_key)
+
+    # Fall back to disk cache if RAM is empty (survives restarts)
+    if thesis is None and narrative_key:
+        _disk_entry = _cache_get(narrative_key)
+        if _disk_entry and _disk_entry.get("thesis"):
+            thesis = _disk_entry["thesis"]
+            st.session_state[cache_key] = thesis
+            try:
+                _saved_dt = datetime.fromisoformat(_disk_entry.get("saved_at", ""))
+                _age_h = (datetime.utcnow() - _saved_dt).total_seconds() / 3600.0
+                _eng = _disk_entry.get("engine", "")
+                if _age_h < 24:
+                    _age_str = f"{_age_h:.1f}h ago"
+                elif _age_h < 24 * 30:
+                    _age_str = f"{_age_h/24:.1f}d ago"
+                else:
+                    _age_str = _saved_dt.strftime("%Y-%m-%d")
+                st.info(
+                    f"📁 Loaded cached thesis for **{narrative_key}** (generated {_age_str}"
+                    f"{f' · {_eng}' if _eng else ''}). Click **Force Refresh** to regenerate."
+                )
+            except Exception:
+                pass
 
     if build_clicked and not narrative_input.strip():
         st.error("Enter a primary narrative first (or set one via Narrative Discovery).")
@@ -910,6 +1172,9 @@ def render():
 
             thesis = _enrich_plays(raw, regime_ctx)
             st.session_state[cache_key] = thesis
+            # Persist to disk — survives restart
+            _engine_label = st.session_state.get("_nth_engine_radio", "")
+            _cache_put(narrative_key, thesis, _engine_label)
 
     if not thesis:
         st.info(
