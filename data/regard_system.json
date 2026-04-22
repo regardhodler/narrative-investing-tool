@@ -1,9 +1,9 @@
 {
   "system": "Regard Terminals",
   "description": "Multi-module investment intelligence dashboard. Regime-aware, AI-powered, built for independent investors.",
-  "generated_at": "2026-04-17T14:55:18",
+  "generated_at": "2026-04-21T15:11:46",
   "current_regime": "Risk-On",
-  "current_qir_pattern": "MOMENTUM_BUILDING",
+  "current_qir_pattern": "REGIME_ONLY_BULLISH",
   "modules": [
     {
       "id": 0,
