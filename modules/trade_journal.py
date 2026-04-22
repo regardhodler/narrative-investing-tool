@@ -855,7 +855,7 @@ def render():
     )
 
     # --- Tabs ---
-    tab_open, tab_intel, tab_risk, tab_closed, tab_analytics, tab_perf, tab_playlog = st.tabs(["OPEN POSITIONS", "🧠 PORTFOLIO INTELLIGENCE", "⚠ RISK MATRIX", "CLOSED TRADES", "ANALYTICS", "📈 PERFORMANCE", "📋 AI PLAY LOG"])
+    tab_open, tab_intel, tab_risk, tab_closed, tab_analytics, tab_perf, tab_playlog, tab_nth = st.tabs(["OPEN POSITIONS", "🧠 PORTFOLIO INTELLIGENCE", "⚠ RISK MATRIX", "CLOSED TRADES", "ANALYTICS", "📈 PERFORMANCE", "📋 AI PLAY LOG", "🎯 NTH-ORDER THESES"])
 
     # --- Open Positions ---
     with tab_open:
@@ -2618,7 +2618,7 @@ def render():
                 pnl *= _usdcad_metrics
             pnls.append(pnl)
             signals.append(t.get("signal_source", "manual"))
-            if t.get("exit_date", "").startswith(current_year):
+            if (t.get("exit_date") or "").startswith(current_year):
                 ytd_pnls.append(pnl)
 
         # Unrealized P&L from ALL open positions — converted to CAD
@@ -3027,3 +3027,87 @@ def render():
                 clear_plays()
                 st.success("Play log cleared.")
                 st.rerun()
+
+    # --- Nth-Order Theses ---
+    with tab_nth:
+        import json as _json, os as _os
+        _nth_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "data", "thesis_tracker.json")
+        try:
+            with open(_nth_path, "r", encoding="utf-8") as _f:
+                _nth_entries = _json.load(_f) or []
+        except Exception:
+            _nth_entries = []
+
+        if not _nth_entries:
+            st.info(
+                "No nth-order theses saved yet. Build one in **Discovery → 🎯 Second Order Thesis** "
+                "and click **💾 Save to Journal & Tracker** to persist."
+            )
+        else:
+            _nth_entries = list(reversed(_nth_entries))  # newest first
+            _tot_tickers = sum(len(e.get("tickers") or []) for e in _nth_entries)
+            _open_count = sum(
+                1 for e in _nth_entries for t in (e.get("tickers") or [])
+                if t.get("status", "open") == "open"
+            )
+            _hit_count = sum(
+                1 for e in _nth_entries for t in (e.get("tickers") or [])
+                if t.get("status") in ("hit", "hit_time")
+            )
+            _miss_count = sum(
+                1 for e in _nth_entries for t in (e.get("tickers") or [])
+                if t.get("status") in ("miss", "miss_time")
+            )
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Theses", len(_nth_entries))
+            c2.metric("Tickers tracked", _tot_tickers)
+            c3.metric("Open", _open_count)
+            _closed = _hit_count + _miss_count
+            _hr = f"{_hit_count/_closed*100:.0f}%" if _closed > 0 else "—"
+            c4.metric("Hit rate", _hr, help=f"{_hit_count} hit / {_miss_count} miss")
+
+            st.markdown("---")
+
+            for _e in _nth_entries[:20]:
+                _primary = _e.get("primary", "—")
+                _gen = _e.get("generated_date") or _e.get("generated_at", "")[:10]
+                _regime = (_e.get("regime_snapshot") or {}).get("hmm_state", "")
+                _tks = _e.get("tickers") or []
+
+                with st.expander(
+                    f"**{_primary}** · {_gen} · {len(_tks)} tickers"
+                    + (f" · regime: {_regime}" if _regime else ""),
+                    expanded=False,
+                ):
+                    by_order = {2: [], 3: [], 4: []}
+                    for t in _tks:
+                        by_order.setdefault(t.get("order", 2), []).append(t)
+
+                    for order in (2, 3, 4):
+                        ts = by_order.get(order) or []
+                        if not ts:
+                            continue
+                        st.markdown(f"**{order}°-Order plays**")
+                        for t in ts:
+                            status = t.get("status", "open")
+                            if status == "open":
+                                badge, color = "OPEN", "#64748b"
+                                ret = t.get("current_return_pct")
+                            elif status in ("hit", "hit_time"):
+                                badge, color = "HIT", "#22c55e"
+                                ret = t.get("final_return_pct")
+                            elif status in ("miss", "miss_time"):
+                                badge, color = "MISS", "#ef4444"
+                                ret = t.get("final_return_pct")
+                            else:
+                                badge, color = status.upper(), "#64748b"
+                                ret = None
+                            ret_str = f"{ret:+.1f}%" if ret is not None else "—"
+                            st.markdown(
+                                f"- `{t['ticker']}` · entry ${t.get('entry_price', 0):.2f} · "
+                                f"target +{t.get('upside_pct_low', 0):.0f}%..{t.get('upside_pct_high', 0):.0f}% · "
+                                f"<span style='color:{color};font-weight:700;'>{badge}</span> {ret_str} · "
+                                f"prob {t.get('probability_score', 0)}/100",
+                                unsafe_allow_html=True,
+                            )

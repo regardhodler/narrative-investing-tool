@@ -979,22 +979,6 @@ def _save_to_journal_and_tracker(thesis: dict, regime_ctx: dict):
     lines.append(f"Kill switch: {kill}")
     thesis_md = "\n".join(lines)
 
-    hmm = regime_ctx.get("hmm_state", "")
-    # Record in journal keyed on first ticker (user can adjust later); use placeholder if none
-    try:
-        if all_tickers:
-            add_trade(
-                ticker=all_tickers[0],
-                direction="Long",
-                entry_price=entry_prices.get(all_tickers[0], 0),
-                position_size=0,
-                signal_source="Nth-Order Thesis",
-                thesis=thesis_md,
-                regime_at_entry=hmm,
-                notes=f"thesis_id={thesis_id or ''}",
-            )
-    except Exception:
-        pass
     return thesis_id
 
 
