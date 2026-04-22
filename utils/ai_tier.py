@@ -6,7 +6,7 @@ TIER_OPTS = ["⚡ Freeloader Mode", "🧠 Regard Mode", "👑 Highly Regarded Mo
 TIER_MAP: dict[str, tuple[bool, str | None]] = {
     "⚡ Freeloader Mode":      (False, None),
     "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-    "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+    "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
 }
 
 MODEL_HINT_HTML = (
@@ -15,7 +15,7 @@ MODEL_HINT_HTML = (
     'margin-top:-10px;margin-bottom:4px;">'
     "⚡ Groq LLaMA 3.3 70B &nbsp;·&nbsp; "
     "🧠 Grok 4.1 &nbsp;·&nbsp; "
-    "👑 Claude Sonnet 4.6"
+    "👑 Claude Haiku 4.5"
     "</div>"
 )
 

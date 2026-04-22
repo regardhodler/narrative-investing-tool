@@ -1,4 +1,4 @@
-﻿import plotly.graph_objects as go
+import plotly.graph_objects as go
 import streamlit as st
 
 from services.trends_client import (
@@ -421,7 +421,7 @@ def render():
     _PLAY_MODEL_MAP = {
         "⚡ Freeloader Mode": (False, None),
         "🧠 Regard Mode": (True, "grok-4-1-fast-reasoning"),
-        "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+        "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
     }
 
     with st.expander("📡 Cross-Signal Macro Plays", expanded=True):
@@ -1157,7 +1157,7 @@ def render():
         _nd_tier_map  = {
             "⚡ Freeloader Mode":      (False, None),
             "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+            "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
         }
     _nd_c1, _nd_c2, _nd_c3 = st.columns([2, 1.5, 1])
     with _nd_c1:

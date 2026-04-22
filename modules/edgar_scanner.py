@@ -1,4 +1,4 @@
-﻿import streamlit as st
+import streamlit as st
 from services.sec_client import get_filings_by_ticker, get_company_info, fetch_filing_text, get_latest_annual_filing, extract_mda_text
 from services.claude_client import summarize_filing, analyze_mda_sentiment
 from utils.session import get_ticker, set_ticker
@@ -89,7 +89,7 @@ def render():
         label="Summary Engine",
         recommendation="🧠 Regard (Grok 4.1) recommended for filing summaries — fast and accurate",
     )
-    _edgar_badge = f" {'👑' if (_use_claude_edgar and _edgar_model == 'claude-sonnet-4-6') else ('🧠' if _use_claude_edgar else '⚡')}"
+    _edgar_badge = f" {'👑' if (_use_claude_edgar and _edgar_model == 'claude-haiku-4-5-20251001') else ('🧠' if _use_claude_edgar else '⚡')}"
     st.subheader(f"AI Filing Summary{_edgar_badge}")
 
     summarizable = filtered[filtered["form_type"].isin(["8-K", "8-K/A", "10-K", "10-Q"])].reset_index(drop=True)

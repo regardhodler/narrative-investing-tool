@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import requests
 import streamlit as st
@@ -289,7 +289,7 @@ MD&A text:
             import anthropic
             client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             msg = client.messages.create(
-                model=_cl_model or "claude-sonnet-4-6",
+                model=_cl_model or "claude-haiku-4-5-20251001",
                 max_tokens=600,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -1784,7 +1784,7 @@ Return ONLY valid JSON:
 }}"""
 
     _system = "You are a JSON-only response bot. Return only valid JSON, no markdown fences, no explanation, no preamble. Be extremely concise: rationale = max 15 words, risk_factors = max 2 short items, narrative = max 25 words, priority_actions = max 3 items. Every position in the input MUST appear in the output positions array."
-    _model = model or "claude-sonnet-4-6"
+    _model = model or "claude-haiku-4-5-20251001"
     try:
         if use_claude and _is_xai_model(_model) and os.getenv("XAI_API_KEY"):
             raw = _call_xai(
@@ -2224,7 +2224,7 @@ Return ONLY valid JSON:
             _os2 = os
             client = _ant.Anthropic(api_key=_os2.getenv("ANTHROPIC_API_KEY", ""))
             msg = client.messages.create(
-                model=model or "claude-sonnet-4-6",
+                model=model or "claude-haiku-4-5-20251001",
                 max_tokens=600,
                 temperature=0.2,
                 messages=[{"role": "user", "content": prompt}],
@@ -2563,7 +2563,7 @@ Return ONLY valid JSON:
             import anthropic as _ant
             client = _ant.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
             resp = client.messages.create(
-                model=_model or "claude-sonnet-4-6", max_tokens=1000, temperature=0.3,
+                model=_model or "claude-haiku-4-5-20251001", max_tokens=1000, temperature=0.3,
                 system=_system,
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -3188,7 +3188,7 @@ def generate_nth_order_thesis(
     system = _nth_order_system_prompt()
     prompt = _nth_order_user_prompt(primary_narrative, regime_ctx or {}, contagion_score)
 
-    _model = model or "claude-sonnet-4-6"
+    _model = model or "claude-haiku-4-5-20251001"
 
     # N-run ensemble — parallel for speed
     from concurrent.futures import ThreadPoolExecutor

@@ -1,4 +1,4 @@
-﻿"""Trade Journal — log trades, track live P&L, and analyze performance by signal source."""
+"""Trade Journal — log trades, track live P&L, and analyze performance by signal source."""
 
 import json
 import os
@@ -246,7 +246,7 @@ def run_quick_risk_snapshot(use_claude: bool = False, model: str | None = None) 
             interp = _irm(snapshot, regime_ctx, use_claude=use_claude, model=model,
                           tactical_context=_tac_snap or None)
             st.session_state["_risk_matrix_interpretation"] = interp
-            tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+            tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") \
                 else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
             st.session_state["_risk_matrix_interpretation_engine"] = tier
         except Exception:
@@ -1493,7 +1493,7 @@ def render():
                 _pd_tier_map  = {
                     "⚡ Freeloader Mode":      (False, None),
                     "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-                    "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+                    "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
                 }
             _db_col1, _db_col2, _db_col3 = st.columns([2, 1.5, 1])
             with _db_col1:

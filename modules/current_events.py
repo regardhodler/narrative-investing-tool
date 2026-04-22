@@ -1,4 +1,4 @@
-﻿"""Current Events — standalone intelligence feed module."""
+"""Current Events — standalone intelligence feed module."""
 
 import streamlit as st
 
@@ -262,7 +262,7 @@ def run_quick_digest(use_claude: bool = False, model: str | None = None) -> bool
 
     if digest:
         digest, _sent_meta = _parse_digest_sentiment(digest)
-        _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
+        _tier = "👑 Highly Regarded Mode" if (_use_cl and _model == "claude-haiku-4-5-20251001") else ("🧠 Regard Mode" if _use_cl else "⚡ Freeloader Mode")
         _conflict = _detect_source_conflict(_x_content_out, _raw_hl_text)
         return {
             "_current_events_digest": digest,
@@ -674,7 +674,7 @@ def _run_digest(headlines, inbox, gist, engine: str):
     _tier_model = {
         "⚡ Freeloader Mode": None,
         "🧠 Regard Mode": "grok-4-1-fast-reasoning",
-        "👑 Highly Regarded Mode": "claude-sonnet-4-6",
+        "👑 Highly Regarded Mode": "claude-haiku-4-5-20251001",
     }
     cl_model = _tier_model.get(engine)
     use_claude = cl_model is not None

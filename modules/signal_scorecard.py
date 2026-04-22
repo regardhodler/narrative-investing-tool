@@ -1,4 +1,4 @@
-﻿"""Signal Scorecard — Short Squeeze Screener + Composite Scorecard."""
+"""Signal Scorecard — Short Squeeze Screener + Composite Scorecard."""
 
 import pandas as pd
 import streamlit as st
@@ -20,7 +20,7 @@ _CURATED = [
 _TIER_MAP = {
     "⚡ Freeloader Mode":           (False, None),
     "🧠 Regard Mode (Grok 4.1)": (True,  "grok-4-1-fast-reasoning"),
-    "👑 Highly Regarded (Claude)": (True,  "claude-sonnet-4-6"),
+    "👑 Highly Regarded (Claude)": (True,  "claude-haiku-4-5-20251001"),
 }
 
 

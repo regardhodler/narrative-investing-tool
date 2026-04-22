@@ -1,4 +1,4 @@
-﻿"""
+"""
 Module 0: Macro Dashboard
 
 Daily macro regime indicator using 26 cross-asset signals:
@@ -901,7 +901,7 @@ def run_quick_regime(use_claude: bool = False, model: str | None = None) -> bool
         macro["macro_regime"], norm_score, signal_summary,
         use_claude=use_claude, model=model,
     )
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     return macro, fred_data, _tac_result, _tac_text_result, _regime_ctx, _plays, _tier, _dq, _raw_signals
 
 
@@ -945,7 +945,7 @@ def run_quick_sector_regime(use_claude: bool = False, model: str | None = None, 
         if not digest or digest.startswith("Error"):
             return {"_sector_regime_error": f"summarize_sector_regime failed: {digest[:120] if digest else 'empty'}"}
         _tier = (
-            "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6")
+            "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001")
             else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
         )
         return {

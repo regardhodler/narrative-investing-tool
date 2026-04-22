@@ -1130,7 +1130,7 @@ def _call_claude_core_forecast(context_json: str, scenarios_json: str, model: st
     """Use Claude for higher-quality causal chains and asset impact reasoning.
 
     Same schema as _call_groq_core_forecast. Requires ANTHROPIC_API_KEY in env.
-    model: grok-4-1-fast (fast/cheap) or claude-sonnet-4-6 (most accurate).
+    model: grok-4-1-fast (fast/cheap) or claude-haiku-4-5-20251001 (most accurate).
     """
     _is_grok = model and model.startswith("grok-")
     if _is_grok:
@@ -1284,7 +1284,7 @@ def _call_claude_commodities_intl_forecast(context_json: str, scenarios_json: st
     """Use Claude for commodities and international equities forecast.
 
     Same schema as _call_groq_commodities_intl_forecast.
-    model: grok-4-1-fast or claude-sonnet-4-6.
+    model: grok-4-1-fast or claude-haiku-4-5-20251001.
     """
     import anthropic
 
@@ -1557,7 +1557,7 @@ def generate_forecast(context_json: str, scenarios_json: str) -> dict | None:
 _CLAUDE_MODEL_MAP = {
     "grok":   "grok-4-1-fast-reasoning",   # 🧠 Regard Mode → xAI Grok 4.1
     "haiku":  "grok-4-1-fast-reasoning",   # legacy alias
-    "sonnet": "claude-sonnet-4-6",         # 👑 Highly Regarded Mode → Anthropic Sonnet
+    "sonnet": "claude-haiku-4-5-20251001",         # 👑 Highly Regarded Mode → Anthropic Sonnet
 }
 
 

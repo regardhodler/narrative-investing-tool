@@ -1,4 +1,4 @@
-﻿"""Quick Intel Run — one button runs Regime + Rate-Path Plays + Current Events + Doom Briefing."""
+"""Quick Intel Run — one button runs Regime + Rate-Path Plays + Current Events + Doom Briefing."""
 
 import streamlit as st
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -5362,7 +5362,7 @@ def render():
     # Confirmation gate when Highly Regarded is selected
     _use_claude, _cl_model = TIER_MAP[_sel]
     if _sel == "👑 Highly Regarded Mode":
-        st.warning("👑 Highly Regarded uses Claude Sonnet — reserve for elevated volatility or high-conviction sessions.")
+        st.warning("👑 Highly Regarded uses Claude Haiku 4.5 — reserve for elevated volatility or high-conviction sessions.")
         _confirmed = st.checkbox("I confirm this is a high-conviction session", key="qr_hr_confirm")
         if not _confirmed:
             _use_claude, _cl_model = True, "grok-4-1-fast-reasoning"
@@ -5937,7 +5937,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 _signals_text_for_debate = "\n\n".join(_sig_parts)
                 st.session_state["_qir_debate_signals_text"] = _signals_text_for_debate
                 _synopsis = _gen_synopsis(_signals_text_for_debate, use_claude=_use_claude, model=_cl_model)
-                _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-sonnet-4-6") \
+                _syn_tier = "👑 Highly Regarded Mode" if (_use_claude and _cl_model == "claude-haiku-4-5-20251001") \
                     else ("🧠 Regard Mode" if _use_claude else "⚡ Freeloader Mode")
                 st.session_state["_macro_synopsis"] = _synopsis
                 st.session_state["_macro_synopsis_ts"] = _syndt.datetime.now()
@@ -6513,7 +6513,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         _dbt_map  = {
             "⚡ Freeloader Mode":      (False, None),
             "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+            "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
         }
     _dbt_c1, _dbt_c2, _dbt_c3 = st.columns([2, 1.5, 1])
     with _dbt_c1:

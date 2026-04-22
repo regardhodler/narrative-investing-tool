@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -42,7 +42,7 @@ def run_quick_whale(use_claude: bool = False, model: str | None = None) -> bool:
         lines.append(f"{filer} ({category}): {status} {issuer} — ${val_m:+,.0f}M change ({pct:+.1f}%)")
 
     summary = summarize_whale_activity("\n".join(lines), use_claude=use_claude, model=model)
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") \
         else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     return {
         "_whale_summary": summary,
@@ -77,7 +77,7 @@ def run_quick_activism(use_claude: bool = False, model: str | None = None) -> di
     if not summary or summary.startswith("Error"):
         return None
 
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") \
         else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     return {
         "_activism_digest": summary,
@@ -688,7 +688,7 @@ def _render_activism_tab():
             import datetime as _dt_act
             st.session_state["_activism_digest"] = _act_summary
             st.session_state["_activism_digest_ts"] = _dt_act.datetime.now()
-            _tier_label = "👑 Highly Regarded Mode" if (_use_cl_act and _act_model == "claude-sonnet-4-6") \
+            _tier_label = "👑 Highly Regarded Mode" if (_use_cl_act and _act_model == "claude-haiku-4-5-20251001") \
                 else ("🧠 Regard Mode" if _use_cl_act else "⚡ Freeloader Mode")
             st.session_state["_activism_digest_engine"] = _tier_label
             st.rerun()

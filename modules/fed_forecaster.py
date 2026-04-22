@@ -1,4 +1,4 @@
-﻿"""
+"""
 Module: Fed Forecaster
 
 Fed policy probability engine — standalone sidebar module.
@@ -971,12 +971,12 @@ def _render_fed_asset_matrix(macro: dict, fred_data: dict, adj_probs: list[dict]
                 index=_tier_options.index(_prev_tier) if _prev_tier in _tier_options else 0,
                 horizontal=True,
                 key="fed_engine_radio",
-                help="Groq = free/fast. Regard Mode = Grok 4.1 (~$0.03). Highly Regarded Mode = Claude Sonnet (~$0.12, most accurate).",
+                help="Groq = free/fast. Regard Mode = Grok 4.1 (~$0.03). Highly Regarded Mode = Claude Haiku 4.5 (~$0.02, accurate).",
             )
             st.markdown(
                 '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
                 'margin-top:-10px;margin-bottom:2px;">'
-                '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+                '⚡ Groq LLaMA 3.3 70B &nbsp;·&nbsp; 🧠 Grok 4.1 &nbsp;·&nbsp; 👑 Claude Haiku 4.5'
                 '</div>',
                 unsafe_allow_html=True,
             )
@@ -1425,7 +1425,7 @@ def run_quick_fed(macro: dict, fred_data: dict, use_claude: bool = False, model:
         f"Regime: {regime} | Quadrant: {macro.get('quadrant', 'Unknown')}"
     )
     _plays = suggest_regime_plays(regime, norm_score, sig, use_claude=use_claude, model=model)
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     result = {
         "_rate_path_probs": final_probs,
         "_rate_path_probs_ts": _dt.datetime.now(),
@@ -1466,7 +1466,7 @@ def run_quick_chain(use_claude: bool = False, model: str | None = None) -> bool:
 
     chains_json = _json.dumps(chains)
     narration = narrate_policy_transmission(chains_json, probs_json, use_claude=use_claude, model=model)
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") \
         else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     st.session_state["_chain_narration"] = narration
     st.session_state["_chain_narration_engine"] = _tier
@@ -1507,7 +1507,7 @@ def run_quick_swans(use_claude: bool = False, model: str | None = None) -> bool:
     else:
         scenarios = ["Geopolitical Black Swan", "US Credit Downgrade", "Oil Supply Shock"]
 
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") \
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") \
         else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     _new_swans = {}
     for label in scenarios:

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Module: Elliott Wave Analysis (SPY) — Multi-Degree
 
@@ -854,12 +854,12 @@ def render():
         horizontal=True,
         key="ew_narrative_tier",
         disabled=not _has_anthropic_ew,
-        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides wave count)  ·  Highly Regarded = Claude Sonnet",
+        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides wave count)  ·  Highly Regarded = Claude Haiku 4.5",
     )
     st.markdown(
         '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
         'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '⚡ Groq LLaMA 3.3 70B &nbsp;·&nbsp; 🧠 Grok 4.1 &nbsp;·&nbsp; 👑 Claude Haiku 4.5'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -948,7 +948,7 @@ def render():
     _ew_tier_now = st.session_state.get("ew_narrative_tier", "⚡ Standard")
     _claude_wa = {}
     if _ew_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and (bool(os.getenv("XAI_API_KEY")) or bool(os.getenv("ANTHROPIC_API_KEY"))):
-        _ca_model = "grok-4-1-fast-reasoning" if _ew_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+        _ca_model = "grok-4-1-fast-reasoning" if _ew_tier_now == "🧠 Regard Mode" else "claude-haiku-4-5-20251001"
         _primary_for_ca = degree_counts.get("Primary") or corrective_counts.get("Primary")
         if _primary_for_ca:
             _deg_sum = tuple((deg, cnt.current_wave_label, cnt.confidence) for deg, cnt in degree_counts.items())
@@ -1209,7 +1209,7 @@ def render():
         _ew_tier_map = {
             "⚡ Standard":            (False, None),
             "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+            "👑 Highly Regarded Mode": (True,  "claude-haiku-4-5-20251001"),
         }
         # Tier is set at top of page — show status here
         _ew_tier = st.session_state.get("ew_narrative_tier", "⚡ Standard")

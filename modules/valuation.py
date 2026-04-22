@@ -774,7 +774,7 @@ def render():
         _vd_tier_map  = {
             "⚡ Freeloader Mode":      (False, None),
             "🧠 Regard Mode":          (True, "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True, "claude-sonnet-4-6"),
+            "👑 Highly Regarded Mode": (True, "claude-haiku-4-5-20251001"),
         }
     _vd_col1, _vd_col2, _vd_col3 = st.columns([2, 1.5, 1])
     with _vd_col1:

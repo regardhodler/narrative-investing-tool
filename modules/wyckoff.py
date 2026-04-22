@@ -1,4 +1,4 @@
-﻿"""
+"""
 Module: Wyckoff Method Analysis (SPY)
 
 Detects Accumulation, Distribution, Markup, and Markdown phases on SPY
@@ -702,12 +702,12 @@ def render():
         index=_wy_default_idx,
         horizontal=True,
         key="wy_narrative_tier",
-        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides phase)  ·  Highly Regarded = Claude Sonnet",
+        help="Standard = Groq LLaMA  ·  Regard = Grok 4.1 (overrides phase)  ·  Highly Regarded = Claude Haiku 4.5",
     )
     st.markdown(
         '<div style="font-size:10px;color:#64748b;font-family:\'JetBrains Mono\',Consolas,monospace;'
         'margin-top:-10px;margin-bottom:2px;">'
-        '⚡ llama-3.3-70b &nbsp;·&nbsp; 🧠 grok-4-1-fast &nbsp;·&nbsp; 👑 claude-sonnet-4-6'
+        '⚡ Groq LLaMA 3.3 70B &nbsp;·&nbsp; 🧠 Grok 4.1 &nbsp;·&nbsp; 👑 Claude Haiku 4.5'
         '</div>',
         unsafe_allow_html=True,
     )
@@ -838,7 +838,7 @@ def render():
     _wy_xai_ok = bool(os.getenv("XAI_API_KEY"))
     _wy_ant_ok = bool(os.getenv("ANTHROPIC_API_KEY"))
     if _wy_tier_now in ("🧠 Regard Mode", "👑 Highly Regarded Mode") and (_wy_xai_ok or _wy_ant_ok) and analysis is not None:
-        _ca_model = "grok-4-1-fast-reasoning" if _wy_tier_now == "🧠 Regard Mode" else "claude-sonnet-4-6"
+        _ca_model = "grok-4-1-fast-reasoning" if _wy_tier_now == "🧠 Regard Mode" else "claude-haiku-4-5-20251001"
         _cur = analysis.current_phase
         _event_strs = tuple(f"{e.event_type}: {e.description}" for e in _cur.events)
         with st.spinner(f"✦ AI ({_ca_model.split('-')[0].capitalize()}) analyzing Wyckoff structure..."):
@@ -1071,7 +1071,7 @@ def render():
         _wy_tier_map = {
             "⚡ Standard":            (False, None),
             "🧠 Regard Mode":         (True,  "grok-4-1-fast-reasoning"),
-            "👑 Highly Regarded Mode": (True,  "claude-sonnet-4-6"),
+            "👑 Highly Regarded Mode": (True,  "claude-haiku-4-5-20251001"),
         }
         _wy_tier = st.session_state.get("wy_narrative_tier", "⚡ Standard")
         st.caption(f"Engine: {_wy_tier} — change at top of page")

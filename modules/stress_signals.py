@@ -1,4 +1,4 @@
-﻿"""
+"""
 Module 9: Stress Signals / Doomsday Monitor
 
 The canary-in-the-coal-mine dashboard — tracking credit stress, institutional
@@ -456,7 +456,7 @@ def run_quick_doom(use_claude: bool = False, model: str | None = None) -> bool:
         "\n".join(stress_text_parts),
         use_claude=use_claude, model=model, current_events=_ce,
     )
-    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-sonnet-4-6") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
+    _tier = "👑 Highly Regarded Mode" if (use_claude and model == "claude-haiku-4-5-20251001") else ("🧠 Regard Mode" if use_claude else "⚡ Freeloader Mode")
     return {
         "_doom_briefing": briefing,
         "_doom_briefing_ts": _dt.datetime.now(),

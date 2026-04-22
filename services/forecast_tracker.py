@@ -27,9 +27,10 @@ _THRESHOLDS = {
 }
 
 MODEL_LABELS = {
-    "llama-3.3-70b-versatile": "Groq Llama 3.3",
-    "grok-4-1-fast-reasoning": "xAI Grok",
-    "claude-sonnet-4-6": "Claude Sonnet 4.6",
+    "llama-3.3-70b-versatile":     "Groq Llama 3.3",
+    "grok-4-1-fast-reasoning":     "xAI Grok",
+    "claude-sonnet-4-6":           "Claude Sonnet 4.6",
+    "claude-haiku-4-5-20251001":   "Claude Haiku 4.5",
 }
 
 
