@@ -1,14 +1,14 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-22T15:11:49",
+  "generated_at": "2026-04-23T15:37:50",
   "regime": {
     "label": "Risk-On",
     "score": 0.24,
     "quadrant": "Reflation",
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+0.97 ()\n- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Commodity Trend (Oil + Copper): z=+0.86 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.75 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 32/100 — Fear (contrarian)"
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.76 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Commodity Trend (Oil + Copper): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 46/100 — Neutral (contrarian)"
   },
   "tactical": {
-    "score": 59,
+    "score": 56,
     "label": "Neutral / Hold",
     "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime is being supported by various catalysts, including the potential Spirit Airlines rescue package and Palantir's $300 million deal with the USDA, which suggest a continued emphasis on growth and investment. However, rising oil prices due to Iran's actions in the Strait of Hormuz and output declines in industries such as airlines and chemicals may pose a threat to this reflation narrative. The market's expectations for inflation, as reflected in the Polymarket prediction markets, remain relatively muted, with only a 16% chance of inflation reaching above 5% in 2026. Meanwhile, the Iran leadership change predictions and recent geopolitical tensions in the region warrant close monitoring as potential risk events.",
+  "current_events_digest": "The current risk-on macro regime continues to be supported by expectations of moderate growth and inflation, with the Polymarket prediction of a 68% chance of China's 2026 annual GDP growth falling between 4.0% and 5.0% aligning with the reflation narrative. However, escalating tensions between the US and Iran, as evidenced by the naval standoff over the Strait of Hormuz, pose a significant risk to this outlook, potentially disrupting global oil supplies and sparking inflation. The recent US inflation picture, described as the worst in almost 4 years, also warrants attention, as it may challenge the Fed's accommodative stance. Meanwhile, the technology sector is experiencing volatility, with ServiceNow's stock sinking towards its worst day ever, which may be a harbinger of broader market sentiment shifts.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
