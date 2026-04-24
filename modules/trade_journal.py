@@ -3104,10 +3104,16 @@ def render():
                                 badge, color = status.upper(), "#64748b"
                                 ret = None
                             ret_str = f"{ret:+.1f}%" if ret is not None else "—"
+                            _atr_bits = ""
+                            if t.get("atr_stop_price") is not None and t.get("atr_target_price") is not None:
+                                _atr_bits = (
+                                    f" · ATR stop ${t['atr_stop_price']:.2f} ({t.get('atr_stop_pct', 0):+.1f}%) "
+                                    f"· ATR TP ${t['atr_target_price']:.2f} ({t.get('atr_target_pct', 0):+.1f}%)"
+                                )
                             st.markdown(
                                 f"- `{t['ticker']}` · entry ${t.get('entry_price', 0):.2f} · "
                                 f"target +{t.get('upside_pct_low', 0):.0f}%..{t.get('upside_pct_high', 0):.0f}% · "
                                 f"<span style='color:{color};font-weight:700;'>{badge}</span> {ret_str} · "
-                                f"prob {t.get('probability_score', 0)}/100",
+                                f"prob {t.get('probability_score', 0)}/100{_atr_bits}",
                                 unsafe_allow_html=True,
                             )

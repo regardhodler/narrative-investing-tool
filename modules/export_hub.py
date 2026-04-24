@@ -1,9 +1,14 @@
 """Export Hub — Download all macro intelligence as Markdown or JSON for AI chat."""
 
 import json
+import os
 from datetime import datetime
 
 import streamlit as st
+
+_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+_THESIS_TRACKER_PATH = os.path.join(_DATA_DIR, "thesis_tracker.json")
+_CORR_HISTORY_PATH = os.path.join(_DATA_DIR, "correlation_history.json")
 
 from utils.journal import load_journal
 from utils.theme import COLORS
@@ -271,6 +276,133 @@ def _section_discovery_plays() -> str:
         lines.append(f"- **Stocks:** {stocks}")
     if rationale:
         lines.append(f"\n**Rationale:** {rationale}")
+    return "\n".join(lines) + "\n"
+
+
+def _section_nth_order_theses() -> str:
+    """Export saved 2nd/3rd/4th-order theses from data/thesis_tracker.json."""
+    try:
+        with open(_THESIS_TRACKER_PATH, "r", encoding="utf-8") as f:
+            entries = json.load(f) or []
+    except Exception:
+        return ""
+    if not entries:
+        return ""
+
+    entries = list(reversed(entries))  # newest first
+    tot_tickers = sum(len(e.get("tickers") or []) for e in entries)
+    open_count = sum(
+        1 for e in entries for t in (e.get("tickers") or [])
+        if t.get("status", "open") == "open"
+    )
+    hit_count = sum(
+        1 for e in entries for t in (e.get("tickers") or [])
+        if t.get("status") in ("hit", "hit_time")
+    )
+    miss_count = sum(
+        1 for e in entries for t in (e.get("tickers") or [])
+        if t.get("status") in ("miss", "miss_time")
+    )
+    closed = hit_count + miss_count
+    hit_rate = f"{hit_count/closed*100:.0f}%" if closed > 0 else "—"
+
+    lines = ["## NTH-ORDER THESES", ""]
+    lines.append(
+        f"**Summary:** {len(entries)} theses · {tot_tickers} tickers tracked · "
+        f"{open_count} open · hit rate {hit_rate} ({hit_count}/{closed} closed)"
+    )
+    lines.append("")
+
+    # Show up to 10 most recent theses
+    for e in entries[:10]:
+        primary = e.get("primary", "—")
+        gen = e.get("generated_date") or e.get("generated_at", "")[:10]
+        regime = (e.get("regime_snapshot") or {}).get("hmm_state", "")
+        tks = e.get("tickers") or []
+        header = f"### {primary} · {gen}"
+        if regime:
+            header += f" · regime: {regime}"
+        lines.append(header)
+
+        by_order: dict[int, list] = {2: [], 3: [], 4: []}
+        for t in tks:
+            by_order.setdefault(t.get("order", 2), []).append(t)
+
+        for order in (2, 3, 4):
+            ts = by_order.get(order) or []
+            if not ts:
+                continue
+            lines.append(f"- **{order}°-Order plays:**")
+            for t in ts:
+                status = t.get("status", "open")
+                if status == "open":
+                    badge = "OPEN"
+                    ret = t.get("current_return_pct")
+                elif status in ("hit", "hit_time"):
+                    badge = "HIT"
+                    ret = t.get("final_return_pct")
+                elif status in ("miss", "miss_time"):
+                    badge = "MISS"
+                    ret = t.get("final_return_pct")
+                else:
+                    badge = status.upper()
+                    ret = None
+                ret_str = f"{ret:+.1f}%" if ret is not None else "—"
+                _atr_bits = ""
+                if t.get("atr_stop_pct") is not None and t.get("atr_target_pct") is not None:
+                    _atr_bits = f" · ATR stop {t['atr_stop_pct']:+.1f}% · ATR TP {t['atr_target_pct']:+.1f}%"
+                lines.append(
+                    f"  - `{t.get('ticker', '?')}` · entry ${t.get('entry_price', 0):.2f} "
+                    f"· target +{t.get('upside_pct_low', 0):.0f}%..{t.get('upside_pct_high', 0):.0f}% "
+                    f"· **{badge}** {ret_str} · prob {t.get('probability_score', 0)}/100{_atr_bits}"
+                )
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _section_cross_asset_correlation() -> str:
+    """Export latest cross-asset correlation snapshot from data/correlation_history.json."""
+    try:
+        with open(_CORR_HISTORY_PATH, "r", encoding="utf-8") as f:
+            history = json.load(f) or []
+    except Exception:
+        return ""
+    if not history:
+        return ""
+
+    latest = history[-1]
+    date_str = latest.get("date", "?")
+    # Skip if older than 7 days
+    try:
+        last_dt = datetime.fromisoformat(date_str)
+        age_days = (datetime.now() - last_dt).days
+        if age_days > 7:
+            return ""
+    except Exception:
+        pass
+
+    score = latest.get("contagion_score")
+    zone = latest.get("zone", "")
+    shifts = latest.get("top_shifts") or []
+
+    lines = ["## CROSS-ASSET CORRELATION", ""]
+    if score is not None:
+        lines.append(f"**Contagion score:** {score:.1f}/100 · Zone: **{zone}**")
+    lines.append(f"**Snapshot date:** {date_str}")
+    lines.append("")
+
+    if shifts:
+        lines.append("**Top correlation shifts vs baseline:**")
+        lines.append("")
+        lines.append("| Pair | Baseline | Current | Δ |")
+        lines.append("|------|----------|---------|---|")
+        for s in shifts[:6]:
+            pair = s.get("pair", "?")
+            base = s.get("base", 0)
+            cur = s.get("cur", 0)
+            delta = s.get("delta", 0)
+            lines.append(f"| {pair} | {base:+.2f} | {cur:+.2f} | {delta:+.2f} |")
+
     return "\n".join(lines) + "\n"
 
 
@@ -567,6 +699,8 @@ def _build_markdown_export(open_trades: list) -> str:
         _section_doom(),
         _section_whale(),
         _section_discovery_plays(),
+        _section_nth_order_theses(),
+        _section_cross_asset_correlation(),
         _section_portfolio(open_trades),
         _section_factor_exposure(open_trades),
         _section_factor_analysis(),
@@ -627,13 +761,16 @@ def _build_pipeline_export() -> str:
         "SEC EDGAR - filings, insider Form 4, 13F holdings",
         "Google Trends - narrative momentum",
         "Congress trading feed - disclosed congressional transactions",
+        "data/thesis_tracker.json - persisted nth-order theses with forward T+30/90/180 scoring",
+        "data/nth_thesis_cache.json - full N=5 ensemble thesis JSON blobs keyed by narrative",
+        "data/correlation_history.json - daily cross-asset correlation snapshots with contagion score",
     ]
 
     service_layer = [
         "services/market_data.py - batch fetch, FRED wrappers, AssetSnapshot dataclass, z-scores",
         "services/hmm_regime.py - GaussianHMM (6-state) trained on FRED+VIX. Brain in data/hmm_brain.json. lookback_years stored in brain and must match live scoring exactly",
         "services/sec_client.py - EDGAR requests, CIK/ticker mapping, rate limiting (10 req/s)",
-        "services/claude_client.py - all LLM synthesis, debates, valuation, plays",
+        "services/claude_client.py - 3-tier LLM router: Groq LLaMA 3.3 70B (⚡ Freeloader), xAI Grok 4.1 Reasoning (🧠 Regard), Claude Haiku 4.5 (👑 Highly Regarded) — all synthesis, debates, valuation, plays, nth-order theses",
         "services/backtest_engine.py - backtest orchestration",
         "services/signals_cache.py - persist/reload session signals",
         "services/forecast_tracker.py - call logging and evaluation",
@@ -648,6 +785,8 @@ def _build_pipeline_export() -> str:
         "services/whale_screener.py - large buyer/seller detection",
         "services/qir_history.py - QIR run history persistence",
         "services/tactical_history.py - tactical score history",
+        "modules/second_order_thesis.py - Nth-order thesis builder (N=5 LLM ensemble, 2°/3°/4° plays, forward tracker with T+30/90/180 scoring, disk cache in data/nth_thesis_cache.json)",
+        "modules/correlation_monitor.py - Cross-asset correlation monitor (rolling contagion score, top shift detection, daily snapshots in data/correlation_history.json)",
     ]
 
     module_layer = [
@@ -877,18 +1016,26 @@ def _build_cross_sectional_export() -> str:
 
     any_data = False
     for label, key in _MODULES:
-        ctx = st.session_state.get(key) or {}
+        ctx = st.session_state.get(key)
         if not ctx:
             continue
         any_data = True
         lines.append(f"## {label}")
-        for k, v in ctx.items():
-            if isinstance(v, list):
-                lines.append(f"**{k}:**")
-                for item in v:
-                    lines.append(f"  - {item}")
-            else:
-                lines.append(f"**{k}:** {v}")
+        if isinstance(ctx, dict):
+            for k, v in ctx.items():
+                if isinstance(v, list):
+                    lines.append(f"**{k}:**")
+                    for item in v:
+                        lines.append(f"  - {item}")
+                else:
+                    lines.append(f"**{k}:** {v}")
+        elif isinstance(ctx, str):
+            lines.append(ctx.strip())
+        elif isinstance(ctx, list):
+            for item in ctx:
+                lines.append(f"- {item}")
+        else:
+            lines.append(str(ctx))
         lines.append("")
         lines.append("---")
         lines.append("")
@@ -1223,6 +1370,8 @@ _READINESS_ITEMS = [
     ("Factor AI Analysis",    "_factor_analysis_ts",       "Run Analyze Factors in My Regarded Portfolio"),
     ("Pre-Trade Verdict",     None,                        "Run Pre-Trade Simulator + Get AI Verdict"),
     ("QIR Debate Payload",    None,                        "Run QIR once to build debate payload"),
+    ("Nth-Order Theses",      None,                        "Build + save in Discovery → Second Order Thesis"),
+    ("Cross-Asset Correlation", None,                      "Run Cross-Asset Correlation Monitor"),
 ]
 
 _STALE_THRESHOLD_H = 6
@@ -1253,6 +1402,22 @@ def _check_item(label: str, ts_key, run_hint: str, open_trades: list):
     elif label == "QIR Debate Payload":
         has = bool(st.session_state.get("_qir_debate_signals_text"))
         ts = None
+    elif label == "Nth-Order Theses":
+        try:
+            with open(_THESIS_TRACKER_PATH, "r", encoding="utf-8") as _f:
+                _entries = json.load(_f) or []
+            has = bool(_entries)
+            ts = datetime.fromtimestamp(os.path.getmtime(_THESIS_TRACKER_PATH)) if has else None
+        except Exception:
+            has, ts = False, None
+    elif label == "Cross-Asset Correlation":
+        try:
+            with open(_CORR_HISTORY_PATH, "r", encoding="utf-8") as _f:
+                _hist = json.load(_f) or []
+            has = bool(_hist)
+            ts = datetime.fromtimestamp(os.path.getmtime(_CORR_HISTORY_PATH)) if has else None
+        except Exception:
+            has, ts = False, None
     else:
         val = st.session_state.get(ts_key) if ts_key else None
         # ts_key may store datetime OR just a non-None value (e.g., tier string)

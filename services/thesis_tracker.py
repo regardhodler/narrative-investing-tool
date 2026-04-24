@@ -33,6 +33,23 @@ def _save(entries: list[dict]) -> None:
         json.dump(entries, f, indent=2)
 
 
+def _fetch_weekly_atr(ticker: str, period: int = 14) -> float | None:
+    """Return current weekly ATR-14 for a ticker, or None if unavailable."""
+    try:
+        from services.market_data import fetch_ohlcv_single
+        from services.indicators import atr as _atr
+        df = fetch_ohlcv_single(ticker, period="6mo", interval="1wk")
+        if df is None or df.empty or len(df) < period + 1:
+            return None
+        h = df["High"].iloc[:, 0] if hasattr(df["High"], "ndim") and df["High"].ndim == 2 else df["High"]
+        l = df["Low"].iloc[:, 0]  if hasattr(df["Low"],  "ndim") and df["Low"].ndim  == 2 else df["Low"]
+        c = df["Close"].iloc[:, 0] if hasattr(df["Close"], "ndim") and df["Close"].ndim == 2 else df["Close"]
+        series = _atr(h, l, c, period=period).dropna()
+        return float(series.iloc[-1]) if not series.empty else None
+    except Exception:
+        return None
+
+
 def save_thesis(thesis: dict, entry_prices: dict[str, float]) -> str:
     """Persist a generated thesis with per-ticker entries for forward tracking.
 
@@ -57,6 +74,11 @@ def save_thesis(thesis: dict, entry_prices: dict[str, float]) -> str:
             ep = entry_prices.get(tk_u) or entry_prices.get(tk)
             if not ep or ep <= 0:
                 continue
+            atr_w = _fetch_weekly_atr(tk_u)
+            atr_stop_price   = float(ep - 2.0 * atr_w) if atr_w else None
+            atr_target_price = float(ep + 3.0 * atr_w) if atr_w else None
+            atr_stop_pct    = ((atr_stop_price / ep - 1) * 100) if atr_stop_price else None
+            atr_target_pct  = ((atr_target_price / ep - 1) * 100) if atr_target_price else None
             tickers_flat.append({
                 "ticker":             tk_u,
                 "order":              order_level,
@@ -69,6 +91,11 @@ def save_thesis(thesis: dict, entry_prices: dict[str, float]) -> str:
                 "duration_months":    duration,
                 "probability_score":  prob,
                 "status":             "open",
+                "atr_14_weekly":      float(atr_w) if atr_w else None,
+                "atr_stop_price":     atr_stop_price,
+                "atr_target_price":   atr_target_price,
+                "atr_stop_pct":       atr_stop_pct,
+                "atr_target_pct":     atr_target_pct,
             })
 
     entry = {

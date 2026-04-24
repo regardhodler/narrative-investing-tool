@@ -34,3 +34,15 @@ def obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     direction = np.sign(close.diff())
     direction.iloc[0] = 0
     return (volume * direction).cumsum()
+
+
+def atr(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+) -> pd.Series:
+    """True-range ATR: max(H-L, |H-prevC|, |L-prevC|) then rolling mean."""
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [high - low, (high - prev_close).abs(), (low - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    return tr.rolling(period).mean()
