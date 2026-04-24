@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-23T15:37:50",
+  "generated_at": "2026-04-24T15:08:32",
   "regime": {
     "label": "Risk-On",
     "score": 0.24,
     "quadrant": "Reflation",
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.97 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- Global Manufacturing (EWG+FXI): z=+0.76 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Commodity Trend (Oil + Copper): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 46/100 — Neutral (contrarian)"
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Commodity Trend (Oil + Copper): z=+0.89 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 39/100 — Fear (contrarian)"
   },
   "tactical": {
-    "score": 56,
-    "label": "Neutral / Hold",
-    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
+    "score": 52,
+    "label": "Caution / Reduce",
+    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
   },
   "qir_pattern": {
     "name": "REGIME_ONLY_BULLISH",
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime continues to be supported by expectations of moderate growth and inflation, with the Polymarket prediction of a 68% chance of China's 2026 annual GDP growth falling between 4.0% and 5.0% aligning with the reflation narrative. However, escalating tensions between the US and Iran, as evidenced by the naval standoff over the Strait of Hormuz, pose a significant risk to this outlook, potentially disrupting global oil supplies and sparking inflation. The recent US inflation picture, described as the worst in almost 4 years, also warrants attention, as it may challenge the Fed's accommodative stance. Meanwhile, the technology sector is experiencing volatility, with ServiceNow's stock sinking towards its worst day ever, which may be a harbinger of broader market sentiment shifts.",
+  "current_events_digest": "The current risk-on macro regime, characterized by a score of +0.24 and a reflation quadrant, is supported by recent market developments, including the surge in AMD and Intel shares, which suggests ongoing optimism in the tech sector. The drop in oil prices following reports of potential peace talks between Iran and Pakistan also aligns with the reflation narrative, as reduced geopolitical tensions can lead to increased economic activity. However, the Polymarket prediction of an 18% chance of inflation reaching over 5% in 2026 introduces a note of caution, as high inflation could prompt monetary policy tightening and contradict the current risk-on regime. The removal of the hurdle for Warsh confirmation following the DOJ's drop of the criminal probe into Fed Chair Powell may also have implications for future monetary policy decisions.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
