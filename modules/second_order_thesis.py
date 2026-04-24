@@ -1060,7 +1060,8 @@ def render():
             key="_nth_ai_tier",
             label="AI engine",
             default=2,
-            recommendation="👑 Highly Regarded (Claude Haiku 4.5) default · drop to 🧠 Regard for quick checks",
+            include_dd_scholar=True,
+            recommendation="👑 Highly Regarded (Haiku) default · 📜 DD Scholar (Sonnet 4.6) for deep chains",
         )
 
     col_btn1, col_btn2, _ = st.columns([1, 1, 3])

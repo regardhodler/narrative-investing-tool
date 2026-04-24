@@ -80,7 +80,8 @@ def render():
     _use_claude, _cl_model = _val_main_tier(
         key="val_engine_radio",
         label="Engine",
-        recommendation="🧠 Regard recommended for valuation · 👑 Highly Regarded for high-conviction positions",
+        include_dd_scholar=True,
+        recommendation="🧠 Regard recommended for valuation · 📜 DD Scholar (Sonnet 4.6) for high-conviction deep dives",
     )
     _selected_val_tier = st.session_state.get("val_engine_radio", "⚡ Freeloader Mode")
     st.session_state["_val_tier_prev"] = _selected_val_tier
