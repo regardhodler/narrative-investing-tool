@@ -777,6 +777,7 @@ def _classify_entry_recommendation(
     divergence_label: str,
     divergence_pts: int,
     velocity_delta: int = 0,
+    forced_lean_score: float = 50.0,
 ) -> dict:
     """Map leading/lagging indicator divergence + tactical + options + macro velocity into a single entry verdict.
 
@@ -834,6 +835,12 @@ def _classify_entry_recommendation(
             verdict = "BUY THE DIP"
         elif opts_bearish and not leading_bull:
             # Options flow bearish + no bullish leadership → downgrade hold to wait
+            verdict = "WAIT"
+        # Forced directional lean (from Uncertainty panel / Lean Tracker) breaks the HOLD tie.
+        # Guards: don't buy a rip (tac ≥ 55) or into weak macro (< 45); no guard needed on WAIT.
+        elif forced_lean_score >= 55 and tactical_score < 55 and macro_score >= 45:
+            verdict = "BUY THE DIP"
+        elif forced_lean_score <= 45:
             verdict = "WAIT"
         # Rapidly improving macro softens a HOLD to a positive lean — note added to reasoning
 
@@ -1652,9 +1659,20 @@ def _render_qir_dashboard() -> None:
         _opts_s    = int(_of.get("options_score", 50))   if _of  else 50
         # Velocity: prefer 5-day macro trend (wider signal); fall back to 1-day delta
         _vel_for_entry = int(_rc.get("score_5d_trend") or _rc.get("velocity") or 0)
+        # Forced directional lean — same weighted formula as Lean Tracker (macro 30% / tac 25% /
+        # opts 20% / sent+event 25% held neutral when unavailable). Prefer the richer GU profile
+        # lean when it exists, converting its magnitude+direction back to a 0-100 directional score.
+        _fl_base = _macro_s * 0.30 + _tac_s * 0.25 + _opts_s * 0.20 + 50 * 0.25
+        if _gu_profile and _gu_profile.get("lean") == "BULLISH":
+            _forced_lean_score = float(_gu_profile.get("lean_pct") or 50)
+        elif _gu_profile and _gu_profile.get("lean") == "BEARISH":
+            _forced_lean_score = 100.0 - float(_gu_profile.get("lean_pct") or 50)
+        else:
+            _forced_lean_score = _fl_base
         _entry_rec = _classify_entry_recommendation(
             _leading_s, _macro_s, _tac_s, _opts_s, _div_label, _div_pts,
             velocity_delta=_vel_for_entry,
+            forced_lean_score=_forced_lean_score,
         )
 
         _verdict_html = (
