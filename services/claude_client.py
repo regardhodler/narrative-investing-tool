@@ -3049,6 +3049,16 @@ def _merge_nth_runs(runs: list[dict]) -> dict:
     def _name_key(nm: str) -> str:
         return " ".join((nm or "").lower().split()[:3])
 
+    def _canon_ticker(t: str) -> str:
+        # Canonical form for vote-counting: strip common exchange suffixes so
+        # '6268' and '6268.T' merge. Original suffixed form is kept for display.
+        t = (t or "").upper().strip()
+        for suf in (".T", ".HK", ".L", ".TO", ".KS", ".KQ", ".SS", ".SZ",
+                    ".AX", ".PA", ".DE", ".MI", ".AS", ".SW"):
+            if t.endswith(suf):
+                return t[:-len(suf)]
+        return t
+
     agg: dict[tuple, dict] = {}
     for r in valid:
         for play in r.get("orders") or []:
@@ -3097,7 +3107,9 @@ def _merge_nth_runs(runs: list[dict]) -> dict:
             bucket["bear_cases"].append(play.get("bear_case", ""))
             bucket["evidence_against"].extend(play.get("evidence_against") or [])
             bucket["data_points"].extend(play.get("data_points") or [])
-            bucket["tickers"].extend([t.upper() for t in (play.get("tickers") or []) if t])
+            bucket["tickers"].extend(
+                [(_canon_ticker(t), t.upper().strip()) for t in (play.get("tickers") or []) if t]
+            )
             if play.get("vehicles"):
                 bucket["vehicles_list"].append(play["vehicles"])
             if play.get("moonshot"):
@@ -3106,20 +3118,34 @@ def _merge_nth_runs(runs: list[dict]) -> dict:
     # Flatten
     plays_out: list[dict] = []
     for key, b in agg.items():
-        # Ticker conviction: frac of runs that included this ticker for this play
-        tk_counter: dict[str, int] = {}
-        for t in b["tickers"]:
-            tk_counter[t] = tk_counter.get(t, 0) + 1
+        # Ticker conviction: vote on canonical form (suffix-stripped) so '6268' and
+        # '6268.T' from different runs merge instead of splitting the vote.
+        canon_counter: dict[str, int] = {}
+        canon_display: dict[str, dict[str, int]] = {}
+        for canon, disp in b["tickers"]:
+            canon_counter[canon] = canon_counter.get(canon, 0) + 1
+            canon_display.setdefault(canon, {})
+            canon_display[canon][disp] = canon_display[canon].get(disp, 0) + 1
+
+        def _pick_display(canon: str) -> str:
+            # Prefer the suffixed form when any run used one — exchange-unambiguous.
+            forms = canon_display.get(canon, {})
+            suffixed = {f: c for f, c in forms.items() if "." in f}
+            if suffixed:
+                return max(suffixed, key=suffixed.get)
+            return max(forms, key=forms.get) if forms else canon
+
         # Keep tickers that appeared in ≥ 2 runs OR in single-run plays keep all
         if b["appearances"] >= 2:
-            tickers = sorted(
-                [t for t, c in tk_counter.items() if c >= 2],
-                key=lambda x: -tk_counter[x],
+            winners = sorted(
+                [c for c, v in canon_counter.items() if v >= 2],
+                key=lambda x: -canon_counter[x],
             )
-            if not tickers:  # fallback: keep the top-voted
-                tickers = sorted(tk_counter, key=lambda x: -tk_counter[x])[:3]
+            if not winners:  # fallback: keep the top-voted
+                winners = sorted(canon_counter, key=lambda x: -canon_counter[x])[:3]
+            tickers = [_pick_display(c) for c in winners]
         else:
-            tickers = list(dict.fromkeys(b["tickers"]))[:5]
+            tickers = list(dict.fromkeys(_pick_display(c) for c in canon_counter))[:5]
 
         conviction_pct = int(round(b["appearances"] / n * 100))
 
