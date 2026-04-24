@@ -1164,7 +1164,7 @@ def render():
             thesis = _enrich_plays(raw, regime_ctx)
             st.session_state[cache_key] = thesis
             # Persist to disk — survives restart
-            _engine_label = st.session_state.get("_nth_engine_radio", "")
+            _engine_label = st.session_state.get("_nth_ai_tier", "")
             _cache_put(narrative_key, thesis, _engine_label)
 
     if not thesis:
