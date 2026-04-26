@@ -7,9 +7,9 @@ for early market TOP detection.
 SAFE: never reads or writes data/hmm_brain.json.
 Results → data/top_signal_search_results.json
 
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 DESIGN
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 All FRED + VIX data is loaded ONCE in the main process and held
 in a shared module-level DataFrame. Worker threads slice the
 pre-built matrix by feature name — no network calls or disk I/O
@@ -17,9 +17,9 @@ inside workers. ThreadPoolExecutor avoids Windows spawn issues
 while still parallelising the CPU-heavy HMM fitting (hmmlearn
 releases the GIL through numpy).
 
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 SCORING LOGIC
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 For each feature combination a GaussianHMM is trained (n_states
 auto-selected 2→6 by BIC, 3 random restarts). Four signals:
 
@@ -32,18 +32,18 @@ Fires are de-duplicated to rising-edge only (one event per
 continuous stress episode). Scored against known SPX peaks
 within a [-180, +60] day window (macro features lag price tops).
 
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 KNOWN SPX PEAKS (in main brain training window 2012+)
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
   2018-09-20  Pre Q4-2018 correction   (-20%)
   2020-02-19  Pre COVID crash          (-34%)
   2021-12-27  Pre rate-shock top       (-25%)
   2024-07-16  Summer 2024 correction   (-8%)
   2025-02-19  Tariff-shock top         (-~15%)
 
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
 USAGE
-───────────────────────────────────────────────────────────────
+---------------------------------------------------------------
   # Two-stage (fast, ~10-25 min):
   python tools/top_signal_search.py
 
@@ -57,6 +57,14 @@ USAGE
   python tools/top_signal_search.py --workers 4
 """
 from __future__ import annotations
+
+import io
+import sys
+# Force UTF-8 output on Windows to avoid cp1252 crashes on any stray chars
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 import argparse
 import itertools
@@ -78,7 +86,7 @@ import numpy as np
 import pandas as pd
 from scipy.special import logsumexp
 
-# ── Constants ────────────────────────────────────────────────────────────────
+# -- Constants ----------------------------------------------------------------
 
 _DATA_DIR = os.path.join(_ROOT, "data")
 _FRED_DIR = os.path.join(_DATA_DIR, "fred_cache")
@@ -123,7 +131,7 @@ _PEAK_TRAIL_WINDOW  = 60    # days after peak that still count
 _FULL_MATRIX: Optional[pd.DataFrame] = None
 
 
-# ── Data loading ─────────────────────────────────────────────────────────────
+# -- Data loading -------------------------------------------------------------
 
 def _load_fred(series_id: str) -> pd.Series:
     path = os.path.join(_FRED_DIR, f"{series_id}.csv")
@@ -203,7 +211,7 @@ def _slice_matrix(features: list[str]) -> pd.DataFrame:
     return _FULL_MATRIX[available].dropna()
 
 
-# ── HMM training ─────────────────────────────────────────────────────────────
+# -- HMM training -------------------------------------------------------------
 
 def _train_combo(features: list[str], df: pd.DataFrame):
     """Train GaussianHMM, return (model, n_states, ll_per_obs, ll_std, ci_anchor, state_labels)."""
@@ -277,7 +285,7 @@ def _train_combo(features: list[str], df: pd.DataFrame):
     return best_model, best_n, ll_per_obs, ll_std, ci_anchor, state_labels
 
 
-# ── Signal extraction ─────────────────────────────────────────────────────────
+# -- Signal extraction ---------------------------------------------------------
 
 def _compute_signals(df: pd.DataFrame, model, ll_per_obs: float,
                      ll_std: float, state_labels: list[str]) -> pd.DataFrame:
@@ -306,7 +314,7 @@ def _compute_signals(df: pd.DataFrame, model, ll_per_obs: float,
     return out
 
 
-# ── Scoring ───────────────────────────────────────────────────────────────────
+# -- Scoring -------------------------------------------------------------------
 
 @dataclass
 class SignalScore:
@@ -368,7 +376,7 @@ def _score_signal(signal: pd.Series, peaks: list[pd.Timestamp],
     )
 
 
-# ── Worker (thread-safe — uses pre-built shared matrix) ──────────────────────
+# -- Worker (thread-safe — uses pre-built shared matrix) ----------------------
 
 def _worker(args: tuple) -> dict:
     features, peaks = args  # peaks already as Timestamps
@@ -419,7 +427,7 @@ def _worker(args: tuple) -> dict:
         return {"features": features, "error": str(e)}
 
 
-# ── Parallel runner ───────────────────────────────────────────────────────────
+# -- Parallel runner -----------------------------------------------------------
 
 def _run_parallel(combos: list[list[str]], peaks: list[pd.Timestamp],
                   workers: int, label: str) -> list[dict]:
@@ -431,7 +439,7 @@ def _run_parallel(combos: list[list[str]], peaks: list[pd.Timestamp],
     print(f"\n  {label}: {n} combinations | {workers} threads")
     print(f"  {'Done':>8}  {'Features':<56}  {'Best':>13}  {'F1':>6}  "
           f"{'Hits':>6}  {'FA':>4}  {'Lead':>7}")
-    print("  " + "─" * 105)
+    print("  " + "-" * 105)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {pool.submit(_worker, a): a[0] for a in args}
@@ -458,13 +466,13 @@ def _run_parallel(combos: list[list[str]], peaks: list[pd.Timestamp],
     return results
 
 
-# ── Stage 1: ablation ─────────────────────────────────────────────────────────
+# -- Stage 1: ablation ---------------------------------------------------------
 
 def _stage1_ablation(all_features: list[str], peaks: list[pd.Timestamp],
                      workers: int) -> list[str]:
-    print("\n" + "═" * 108)
+    print("\n" + "=" * 108)
     print("  STAGE 1 — ABLATION (remove one feature at a time)")
-    print("═" * 108)
+    print("=" * 108)
 
     # Baseline
     print("  Computing baseline (all features)...")
@@ -485,15 +493,15 @@ def _stage1_ablation(all_features: list[str], peaks: list[pd.Timestamp],
 
     print(f"\n  {'Dropped':<10}  {'F1':>6}  {'Delta':>8}  {'Verdict':<14}  "
           f"{'Hits':>8}  {'FA':>4}  {'Lead':>7}")
-    print("  " + "─" * 70)
+    print("  " + "-" * 70)
 
     survivors = []
     for res in sorted(ablation_results, key=lambda r: r["combo"]["f1"], reverse=True):
         feat_set = set(res["features"])
         dropped  = next((f for f in all_features if f not in feat_set), "?")
         delta    = res["combo"]["f1"] - baseline_f1
-        verdict  = ("▲ DROP IT"   if delta >  0.02 else
-                    ("▼ KEEP IT"  if delta < -0.02 else "~ neutral"))
+        verdict  = ("^ DROP IT"   if delta >  0.02 else
+                    ("v KEEP IT"  if delta < -0.02 else "~ neutral"))
         sc = res["combo"]
         print(f"  {dropped:<10}  {sc['f1']:>6.3f}  {delta:>+8.3f}  {verdict:<14}  "
               f"{sc['hits']:>2}/{sc['n_peaks']:<3}  {sc['false_alarms']:>4}  "
@@ -502,26 +510,26 @@ def _stage1_ablation(all_features: list[str], peaks: list[pd.Timestamp],
             survivors.append(dropped)
 
     dropped_features = [f for f in all_features if f not in survivors]
-    print(f"\n  ✓ Survivors ({len(survivors)}): {survivors}")
-    print(f"  ✗ Dropped   ({len(dropped_features)}): {dropped_features}")
+    print(f"\n  OK Survivors ({len(survivors)}): {survivors}")
+    print(f"  XX Dropped   ({len(dropped_features)}): {dropped_features}")
     return survivors
 
 
-# ── Stage 2: combinatorial ────────────────────────────────────────────────────
+# -- Stage 2: combinatorial ----------------------------------------------------
 
 def _stage2_sweep(features: list[str], peaks: list[pd.Timestamp],
                   workers: int, min_features: int = 3) -> list[dict]:
     combos = []
     for k in range(min_features, len(features) + 1):
         combos.extend(list(c) for c in itertools.combinations(features, k))
-    print("\n" + "═" * 108)
+    print("\n" + "=" * 108)
     print(f"  STAGE 2 — COMBINATORIAL SWEEP  "
           f"({len(combos)} combinations of {min_features}..{len(features)} features)")
-    print("═" * 108)
+    print("=" * 108)
     return _run_parallel(combos, peaks, workers, "COMBO SWEEP")
 
 
-# ── SPX peak auto-detection ───────────────────────────────────────────────────
+# -- SPX peak auto-detection ---------------------------------------------------
 
 def _detect_spx_peaks(spx: pd.Series, train_start: pd.Timestamp,
                       prominence: float = 0.12) -> list[pd.Timestamp]:
@@ -534,7 +542,7 @@ def _detect_spx_peaks(spx: pd.Series, train_start: pd.Timestamp,
     return [sub.index[i] for i in idx]
 
 
-# ── Leaderboard ───────────────────────────────────────────────────────────────
+# -- Leaderboard ---------------------------------------------------------------
 
 def _print_leaderboard(results: list[dict], top_n: int = 25) -> None:
     ranked = sorted(
@@ -542,12 +550,12 @@ def _print_leaderboard(results: list[dict], top_n: int = 25) -> None:
         key=lambda r: (r["combo"]["f1"], r["combo"]["avg_lead_days"]),
         reverse=True,
     )
-    print("\n" + "═" * 115)
+    print("\n" + "=" * 115)
     print(f"  TOP-{top_n} FEATURE COMBINATIONS FOR TOP DETECTION")
-    print("═" * 115)
+    print("=" * 115)
     print(f"  {'Rank':>4}  {'Features':<60}  {'n':>2}  {'Best signal':<14}  "
           f"{'F1':>6}  {'Hits':>6}  {'FA':>4}  {'Lead':>7}  {'Flag%':>6}")
-    print("  " + "─" * 111)
+    print("  " + "-" * 111)
 
     for rank, res in enumerate(ranked[:top_n], 1):
         sc       = res["combo"]
@@ -562,7 +570,7 @@ def _print_leaderboard(results: list[dict], top_n: int = 25) -> None:
 
     if ranked:
         best = ranked[0]
-        print(f"\n  ★  WINNER: {best['features']}")
+        print(f"\n  *  WINNER: {best['features']}")
         print(f"     n_states={best['n_states']}  ci_anchor={best['ci_anchor']}  "
               f"best_signal={best.get('best_signal','?')}")
         sc = best["combo"]
@@ -578,7 +586,7 @@ def _print_leaderboard(results: list[dict], top_n: int = 25) -> None:
                       f"lead={s['avg_lead_days']:.0f}d")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main() -> int:
     global _FULL_MATRIX
@@ -595,11 +603,11 @@ def main() -> int:
                         help="Min features per combination in stage 2 (default: 3)")
     args = parser.parse_args()
 
-    print("═" * 108)
+    print("=" * 108)
     print("  TOP-SIGNAL HMM FEATURE SEARCH")
     print(f"  Mode: {'FULL SWEEP' if args.full else 'TWO-STAGE'}  |  "
           f"Workers: {args.workers}  |  Output: {_OUT_PATH}")
-    print("═" * 108)
+    print("=" * 108)
 
     print("\n[1/4] Loading all features into shared matrix...")
     _FULL_MATRIX = _build_full_matrix()
@@ -685,7 +693,7 @@ def main() -> int:
     with open(_OUT_PATH, "w") as f:
         json.dump(output, f, indent=2)
 
-    print(f"\n  ✓ Results written to {_OUT_PATH}")
+    print(f"\n  OK Results written to {_OUT_PATH}")
     return 0
 
 
