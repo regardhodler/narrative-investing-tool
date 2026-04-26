@@ -299,17 +299,17 @@ def compute_turning_point_probability(
     _bear_macro_boost = 0.0
     _bull_macro_boost = 0.0
     # Bearish turn confirmation: macro is elevated AND conviction is low (< 20)
-    if macro_score > 55 and conviction < 20:
+    if macro_score is not None and conviction is not None and macro_score > 55 and conviction < 20:
         _bear_macro_boost = min(0.20, p_signal_bear * 0.4)
     # Also boost if macro is in the peak range (50-65) with active credit/NFCI stress
-    elif macro_score > 48 and any(d.get("signal") in ("Credit HY Spreads", "Financial Conditions")
+    elif macro_score is not None and macro_score > 48 and any(d.get("signal") in ("Credit HY Spreads", "Financial Conditions")
                                    and d.get("weight", 0) >= 0.5 for d in bearish_active):
         _bear_macro_boost = min(0.15, p_signal_bear * 0.3)
 
     # Bullish turn confirmation: macro is crushed
-    if macro_score < 35:
+    if macro_score is not None and macro_score < 35:
         _bull_macro_boost = min(0.25, p_signal_bull * 0.5)
-    elif macro_score < 42 and any(d.get("signal") in ("VIX", "Credit HY Spreads")
+    elif macro_score is not None and macro_score < 42 and any(d.get("signal") in ("VIX", "Credit HY Spreads")
                                    and d.get("weight", 0) >= 0.5 for d in bullish_active):
         _bull_macro_boost = min(0.15, p_signal_bull * 0.3)
 
@@ -317,10 +317,10 @@ def compute_turning_point_probability(
     p_bull = p_bull_base + _bull_hmm_boost + _bull_macro_boost
 
     # Macro-direction damper: suppress the contradictory side.
-    if macro_score > 50:
+    if macro_score is not None and macro_score > 50:
         bull_damp = max(0.15, 1.0 - (macro_score - 50) / 25)
         p_bull *= bull_damp
-    elif macro_score < 40:
+    elif macro_score is not None and macro_score < 40:
         bear_damp = max(0.15, 1.0 - (40 - macro_score) / 25)
         p_bear *= bear_damp
 

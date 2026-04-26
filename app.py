@@ -82,7 +82,7 @@ with st.sidebar:
         if st.button("↗", key="nav_open_t2", help="Open selected Research module"):
             st.session_state["_active_tier"] = 2
             st.session_state["_close_sidebar"] = True
-    _t2 = st.radio("", ["Risk Regime", "Correlation Monitor", "Fed Forecaster", "Current Events",
+    _t2 = st.radio("", ["Risk Regime", "Regime Chart", "Tops & Bottoms", "Correlation Monitor", "Fed Forecaster", "Current Events",
                          "Tail Risk Studio", "Whale Movement", "Stress Signals"],
                    key="nav_t2", label_visibility="collapsed")
 
@@ -217,6 +217,10 @@ if top_level == "⚡ Quick Intel Run":
     from modules.quick_run import render; render()
 elif top_level == "Risk Regime":
     from modules.risk_regime import render; render()
+elif top_level == "Regime Chart":
+    from modules.regime_chart import render; render()
+elif top_level == "Tops & Bottoms":
+    from modules.top_bottom_predictor import render; render()
 elif top_level == "Correlation Monitor":
     from modules.correlation_monitor import render; render()
 elif top_level == "Fed Forecaster":

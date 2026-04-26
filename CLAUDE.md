@@ -84,13 +84,14 @@ Each module is a standalone `render()` function.
 
 ## CI% Crisis Detection System
 The LL-anchored Crisis Intensity system is the core crisis signal:
-- **Formula**: `CI% = abs(ll_zscore) / 0.467 * 100` (uncapped — COVID in-sample = 100%)
+- **Formula**: `CI% = abs(ll_zscore) / brain.ci_anchor * 100` (uncapped — in-sample worst day = 100%)
+- **Anchor source**: `brain.ci_anchor` field, auto-calibrated at training time (`= max(|z|)` over training window). All consumers read it via `services.hmm_regime.get_ci_anchor()` — never hardcode.
 - **Zone 1** (CI < 22%): Normal — conviction signals suppressed
-- **Zone 2** (CI 22–67%): Model Stress — signals shown as context
-- **Zone 3** (CI ≥ 67%): Crisis Gate Open — 9.25% crash probability (3x baseline), historically preceded all major drawdowns
+- **Zone 2** (CI 22–40%): Model Stress — early warning, signals shown as context
+- **Zone 3** (CI ≥ 40%): Crisis Gate Open — 75% historical crash detection, 0% false alarms (recalibrated 2026-04 — was 67% under legacy ICE BofA brain)
 - **Zone 4** (CI > 100%): Beyond Training Range — purple, model seeing post-training extremes
-- **Gate**: z < -0.30 = 67% CI (Volmageddon=76%, Fed Panic=96%, COVID=100%)
-- **After retraining**: run `python ll_gate_backtest_live_brain.py` and update `0.467` anchor if COVID peak z changed
+- **Gate**: 40% CI = Crisis Gate Open. Specific z value = -0.40 * brain.ci_anchor.
+- **After retraining**: anchor self-updates automatically. `python ll_gate_backtest_live_brain.py` is now purely diagnostic — it reports detection rates and false-alarm rates against historical crashes using the new anchor. NO source-code edits required after retraining.
 
 ## Key Conventions
 - All SEC requests use `SEC_HEADERS` with User-Agent and go through `_rate_limit()` (10 req/sec max)
@@ -109,8 +110,9 @@ streamlit run app.py
 - `data/hmm_brain.json` — Trained HMM model (transmat, means, covars, baseline LL stats, lookback_years)
 - `data/hmm_state_history.json` — Daily HMM state log (last 500 entries)
 - `data/signals_cache.json` — Cached signal values
-- `ll_gate_backtest_live_brain.py` — Backtest script (run after every brain retrain)
+- `ll_gate_backtest_live_brain.py` — Diagnostic backtest (read-only; reports gate detection vs known crashes scaled to brain.ci_anchor)
 - `ll_gate_backtest_live_brain.json` — Latest backtest results
+- `tools/refetch_credit_spreads_and_retrain.py` — Refetches BAA10Y + AAA10Y from FRED API and retrains the brain in one shot
 
 ## Dependencies
 See `requirements.txt`. Key: streamlit, plotly, pandas, requests, python-dotenv, ib_insync, hmmlearn, scipy.

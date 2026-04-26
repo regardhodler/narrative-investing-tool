@@ -10,6 +10,7 @@ from utils.components import (
     render_action_queue,
     apply_confidence_penalty,
 )
+from services.hmm_regime import get_ci_anchor as _ci_anchor
 
 
 # ── QIR Dashboard helpers ────────────────────────────────────────────────────
@@ -3027,13 +3028,14 @@ def _render_qir_dashboard() -> None:
             pass
 
         # ── LL-ANCHORED CRISIS DETECTION ─────────────────────────────────────────
-        # Crisis Intensity (CI%) normalizes LL z-score to 0-100% scale:
-        #   0%   = z  0.0    (perfectly normal market)
-        #   22%  = z -0.10   (stress zone start)
-        #   67%  = z -0.30   (crisis gate open, 9.25% crash prob = 3x baseline)
-        #   100% = z -0.467  (COVID peak — worst ever recorded in-sample)
-        #   >100% = post-training extremes (model scoring novel data beyond training range)
-        # Formula: CI = abs(ll_z) / 0.467 * 100  (uncapped — >100% is valid)
+        # Crisis Intensity (CI%) normalizes LL z-score to 0-100% scale.
+        # Anchor lives on brain.ci_anchor (auto-calibrated at training time = |z|
+        # at the worst in-sample day, set to map to 100% CI).
+        #   Zone 1: CI < 22%    — Normal
+        #   Zone 2: 22-40%      — Model Stress (early warning)
+        #   Zone 3: 40-100%     — Crisis Gate Open (75% recall, 0% FP)
+        #   Zone 4: > 100%      — Beyond training range
+        # Formula: CI = abs(ll_z) / brain.ci_anchor * 100  (uncapped)
         def _build_early_warning_pill() -> str:
             """Pre-gate warning when faster signals detect stress before primary brain."""
             try:
@@ -3042,7 +3044,7 @@ def _render_qir_dashboard() -> None:
                 _ew_sh = st.session_state.get("_shadow_state_obj")
                 _ew_sh_ci = getattr(_ew_sh, "ci_pct", 0.0) if _ew_sh else 0.0
                 _ew_sh_label = getattr(_ew_sh, "state_label", "") if _ew_sh else ""
-                _ew_primary_ci = max(0.0, (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0)
+                _ew_primary_ci = max(0.0, (abs(_tb_ll_z) / _ci_anchor() * 100.0) if _tb_ll_z < 0 else 0.0)
 
                 # DIP WARNING: options bearish + shadow stressed + primary calm
                 if _ew_of_score < 35 and _ew_sh_ci > 22 and _ew_primary_ci < 22:
@@ -3076,18 +3078,12 @@ def _render_qir_dashboard() -> None:
 
         def _build_ll_anchored_block() -> str:
             # Crisis Intensity score — uncapped, COVID in-sample peak = 100%
-            _ci_raw = (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0
+            _ci_raw = (abs(_tb_ll_z) / _ci_anchor() * 100.0) if _tb_ll_z < 0 else 0.0
             _ci = max(0.0, _ci_raw)
 
-            # Zone thresholds in CI%
-            if _ci > 100.0:    # Beyond training range — model sees novel extremes
-                _zone = 4
-            elif _ci >= 67.0:  # LL < -0.30  → confirmed gate
-                _zone = 3
-            elif _ci >= 22.0:  # LL < -0.10  → stress watch
-                _zone = 2
-            else:
-                _zone = 1
+            # Zone thresholds in CI% — classifier lives in utils.ci_zone
+            from utils.ci_zone import classify_ci_zone as _classify_ci_zone
+            _zone = _classify_ci_zone(_ci).zone
 
             # ── Conviction signals ────────────────────────────────────────────────
             _vix_val  = st.session_state.get("_market_snapshot", {}).get("VIX", {}).get("price", 20)
@@ -3113,12 +3109,12 @@ def _render_qir_dashboard() -> None:
                 _bg, _border     = "#100000", "#7f1d1d"
                 _ci_color        = "#ef4444"
                 _label           = "CRISIS CONFIRMED"
-                _label_sub       = "9.25% crash prob at gate (3x baseline) · 3,408 days backtested"
+                _label_sub       = "Crisis Gate Open · 75% historical detection, 0% false alarms"
             elif _zone == 2:
                 _bg, _border     = "#0f0e00", "#78350f"
                 _ci_color        = "#f59e0b"
                 _label           = "MODEL STRESS DETECTED"
-                _label_sub       = f"Below crisis gate (67%) · watch for continuation"
+                _label_sub       = f"Below crisis gate (40%) · watch for continuation"
             else:
                 _bg, _border     = "#0f172a", "#1e293b"
                 _ci_color        = "#22c55e"
@@ -3156,39 +3152,40 @@ def _render_qir_dashboard() -> None:
 
             # ── Reference points on the CI scale ─────────────────────────────────
             _ref_events = [
-                ("Tariff/Rate", 12, "#475569"),    # ~-0.054 to -0.092 → 12-21% CI
-                ("Volmageddon", 76, "#f59e0b"),    # -0.341 → 76% CI
-                ("Fed Panic",   96, "#f97316"),    # -0.428 → 96% CI
-                ("COVID",      100, "#ef4444"),    # -0.467 → 100% CI
+                # CI% values rescaled to current brain.ci_anchor (~6.461 post-2026-04 retrain)
+                ("Tariff 2025", 50, "#f59e0b"),    # 2025-04 z=-3.21 → 50% CI (above gate)
+                ("Volmageddon", 34, "#f59e0b"),    # 2018-02 z=-2.22 → 34% CI
+                ("Fed Panic",   41, "#ef4444"),    # 2018-12 z=-2.66 → 41% CI (just over gate)
+                ("COVID",      100, "#ef4444"),    # |z| = brain.ci_anchor → 100% CI
             ]
 
             # ── Footer text ───────────────────────────────────────────────────────
             if _zone == 4:
                 _explain = (
                     f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Model is scoring data BEYOND its training range. "
-                    f"100% = COVID worst-ever (z=-0.467 in-sample). Current reading exceeds that baseline by "
+                    f"100% = worst-ever in-sample (z=-{_ci_anchor():.3f}). Current reading exceeds that baseline by "
                     f"{_ci - 100:.0f}%. This occurs when post-training market data is structurally novel to the model — "
                     f"a stronger crisis signal than any event in the backtest history."
                 )
             elif _zone == 3:
                 _explain = (
-                    f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}) has breached the 67% confirmation gate. "
+                    f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}) has breached the 40% confirmation gate. "
                     f"Identical signatures: Volmageddon 76%, Fed Panic 96%, COVID 100%. "
                     f"Backtested 3,408 days: zero false alarms. Rate shocks (2022) and tariff events "
                     f"stay below 22% — the HMM model recognizes them as known regimes."
                 )
             elif _zone == 2:
                 _explain = (
-                    f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Stress detected but below 67% gate. "
+                    f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Stress detected but below 40% gate. "
                     f"Historical misses (2022 bear, tariffs) peaked at 12-21% CI — well below here. "
                     f"{_n_firing}/5 conviction signals shown as context. "
-                    f"67% is the crisis gate threshold (9.25% crash prob = 3x baseline)."
+                    f"40% is the crisis gate threshold (9.25% crash prob = 3x baseline)."
                 )
             else:
                 _explain = (
                     f"CI {_ci:.0f}% (LL z={_tb_ll_z:.3f}). Normal market — HMM fits well. "
                     f"Conviction signals suppressed: they fire every day alone (0% precision). "
-                    f"Stress watch above 22% CI · Crisis confirmed above 67% CI · COVID was 100%."
+                    f"Stress watch above 22% CI · Crisis confirmed above 40% CI · COVID was 100%."
                 )
 
             # Bar fill capped at 100% visually — but CI number shows true value
@@ -3232,15 +3229,15 @@ def _render_qir_dashboard() -> None:
                 f'background:{_ci_color};border-radius:4px;"></div>'
                 # Zone boundary at 22% (stress start)
                 f'<div style="position:absolute;left:22%;top:0;width:1px;height:100%;background:#334155;"></div>'
-                # Gate marker at 67%
-                f'<div style="position:absolute;left:67%;top:0;width:2px;height:100%;background:#ef444488;"></div>'
+                # Gate marker at 40% (recalibrated 2026-04 — was 67% under legacy ICE BofA brain)
+                f'<div style="position:absolute;left:40%;top:0;width:2px;height:100%;background:#ef444488;"></div>'
                 f'</div>'
                 # Scale labels
                 f'<div style="display:flex;justify-content:space-between;font-size:6px;'
                 f'color:#334155;margin-top:2px;">'
                 f'<span>0% Normal</span>'
                 f'<span style="margin-left:10%;">22% Stress</span>'
-                f'<span style="color:#ef444488;">67% ▲ GATE</span>'
+                f'<span style="color:#ef444488;">40% ▲ GATE</span>'
                 f'<span>100% COVID</span>'
                 f'</div>'
                 # Reference events
@@ -4049,6 +4046,163 @@ def _render_qir_dashboard() -> None:
             )
 
 
+        # ── Main + Shadow Combo Gate ───────────────────────────────────────────
+        try:
+            _combo_main_ci  = max(0.0, (abs(_tb_ll_z) / _ci_anchor() * 100.0) if _tb_ll_z < 0 else 0.0)
+            _sh_obj_combo   = st.session_state.get("_shadow_state_obj")
+            _combo_shad_ci  = float(getattr(_sh_obj_combo, "ci_pct", 0.0) or 0.0) if _sh_obj_combo else None
+
+            _combo_m_z2 = _combo_main_ci >= 22
+            _combo_m_z3 = _combo_main_ci >= 40
+            _combo_s_z2 = (_combo_shad_ci is not None and _combo_shad_ci >= 22)
+            _combo_s_z3 = (_combo_shad_ci is not None and _combo_shad_ci >= 40)
+
+            # Evaluate all six strategies
+            _combo_strategies = [
+                ("OR — either Zone 3 fires",            _combo_m_z3 or  _combo_s_z3,  "7/8 (88%)", "5/1098 (0.5%)"),
+                ("AND — both Zone 3 fire",              _combo_m_z3 and _combo_s_z3,  "5/8 (62%)", "0/1098 (0.0%)"),
+                ("OR — either Zone 2 fires",            _combo_m_z2 or  _combo_s_z2,  "8/8 (100%)","59/1098 (5.4%)"),
+                ("AND — both Zone 2 fire",              _combo_m_z2 and _combo_s_z2,  "7/8 (88%)", "0/1098 (0.0%) ★"),
+                ("Main Z3 OR (Main Z2 AND Shadow Z2)",  _combo_m_z3 or (_combo_m_z2 and _combo_s_z2), "7/8 (88%)", "0/1098 (0.0%) ★"),
+                ("Main Z3 OR (Shadow Z3 AND Main Z2)",  _combo_m_z3 or (_combo_s_z3 and _combo_m_z2), "7/8 (88%)", "0/1098 (0.0%) ★"),
+            ]
+
+            # How many strategies are firing?
+            _n_firing = sum(1 for _, active, _, _ in _combo_strategies if active)
+            _best_firing = [s for s, active, _, _ in _combo_strategies
+                            if active and "0/1098 (0.0%) ★" in _]
+
+            # Gate status color
+            if _n_firing >= 4:
+                _gate_color = "#ef4444"; _gate_label = "MULTIPLE GATES OPEN"
+            elif _n_firing >= 2:
+                _gate_color = "#f59e0b"; _gate_label = "STRESS CONFIRMED"
+            elif _n_firing == 1:
+                _gate_color = "#f59e0b"; _gate_label = "EARLY WARNING"
+            else:
+                _gate_color = "#22c55e"; _gate_label = "ALL QUIET"
+
+            _shad_ci_str = f"{_combo_shad_ci:.1f}%" if _combo_shad_ci is not None else "—"
+            _shad_missing = _combo_shad_ci is None
+
+            # Build strategy table rows
+            _strat_rows = ""
+            for _sname, _active, _det, _fa in _combo_strategies:
+                _row_bg   = "rgba(239,68,68,0.12)" if _active else "transparent"
+                _dot_col  = "#ef4444" if _active else "#334155"
+                _dot      = f'<span style="color:{_dot_col};font-size:10px;">&#9679;</span>'
+                _star     = " ★" if "★" in _fa else ""
+                _fa_clean = _fa.replace(" ★", "")
+                _star_html = f'<span style="color:#f59e0b;">{_star}</span>' if _star else ""
+                _strat_rows += (
+                    f'<tr style="background:{_row_bg};">'
+                    f'<td style="padding:3px 8px;color:#94a3b8;font-size:10px;">{_dot} {_sname}</td>'
+                    f'<td style="padding:3px 8px;text-align:center;font-size:10px;'
+                    f'color:{"#f87171" if _active else "#64748b"};">'
+                    f'{"FIRING" if _active else "quiet"}</td>'
+                    f'<td style="padding:3px 8px;text-align:center;font-size:10px;color:#64748b;">{_det}</td>'
+                    f'<td style="padding:3px 8px;text-align:center;font-size:10px;color:#475569;">{_fa_clean}{_star_html}</td>'
+                    f'</tr>'
+                )
+
+            _shad_note = (
+                '<div style="color:#f59e0b;font-size:9px;margin-top:4px;">'
+                '&#9888; Shadow brain not scored yet — score from QIR first</div>'
+                if _shad_missing else ""
+            )
+
+            _combo_html = f"""
+<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
+            padding:14px 16px;margin:12px 0;">
+  <!-- Header row -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;
+                text-transform:uppercase;">MAIN + SHADOW COMBO GATE</div>
+    <div style="background:{_gate_color}22;border:1px solid {_gate_color}55;
+                border-radius:4px;padding:2px 10px;">
+      <span style="font-size:11px;font-weight:800;color:{_gate_color};
+                   letter-spacing:0.08em;">{_gate_label}</span>
+    </div>
+  </div>
+
+  <!-- Dual CI bars -->
+  <div style="display:flex;gap:12px;margin-bottom:10px;">
+    <!-- Main brain bar -->
+    <div style="flex:1;">
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:3px;">
+        MAIN BRAIN CI%</div>
+      <div style="background:#1e293b;border-radius:3px;height:8px;position:relative;">
+        <div style="height:8px;border-radius:3px;width:{min(_combo_main_ci,100):.0f}%;
+                    background:{"#ef4444" if _combo_main_ci>=40 else "#f59e0b" if _combo_main_ci>=22 else "#22c55e"};
+                    transition:width 0.4s;"></div>
+        <div style="position:absolute;top:0;left:22%;width:1px;height:8px;
+                    background:#64748b55;"></div>
+        <div style="position:absolute;top:0;left:40%;width:1px;height:8px;
+                    background:#ef444488;"></div>
+      </div>
+      <div style="font-size:10px;font-weight:700;
+                  color:{"#ef4444" if _combo_main_ci>=40 else "#f59e0b" if _combo_main_ci>=22 else "#22c55e"};
+                  margin-top:2px;">{_combo_main_ci:.1f}%
+        <span style="font-size:8px;color:#475569;font-weight:400;">
+          {"Zone 3" if _combo_main_ci>=40 else "Zone 2" if _combo_main_ci>=22 else "Zone 1"}</span>
+      </div>
+    </div>
+    <!-- Shadow brain bar -->
+    <div style="flex:1;">
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:3px;">
+        SHADOW BRAIN CI%</div>
+      <div style="background:#1e293b;border-radius:3px;height:8px;position:relative;">
+        <div style="height:8px;border-radius:3px;
+                    width:{min(_combo_shad_ci or 0,100):.0f}%;
+                    background:{"#ef4444" if (_combo_shad_ci or 0)>=40 else "#f59e0b" if (_combo_shad_ci or 0)>=22 else "#22c55e"};
+                    transition:width 0.4s;"></div>
+        <div style="position:absolute;top:0;left:22%;width:1px;height:8px;
+                    background:#64748b55;"></div>
+        <div style="position:absolute;top:0;left:40%;width:1px;height:8px;
+                    background:#ef444488;"></div>
+      </div>
+      <div style="font-size:10px;font-weight:700;
+                  color:{"#ef4444" if (_combo_shad_ci or 0)>=40 else "#f59e0b" if (_combo_shad_ci or 0)>=22 else "#22c55e"};
+                  margin-top:2px;">{_shad_ci_str}
+        <span style="font-size:8px;color:#475569;font-weight:400;">
+          {"Zone 3" if (_combo_shad_ci or 0)>=40 else "Zone 2" if (_combo_shad_ci or 0)>=22 else "Zone 1"}</span>
+      </div>
+    </div>
+    <!-- Firing count -->
+    <div style="text-align:center;min-width:60px;">
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:3px;">
+        GATES FIRING</div>
+      <div style="font-size:26px;font-weight:800;line-height:1;
+                  color:{_gate_color};">{_n_firing}</div>
+      <div style="font-size:8px;color:#475569;">of 6</div>
+    </div>
+  </div>
+
+  <!-- Strategy table -->
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e293b;">
+        <th style="padding:3px 8px;text-align:left;font-size:9px;
+                   color:#334155;letter-spacing:0.08em;font-weight:600;">STRATEGY</th>
+        <th style="padding:3px 8px;text-align:center;font-size:9px;
+                   color:#334155;letter-spacing:0.08em;font-weight:600;">NOW</th>
+        <th style="padding:3px 8px;text-align:center;font-size:9px;
+                   color:#334155;letter-spacing:0.08em;font-weight:600;">DETECTION</th>
+        <th style="padding:3px 8px;text-align:center;font-size:9px;
+                   color:#334155;letter-spacing:0.08em;font-weight:600;">FALSE ALARMS</th>
+      </tr>
+    </thead>
+    <tbody>{_strat_rows}</tbody>
+  </table>
+  {_shad_note}
+  <div style="font-size:8px;color:#1e293b;margin-top:6px;line-height:1.4;">
+    Backtest: 8 crashes 2012-2026 · 1,098 normal days · ★ = best tradeoff (88% detection, 0% FA)
+  </div>
+</div>"""
+            st.markdown(_combo_html, unsafe_allow_html=True)
+        except Exception:
+            pass
+
         # ── Velocity Cascade V2 (continuous conviction scores) ─────────────────
         _cascade_block = ""
         try:
@@ -4298,7 +4452,7 @@ def _render_qir_dashboard() -> None:
         # ── Bottom Watch card (always visible; greyed when CI% < 22) ───────────
         _bw_block = ""
         # _ci in outer scope (same formula as inside _build_ll_anchored_block)
-        _ci = max(0.0, (abs(_tb_ll_z) / 0.467 * 100.0) if _tb_ll_z < 0 else 0.0)
+        _ci = max(0.0, (abs(_tb_ll_z) / _ci_anchor() * 100.0) if _tb_ll_z < 0 else 0.0)
         try:
             _bw_live = _ci >= 22.0 and bool(_tb_bw)
             _bw_score = (_tb_bw.get("score", 0) if _tb_bw else 0) if _bw_live else 0
@@ -5164,6 +5318,18 @@ def _render_qir_dashboard() -> None:
 def render():
     _oc = COLORS["bloomberg_orange"]
 
+    # ── Brain health status banner ─────────────────────────────────────────────
+    try:
+        from modules.regime_chart import _brain_health, _render_status_banner, _MAIN_HISTORY, _SHADOW_HISTORY
+        from services.hmm_regime import load_hmm_brain as _qir_load_main
+        from services.hmm_shadow import load_shadow_brain as _qir_load_shadow
+        _render_status_banner(
+            _brain_health(_qir_load_main(),   _MAIN_HISTORY,   "Main"),
+            _brain_health(_qir_load_shadow(), _SHADOW_HISTORY, "Shadow"),
+        )
+    except Exception:
+        pass
+
     # ── Hidden AI context block — read by Gemini / browser AI sidebar ─────────
     # display:none but fully in DOM; contains structured signal state for AI
     _ai_ctx = st.session_state.get("_qir_ai_context") or {}
@@ -5516,6 +5682,41 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
 
         # Clear ALL cached data so every module fetches fresh on this run
         st.cache_data.clear()
+
+        # ── Auto-refresh HMM + Shadow brain state (once per day) ─────────────
+        # Both brains' history files are append-once-per-day; if today's entry
+        # is missing, run scoring so persistence/CI advance. Fails silently —
+        # downstream load_current_*_state() falls back to last entry on error.
+        try:
+            from datetime import datetime as _ar_dt, timezone as _ar_tz
+            from services.hmm_regime import (
+                score_current_state as _ar_score_hmm,
+                _load_history as _ar_hmm_hist,
+            )
+            from services.hmm_shadow import (
+                score_current_shadow_state as _ar_score_sh,
+                _load_history as _ar_sh_hist,
+            )
+            _ar_today = _ar_dt.now(_ar_tz.utc).strftime("%Y-%m-%d")
+            _ar_hmm_h = _ar_hmm_hist()
+            _ar_sh_h = _ar_sh_hist()
+            _ar_hmm_due = not _ar_hmm_h or _ar_hmm_h[-1].get("date") != _ar_today
+            _ar_sh_due = not _ar_sh_h or _ar_sh_h[-1].get("date") != _ar_today
+            if _ar_hmm_due or _ar_sh_due:
+                with st.spinner("🧠 Refreshing HMM + Shadow brain state for today..."):
+                    with ThreadPoolExecutor(max_workers=2) as _ar_pool:
+                        _ar_futs = []
+                        if _ar_hmm_due:
+                            _ar_futs.append(_ar_pool.submit(_ar_score_hmm, None, True))
+                        if _ar_sh_due:
+                            _ar_futs.append(_ar_pool.submit(_ar_score_sh, True))
+                        for _ar_f in _ar_futs:
+                            try:
+                                _ar_f.result()
+                            except Exception:
+                                pass
+        except Exception:
+            pass
 
         _results = {}
         _macro_ctx, _fred_data = {}, {}
@@ -6111,10 +6312,10 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     import datetime as _ai_dt
                     _ai_crisis = st.session_state.get("_ll_anchored_crisis") or {}
                     _ai_ll_z   = _ai_crisis.get("ll_zscore", 0.0) or 0.0
-                    _ai_ci     = round(max(0.0, abs(_ai_ll_z) / 0.467 * 100.0) if _ai_ll_z < 0 else 0.0, 1)
+                    _ai_ci     = round(max(0.0, abs(_ai_ll_z) / _ci_anchor() * 100.0) if _ai_ll_z < 0 else 0.0, 1)
                     _ai_zone   = (
                         "Zone 4 · Beyond Training Range (purple)" if _ai_ci > 100.0 else
-                        "Zone 3 · Crisis Gate Open (9.25% crash prob = 3x baseline)" if _ai_ci >= 67.0 else
+                        "Zone 3 · Crisis Gate Open (75% historical detection rate, 0% false alarms)" if _ai_ci >= 40.0 else
                         "Zone 2 · Model Stress (context signals)" if _ai_ci >= 22.0 else
                         "Zone 1 · Normal (conviction signals suppressed)"
                     )
@@ -6146,8 +6347,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "top_proximity_pct": _prox.get("top_pct", "?"),
                         "bottom_proximity_pct": _prox.get("bottom_pct", "?"),
                         "data_quality":   f"{_dq_f.get('score', '?')}/100",
-                        "CI_FORMULA":     "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
-                        "ZONE_GUIDE":     "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
+                        "CI_FORMULA":     "CI% = abs(ll_zscore) / brain.ci_anchor × 100 · Gate opens at 40% CI",
+                        "ZONE_GUIDE":     "Normal<22% | Stress 22-40% | Crisis>=40% (75% historical detection, 0% FP) | Beyond>100%",
                         "KELLY_GUIDE":    "Half-Kelly shown — reduce by 50% in Zone 2+, 75% in Zone 3+",
                         "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
                         "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
@@ -6228,8 +6429,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                         "crisis_status": _ai_wyk.get("status_text", "Normal"),
                         "gate_open": _ai_wyk.get("gate_open", False),
                         "confirmations": _ai_wyk.get("confirmations", []),
-                        "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100",
-                        "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
+                        "CI_FORMULA": "CI% = abs(ll_zscore) / brain.ci_anchor × 100",
+                        "ZONE_GUIDE": "Normal<22% | Stress 22-40% | Crisis>=40% (75% historical detection, 0% FP) | Beyond>100%",
                         "SHADOW_BRAIN_STATE": getattr(st.session_state.get("_shadow_state_obj"), "state_label", "?"),
                         "SHADOW_CI_PCT": f"{getattr(st.session_state.get('_shadow_state_obj'), 'ci_pct', '?')}%",
                         "SHADOW_LL_ZSCORE": getattr(st.session_state.get("_shadow_state_obj"), "ll_zscore", "?"),
@@ -6362,10 +6563,10 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
         _of_f2  = st.session_state.get("_options_flow_context") or {}
         _ai_crisis2 = st.session_state.get("_ll_anchored_crisis") or {}
         _ai_ll_z2   = float(_ai_crisis2.get("ll_zscore") or 0.0)
-        _ai_ci2     = round(max(0.0, abs(_ai_ll_z2) / 0.467 * 100.0) if _ai_ll_z2 < 0 else 0.0, 1)
+        _ai_ci2     = round(max(0.0, abs(_ai_ll_z2) / _ci_anchor() * 100.0) if _ai_ll_z2 < 0 else 0.0, 1)
         _ai_zone2   = (
             "Zone 4 · Beyond Training Range" if _ai_ci2 > 100.0 else
-            "Zone 3 · Crisis Gate Open (9.25% crash prob = 3x baseline)" if _ai_ci2 >= 67.0 else
+            "Zone 3 · Crisis Gate Open (75% historical detection rate, 0% false alarms)" if _ai_ci2 >= 40.0 else
             "Zone 2 · Model Stress" if _ai_ci2 >= 22.0 else
             "Zone 1 · Normal"
         )
@@ -6384,8 +6585,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             "ci_zone": _ai_zone2,
             "HMM_BRAIN_STATE": _ai_crisis2.get("hmm_state", _rc_f2.get("regime", "?")),
             "data_quality": f"{_dq_f2.get('score','?')}/100",
-            "CI_FORMULA": "CI% = abs(ll_zscore) / 0.467 × 100 · Gate opens at z < -0.30 (67% CI)",
-            "ZONE_GUIDE": "Normal<22% | Stress 22-67% | Crisis>=67% (9% crash prob, 3x baseline) | Beyond>100%",
+            "CI_FORMULA": "CI% = abs(ll_zscore) / brain.ci_anchor × 100 · Gate opens at 40% CI",
+            "ZONE_GUIDE": "Normal<22% | Stress 22-40% | Crisis>=40% (75% historical detection, 0% FP) | Beyond>100%",
         }
 
         # Enrich with pattern + synopsis (may fail on partial runs — safe to skip)
@@ -7153,7 +7354,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                 f'padding:10px 14px;margin-bottom:10px;">'
                 f'<div style="font-size:9px;color:#475569;font-weight:700;'
-                f'letter-spacing:0.1em;margin-bottom:6px;">CI% ZONE MAP (anchor 0.467)</div>'
+                f'letter-spacing:0.1em;margin-bottom:6px;">CI% ZONE MAP (anchor {_ci_anchor():.3f})</div>'
                 f'<table style="border-collapse:collapse;width:100%;">'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#22c55e;font-weight:700;">Zone 1</td>'
@@ -7165,38 +7366,41 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;">Zone 2</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Model Stress</td>'
-                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-67%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-40%</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z -0.10 to -0.30</td>'
                 f'<td style="padding:4px 8px;font-size:9px;color:#475569;">~6% crash prob &middot; signals as context</td>'
                 f'</tr>'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#ef4444;font-weight:700;">Zone 3</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis Gate</td>'
-                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 67%</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 40%</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.30</td>'
-                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">9.25% crash prob (3x baseline)</td>'
+                f'<td style="padding:4px 8px;font-size:9px;color:#475569;">75% historical detection · 0% false alarms</td>'
                 f'</tr>'
                 f'<tr>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#a855f7;font-weight:700;">Zone 4</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Beyond Training</td>'
                 f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &gt; 100%</td>'
-                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.467</td>'
+                f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -{_ci_anchor():.3f}</td>'
                 f'<td style="padding:4px 8px;font-size:9px;color:#475569;">post-training extremes (COVID = 100%)</td>'
                 f'</tr>'
                 f'</table>'
-                f'<div style="font-size:9px;color:#334155;margin-top:6px;">Volmageddon = 76% &middot; '
-                f'Fed Panic = 96% &middot; COVID = 100%</div>'
+                f'<div style="font-size:9px;color:#334155;margin-top:6px;">'
+                f'Recalibrated to brain.ci_anchor: Volmageddon = 34% &middot; Fed Panic = 41% &middot; '
+                f'Tariff 2025 = 50% &middot; COVID = 100%</div>'
                 f'</div>'
                 f'<div style="background:#0a0f1a;border:1px solid #1e3a5f;border-radius:5px;'
                 f'padding:10px 14px;margin-bottom:10px;">'
                 f'<div style="font-size:9px;color:#3b82f6;font-weight:700;'
                 f'letter-spacing:0.08em;margin-bottom:4px;">AFTER RETRAINING</div>'
                 f'<div style="font-size:9px;color:#64748b;line-height:1.7;">'
-                f'Re-run the backtest to recalibrate CI% anchors:<br>'
-                f'<span style="font-family:monospace;color:#94a3b8;font-size:9px;">'
-                f'python ll_gate_backtest_live_brain.py</span><br>'
-                f'Then update the <span style="color:#94a3b8;font-weight:600;">0.467</span> anchor in '
-                f'quick_run.py + backtesting.py if the COVID peak z-score changed.</div>'
+                f'Nothing required — <span style="color:#94a3b8;font-weight:600;">brain.ci_anchor</span> '
+                f'auto-calibrates at training time (currently {_ci_anchor():.3f}). All consumers read '
+                f'it dynamically via <span style="font-family:monospace;color:#94a3b8;">'
+                f'services.hmm_regime.get_ci_anchor()</span>.<br>'
+                f'Optional diagnostic (read-only, makes no edits): '
+                f'<span style="font-family:monospace;color:#94a3b8;">python ll_gate_backtest_live_brain.py</span>'
+                f'</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -7307,14 +7511,14 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                     f'<tr>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#f59e0b;font-weight:700;">Zone 2</td>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Stress</td>'
-                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-67%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI 22-40%</td>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z -0.26 to -0.80</td>'
                     f'<td style="padding:4px 8px;font-size:9px;color:#475569;">signals shown as context</td>'
                     f'</tr>'
                     f'<tr>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#ef4444;font-weight:700;">Zone 3</td>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#94a3b8;">Crisis</td>'
-                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 67%</td>'
+                    f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">CI &ge; 40%</td>'
                     f'<td style="padding:4px 8px;font-size:10px;color:#64748b;">z &lt; -0.80</td>'
                     f'<td style="padding:4px 8px;font-size:9px;color:#475569;">95% hit rate &middot; 16% days flagged</td>'
                     f'</tr>'

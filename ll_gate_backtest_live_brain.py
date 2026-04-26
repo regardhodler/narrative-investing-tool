@@ -2,13 +2,19 @@
 """
 LL Gate Backtest — Using the LIVE brain (same scale as production).
 
-Scores each trading day from 2012–2026 using the live HMM brain,
+Scores each trading day from training_start to today using the live HMM brain,
 computing LL z-scores on the same scale the user sees in the app.
 Then tests the LL gate against every crash in that window.
+
+Diagnostic / read-only — does NOT modify the brain or any source files.
+The CI anchor is auto-calibrated at training time (brain.ci_anchor field),
+so this script is purely informational. Thresholds below scale automatically
+to the live brain's anchor so output stays meaningful across retrains.
 """
 import json, os, sys
 import numpy as np
 import pandas as pd
+from scipy.special import logsumexp
 
 # ── Load live brain ──────────────────────────────────────────────────────────
 BRAIN_PATH = os.path.join("data", "hmm_brain.json")
@@ -19,8 +25,10 @@ n_states = brain_raw["n_states"]
 feature_names = brain_raw["feature_names"]
 ll_baseline_mean = brain_raw["ll_baseline_mean"]
 ll_baseline_std = brain_raw["ll_baseline_std"]
+ci_anchor = brain_raw.get("ci_anchor", 0.467)
 print(f"Live brain: {n_states} states, trained {brain_raw['training_start']} to {brain_raw['training_end']}")
 print(f"LL baseline: mean={ll_baseline_mean:.6f}, std={ll_baseline_std:.6f}")
+print(f"CI anchor:   {ci_anchor:.4f}  (auto-calibrated at training time)")
 print(f"Features: {feature_names}")
 print()
 
@@ -55,53 +63,33 @@ dates = df.index.tolist()
 print(f"Feature matrix: {len(dates)} days from {dates[0].strftime('%Y-%m-%d')} to {dates[-1].strftime('%Y-%m-%d')}")
 print()
 
-# ── Score day-by-day using expanding window ──────────────────────────────────
-# For each day T, score X[0:T+1] to get LL, then z-score it
-# This mimics what the live system does (scores entire history up to today)
-print("Scoring day-by-day (expanding window)... this takes a minute...")
+# ── Score every day using PER-DAY emission marginals ────────────────────────
+# Match live scoring: ll_per_obs[t] = logsumexp(emit_log_probs[t]).
+# This is the per-day emission likelihood (no transition compounding), which
+# is what the brain's ci_anchor and the live UI both use.
+print("Scoring all days using per-day emission marginals...")
 
-MIN_WINDOW = 252  # Need at least 1 year of data before scoring
+posteriors_full = model.predict_proba(X_full)
+state_seq = np.argmax(posteriors_full, axis=1)
+log_emit = model._compute_log_likelihood(X_full)
+ll_per_obs_full = logsumexp(log_emit, axis=1)
+ll_z_full = (ll_per_obs_full - ll_baseline_mean) / max(ll_baseline_std, 1e-6)
+
+from scipy.stats import entropy as shannon_entropy
+max_entropy = float(np.log(n_states))
+
 results = []
-
-for i in range(MIN_WINDOW, len(X_full)):
-    X_window = X_full[:i+1]
-    date_str = dates[i].strftime("%Y-%m-%d")
-    
-    try:
-        ll_total = float(model.score(X_window))
-        ll_per_obs = ll_total / len(X_window)
-        ll_zscore = (ll_per_obs - ll_baseline_mean) / max(ll_baseline_std, 1e-6)
-        
-        # Also get state probabilities for entropy
-        posteriors = model.predict_proba(X_window)
-        today_probs = posteriors[-1]
-        state_idx = int(np.argmax(today_probs))
-        
-        from scipy.stats import entropy as shannon_entropy
-        raw_entropy = float(shannon_entropy(today_probs))
-        max_entropy = float(np.log(n_states))
-        norm_entropy = raw_entropy / max_entropy if max_entropy > 0 else 0.0
-        
-        results.append({
-            "date": date_str,
-            "ll_zscore": round(ll_zscore, 4),
-            "ll_per_obs": round(ll_per_obs, 6),
-            "entropy": round(norm_entropy, 4),
-            "state_idx": state_idx,
-            "state_label": brain_raw["state_labels"][state_idx],
-        })
-    except Exception as e:
-        results.append({
-            "date": date_str,
-            "ll_zscore": 0.0,
-            "ll_per_obs": 0.0,
-            "entropy": 0.0,
-            "state_idx": -1,
-            "state_label": "Error",
-        })
-    
-    if (i - MIN_WINDOW) % 500 == 0:
-        print(f"  Scored {i - MIN_WINDOW + 1}/{len(X_full) - MIN_WINDOW} days... (current: {date_str}, LL z={ll_zscore:.3f})")
+for i in range(len(X_full)):
+    raw_entropy = float(shannon_entropy(posteriors_full[i]))
+    norm_entropy = raw_entropy / max_entropy if max_entropy > 0 else 0.0
+    results.append({
+        "date": dates[i].strftime("%Y-%m-%d"),
+        "ll_zscore": round(float(ll_z_full[i]), 4),
+        "ll_per_obs": round(float(ll_per_obs_full[i]), 6),
+        "entropy": round(norm_entropy, 4),
+        "state_idx": int(state_seq[i]),
+        "state_label": brain_raw["state_labels"][int(state_seq[i])],
+    })
 
 print(f"  Done! Scored {len(results)} days total.")
 print()
@@ -121,19 +109,32 @@ print(f"  Mean: {sum(ll_vals)/len(ll_vals):.3f}")
 print(f"  Days total: {len(ll_vals)}")
 print()
 
-thresholds = [-0.20, -0.30, -0.35, -0.40, -0.45]
-for t in thresholds:
+# Thresholds scale to brain.ci_anchor — Zone 2 starts at 22% CI, Zone 3 at 67%.
+# Mapping back to z: z_zone2 = -0.22 * anchor, z_zone3 = -0.67 * anchor, etc.
+threshold_pct = [0.22, 0.40, 0.50, 0.67, 0.80, 1.00]
+print(f"  (CI% gate thresholds scaled to brain.ci_anchor = {ci_anchor:.4f})")
+for pct in threshold_pct:
+    t = -pct * ci_anchor
     count = len([x for x in ll_vals if x < t])
-    pct = count / len(ll_vals) * 100
-    print(f"  Below z={t}: {count} days ({pct:.1f}%)")
+    obs_pct = count / len(ll_vals) * 100
+    zone = 1 if pct < 0.22 else (2 if pct < 0.67 else (3 if pct <= 1.0 else 4))
+    print(f"  Below z={t:+.4f}  (CI={int(pct*100)}% | Zone {zone}): {count} days ({obs_pct:.2f}%)")
 
-# Compute COVID anchor for CI% calibration
-covid_window = [r for r in results if "2020-02-15" <= r["date"] <= "2020-04-15"]
+# Compute COVID-era worst z for sanity check vs ci_anchor
+covid_window = [r for r in results if "2020-02-01" <= r["date"] <= "2020-04-30"]
 covid_worst_z = min(r["ll_zscore"] for r in covid_window) if covid_window else None
 if covid_worst_z:
-    print(f"\n  COVID peak z: {covid_worst_z:.4f}  → anchor for CI%=100%")
-    print(f"  Gate z=-0.30 → CI% = {abs(-0.30)/abs(covid_worst_z)*100:.1f}% (target: ~67%)")
-    print(f"  ⚠  If COVID peak z changed from 0.448, update anchor in quick_run.py + backtesting.py")
+    covid_ci = abs(covid_worst_z) / max(ci_anchor, 1e-6) * 100
+    print(f"\n  COVID-era (Feb-Apr 2020) worst z: {covid_worst_z:.4f}  ->  CI% = {covid_ci:.1f}%")
+    print(f"  Brain ci_anchor                  : {ci_anchor:.4f}  ->  CI% = 100% (calibration target)")
+    if abs(abs(covid_worst_z) - ci_anchor) / max(ci_anchor, 1e-6) > 0.05:
+        print(f"  NOTE: COVID worst z differs from ci_anchor by >5% — anchor likely set by a different extreme day.")
+    else:
+        print(f"  Anchor is calibrated against COVID-era extreme. OK.")
+print(f"\n  ANCHOR HANDLING: brain.ci_anchor is now AUTO-CALIBRATED at training time.")
+print(f"  Do NOT manually edit 0.467 anywhere — all consumers read brain.ci_anchor via")
+print(f"  services.hmm_regime.get_ci_anchor(). Re-running this script after a retrain")
+print(f"  is purely diagnostic — no source-code changes needed.")
 
 # ── Test against crashes ─────────────────────────────────────────────────────
 print()
@@ -152,9 +153,11 @@ crashes = [
     ("2025-04 Tariff Shock", "2025-04-07", "2025-03-01", "2025-04-14"),
 ]
 
-# Try the actual CI% gate thresholds (signal range is ~-0.467 to +0.191)
-for threshold in [-0.25, -0.30, -0.35, -0.40, -0.45]:
-    print(f"\n--- THRESHOLD: z < {threshold} ---")
+# Try CI%-based gate thresholds, scaled to the brain's ci_anchor.
+# 22% = Zone 2 entry, 50% = mid-stress, 67% = Zone 3 (Crisis Gate), 100% = anchor.
+for ci_threshold in [0.22, 0.40, 0.50, 0.67, 0.80, 1.00]:
+    threshold = -ci_threshold * ci_anchor
+    print(f"\n--- THRESHOLD: z < {threshold:+.4f}  (CI={int(ci_threshold*100)}%) ---")
     detected = 0
     missed = 0
     

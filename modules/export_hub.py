@@ -641,7 +641,8 @@ def _section_qir_snapshot() -> str:
         state = hmm_ctx.get("state_label", "—")
         conf = hmm_ctx.get("confidence", 0)
         ll_z = hmm_ctx.get("ll_zscore", 0)
-        ci_pct = abs(ll_z) / 0.467 * 100 if ll_z else 0
+        from services.hmm_regime import get_ci_anchor as _gca
+        ci_pct = abs(ll_z) / max(_gca(), 1e-6) * 100 if ll_z else 0
         lines.append(f"- **HMM State:** {state} (conf={conf:.2f}, ll_z={ll_z:.3f}, CI%={ci_pct:.1f}%)")
 
     # Prefer LL-anchored crisis block + shadow brain when available (new QIR wiring)
@@ -650,7 +651,8 @@ def _section_qir_snapshot() -> str:
         _hmm_llz = float(ll_crisis.get("ll_zscore", 0.0) or 0.0)
         _hmm_ci = ll_crisis.get("ci_pct")
         if _hmm_ci is None:
-            _hmm_ci = abs(_hmm_llz) / 0.467 * 100 if _hmm_llz < 0 else 0.0
+            from services.hmm_regime import get_ci_anchor as _gca2
+            _hmm_ci = abs(_hmm_llz) / max(_gca2(), 1e-6) * 100 if _hmm_llz < 0 else 0.0
         lines.append(f"- **HMM Learn Brain:** {_hmm_lbl} (ll_z={_hmm_llz:+.2f}, CI%={float(_hmm_ci):.1f}%)")
 
     if shadow is not None:
@@ -871,25 +873,22 @@ def _build_pipeline_export() -> str:
         "- CRITICAL: lookback_years stored in brain JSON — live scoring must use brain.lookback_years exactly",
         "",
         "### CI% Zones",
-        "- Zone 1 (CI < 22%):  NORMAL — conviction signals suppressed (they fire every day alone = 0% precision)",
-        "- Zone 2 (CI 22–67%): MODEL STRESS — signals visible as context (unvalidated individually)",
-        "- Zone 3 (CI ≥ 67%):  CRISIS GATE OPEN — 9.25% crash probability (3x baseline)",
+        "- Zone 1 (CI < 22%):  NORMAL — conviction signals suppressed",
+        "- Zone 2 (CI 22–40%): MODEL STRESS — early-warning watch zone",
+        "- Zone 3 (CI ≥ 40%):  CRISIS GATE OPEN — 75% historical detection, 0% false alarms",
         "- Zone 4 (CI > 100%): BEYOND TRAINING RANGE — purple, model scoring post-training extremes",
         "",
-        "### Backtested Event Anchors",
-        "- Tariff/Rate shocks (2022, 2025): CI 12–21% — correctly ignored (known regimes)",
-        "- Volmageddon (Feb 2018): CI 76% — detected (z=-0.341)",
-        "- Fed Panic (Dec 2018): CI 96% — detected 84 days early (z=-0.428)",
-        "- COVID Start (Feb 2020): CI 94% — detected 36 days early (z=-0.421)",
-        "- COVID Bottom (Mar 2020): CI 100% — peak (z=-0.448, the anchor)",
-        "- Gate threshold: z < -0.30 = 67% CI",
+        "### Backtested Event Anchors (rescaled to brain.ci_anchor)",
+        "- Volmageddon (Feb 2018): CI 34% — Zone 2 stress",
+        "- Fed Panic (Dec 2018): CI 41% — Zone 3 (just over gate)",
+        "- COVID Feb 2020 peak: CI 100% — anchor (worst in-sample day)",
+        "- Tariff Apr 2025: CI 50% — Zone 3",
+        "- Gate threshold: 40% CI = Zone 3 entry",
         "",
         "### Post-Retrain Workflow",
-        "1. Retrain brain (lookback_years=15 stored automatically in brain JSON)",
-        "2. Run: python ll_gate_backtest_live_brain.py",
-        "3. Check new COVID peak z-score — if changed from -0.448, update anchor in:",
-        "   - modules/quick_run.py: abs(_tb_ll_z) / 0.448 * 100",
-        "   - modules/backtesting.py: same formula",
+        "1. Retrain brain (auto-calibrates brain.ci_anchor)",
+        "2. Optional diagnostic: python ll_gate_backtest_live_brain.py (read-only)",
+        "3. No source-code edits needed — all consumers read brain.ci_anchor dynamically",
         "",
         "### Market Bottom Watch (linked to CI%)",
         "- Always visible in QIR; dormant (opacity 0.55, grey) when CI% < 22, live when CI% ≥ 22",

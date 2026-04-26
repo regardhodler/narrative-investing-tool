@@ -38,8 +38,10 @@ _HISTORY_PATH = os.path.join(_DATA_DIR, "hmm_state_history.json")
 # ── Feature set ───────────────────────────────────────────────────────────────
 # 9 FRED series + VIX from yfinance.  Chosen for low lag, high regime signal.
 _FRED_FEATURES = [
-    "BAMLH0A0HYM2",  # HY spreads — most predictive of risk-off
-    "BAMLC0A0CM",    # IG spreads
+    "BAA10Y",        # Moody's Baa - 10yr (HY-proxy spread, daily, 1986+).
+                     # Replaces BAMLH0A0HYM2 — ICE BofA series capped at 3yr public history (Apr 2026).
+    "AAA10Y",        # Moody's Aaa - 10yr (IG-proxy spread, daily, 1983+).
+                     # Replaces BAMLC0A0CM — same licensing reason.
     "T10Y2Y",        # 10yr-2yr yield curve
     "T10Y3M",        # 10yr-3mo (inversion depth)
     "DGS10",         # nominal 10yr yield
@@ -70,6 +72,8 @@ class HMMBrain:
     ll_baseline_mean: float = 0.0   # mean LL per observation at training time
     ll_baseline_std: float = 1.0    # std of rolling-window LL (for z-scoring daily LL)
     lookback_years: int = 15        # lookback used to build feature matrix — MUST match live scoring
+    ci_anchor: float = 0.467        # |z| value that maps to 100% CI. Auto-set at train time
+                                    # to the in-sample worst-day z. Default preserves legacy behavior.
 
 
 @dataclass
@@ -194,18 +198,24 @@ def _build_feature_matrix(lookback_years: int = 15) -> pd.DataFrame:
 
 def _label_states(model, feature_names: list) -> list[str]:
     """
-    Auto-label HMM states by mean HY spread (BAMLH0A0HYM2) level.
+    Auto-label HMM states by mean HY-proxy spread level.
     Lowest spread → Bull. Highest spread → Crisis (true dislocation).
     'Crash' intentionally avoided — reserved only for genuine credit crisis levels.
+
+    Tries Moody's BAA10Y first (current feature set), falls back to the legacy
+    ICE BofA BAMLH0A0HYM2 name for backward compatibility with old brains.
     """
     n = model.n_components
     means = model.means_  # shape (n_states, n_features)
 
-    # Find index of HY spread feature
+    # Find index of HY spread feature — try current name first, then legacy
     hy_idx = None
-    for i, name in enumerate(feature_names):
-        if "BAMLH0A0HYM2" in name:
-            hy_idx = i
+    for candidate in ("BAA10Y", "BAMLH0A0HYM2"):
+        for i, name in enumerate(feature_names):
+            if candidate in name:
+                hy_idx = i
+                break
+        if hy_idx is not None:
             break
 
     if hy_idx is None or n < 2:
@@ -330,6 +340,20 @@ def train_hmm(lookback_years: int = 15, max_states: int = 6,
         _ll_vals.append(float(best_model.score(_chunk)) / _window)
     _ll_std = float(np.std(_ll_vals)) if _ll_vals else 1.0
 
+    # ── CI anchor: auto-calibrate from in-sample emission-marginal z-scores ──
+    # The anchor is |z| at the worst training day (COVID-equivalent → 100% CI).
+    # We use the SAME logsumexp(emit) calculation that live scoring uses, so
+    # the live z-distribution matches the training reference and threshold
+    # gates (Zone 2/3/4) keep their intended meaning across feature swaps.
+    try:
+        from scipy.special import logsumexp as _logsumexp
+        _emit_log = best_model._compute_log_likelihood(X)
+        _live_ll  = _logsumexp(_emit_log, axis=1)
+        _z_train  = (_live_ll - ll_per_obs) / max(_ll_std, 1e-6)
+        _ci_anchor = float(max(abs(_z_train.min()), 0.467))
+    except Exception:
+        _ci_anchor = 0.467  # safe fallback to legacy anchor
+
     brain = HMMBrain(
         n_states=best_n,
         trained_at=datetime.now(timezone.utc).isoformat(),
@@ -345,6 +369,7 @@ def train_hmm(lookback_years: int = 15, max_states: int = 6,
         ll_baseline_mean=round(ll_per_obs, 6),
         ll_baseline_std=round(max(_ll_std, 1e-6), 6),
         lookback_years=lookback_years,
+        ci_anchor=round(_ci_anchor, 4),
     )
 
     save_hmm_brain(brain)
@@ -357,6 +382,39 @@ def save_hmm_brain(brain: HMMBrain) -> None:
     os.makedirs(_DATA_DIR, exist_ok=True)
     with open(_BRAIN_PATH, "w") as f:
         json.dump(asdict(brain), f, indent=2)
+    invalidate_ci_anchor_cache()
+
+
+def get_ci_anchor() -> float:
+    """Return the CI% anchor for the currently saved brain.
+
+    All CI%/Zone calculations should use this instead of hardcoding 0.467.
+    Falls back to the legacy 0.467 if no brain is saved.
+
+    Cached at module level; auto-invalidates when the brain file changes on disk
+    (handles external retrains that don't go through save_hmm_brain()).
+    """
+    global _CI_ANCHOR_CACHE, _CI_ANCHOR_MTIME
+    try:
+        current_mtime = os.path.getmtime(_BRAIN_PATH) if os.path.exists(_BRAIN_PATH) else None
+    except OSError:
+        current_mtime = None
+    if _CI_ANCHOR_CACHE is None or current_mtime != _CI_ANCHOR_MTIME:
+        brain = load_hmm_brain()
+        _CI_ANCHOR_CACHE = float(brain.ci_anchor) if brain else 0.467
+        _CI_ANCHOR_MTIME = current_mtime
+    return _CI_ANCHOR_CACHE
+
+
+_CI_ANCHOR_CACHE: Optional[float] = None
+_CI_ANCHOR_MTIME: Optional[float] = None
+
+
+def invalidate_ci_anchor_cache() -> None:
+    """Clear the cached CI anchor — call after train_hmm() to force re-read."""
+    global _CI_ANCHOR_CACHE, _CI_ANCHOR_MTIME
+    _CI_ANCHOR_CACHE = None
+    _CI_ANCHOR_MTIME = None
 
 
 def load_hmm_brain() -> Optional[HMMBrain]:
@@ -369,6 +427,7 @@ def load_hmm_brain() -> Optional[HMMBrain]:
         d.setdefault("ll_baseline_mean", 0.0)
         d.setdefault("ll_baseline_std", 1.0)
         d.setdefault("lookback_years", 15)  # default to 15 for brains trained before this field was added
+        d.setdefault("ci_anchor", 0.467)    # legacy ICE BofA anchor; new brains override at train time
         return HMMBrain(**d)
     except Exception:
         return None
@@ -499,10 +558,15 @@ def score_current_state(brain: Optional[HMMBrain] = None,
                 break
 
         # ── Log-Likelihood: "Check Engine" light ────────────────────────────
-        ll_total = float(model.score(X))
-        ll_per_obs = round(ll_total / len(X), 6)
+        # Use TODAY's per-day emission marginal (logsumexp across states).
+        # MUST match compute_full_state_path() so live z-scores align with
+        # the historical path used to calibrate ci_anchor.
+        from scipy.special import logsumexp as _logsumexp
+        log_emit = model._compute_log_likelihood(X)
+        todays_ll = float(_logsumexp(log_emit[-1]))
+        ll_per_obs = round(todays_ll, 6)
         ll_zscore = round(
-            (ll_per_obs - brain.ll_baseline_mean) / max(brain.ll_baseline_std, 1e-6), 3
+            (todays_ll - brain.ll_baseline_mean) / max(brain.ll_baseline_std, 1e-6), 3
         )
 
         # ── Entropy: regime certainty [0=pure, 1=total fog] ─────────────────
@@ -574,6 +638,65 @@ def score_current_state(brain: Optional[HMMBrain] = None,
 
         return state
 
+    except Exception:
+        return None
+
+
+def compute_full_state_path(brain: Optional[HMMBrain] = None) -> Optional[pd.DataFrame]:
+    """
+    Decode the full historical regime path for the main HMM brain.
+
+    Rebuilds the GaussianHMM from stored params, runs predict_proba over the
+    entire feature matrix the model was trained on (~lookback_years long), and
+    returns one row per business day with the argmax state, the per-day
+    marginal log-likelihood, its z-score against the training baseline, and CI%.
+
+    Returns None if the brain or feature data is unavailable.
+    """
+    if brain is None:
+        brain = load_hmm_brain()
+    if brain is None:
+        return None
+
+    try:
+        from hmmlearn.hmm import GaussianHMM
+        from scipy.special import logsumexp
+
+        n = brain.n_states
+        model = GaussianHMM(n_components=n, covariance_type="full")
+        model.n_features = len(brain.feature_names)
+        model.startprob_ = np.ones(n) / n
+        model.transmat_ = np.array(brain.transmat)
+        model.means_ = np.array(brain.means)
+        model.covars_ = np.array(brain.covars)
+
+        df = _build_feature_matrix(lookback_years=brain.lookback_years)
+        for col in brain.feature_names:
+            if col not in df.columns:
+                df[col] = 0.0
+        df = df[brain.feature_names].dropna()
+        if df.empty:
+            return None
+        X = df.values.astype(np.float64)
+
+        posteriors = model.predict_proba(X)
+        states_seq = np.argmax(posteriors, axis=1)
+        log_emit = model._compute_log_likelihood(X)
+        ll_per_obs = logsumexp(log_emit, axis=1)
+        ll_z = (ll_per_obs - brain.ll_baseline_mean) / max(brain.ll_baseline_std, 1e-6)
+        ci_pct = np.abs(ll_z) / max(brain.ci_anchor, 1e-6) * 100.0
+
+        labels = [brain.state_labels[i] for i in states_seq]
+        return pd.DataFrame(
+            {
+                "state_idx": states_seq,
+                "state_label": labels,
+                "ll_per_obs": ll_per_obs,
+                "ll_zscore": ll_z,
+                "ci_pct": ci_pct,
+            },
+            index=df.index,
+        )
     except Exception:
         return None
 
