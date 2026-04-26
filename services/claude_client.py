@@ -1463,6 +1463,65 @@ def generate_macro_synopsis(signals_text: str, use_claude: bool = False, model: 
         return {"conviction": "UNCERTAIN", "summary": f"Error: {e}", "key_points": [], "contradictions": []}
 
 
+def generate_regime_chart_analysis(signals_text: str) -> dict:
+    """Interpret the current regime chart state in plain English.
+
+    Returns dict with keys:
+      headline: one sentence verdict
+      main_brain: 2-3 sentence read on main brain state
+      shadow_brain: 2-3 sentence read on shadow brain state
+      divergence: 1-2 sentences on agreement/divergence between brains
+      watch: 2-3 bullet strings of what to monitor next
+    """
+    prompt = (
+        "You are a senior quant analyst reading two Hidden Markov Model brains trained on market data. "
+        "Your job is to explain in plain English what the brains are currently seeing, "
+        "how they compare, and what a sophisticated investor should watch for next. "
+        "Be specific — cite the regime labels, CI%, zone, and lead-time hit rate from the data provided. "
+        "Do NOT give investment advice or tell anyone to buy/sell. "
+        "Return ONLY valid JSON (no markdown fences) with this exact structure:\n"
+        '{"headline": "<one crisp sentence verdict>", '
+        '"main_brain": "<2-3 sentences on main brain regime, CI%, zone, what it means>", '
+        '"shadow_brain": "<2-3 sentences on shadow brain regime, CI%, zone, what it means>", '
+        '"divergence": "<1-2 sentences: are both brains aligned or diverging? what does that imply?>", '
+        '"watch": ["<item 1>", "<item 2>", "<item 3>"]}\n\n'
+        "Rules:\n"
+        "- headline must state the dominant regime + whether stress is building or abating\n"
+        "- cite specific numbers from the data (CI%, z-score, zone number, hit rate)\n"
+        "- divergence: if both brains agree = conviction up; if they split = uncertainty\n"
+        "- watch items: concrete signals to monitor (e.g. 'Shadow CI% crossing Zone 3 gate at 40%')\n"
+        "- Be clinical and direct — no vague generalities\n\n"
+        f"REGIME CHART DATA:\n{signals_text[:3500]}"
+    )
+
+    api_key = os.getenv("GROQ_API_KEY", "")
+    if not api_key:
+        return {"headline": "GROQ_API_KEY not set.", "main_brain": "", "shadow_brain": "",
+                "divergence": "", "watch": []}
+    try:
+        import json as _json
+        import re as _re
+        resp = requests.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 700,
+                "temperature": 0.3,
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        _raw = resp.json()["choices"][0]["message"]["content"].strip()
+        _raw = _re.sub(r"^```(?:json)?\s*", "", _raw, flags=_re.MULTILINE)
+        _raw = _re.sub(r"\s*```$", "", _raw, flags=_re.MULTILINE).strip()
+        return _json.loads(_raw)
+    except Exception as e:
+        return {"headline": f"Error: {e}", "main_brain": "", "shadow_brain": "",
+                "divergence": "", "watch": []}
+
+
 def assess_macro_fit(
     ticker: str,
     company_name: str,

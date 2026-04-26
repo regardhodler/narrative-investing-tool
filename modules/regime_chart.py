@@ -711,6 +711,111 @@ def render():
         comp_fig = _build_comparison_chart(shadow_df, main_df)
         st.plotly_chart(comp_fig, use_container_width=True)
 
+    # ── AI Regime Interpreter ───────────────────────────────────────────────
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown(
+        f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;'
+        f'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;">'
+        f"AI REGIME INTERPRETATION</div>",
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Interpret Regime Chart", key="regime_chart_ai_btn"):
+        # Build signal text from available brain state
+        _ai_parts = []
+
+        if main_brain is not None and main_df is not None and not main_df.empty:
+            _m_latest = main_df.iloc[-1]
+            _m_z = float(_m_latest.get("ll_zscore", 0))
+            _m_anchor = get_ci_anchor()
+            _m_ci = round(abs(_m_z) / max(_m_anchor, 1e-6) * 100, 1) if _m_z < 0 else 0.0
+            _m_zone = _ci_zone_label(_m_ci)
+            _m_state = str(_m_latest.get("state_label", "—"))
+            _m_lt = _build_lead_time_table(main_df, spx, ci_anchor=_m_anchor)
+            _m_hits = int((_m_lt["Fired?"] == "Yes").sum()) if not _m_lt.empty else 0
+            _m_total = len(_m_lt) if not _m_lt.empty else 0
+            _ai_parts.append(
+                f"MAIN BRAIN (trained {main_brain.training_start} → {main_brain.training_end}, "
+                f"{main_brain.lookback_years}yr lookback, {main_brain.n_states} states):\n"
+                f"  Current regime: {_m_state}\n"
+                f"  LL z-score: {_m_z:.3f}\n"
+                f"  CI%: {_m_ci:.1f}% ({_m_zone})\n"
+                f"  CI anchor: {_m_anchor:.3f} (Zone 3 gate: z < {-0.40 * _m_anchor:.3f})\n"
+                f"  Lead-time backtest: {_m_hits}/{_m_total} crises detected"
+            )
+
+        if shadow_brain is not None and shadow_df is not None and not shadow_df.empty:
+            _s_latest = shadow_df.iloc[-1]
+            _s_z = float(_s_latest.get("ll_zscore", 0))
+            _s_anchor = getattr(shadow_brain, "ci_anchor", get_ci_anchor())
+            _s_ci = round(abs(_s_z) / max(_s_anchor, 1e-6) * 100, 1) if _s_z < 0 else 0.0
+            _s_zone = _ci_zone_label(_s_ci)
+            _s_state = str(_s_latest.get("state_label", "—"))
+            _s_threshold = -0.40 * _s_anchor
+            _s_lt = _build_lead_time_table(shadow_df, spx, threshold=_s_threshold, ci_anchor=_s_anchor)
+            _s_hits = int((_s_lt["Fired?"] == "Yes").sum()) if not _s_lt.empty else 0
+            _s_total = len(_s_lt) if not _s_lt.empty else 0
+            _ai_parts.append(
+                f"SHADOW BRAIN (trained {shadow_brain.training_start} → {shadow_brain.training_end}, "
+                f"{shadow_brain.n_states} states, features: {', '.join(getattr(shadow_brain, 'feature_names', ['SPX', 'VIX']))}):\n"
+                f"  Current regime: {_s_state}\n"
+                f"  LL z-score: {_s_z:.3f}\n"
+                f"  CI%: {_s_ci:.1f}% ({_s_zone})\n"
+                f"  CI anchor: {_s_anchor:.3f} (Zone 3 gate: z < {_s_threshold:.3f})\n"
+                f"  Lead-time backtest: {_s_hits}/{_s_total} crises detected\n"
+                f"  Zone 3 crash probability (historical): "
+                f"{next((b['prob_10pct'] * 100 for b in getattr(shadow_brain, 'crash_prob_bins', []) if b.get('label') == 'Zone 3'), 'N/A')}%"
+            )
+
+        try:
+            if main_brain is not None and shadow_brain is not None:
+                _agree = "ALIGNED" if (
+                    (_m_ci >= 40 and _s_ci >= 40) or (_m_ci < 22 and _s_ci < 22)
+                ) else "DIVERGING"
+                _ai_parts.append(f"BRAIN AGREEMENT: {_agree} (Main CI: {_m_ci:.1f}% | Shadow CI: {_s_ci:.1f}%)")
+        except NameError:
+            pass
+
+        _ai_signals = "\n\n".join(_ai_parts)
+
+        with st.spinner("Reading the chart..."):
+            from services.claude_client import generate_regime_chart_analysis as _gen_rc
+            _rc_result = _gen_rc(_ai_signals)
+
+        if _rc_result:
+            _headline = _rc_result.get("headline", "")
+            _main_txt = _rc_result.get("main_brain", "")
+            _shad_txt = _rc_result.get("shadow_brain", "")
+            _div_txt = _rc_result.get("divergence", "")
+            _watch = _rc_result.get("watch", [])
+
+            st.markdown(
+                f'<div style="background:#0f1923;border:1px solid {COLORS["border"]};'
+                f'border-radius:8px;padding:16px;margin-top:8px;">'
+                f'<div style="color:{COLORS["bloomberg_orange"]};font-weight:700;'
+                f'font-size:13px;margin-bottom:10px;">{_headline}</div>'
+                + (f'<div style="color:{COLORS["text_dim"]};font-size:10px;text-transform:uppercase;'
+                   f'letter-spacing:0.08em;margin:8px 0 2px 0;">MAIN BRAIN</div>'
+                   f'<div style="color:{COLORS["text"]};font-size:12px;line-height:1.6;">{_main_txt}</div>'
+                   if _main_txt else "")
+                + (f'<div style="color:{COLORS["text_dim"]};font-size:10px;text-transform:uppercase;'
+                   f'letter-spacing:0.08em;margin:10px 0 2px 0;">SHADOW BRAIN</div>'
+                   f'<div style="color:{COLORS["text"]};font-size:12px;line-height:1.6;">{_shad_txt}</div>'
+                   if _shad_txt else "")
+                + (f'<div style="color:{COLORS["text_dim"]};font-size:10px;text-transform:uppercase;'
+                   f'letter-spacing:0.08em;margin:10px 0 2px 0;">BRAIN AGREEMENT</div>'
+                   f'<div style="color:{COLORS["text"]};font-size:12px;line-height:1.6;">{_div_txt}</div>'
+                   if _div_txt else "")
+                + (f'<div style="color:{COLORS["text_dim"]};font-size:10px;text-transform:uppercase;'
+                   f'letter-spacing:0.08em;margin:10px 0 4px 0;">WATCH FOR</div>'
+                   + "".join(
+                       f'<div style="color:{COLORS["text"]};font-size:12px;line-height:1.6;">'
+                       f'· {w}</div>' for w in _watch
+                   ) if _watch else "")
+                + "</div>",
+                unsafe_allow_html=True,
+            )
+
     # ── Footer metadata ─────────────────────────────────────────────────────
     notes = []
     if main_brain is not None and main_df is not None:
