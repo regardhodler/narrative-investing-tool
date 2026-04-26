@@ -812,9 +812,15 @@ def _render_combo_gate(verdict: dict) -> None:
     </thead>
     <tbody>{rows}</tbody>
   </table>
-  <div style="font-size:8px;color:#1e293b;line-height:1.5;">
+  <div style="font-size:8px;color:#334155;line-height:1.6;margin-top:4px;">
     Backtest: 8 crashes 2012–2026 · 1,098 normal-market days · ★ = best tradeoff (88% detection, 0% FA)
     &nbsp;·&nbsp; Zone 2 = CI &ge;22% · Zone 3 = CI &ge;40%
+  </div>
+  <div style="font-size:8px;color:#475569;line-height:1.7;margin-top:3px;
+              border-top:1px solid #1e293b;padding-top:5px;">
+    The one crash missed in all 88% strategies is <span style="color:#64748b;">2022-01 Rate Shock</span> — the macro brain never registered it
+    (z=0, bull regime throughout), and the shadow brain didn't spike either. That's a structural blind spot:
+    slow Fed rate hikes don't create LL spikes in either model.
   </div>
 </div>"""
     st.markdown(html, unsafe_allow_html=True)

@@ -3915,7 +3915,7 @@ def _render_qir_dashboard() -> None:
                     f'{_sh_b.state_labels[j][:4]} '
                     f'<span style="color:#94a3b8;">{_sh_fmt_prob(_sh_trans_row[j])}</span>'
                     f'</span>  '
-                    for j in range(_sh_b.k_regimes)
+                    for j in range(_sh_b.n_states)
                 )
 
                 _shadow_block = (
@@ -3953,7 +3953,7 @@ def _render_qir_dashboard() -> None:
                     f'→ {_sh_trans_cells}'
                     f'</div>'
                     f'<div style="font-size:9px;color:#334155;margin-top:3px;">'
-                    f'{_sh_b.k_regimes}-regime MarkovRegression · trained {_sh_trained} · '
+                    f'{_sh_b.n_states}-regime GaussianHMM (SPX+VIX) · trained {_sh_trained} · '
                     f'window {_sh_b.training_start}–{_sh_b.training_end}</div>'
                     f'<div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:10px;'
                     f'margin-top:8px;padding-top:8px;border-top:1px solid #1e293b;">'
@@ -4195,8 +4195,14 @@ def _render_qir_dashboard() -> None:
     <tbody>{_strat_rows}</tbody>
   </table>
   {_shad_note}
-  <div style="font-size:8px;color:#1e293b;margin-top:6px;line-height:1.4;">
-    Backtest: 8 crashes 2012-2026 · 1,098 normal days · ★ = best tradeoff (88% detection, 0% FA)
+  <div style="font-size:8px;color:#334155;margin-top:6px;line-height:1.6;">
+    Backtest: 8 crashes 2012–2026 · 1,098 normal days · ★ = best tradeoff (88% detection, 0% FA)
+  </div>
+  <div style="font-size:8px;color:#475569;line-height:1.7;margin-top:3px;
+              border-top:1px solid #1e293b;padding-top:5px;">
+    The one crash missed in all 88% strategies is <span style="color:#64748b;">2022-01 Rate Shock</span> — the macro brain never registered it
+    (z=0, bull regime throughout), and the shadow brain didn't spike either. That's a structural blind spot:
+    slow Fed rate hikes don't create LL spikes in either model.
   </div>
 </div>"""
             st.markdown(_combo_html, unsafe_allow_html=True)
@@ -7422,15 +7428,15 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
             _shb = _load_sh_brain()
             if _shb:
                 _shb_trained = _shb.trained_at[:10]
-                _shb_bic_txt = f"{_shb.bic:,.0f}" if _shb.bic else "—"
+                _shb_bic_txt = f"{_shb.ci_anchor:.3f}"
                 st.markdown(
                     f'<div style="background:#0f172a;border:1px solid #1e293b;border-radius:5px;'
                     f'padding:10px 14px;margin-bottom:10px;">'
                     f'<div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.1em;margin-bottom:6px;">CURRENT BRAIN</div>'
                     f'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'
                     f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">STATES</div>'
-                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_shb.k_regimes}</div></div>'
-                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">BIC</div>'
+                    f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_shb.n_states}</div></div>'
+                    f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">CI ANCHOR</div>'
                     f'<div style="font-size:18px;font-weight:900;color:#94a3b8;">{_shb_bic_txt}</div></div>'
                     f'<div><div style="font-size:8px;color:#64748b;font-weight:700;letter-spacing:0.08em;">TRAINED</div>'
                     f'<div style="font-size:11px;font-weight:700;color:#94a3b8;margin-top:4px;">{_shb_trained}</div></div>'
@@ -7448,7 +7454,7 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                 )
                 # Transition matrix
                 _shtm = _shb.transmat
-                _shn  = _shb.k_regimes
+                _shn  = _shb.n_states
                 _sh_rows_html = ""
                 for i in range(_shn):
                     def _sh_fmt_tm(v):
@@ -7593,8 +7599,8 @@ Measures what SPY options participants are doing *right now*: put/call ratio, ga
                             _sh_new_state = _score_sh(log_to_history=True)
                         _sh_lbl = _sh_new_state.state_label if _sh_new_state else "unknown"
                         st.toast(
-                            f"✅ Shadow retrained — {_sh_new_brain.k_regimes} regimes "
-                            f"(BIC {_sh_new_brain.bic:,.0f}) · Today: {_sh_lbl}",
+                            f"✅ Shadow retrained — {_sh_new_brain.n_states} regimes "
+                            f"· CI anchor {_sh_new_brain.ci_anchor:.3f} · Today: {_sh_lbl}",
                             icon="🧠",
                         )
                         st.rerun()

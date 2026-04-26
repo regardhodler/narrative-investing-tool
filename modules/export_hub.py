@@ -672,6 +672,64 @@ def _section_qir_snapshot() -> str:
     return "\n".join(lines)
 
 
+def _section_cross_signal_combo() -> str:
+    """Export Main + Shadow combo gate status and strategy table."""
+    ll_crisis = st.session_state.get("_ll_anchored_crisis") or {}
+    shadow    = st.session_state.get("_shadow_state_obj")
+    if not ll_crisis and shadow is None:
+        return ""
+
+    from services.hmm_regime import get_ci_anchor as _gca
+    _main_llz = float(ll_crisis.get("ll_zscore", 0.0) or 0.0)
+    _main_ci  = abs(_main_llz) / max(_gca(), 1e-6) * 100 if _main_llz < 0 else 0.0
+    _shad_ci  = float(getattr(shadow, "ci_pct", 0.0) or 0.0) if shadow else None
+
+    _cm_z2 = _main_ci  >= 22;  _cm_z3 = _main_ci  >= 40
+    _cs_z2 = (_shad_ci is not None and _shad_ci >= 22)
+    _cs_z3 = (_shad_ci is not None and _shad_ci >= 40)
+
+    strategies = [
+        ("OR — either Zone 3 fires",            _cm_z3 or  _cs_z3,  "7/8 (88%)", "0.5%"),
+        ("AND — both Zone 3 fire",              _cm_z3 and _cs_z3,  "5/8 (62%)", "0.0%"),
+        ("OR — either Zone 2 fires",            _cm_z2 or  _cs_z2,  "8/8 (100%)","5.4%"),
+        ("AND — both Zone 2 fire ★",            _cm_z2 and _cs_z2,  "7/8 (88%)", "0.0%"),
+        ("Main Z3 OR (Main Z2 AND Shadow Z2) ★", _cm_z3 or (_cm_z2 and _cs_z2), "7/8 (88%)", "0.0%"),
+        ("Main Z3 OR (Shadow Z3 AND Main Z2) ★", _cm_z3 or (_cs_z3 and _cm_z2), "7/8 (88%)", "0.0%"),
+    ]
+    n_firing = sum(1 for _, active, _, _ in strategies if active)
+    star_firing = any(active and "★" in name for name, active, _, _ in strategies)
+
+    if n_firing >= 4:
+        gate_status = "MULTIPLE GATES OPEN"
+    elif n_firing >= 2:
+        gate_status = "STRESS CONFIRMED"
+    elif n_firing == 1:
+        gate_status = "EARLY WARNING"
+    else:
+        gate_status = "ALL QUIET"
+
+    lines = ["## MAIN + SHADOW COMBO GATE"]
+    lines.append(f"- **Gate Status:** {gate_status} ({n_firing}/6 strategies firing)")
+    lines.append(f"- **Main Brain CI%:** {_main_ci:.1f}% ({'Zone 3' if _cm_z3 else 'Zone 2' if _cm_z2 else 'Zone 1'})")
+    lines.append(f"- **Shadow Brain CI%:** {f'{_shad_ci:.1f}%' if _shad_ci is not None else '—'} "
+                 f"({'Zone 3' if _cs_z3 else 'Zone 2' if _cs_z2 else 'Zone 1'} if _shad_ci is not None else '')")
+    lines.append(f"- **High-confidence gates firing (★, 0% false alarms):** {'YES' if star_firing else 'NO'}")
+    lines.append("")
+    lines.append("| Strategy | Firing | Detection | False Alarms |")
+    lines.append("|---|---|---|---|")
+    for name, active, det, fa in strategies:
+        lines.append(f"| {name} | {'✅ FIRING' if active else '—'} | {det} | {fa} |")
+    lines.append("")
+    lines.append(
+        "> Structural blind spot: slow Fed rate-hike cycles (e.g. 2022-01 Rate Shock) rarely produce "
+        "LL spikes in either brain — macro features move gradually and SPX+VIX don't flag a crisis "
+        "until the damage is done. Excluding that regime type, effective hit rate is ~80% on "
+        "actionable crash events. Backtest: 8 crashes 2012–2026, 1,098 normal-market days."
+    )
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _section_qir_debate_payload() -> str:
     """Export the full QIR debate payload assembled in Quick Run (includes HMM + shadow lines)."""
     payload = st.session_state.get("_qir_debate_signals_text")
@@ -692,6 +750,7 @@ def _build_markdown_export(open_trades: list) -> str:
         _section_current_events(),
         _section_regime(),
         _section_qir_snapshot(),
+        _section_cross_signal_combo(),
         _section_qir_debate_payload(),
         _section_rate_path(),
         _section_policy_transmission(),

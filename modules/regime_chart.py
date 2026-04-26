@@ -45,8 +45,8 @@ _CRISIS_MARKERS = [
 ]
 
 def _trigger_anchor() -> float:
-    """Negative-signed CI anchor used as the LL z-score trigger threshold."""
-    return -get_ci_anchor()
+    """Zone 3 gate: z < -0.40 * ci_anchor (40% CI). Used as the lead-time trigger threshold."""
+    return -0.40 * get_ci_anchor()
 
 _SPX_LINE_COLOR = "#B0B8C5"
 _LL_LINE_COLOR = "#4B9FFF"
@@ -246,13 +246,26 @@ def _trigger_clusters(brain_df: pd.DataFrame, threshold: float | None = None,
     return clusters
 
 
+def _ci_zone_label(ci_pct: float) -> str:
+    if ci_pct >= 100:
+        return "Zone 4 — Beyond Range"
+    if ci_pct >= 40:
+        return "Zone 3 — Crisis Gate"
+    if ci_pct >= 22:
+        return "Zone 2 — Model Stress"
+    return "Zone 1 — Normal"
+
+
 def _build_lead_time_table(brain_df: pd.DataFrame, spx: pd.Series,
                            threshold: float | None = None,
-                           window_days: int = 180) -> pd.DataFrame:
+                           window_days: int = 180,
+                           ci_anchor: float | None = None) -> pd.DataFrame:
     if brain_df is None or brain_df.empty:
         return pd.DataFrame()
     if threshold is None:
         threshold = _trigger_anchor()
+    if ci_anchor is None:
+        ci_anchor = get_ci_anchor()
 
     rows = []
     for date_str, label in _CRISIS_MARKERS:
@@ -266,6 +279,9 @@ def _build_lead_time_table(brain_df: pd.DataFrame, spx: pd.Series,
         if window_df.empty:
             continue
 
+        min_z_val = float(window_df["ll_zscore"].min())
+        min_ci = round(abs(min_z_val) / max(ci_anchor, 1e-6) * 100, 1) if min_z_val < 0 else 0.0
+
         fires = window_df[window_df["ll_zscore"] < threshold]
         if fires.empty:
             rows.append({
@@ -273,14 +289,20 @@ def _build_lead_time_table(brain_df: pd.DataFrame, spx: pd.Series,
                 "Date": crisis_date.strftime("%Y-%m-%d"),
                 "First trigger": "—",
                 "State at trigger": "MISSED",
-                "Min z": f"{window_df['ll_zscore'].min():.3f}",
+                "Min z": f"{min_z_val:.3f}",
                 "Lead time (days)": "—",
+                # CI tab columns
+                "Peak CI%": f"{min_ci:.1f}%",
+                "Zone at peak": _ci_zone_label(min_ci),
+                "Trigger CI%": f"{abs(threshold) / max(ci_anchor, 1e-6) * 100:.1f}%",
+                "Fired?": "No",
             })
             continue
 
         first_trigger = fires.index[0]
         state_at_trigger = str(fires.iloc[0]["state_label"])
-        min_z = float(window_df["ll_zscore"].min())
+        trigger_z = float(fires.iloc[0]["ll_zscore"])
+        trigger_ci = round(abs(trigger_z) / max(ci_anchor, 1e-6) * 100, 1)
 
         spx_window = spx.loc[max(win_start, spx.index[0]):min(win_end, spx.index[-1])]
         spx_bottom_date = spx_window.idxmin() if not spx_window.empty else crisis_date
@@ -294,8 +316,13 @@ def _build_lead_time_table(brain_df: pd.DataFrame, spx: pd.Series,
             "Date": crisis_date.strftime("%Y-%m-%d"),
             "First trigger": first_trigger.strftime("%Y-%m-%d"),
             "State at trigger": state_at_trigger,
-            "Min z": f"{min_z:.3f}",
+            "Min z": f"{min_z_val:.3f}",
             "Lead time (days)": lead_str,
+            # CI tab columns
+            "Peak CI%": f"{min_ci:.1f}%",
+            "Zone at peak": _ci_zone_label(min_ci),
+            "Trigger CI%": f"{trigger_ci:.1f}%",
+            "Fired?": "Yes",
         })
 
     return pd.DataFrame(rows)
@@ -590,7 +617,12 @@ def render():
         st.plotly_chart(shadow_fig, use_container_width=True)
         st.markdown(_legend_html(shadow_brain.state_labels, "Shadow regimes"),
                     unsafe_allow_html=True)
-        lead_table = _build_lead_time_table(shadow_df, spx)
+        shadow_anchor = getattr(shadow_brain, "ci_anchor", get_ci_anchor())
+        shadow_threshold = -0.40 * shadow_anchor
+        shadow_trigger_ci = round(abs(shadow_threshold) / max(shadow_anchor, 1e-6) * 100, 1)
+        lead_table = _build_lead_time_table(
+            shadow_df, spx, threshold=shadow_threshold, ci_anchor=shadow_anchor
+        )
         if not lead_table.empty:
             st.markdown(
                 f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;'
@@ -598,7 +630,25 @@ def render():
                 f"SHADOW BRAIN — LEAD-TIME BACKTEST</div>",
                 unsafe_allow_html=True,
             )
-            st.dataframe(lead_table, use_container_width=True, hide_index=True)
+            st.markdown(
+                f'<div style="color:{COLORS["text_dim"]};font-size:11px;margin-bottom:6px;">'
+                f"Trigger: z &lt; {shadow_threshold:.3f} &nbsp;·&nbsp; "
+                f"CI% = {shadow_trigger_ci:.1f}% &nbsp;·&nbsp; "
+                f"{_ci_zone_label(shadow_trigger_ci)} &nbsp;·&nbsp; "
+                f"anchor = {shadow_anchor:.3f}</div>",
+                unsafe_allow_html=True,
+            )
+            _lt_tab, _ci_tab = st.tabs(["Lead-Time", "CI & Zone"])
+            with _lt_tab:
+                st.dataframe(
+                    lead_table[["Crisis", "Date", "First trigger", "State at trigger", "Min z", "Lead time (days)"]],
+                    use_container_width=True, hide_index=True,
+                )
+            with _ci_tab:
+                st.dataframe(
+                    lead_table[["Crisis", "Date", "Peak CI%", "Zone at peak", "Trigger CI%", "Fired?"]],
+                    use_container_width=True, hide_index=True,
+                )
     else:
         st.info("Shadow brain not available — train it first.")
 
@@ -620,7 +670,10 @@ def render():
         st.plotly_chart(main_fig, use_container_width=True)
         st.markdown(_legend_html(main_brain.state_labels, "Main regimes"),
                     unsafe_allow_html=True)
-        lead_table = _build_lead_time_table(main_df, spx)
+        main_anchor = get_ci_anchor()
+        main_threshold = _trigger_anchor()
+        main_trigger_ci = round(abs(main_threshold) / max(main_anchor, 1e-6) * 100, 1)
+        lead_table = _build_lead_time_table(main_df, spx, ci_anchor=main_anchor)
         if not lead_table.empty:
             st.markdown(
                 f'<div style="color:{COLORS["bloomberg_orange"]};font-size:11px;'
@@ -628,7 +681,25 @@ def render():
                 f"MAIN BRAIN — LEAD-TIME BACKTEST</div>",
                 unsafe_allow_html=True,
             )
-            st.dataframe(lead_table, use_container_width=True, hide_index=True)
+            st.markdown(
+                f'<div style="color:{COLORS["text_dim"]};font-size:11px;margin-bottom:6px;">'
+                f"Trigger: z &lt; {main_threshold:.3f} &nbsp;·&nbsp; "
+                f"CI% = {main_trigger_ci:.1f}% &nbsp;·&nbsp; "
+                f"{_ci_zone_label(main_trigger_ci)} &nbsp;·&nbsp; "
+                f"anchor = {main_anchor:.3f}</div>",
+                unsafe_allow_html=True,
+            )
+            _lt_tab, _ci_tab = st.tabs(["Lead-Time", "CI & Zone"])
+            with _lt_tab:
+                st.dataframe(
+                    lead_table[["Crisis", "Date", "First trigger", "State at trigger", "Min z", "Lead time (days)"]],
+                    use_container_width=True, hide_index=True,
+                )
+            with _ci_tab:
+                st.dataframe(
+                    lead_table[["Crisis", "Date", "Peak CI%", "Zone at peak", "Trigger CI%", "Fired?"]],
+                    use_container_width=True, hide_index=True,
+                )
     else:
         st.info("Main HMM brain not available — train it first.")
 
@@ -650,7 +721,7 @@ def render():
     if shadow_brain is not None and shadow_df is not None:
         notes.append(
             f"Shadow HMM trained {shadow_brain.training_start} → {shadow_brain.training_end} "
-            f"(BIC {shadow_brain.bic:.0f}, n_obs {shadow_brain.n_obs:,})"
+            f"(CI anchor {shadow_brain.ci_anchor:.3f}, n_obs {shadow_brain.n_obs:,})"
         )
     if notes:
         st.markdown(
