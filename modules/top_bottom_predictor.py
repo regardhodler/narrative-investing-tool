@@ -723,6 +723,98 @@ def _render_prob_time_series(brain_path: pd.DataFrame, spx: pd.Series, brain_lab
     return fig
 
 
+def _render_brain_performance(main_state, shadow_state, top_sig: Optional[dict], verdict: Optional[dict]) -> None:
+    """Compact brain performance summary — hit rate, FA, CI%, current status."""
+    from services.hmm_regime import get_ci_anchor
+    from services.hmm_shadow import load_shadow_brain as _lsb
+
+    # ── Main Brain live CI% ────────────────────────────────────────────────
+    _main_ll_z  = getattr(main_state,   "ll_zscore", None) if main_state   else None
+    _shad_ll_z  = getattr(shadow_state, "ll_zscore", None) if shadow_state else None
+    _main_anchor = get_ci_anchor()
+    _shad_brain  = _lsb()
+    _shad_anchor = getattr(_shad_brain, "ci_anchor", 5.0) if _shad_brain else 5.0
+
+    main_ci  = abs(_main_ll_z)  / max(_main_anchor,  1e-6) * 100 if _main_ll_z  is not None else 0.0
+    shad_ci  = abs(_shad_ll_z)  / max(_shad_anchor,  1e-6) * 100 if _shad_ll_z  is not None else 0.0
+    top_firing = bool(top_sig and top_sig.get("sig_and"))
+    top_roll   = (top_sig or {}).get("ll_z_roll", 0.0)
+    top_days   = (top_sig or {}).get("days_in_stress", 0)
+
+    combo_main = (verdict or {}).get("combo_main_ci", 0.0)
+    combo_shad = (verdict or {}).get("combo_shad_ci", 0.0)
+    combo_on   = combo_main >= 22.0 and combo_shad >= 22.0
+
+    def _zone_pill(ci):
+        if ci >= 40:
+            return f'<span style="color:#ef4444;font-weight:700;">Z3 {ci:.1f}%</span>'
+        elif ci >= 22:
+            return f'<span style="color:#f59e0b;font-weight:700;">Z2 {ci:.1f}%</span>'
+        return f'<span style="color:#22c55e;font-weight:700;">Z1 {ci:.1f}%</span>'
+
+    def _status(on, label):
+        c = "#ef4444" if on else "#22c55e"
+        return f'<span style="color:{c};font-weight:800;">{label if on else "QUIET"}</span>'
+
+    rows = [
+        ("TOP BRAIN",        "Top detection",    "5/8 (62%)", "4",  "107d",  "macro drift",
+         _status(top_firing, "FIRING"),
+         f'<span style="color:#f59e0b;">roll={top_roll:.3f}{"  ·  "+str(top_days)+"d active" if top_firing else ""}</span>'),
+        ("MAIN BRAIN",       "Regime + crisis",  "7/8 (88%)", "0",  "0d",    "CI% Zone 3",
+         _zone_pill(main_ci),
+         f'<span style="color:#64748b;">ll_z={_main_ll_z:+.3f}</span>' if _main_ll_z is not None else "—"),
+        ("SHADOW BRAIN",     "Bottom / crash",   "7/8 (88%)", "0",  "0d",    "CI% Zone 2",
+         _zone_pill(shad_ci),
+         f'<span style="color:#64748b;">ll_z={_shad_ll_z:+.3f}</span>' if _shad_ll_z is not None else "—"),
+        ("COMBO (M+S)",      "Confirmed bottom", "7/8 (88%)", "0★", "—",     "both Zone 2",
+         _status(combo_on, "ACTIVE"),
+         f'<span style="color:#64748b;">M={combo_main:.1f}%  S={combo_shad:.1f}%</span>'),
+    ]
+
+    header = (
+        f'<div style="display:grid;grid-template-columns:110px 110px 90px 40px 55px 90px 100px 1fr;'
+        f'gap:6px;padding:4px 8px;border-bottom:1px solid #1e293b;margin-bottom:4px;">'
+        + "".join(
+            f'<div style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.08em;">{h}</div>'
+            for h in ["BRAIN", "PURPOSE", "HIT RATE", "FA", "AVG LEAD", "SIGNAL", "STATUS", "LIVE"]
+        )
+        + "</div>"
+    )
+
+    body = ""
+    for brain, purpose, hit, fa, lead, signal, status, live in rows:
+        body += (
+            f'<div style="display:grid;grid-template-columns:110px 110px 90px 40px 55px 90px 100px 1fr;'
+            f'gap:6px;padding:5px 8px;border-bottom:1px solid #0f172a;align-items:center;">'
+            f'<div style="font-size:9px;color:#94a3b8;font-weight:700;">{brain}</div>'
+            f'<div style="font-size:8px;color:#475569;">{purpose}</div>'
+            f'<div style="font-size:9px;color:#64748b;">{hit}</div>'
+            f'<div style="font-size:9px;color:#64748b;">{fa}</div>'
+            f'<div style="font-size:9px;color:#64748b;">{lead}</div>'
+            f'<div style="font-size:8px;color:#475569;">{signal}</div>'
+            f'<div style="font-size:9px;">{status}</div>'
+            f'<div style="font-size:8px;">{live}</div>'
+            f'</div>'
+        )
+
+    html = f"""
+<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
+            padding:12px 14px;margin:0 0 12px 0;">
+  <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;
+              text-transform:uppercase;margin-bottom:8px;">
+    BRAIN PERFORMANCE SUMMARY
+  </div>
+  {header}
+  {body}
+  <div style="font-size:7px;color:#1e293b;margin-top:6px;line-height:1.8;">
+    ★ = zero false alarms &nbsp;·&nbsp;
+    Hit rate / FA from validated backtest 2012–2026 &nbsp;·&nbsp;
+    Main + Shadow CI% use their own anchors — not comparable to each other
+  </div>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _render_cycle_ladder(top_sig: Optional[dict], verdict: Optional[dict], main_state) -> None:
     """3-stage market cycle escalation ladder."""
     # Stage 1 — Top Brain
@@ -1198,12 +1290,13 @@ def render():
     if main_state is not None or shadow_state is not None:
         verdict = _compute_today_verdict(main_state, shadow_state, main_path, shadow_path, shadow_brain=shadow_brain)
 
-        # Cycle ladder — always first thing visible
+        # Cycle ladder + brain performance — always first things visible
         try:
             _top_sig_for_ladder = compute_top_signal_today(top_brain) if top_brain else None
+            _render_brain_performance(main_state, shadow_state, _top_sig_for_ladder, verdict)
             _render_cycle_ladder(_top_sig_for_ladder, verdict, main_state)
-        except Exception:
-            pass
+        except Exception as _e:
+            st.warning(f"Brain summary error: {_e}")
 
         _render_verdict_card(verdict)
         _render_drivers(verdict["drivers_bearish"], verdict["drivers_bullish"],
