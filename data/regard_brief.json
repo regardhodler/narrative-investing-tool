@@ -1,14 +1,14 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-24T15:08:32",
+  "generated_at": "2026-04-27T15:37:11",
   "regime": {
     "label": "Risk-On",
     "score": 0.24,
     "quadrant": "Reflation",
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Commodity Trend (Oil + Copper): z=+0.89 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 39/100 — Fear (contrarian)"
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.93 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Global Manufacturing (EWG+FXI): z=+0.84 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 47/100 — Neutral (contrarian)"
   },
   "tactical": {
-    "score": 52,
+    "score": 53,
     "label": "Caution / Reduce",
     "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
   },
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime, characterized by a score of +0.24 and a reflation quadrant, is supported by recent market developments, including the surge in AMD and Intel shares, which suggests ongoing optimism in the tech sector. The drop in oil prices following reports of potential peace talks between Iran and Pakistan also aligns with the reflation narrative, as reduced geopolitical tensions can lead to increased economic activity. However, the Polymarket prediction of an 18% chance of inflation reaching over 5% in 2026 introduces a note of caution, as high inflation could prompt monetary policy tightening and contradict the current risk-on regime. The removal of the hurdle for Warsh confirmation following the DOJ's drop of the criminal probe into Fed Chair Powell may also have implications for future monetary policy decisions.",
+  "current_events_digest": "The current risk-on macro regime, with a score of +0.24, is supported by recent developments in the AI sector, including significant funding rounds and strategic partnerships, such as the $1.1 billion seed funding for a former Google DeepMind researcher's AI startup. However, the unraveling of Iran peace talks and subsequent surge in Brent oil prices to over $108 per barrel introduces a note of caution, contradicting the reflation narrative. The dominance of AI-related news, including the launch of ChatGPT-powered apps by Starbucks and Little Caesars, confirms the ongoing technological shift, while the prediction markets' low probability of a Fed rate cut to 0% or lower before 2027 suggests a relatively stable monetary policy outlook. The loosening of ties between OpenAI and Microsoft also highlights the evolving landscape of AI partnerships.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",

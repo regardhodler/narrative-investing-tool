@@ -2,20 +2,20 @@
   "_regime_context": {
     "regime": "Risk-On",
     "score": 0.24,
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Commodity Trend (Oil + Copper): z=+0.89 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.74 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Corporate CAPEX vs Liquidity: z=+0.60 ()\n- Fear & Greed Index: 39/100 \u2014 Fear (contrarian)",
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.93 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Global Manufacturing (EWG+FXI): z=+0.84 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 47/100 \u2014 Neutral (contrarian)",
     "quadrant": "Reflation",
     "macro_score": 62,
-    "leading_score": 62,
-    "leading_divergence": 0,
+    "leading_score": 61,
+    "leading_divergence": -1,
     "leading_label": "Aligned",
-    "score_5d_trend": 2,
-    "leading_5d_trend": -1,
+    "score_5d_trend": -1,
+    "leading_5d_trend": -2,
     "pts_to_risk_on": -2,
     "pts_to_risk_off": 22,
-    "velocity_label": "\u2192 Stable (-1 pts vs 2026-04-23)"
+    "velocity_label": "\u2192 Stable (+0 pts vs 2026-04-26)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-24T15:08:12.056333"
+    "__datetime__": "2026-04-27T15:36:51.595324"
   },
   "_rp_plays_result": {
     "sectors": [
@@ -43,53 +43,53 @@
     "stocks": [
       {
         "ticker": "AAPL",
-        "reason": "AAPL is a leader in the Technology sector with strong growth prospects",
+        "reason": "AAPL is a leader in the Technology sector, which is poised for growth in a Risk-On regime",
         "conviction": 3
       },
       {
         "ticker": "XOM",
-        "reason": "XOM is a major player in the Energy sector with a strong balance sheet",
+        "reason": "XOM is a major player in the Energy sector, which is benefiting from the current commodity trend",
         "conviction": 2
       },
       {
         "ticker": "BHP",
-        "reason": "BHP is a diversified mining company with exposure to growing demand for commodities",
+        "reason": "BHP is a diversified mining company that should benefit from the positive trend in Materials",
         "conviction": 2
       },
       {
-        "ticker": "UNP",
-        "reason": "UNP is a leading railroad company with a strong track record of profitability",
+        "ticker": "UNH",
+        "reason": "UNH is a leader in the Healthcare sector, which is a defensive play in a Risk-On regime",
         "conviction": 1
       },
       {
         "ticker": "JPM",
-        "reason": "JPM is a well-capitalized bank with a strong franchise",
+        "reason": "JPM is a major bank that should benefit from the positive trend in Financials",
         "conviction": 1
       },
       {
-        "ticker": "MSFT",
-        "reason": "MSFT is a dominant player in the Technology sector with a growing cloud business",
+        "ticker": "CSCO",
+        "reason": "CSCO is a leader in the Technology sector, which is poised for growth in a Risk-On regime",
         "conviction": 2
       }
     ],
     "bonds": [
       {
-        "ticker": "TSLA 2.00% 2028",
-        "reason": "TSLA bonds offer a relatively high yield with a strong credit profile",
+        "ticker": "TLT",
+        "reason": "TLT is a long-term Treasury bond that can provide a safe haven in a Risk-On regime",
+        "conviction": 1
+      },
+      {
+        "ticker": "JNK",
+        "reason": "JNK is a high-yield bond that can benefit from the positive trend in credit markets",
         "conviction": 2
       },
       {
-        "ticker": "AAPL 2.50% 2030",
-        "reason": "AAPL bonds offer a stable income stream with a low credit risk",
-        "conviction": 2
-      },
-      {
-        "ticker": "JPM 3.00% 2027",
-        "reason": "JPM bonds offer a relatively high yield with a strong bank credit profile",
+        "ticker": "LQD",
+        "reason": "LQD is an investment-grade corporate bond that can provide a stable return in a Risk-On regime",
         "conviction": 1
       }
     ],
-    "rationale": "The current Risk-On regime suggests a positive outlook for equities and commodities, with a focus on growth and inflation protection. The strong conviction in Technology and Energy sectors reflects this, while the moderate conviction in Materials and Industrials sectors acknowledges the potential for rotation into more cyclical areas. The bond picks focus on high-quality issuers with relatively attractive yields, given the current interest rate environment."
+    "rationale": "The current Risk-On regime, with an aggregate score of +0.24, suggests that investors are taking on more risk and seeking growth opportunities. The positive trends in Technology, Energy, and Materials sectors, as well as the strong performance of commodity-related stocks, support this view. As such, we recommend investing in sectors and stocks that are well-positioned to benefit from this regime, while maintaining a defensive posture through selective bond investments."
   },
   "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
   "_rate_path_probs": [
@@ -118,63 +118,63 @@
       "source": "yfinance"
     }
   ],
-  "_current_events_digest": "The current risk-on macro regime, characterized by a score of +0.24 and a reflation quadrant, is supported by recent market developments, including the surge in AMD and Intel shares, which suggests ongoing optimism in the tech sector. The drop in oil prices following reports of potential peace talks between Iran and Pakistan also aligns with the reflation narrative, as reduced geopolitical tensions can lead to increased economic activity. However, the Polymarket prediction of an 18% chance of inflation reaching over 5% in 2026 introduces a note of caution, as high inflation could prompt monetary policy tightening and contradict the current risk-on regime. The removal of the hurdle for Warsh confirmation following the DOJ's drop of the criminal probe into Fed Chair Powell may also have implications for future monetary policy decisions.",
+  "_current_events_digest": "The current risk-on macro regime, with a score of +0.24, is supported by recent developments in the AI sector, including significant funding rounds and strategic partnerships, such as the $1.1 billion seed funding for a former Google DeepMind researcher's AI startup. However, the unraveling of Iran peace talks and subsequent surge in Brent oil prices to over $108 per barrel introduces a note of caution, contradicting the reflation narrative. The dominance of AI-related news, including the launch of ChatGPT-powered apps by Starbucks and Little Caesars, confirms the ongoing technological shift, while the prediction markets' low probability of a Fed rate cut to 0% or lower before 2027 suggests a relatively stable monetary policy outlook. The loosening of ties between OpenAI and Microsoft also highlights the evolving landscape of AI partnerships.",
   "_current_events_digest_ts": {
-    "__datetime__": "2026-04-24T15:08:16.467920"
+    "__datetime__": "2026-04-27T15:36:55.354508"
   },
   "_current_events_engine": "\u26a1 Freeloader Mode",
   "_tactical_context": {
-    "tactical_score": 52,
+    "tactical_score": 53,
     "label": "Caution / Reduce",
     "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "18.7 (+1.2 5d)",
-        "Score": -0.189,
-        "Direction": "Neutral \u2014 Leaning Risk-Off"
+        "Value": "18.7 (-0.1 5d)",
+        "Score": -0.013,
+        "Direction": "True Neutral"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.888",
-        "Score": 0.747,
+        "Value": "0.883",
+        "Score": 0.78,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+4.5%/20d  +5.2%/50d",
+        "Value": "+4.1%/20d  +5.4%/50d",
         "Score": 0.4,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +0.2%  20d +10.3%",
-        "Score": -0.362,
+        "Value": "5d +0.6%  20d +12.4%",
+        "Score": -0.28,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "-0.76% 5d",
-        "Score": -0.765,
+        "Value": "-1.52% 5d",
+        "Score": -1.0,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:17.1 VIX:18.7 3M:21.1 6M:23.1",
-        "Score": 0.638,
+        "Value": "9D:17.9 VIX:18.7 3M:21.2 6M:23.3",
+        "Score": 0.554,
         "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "139.6 (-2.2 5d)",
-        "Score": -0.979,
+        "Value": "139.1 (-2.8 5d)",
+        "Score": -0.954,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Fear & Greed (Contrarian)",
-        "Value": "39 \u2014 Fear (+18 7d)",
-        "Score": 0.22,
-        "Direction": "Risk-On"
+        "Value": "47 \u2014 Neutral (+18 7d)",
+        "Score": 0.06,
+        "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "AAII Sentiment (Contrarian)",
@@ -185,14 +185,14 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-24T15:08:12.056340"
+    "__datetime__": "2026-04-27T15:36:51.595328"
   },
-  "_tactical_analysis": "The combined signal picture suggests a mixed short-term risk appetite, with the overall tactical regime score of 52/100 indicating a Caution/Reduce stance. The VIX level and 5-day trend, currently at 18.7 (+1.2), is neutral but leaning risk-off, while the VIX term structure (VIX/VIX3M) at 0.888 is decidedly risk-on. The SPY vs 20d/50d MA, at +4.5%/20d and +5.2%/50d, also supports a risk-on view. However, other signals such as the SPY momentum (5d vs 20d ROC) at 0.2% vs 10.3%, and the Breadth Trend (RSP/SPY 5d) at -0.76%, are risk-off.\n\nThe most dominant signals right now are the VIX term structure (score +0.747) and the VIX Curve (score +0.638), which both suggest a risk-on environment. However, these are offset by the CBOE SKEW (score -0.979) and the Breadth Trend (score -0.765), which indicate increased tail risk and weakening market breadth. The Fear & Greed index, at 39, is also in the fear zone, but its score of +0.220 is relatively mild. The net effect is a cautious stance, as the risk-on signals are countered by significant risk-off signals.\n\nGiven this setup, a trader should consider reducing exposure to risky assets. The mixed signal picture and the overall Caution/Reduce regime score suggest that the reward/risk tradeoff is not favorable. Specifically, traders may consider reducing long positions or hedging existing exposure to mitigate potential losses. With the VIX at 18.7 and the VIX term structure indicating a risk-on environment, buying protection or hedging strategies may be relatively expensive. However, the CBOE SKEW and Breadth Trend signals suggest that this may be a necessary precaution to avoid potential downside risks.",
+  "_tactical_analysis": "The combined signal picture suggests a cautious stance, with a Tactical Regime score of 53/100, indicating a moderate level of risk appetite. The MACRO BACKDROP is Risk-On / Reflation, but the short-term signals are mixed. The VIX Term Structure (VIX/VIX3M) score of +0.780 and the VIX Curve (9D/VIX/3M/6M) score of +0.554 indicate a Risk-On tone, with the VIX Term Structure suggesting a relatively flat volatility curve (0.883). However, the SPY Momentum (5d vs 20d ROC) score of -0.280 and the Breadth Trend (RSP/SPY 5d) score of -1.000 suggest some weakness in the market's momentum and breadth.\n\nThe most dominant signals right now are the VIX Term Structure and the Breadth Trend. The VIX Term Structure score of +0.780 is a strong Risk-On signal, indicating that the market is pricing in relatively low volatility in the short term. In contrast, the Breadth Trend score of -1.000 is a strong Risk-Off signal, indicating that the market's breadth is weakening, with the RSP/SPY 5d ratio at -1.52%. The CBOE SKEW (Tail Risk) score of -0.954 is also noteworthy, as it suggests that the market is pricing in relatively high tail risk, with a SKEW value of 139.1. These signals suggest that while the market is still in a Risk-On mode, there are some warning signs that need to be monitored.\n\nGiven this setup, a trader should consider reducing their exposure to the market. The cautious Tactical Regime score and the mixed signal picture suggest that the market is due for a pullback. The weak Breadth Trend and high tail risk (as indicated by the CBOE SKEW) suggest that the market's momentum is weakening, and a reduction in exposure can help mitigate potential losses. A trader could consider reducing their long positions or hedging their portfolio with a short-term volatility hedge, such as a VIX call option or a put option on the SPY. With the VIX Level at 18.7 and the VIX Term Structure indicating a relatively flat volatility curve, a short-term volatility hedge may be an attractive way to manage risk in this environment.",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-24T15:08:12.056341"
+    "__datetime__": "2026-04-27T15:36:51.595328"
   },
   "_data_quality": {
-    "score": 50,
+    "score": 40,
     "label": "Low \u2014 AI reasoning may be unreliable",
     "stale_market": [
       "DXY"
@@ -200,13 +200,14 @@
     "stale_fred": [
       "dgs10",
       "credit_spread",
+      "yield_curve",
       "sahm",
       "core_pce"
     ],
     "total_signals": 10,
-    "fresh_signals": 5
+    "fresh_signals": 4
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-24T15:08:12.056342"
+    "__datetime__": "2026-04-27T15:36:51.595329"
   }
 }
