@@ -4138,6 +4138,16 @@ def _render_qir_dashboard() -> None:
                     f'{_top_roll_window}-day ll_z roll &lt; {_top_roll_thresh}'
                     f' &nbsp;·&nbsp; ci_anchor={_top_anchor:.3f} · CI%={_top_ci:.1f}%'
                     f'</div>'
+                    f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
+                    f'border-radius:4px;border:1px solid #1e293b;">'
+                    f'<div style="font-size:7px;color:#2d3748;font-weight:700;'
+                    f'letter-spacing:0.08em;margin-bottom:3px;">HOW TO USE</div>'
+                    f'<div style="font-size:7px;color:#2d3748;line-height:1.8;">'
+                    f'<span style="color:#3d5a80;">&#9650; FIRING</span> → trim longs, tighten stops, raise cash'
+                    f' · 107d avg lead gives time to act&nbsp;&nbsp;'
+                    f'<span style="color:#1e4060;">&#9632; CI% Z3 ≥40%</span> → crash underway, full defense&nbsp;&nbsp;'
+                    f'<span style="font-style:italic;">Top Brain fires early — not the crisis gate.</span>'
+                    f'</div></div>'
                     f'</div>'
                 )
             else:

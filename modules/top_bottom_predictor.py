@@ -868,6 +868,26 @@ def _render_top_brain_card(sig: dict) -> None:
     &nbsp;&middot;&nbsp;
     ci_anchor = {ci_anchor:.3f}
   </div>
+
+  <!-- Greyed tip -->
+  <div style="margin-top:8px;padding:7px 10px;background:#0a0f1a;border-radius:4px;
+              border:1px solid #1e293b;">
+    <div style="font-size:8px;color:#334155;font-weight:700;letter-spacing:0.08em;
+                margin-bottom:4px;">HOW TO USE</div>
+    <div style="font-size:8px;color:#334155;line-height:1.8;">
+      <span style="color:#3d5a80;">&#9650; Top Brain FIRING</span>
+      &nbsp;&rarr;&nbsp; start trimming longs, tighten stops, raise cash &nbsp;&middot;&nbsp;
+      <span style="color:#334155;">107-day avg lead gives time to act</span>
+      <br>
+      <span style="color:#1e4060;">&#9632; CI% Zone 3 (&ge;40%)</span>
+      &nbsp;&rarr;&nbsp; crash underway &mdash; full defense mode
+      <br>
+      <span style="color:#2d3748;font-style:italic;">
+        Top Brain fires early &mdash; don&apos;t use it as the crisis gate.
+        It catches slow distribution tops; Main + Shadow catch the crash itself.
+      </span>
+    </div>
+  </div>
 </div>"""
     st.markdown(html, unsafe_allow_html=True)
 
