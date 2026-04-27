@@ -19,6 +19,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 load_dotenv()
 
 from services.hmm_regime import save_hmm_brain, train_hmm
+from services.hmm_shadow import train_shadow_hmm, save_shadow_brain
+from services.hmm_top import train_top_brain, save_top_brain
 
 _TARGETS = ["BAA10Y", "AAA10Y"]
 _FRED_API = "https://api.stlouisfed.org/fred/series/observations"
@@ -70,14 +72,31 @@ def main() -> int:
         last = df["observation_date"].iloc[-1]
         print(f"  [OK] Wrote {out_path} — {first} -> {last}  ({len(df)} rows)")
 
-    print("\n-> Retraining main HMM brain on refreshed feature window ...")
+    print("\n-> Retraining Main Brain on refreshed feature window ...")
     brain = train_hmm(lookback_years=15)
     save_hmm_brain(brain)
-    print(f"  [OK] Brain saved.")
+    print(f"  [OK] Main Brain saved.")
     print(f"     n_states     = {brain.n_states}")
     print(f"     training     = {brain.training_start} -> {brain.training_end}")
     print(f"     state_labels = {brain.state_labels}")
     print(f"     BIC          = {brain.bic:.0f}")
+
+    print("\n-> Retraining Shadow Brain (SPX log returns + VIX) ...")
+    shadow_brain = train_shadow_hmm()
+    save_shadow_brain(shadow_brain)
+    print(f"  [OK] Shadow Brain saved.")
+    print(f"     n_states     = {shadow_brain.n_states}")
+    print(f"     ci_anchor    = {shadow_brain.ci_anchor:.4f}")
+    print(f"     state_labels = {shadow_brain.state_labels}")
+
+    print("\n-> Retraining Top Brain (VIX+NFCI+BAA10Y+T10Y3M) ...")
+    top_brain = train_top_brain(lookback_years=15)
+    save_top_brain(top_brain)
+    print(f"  [OK] Top Brain saved.")
+    print(f"     n_states     = {top_brain.n_states}")
+    print(f"     ci_anchor    = {top_brain.ci_anchor:.4f}")
+    print(f"     state_labels = {top_brain.state_labels}")
+
     print("\nDone. Refresh your Streamlit app to see the new chart.")
     return 0
 

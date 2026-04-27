@@ -1934,6 +1934,7 @@ def _render_qir_dashboard() -> None:
         _ll_anchored_block = ""
         _hmm_block        = ""
         _shadow_block     = ""
+        _top_block        = ""
         _gex_block        = ""
         _lean_card        = ""
         _fast_setups_html = ""
@@ -4046,6 +4047,147 @@ def _render_qir_dashboard() -> None:
             )
 
 
+        # ── Top Brain (macro drift / top detection) ───────────────────────────
+        _top_block = ""
+        try:
+            from services.hmm_top import (
+                load_top_brain as _load_top_brain,
+                compute_top_signal_today as _top_signal_today,
+                _LATE_LABELS as _top_late_labels,
+                _LL_ROLL_THRESH as _top_roll_thresh,
+                _LL_ROLL_WINDOW as _top_roll_window,
+                _BT_HITS as _top_bt_hits,
+                _BT_PEAKS as _top_bt_peaks,
+                _BT_HIT_PCT as _top_bt_pct,
+                _BT_FA as _top_bt_fa,
+                _BT_AVG_LEAD as _top_bt_lead,
+            )
+            _top_b = _load_top_brain()
+            if _top_b is not None:
+                _top_sig = _top_signal_today(_top_b)
+                if _top_sig is not None:
+                    _top_firing   = _top_sig["sig_and"]
+                    _top_roll     = _top_sig["ll_z_roll"]
+                    _top_llz      = _top_sig["ll_z"]
+                    _top_regime   = _top_sig["regime_label"]
+                    _top_days_on  = _top_sig["days_in_stress"]
+                    _top_fill     = min(_top_sig["roll_fill_pct"], 100.0)
+                    _top_ci       = _top_sig["ci_pct"]
+                    _top_anchor   = _top_sig["ci_anchor"]
+
+                    _top_gate_col  = "#ef4444" if _top_firing else "#22c55e"
+                    _top_reg_col   = "#ef4444" if _top_regime in _top_late_labels else "#22c55e"
+                    _top_meter_col = "#ef4444" if _top_fill >= 100 else "#f59e0b" if _top_fill >= 50 else "#22c55e"
+
+                    _top_days_html = (
+                        f'<span style="font-size:8px;color:#f59e0b;margin-left:6px;">'
+                        f'{_top_days_on}d active</span>'
+                        if _top_firing and _top_days_on > 0 else ""
+                    )
+
+                    _top_block = (
+                        f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                        f'border-left:3px solid {_top_gate_col};border-radius:5px;'
+                        f'padding:8px 12px;margin-bottom:8px;">'
+                        f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">'
+                        f'<span style="font-size:13px;color:#475569;font-weight:700;letter-spacing:0.1em;">'
+                        f'TOP BRAIN '
+                        f'<span style="color:#64748b;font-size:10px;">(VIX·NFCI·BAA10Y·T10Y3M · macro drift)</span>'
+                        f'</span>'
+                        f'<span style="font-size:7px;color:#64748b;font-weight:700;letter-spacing:0.08em;'
+                        f'background:#0a0f1a;padding:1px 5px;border-radius:2px;">&#9650; TOP DETECTOR</span>'
+                        f'<span style="background:{_top_gate_col}22;border:1px solid {_top_gate_col}55;'
+                        f'border-radius:3px;padding:1px 7px;font-size:9px;font-weight:800;'
+                        f'color:{_top_gate_col};letter-spacing:0.06em;">'
+                        f'{"FIRING" if _top_firing else "QUIET"}</span>'
+                        f'{_top_days_html}'
+                        f'</div>'
+                        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:6px;">'
+                        # Col 1: 40-day LL roll meter
+                        f'<div>'
+                        f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                        f'letter-spacing:0.08em;margin-bottom:2px;">40-DAY LL ROLL</div>'
+                        f'<div style="font-size:20px;font-weight:900;color:{_top_meter_col};">'
+                        f'{_top_roll:.3f}</div>'
+                        f'<div style="background:#1e293b;border-radius:2px;height:5px;'
+                        f'position:relative;overflow:hidden;margin-top:3px;">'
+                        f'<div style="height:5px;border-radius:2px;width:{_top_fill:.1f}%;'
+                        f'background:{_top_meter_col};"></div>'
+                        f'<div style="position:absolute;right:0;top:0;width:2px;height:5px;'
+                        f'background:#ef444488;"></div>'
+                        f'</div>'
+                        f'<div style="font-size:7px;color:#475569;margin-top:2px;">'
+                        f'thresh {_top_roll_thresh} · today ll_z {_top_llz:+.3f}</div>'
+                        f'</div>'
+                        # Col 2: regime
+                        f'<div>'
+                        f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                        f'letter-spacing:0.08em;margin-bottom:2px;">REGIME</div>'
+                        f'<div style="font-size:16px;font-weight:900;color:{_top_reg_col};">'
+                        f'{_top_regime}</div>'
+                        f'<div style="font-size:7px;color:#475569;margin-top:2px;">'
+                        f'Gate: Late Cycle / Stress / Crisis</div>'
+                        f'</div>'
+                        # Col 3: backtest accuracy
+                        f'<div>'
+                        f'<div style="font-size:8px;color:#64748b;font-weight:700;'
+                        f'letter-spacing:0.08em;margin-bottom:2px;">ACCURACY</div>'
+                        f'<div style="font-size:16px;font-weight:900;color:#94a3b8;">'
+                        f'{_top_bt_hits}/{_top_bt_peaks}</div>'
+                        f'<div style="font-size:7px;color:#475569;margin-top:2px;">'
+                        f'{_top_bt_pct}% hit · {_top_bt_fa} FA · {_top_bt_lead}d lead</div>'
+                        f'</div>'
+                        f'</div>'
+                        f'<div style="font-size:8px;color:#1e293b;border-top:1px solid #1e293b;'
+                        f'padding-top:5px;line-height:1.7;">'
+                        f'<span style="color:#334155;">Gate: regime ∈ {{Late Cycle, Stress}} AND '
+                        f'{_top_roll_window}-day ll_z roll &lt; {_top_roll_thresh}</span>'
+                        f' &nbsp;·&nbsp; <span style="color:#334155;">ci_anchor = {_top_anchor:.3f} '
+                        f'· F1=0.556 · CI%={_top_ci:.1f}%</span>'
+                        f'</div>'
+                        f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
+                        f'border-radius:4px;border:1px solid #1e293b;">'
+                        f'<div style="font-size:8px;color:#1e293b;font-weight:700;'
+                        f'letter-spacing:0.08em;margin-bottom:3px;">WHY A THIRD BRAIN</div>'
+                        f'<div style="font-size:8px;color:#1e3a5f;line-height:1.7;">'
+                        f'Top Brain fires when macro slowly rots before price: credit spreads widen, '
+                        f'financial conditions tighten, yield curve inverts, VIX creeps up — all over '
+                        f'40+ days. It misses sudden-shock tops but catches slow distribution tops with '
+                        f'<span style="color:#1e4a7a;">107-day avg lead</span>. '
+                        f'Main + Shadow catch crashes. Top Brain catches tops.'
+                        f'</div></div>'
+                        f'</div>'
+                    )
+                else:
+                    _top_block = (
+                        f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                        f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                        f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                        f'letter-spacing:0.1em;margin-bottom:4px;">TOP BRAIN</div>'
+                        f'<div style="font-size:11px;color:#f59e0b;">'
+                        f'Brain loaded but signal could not be computed.</div></div>'
+                    )
+            else:
+                _top_block = (
+                    f'<div style="background:#0f172a;border:1px solid #1e293b;'
+                    f'border-radius:5px;padding:8px 12px;margin-bottom:8px;">'
+                    f'<div style="font-size:13px;color:#475569;font-weight:700;'
+                    f'letter-spacing:0.1em;margin-bottom:4px;">TOP BRAIN</div>'
+                    f'<div style="font-size:11px;color:#ef444466;">'
+                    f'Not trained — run <span style="font-family:monospace;">'
+                    f'python tools/train_top_brain.py</span></div></div>'
+                )
+        except Exception as _top_exc:
+            import traceback as _top_tb
+            _top_block = (
+                f'<div style="background:#1a0000;border:1px solid #ef4444;border-radius:5px;'
+                f'padding:8px 12px;margin-bottom:8px;">'
+                f'<div style="font-size:11px;color:#ef4444;font-weight:700;">TOP BRAIN ERROR</div>'
+                f'<pre style="font-size:9px;color:#f87171;white-space:pre-wrap;">'
+                f'{"".join(_top_tb.format_exception(type(_top_exc), _top_exc, _top_exc.__traceback__))}'
+                f'</pre></div>'
+            )
+
         # ── Main + Shadow Combo Gate ───────────────────────────────────────────
         try:
             _combo_main_ci  = max(0.0, (abs(_tb_ll_z) / _ci_anchor() * 100.0) if _tb_ll_z < 0 else 0.0)
@@ -5079,6 +5221,7 @@ def _render_qir_dashboard() -> None:
         f'{_hmm_block if _populated else ""}'
         f'{_ll_anchored_block if _populated else ""}'
         f'{_shadow_block if _populated else ""}'
+        f'{_top_block if _populated else ""}'
         f'{_cascade_block if _populated else ""}'
         f'{_bw_block if _populated else ""}'
         # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────

@@ -29,6 +29,13 @@ from services.hmm_shadow import (
     load_current_shadow_state,
     load_shadow_brain,
 )
+from services.hmm_top import (
+    compute_full_top_state_path,
+    compute_top_signal_today,
+    load_top_brain,
+    _BT_HITS, _BT_PEAKS, _BT_HIT_PCT, _BT_FA, _BT_AVG_LEAD,
+    _LL_ROLL_THRESH, _LL_ROLL_WINDOW, _LATE_LABELS as _TOP_LATE_LABELS,
+)
 from services.turning_point import (
     SIGNAL_NAMES,
     compute_turning_point_probability,
@@ -82,6 +89,11 @@ def _load_main_path(_cache_key: str = "") -> Optional[pd.DataFrame]:
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_shadow_path(_cache_key: str = "") -> Optional[pd.DataFrame]:
     return compute_full_shadow_state_path()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _load_top_path(_cache_key: str = "") -> Optional[pd.DataFrame]:
+    return compute_full_top_state_path()
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -711,6 +723,252 @@ def _render_prob_time_series(brain_path: pd.DataFrame, spx: pd.Series, brain_lab
     return fig
 
 
+def _render_top_brain_card(sig: dict) -> None:
+    """Render the Top Brain macro-drift card above the Main+Shadow combo gate."""
+    firing     = sig["sig_and"]
+    roll       = sig["ll_z_roll"]
+    fill       = sig["roll_fill_pct"]          # 0-150%, progress toward threshold
+    regime     = sig["regime_label"]
+    days_on    = sig["days_in_stress"]
+    ci_anchor  = sig["ci_anchor"]
+    ll_z       = sig["ll_z"]
+    ci_pct     = sig["ci_pct"]
+
+    # Colors
+    gate_color   = "#ef4444" if firing else "#22c55e"
+    gate_label   = "FIRING" if firing else "QUIET"
+    regime_color = "#ef4444" if regime in _TOP_LATE_LABELS else "#22c55e"
+
+    # Meter fill color: green → amber → red
+    if fill < 50:
+        meter_color = "#22c55e"
+    elif fill < 100:
+        meter_color = "#f59e0b"
+    else:
+        meter_color = "#ef4444"
+
+    meter_pct = min(fill, 100.0)  # cap bar width at 100%
+
+    # CI% bar
+    ci_capped = min(ci_pct, 120.0)
+    if ci_pct >= 40:
+        ci_color = "#ef4444"
+        ci_zone  = "Z3 CRISIS"
+    elif ci_pct >= 22:
+        ci_color = "#f59e0b"
+        ci_zone  = "Z2 STRESS"
+    else:
+        ci_color = "#22c55e"
+        ci_zone  = "Z1 NORMAL"
+
+    days_html = (
+        f'<div style="font-size:9px;color:#f59e0b;margin-top:3px;">'
+        f'{days_on}d active</div>'
+        if firing and days_on > 0 else ""
+    )
+
+    html = f"""
+<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
+            padding:14px 16px;margin:12px 0 4px 0;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;
+                text-transform:uppercase;">TOP BRAIN &mdash; MACRO DRIFT DETECTOR</div>
+    <div style="background:{gate_color}22;border:1px solid {gate_color}55;
+                border-radius:4px;padding:2px 10px;">
+      <span style="font-size:11px;font-weight:800;color:{gate_color};
+                   letter-spacing:0.08em;">{gate_label}</span>
+    </div>
+  </div>
+
+  <!-- CI% bar -->
+  <div style="margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+      <span style="font-size:9px;color:#64748b;letter-spacing:0.08em;">CRISIS INTENSITY (CI%)</span>
+      <span style="font-size:10px;font-weight:700;color:{ci_color};">{ci_pct:.1f}% &nbsp; {ci_zone}</span>
+    </div>
+    <div style="background:#1e293b;border-radius:3px;height:6px;position:relative;overflow:hidden;">
+      <div style="height:6px;border-radius:3px;width:{ci_capped:.1f}%;background:{ci_color};"></div>
+      <!-- Z2 marker at 22% -->
+      <div style="position:absolute;top:0;left:22%;width:1px;height:6px;background:#f59e0b66;"></div>
+      <!-- Z3 marker at 40% -->
+      <div style="position:absolute;top:0;left:40%;width:1px;height:6px;background:#ef444466;"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:7px;color:#334155;margin-top:2px;">
+      <span>0%</span><span style="margin-left:22%;">Z2·22%</span>
+      <span style="margin-left:18%;">Z3·40%</span><span>100%+</span>
+    </div>
+  </div>
+
+  <!-- Three columns -->
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:12px;">
+
+    <!-- Col 1: Macro Drift Meter -->
+    <div>
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:4px;">
+        40-DAY LL ROLL
+      </div>
+      <div style="background:#1e293b;border-radius:3px;height:7px;position:relative;overflow:hidden;">
+        <div style="height:7px;border-radius:3px;width:{meter_pct:.1f}%;
+                    background:{meter_color};transition:width 0.3s;"></div>
+        <!-- Threshold marker at 100% = threshold reached -->
+        <div style="position:absolute;top:0;right:0;width:2px;height:7px;
+                    background:#ef444488;"></div>
+      </div>
+      <div style="margin-top:4px;">
+        <span style="font-size:14px;font-weight:800;color:{meter_color};">{roll:.3f}</span>
+        <span style="font-size:9px;color:#475569;margin-left:4px;">/ thresh {_LL_ROLL_THRESH}</span>
+      </div>
+      <div style="font-size:8px;color:#334155;margin-top:1px;">
+        today ll_z = {ll_z:+.3f}
+      </div>
+      <div style="font-size:8px;color:#334155;margin-top:2px;">
+        {_LL_ROLL_WINDOW}-day mean &lt; {_LL_ROLL_THRESH} to fire
+      </div>
+    </div>
+
+    <!-- Col 2: Regime state -->
+    <div>
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:4px;">
+        REGIME
+      </div>
+      <div style="font-size:18px;font-weight:800;color:{regime_color};line-height:1.1;">
+        {regime}
+      </div>
+      <div style="font-size:8px;color:#475569;margin-top:4px;">
+        Gate: Late Cycle / Stress / Crisis
+      </div>
+      {days_html}
+    </div>
+
+    <!-- Col 3: Signal status -->
+    <div>
+      <div style="font-size:9px;color:#64748b;letter-spacing:0.08em;margin-bottom:4px;">
+        TOP SIGNAL (sig_and)
+      </div>
+      <div style="font-size:18px;font-weight:800;color:{gate_color};line-height:1.1;">
+        {"FIRING" if firing else "QUIET"}
+      </div>
+      <div style="font-size:8px;color:#475569;margin-top:4px;">
+        {_BT_HITS}/{_BT_PEAKS} hits &middot; {_BT_FA} FA &middot; {_BT_AVG_LEAD}d lead avg
+      </div>
+      <div style="font-size:8px;color:#334155;margin-top:1px;">
+        F1=0.556 (validated 2012&ndash;2026)
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div style="font-size:8px;color:#334155;border-top:1px solid #1e293b;
+              padding-top:5px;line-height:1.7;">
+    Features: VIX &middot; NFCI &middot; BAA10Y &middot; T10Y3M
+    &nbsp;&middot;&nbsp;
+    Gate: regime &isin; &#123;Late Cycle, Stress&#125; AND {_LL_ROLL_WINDOW}-day ll_z roll &lt; {_LL_ROLL_THRESH}
+    &nbsp;&middot;&nbsp;
+    ci_anchor = {ci_anchor:.3f}
+  </div>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_top_brain_expander(top_path: pd.DataFrame, spx: pd.Series) -> None:
+    """Render the Top Brain historical sig_and fire chart + detail table."""
+    from tools.top_signal_search import (
+        _rising_edges, _KNOWN_PEAKS, _PEAK_LEAD_WINDOW, _PEAK_TRAIL_WINDOW,
+        _detect_spx_peaks,
+    )
+
+    if top_path is None or top_path.empty:
+        return
+
+    ts, te = top_path.index[0], top_path.index[-1]
+
+    # Build peaks (same list as the backtest)
+    hardcoded = [pd.Timestamp(d) for d, _ in _KNOWN_PEAKS if ts <= pd.Timestamp(d) <= te]
+    auto = _detect_spx_peaks(spx, ts)
+    all_peaks: set = set(hardcoded)
+    for ap in auto:
+        if not any(abs((ap - hp).days) < 60 for hp in all_peaks):
+            all_peaks.add(ap)
+    peaks = sorted(all_peaks)
+    peak_windows = [
+        (p - pd.Timedelta(days=_PEAK_LEAD_WINDOW),
+         p + pd.Timedelta(days=_PEAK_TRAIL_WINDOW), p)
+        for p in peaks
+    ]
+
+    fires = _rising_edges(top_path["sig_and"])
+
+    # Build detail rows
+    rows = []
+    for fire in fires:
+        if fire not in top_path.index:
+            continue
+        r = top_path.loc[fire]
+        nearest = min(peaks, key=lambda p: abs((p - fire).days)) if peaks else None
+        lead = (nearest - fire).days if nearest else None
+        in_win = nearest and any(ws <= fire <= peak for ws, we, peak in peak_windows)
+        rows.append({
+            "Fire date":    fire.strftime("%Y-%m-%d"),
+            "Regime":       r["state_label"],
+            "ll_z":         f"{r['ll_zscore']:.3f}",
+            "40d roll":     f"{r['ll_z_roll']:.3f}",
+            "Nearest peak": nearest.strftime("%Y-%m-%d") if nearest else "—",
+            "Lead (d)":     f"{lead:+d}" if lead is not None else "—",
+            "Hit":          "✓" if in_win else "✗",
+        })
+
+    detail_df = pd.DataFrame(rows) if rows else pd.DataFrame()
+
+    # Plotly chart: SPX + signal fire markers
+    spx_clip = spx.loc[ts:te] if ts in spx.index or te in spx.index else spx
+    spx_clip = spx_clip.loc[ts:te]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=spx_clip.index, y=np.log(spx_clip.values),
+        mode="lines", line=dict(color="#334155", width=1),
+        name="SPX (log)", hovertemplate="%{x|%Y-%m-%d}<extra></extra>",
+    ))
+
+    if fires:
+        fire_dates = [f for f in fires if ts <= f <= te]
+        fire_y = [float(np.log(spx_clip.loc[f])) if f in spx_clip.index else None
+                  for f in fire_dates]
+        fig.add_trace(go.Scatter(
+            x=fire_dates, y=fire_y,
+            mode="markers",
+            marker=dict(symbol="triangle-down", size=10, color="#ef4444"),
+            name="sig_and fire",
+            hovertemplate="%{x|%Y-%m-%d}<extra>TOP signal</extra>",
+        ))
+
+    for p in peaks:
+        if ts <= p <= te:
+            fig.add_vline(x=p, line=dict(color="#94a3b8", width=1, dash="dot"))
+
+    apply_dark_layout(fig)
+    fig.update_layout(
+        height=220, margin=dict(t=10, b=10, l=10, r=10),
+        showlegend=True,
+        legend=dict(font=dict(size=9), bgcolor="rgba(0,0,0,0)"),
+        yaxis_title="log SPX",
+    )
+
+    with st.expander("📋 Top Brain — sig_and historical fires · detail", expanded=False):
+        st.markdown(
+            f'<div style="font-size:10px;color:#94a3b8;margin-bottom:6px;">'
+            f'Red ▼ = sig_and fire &nbsp;·&nbsp; Gray dotted = known SPX peak &nbsp;·&nbsp; '
+            f'Validated: {_BT_HITS}/{_BT_PEAKS} hits · {_BT_FA} FA · {_BT_AVG_LEAD}d avg lead'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        if not detail_df.empty:
+            st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
+
 def _render_combo_gate(verdict: dict) -> None:
     """Render the Main + Shadow combo gate block."""
     strategies  = verdict.get("combo_strategies", [])
@@ -858,11 +1116,15 @@ def render():
     main_state = load_current_hmm_state()
     shadow_state = load_current_shadow_state()
 
+    top_brain = load_top_brain()
+
     with st.spinner("Loading brain history and SPX data..."):
-        main_key = getattr(main_brain, "trained_at", "") if main_brain else ""
+        main_key   = getattr(main_brain,   "trained_at", "") if main_brain   else ""
         shadow_key = getattr(shadow_brain, "trained_at", "") if shadow_brain else ""
-        main_path = _load_main_path(main_key) if main_brain else None
+        top_key    = getattr(top_brain,    "trained_at", "") if top_brain    else ""
+        main_path   = _load_main_path(main_key)     if main_brain   else None
         shadow_path = _load_shadow_path(shadow_key) if shadow_brain else None
+        top_path    = _load_top_path(top_key)       if top_brain    else None
         spx = _load_spx_close()
 
     # ── SECTION 1 — TODAY'S VERDICT ─────────────────────────────────────────
@@ -871,6 +1133,18 @@ def render():
         _render_verdict_card(verdict)
         _render_drivers(verdict["drivers_bearish"], verdict["drivers_bullish"],
                         verdict["fingerprints_loaded"])
+        # Top Brain card — above the Main+Shadow combo gate
+        if top_brain is not None:
+            try:
+                top_sig = compute_top_signal_today(top_brain)
+                if top_sig is not None:
+                    _render_top_brain_card(top_sig)
+                else:
+                    st.warning("Top Brain: signal returned None — check FRED data.")
+            except Exception as _top_err:
+                st.warning(f"Top Brain card error: {_top_err}")
+        else:
+            st.info("Top Brain not trained — run `python tools/train_top_brain.py`.")
         _render_combo_gate(verdict)
     else:
         st.info("Score both brains in the QIR module first to see today's verdict.")
@@ -952,6 +1226,18 @@ def render():
                 st.dataframe(display, use_container_width=True, hide_index=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
+
+    # Top Brain expander — always shown if brain exists
+    if top_path is not None and not top_path.empty:
+        try:
+            _render_top_brain_expander(top_path, spx)
+        except Exception as _exp_err:
+            with st.expander("📋 Top Brain — sig_and historical fires · detail", expanded=False):
+                st.warning(f"Top Brain expander error: {_exp_err}")
+    elif top_brain is not None:
+        with st.expander("📋 Top Brain — sig_and historical fires · detail", expanded=False):
+            st.info(f"top_path unavailable (top_path is None: {top_path is None})")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ── SECTION 3 — PROBABILITY TIME SERIES ─────────────────────────────────
     st.markdown(
