@@ -21,6 +21,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Optional
 
 import numpy as np
@@ -345,3 +346,22 @@ def compute_top_signal_today(brain: Optional[HMMTopBrain] = None) -> Optional[di
         "ci_anchor":     brain.ci_anchor,
         "training_end":  brain.training_end,
     }
+
+
+# ── Cached signal (keyed by trained_at so it refreshes after retrain) ────────
+
+@lru_cache(maxsize=4)
+def _cached_top_signal(trained_at: str) -> Optional[dict]:
+    """LRU-cached wrapper — one FRED matrix build per brain version per process."""
+    brain = load_top_brain()
+    if brain is None or brain.trained_at != trained_at:
+        return None
+    return compute_top_signal_today(brain)
+
+
+def get_top_signal_cached() -> Optional[dict]:
+    """Call this from QIR / any hot path instead of compute_top_signal_today()."""
+    brain = load_top_brain()
+    if brain is None:
+        return None
+    return _cached_top_signal(brain.trained_at)
