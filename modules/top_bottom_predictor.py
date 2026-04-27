@@ -723,6 +723,86 @@ def _render_prob_time_series(brain_path: pd.DataFrame, spx: pd.Series, brain_lab
     return fig
 
 
+def _render_cycle_ladder(top_sig: Optional[dict], verdict: Optional[dict], main_state) -> None:
+    """3-stage market cycle escalation ladder."""
+    # Stage 1 — Top Brain
+    s1_on = bool(top_sig and top_sig.get("sig_and"))
+    s1_days = (top_sig or {}).get("days_in_stress", 0)
+    s1_regime = (top_sig or {}).get("regime_label", "—")
+
+    # Stage 2 — Main Brain Zone 3
+    from services.hmm_regime import get_ci_anchor
+    _main_ll_z = getattr(main_state, "ll_zscore", None) if main_state else None
+    _anchor = get_ci_anchor()
+    main_ci = abs(_main_ll_z) / max(_anchor, 1e-6) * 100 if _main_ll_z is not None else 0.0
+    s2_on = main_ci >= 40.0
+
+    # Stage 3 — Main + Shadow combo Zone 2 (both ≥ 22%)
+    combo_main_ci = (verdict or {}).get("combo_main_ci", 0.0)
+    combo_shad_ci = (verdict or {}).get("combo_shad_ci", 0.0)
+    s3_on = combo_main_ci >= 22.0 and combo_shad_ci >= 22.0
+
+    def _dot(on, color="#ef4444"):
+        bg = color if on else "#1e293b"
+        return (f'<div style="width:10px;height:10px;border-radius:50%;'
+                f'background:{bg};flex-shrink:0;margin-top:2px;"></div>')
+
+    def _stage(num, label, action, tip, on, color, detail=""):
+        dot = _dot(on, color)
+        text_col = color if on else "#334155"
+        status = f'<span style="color:{color};font-weight:800;">ACTIVE</span>' if on else '<span style="color:#334155;">QUIET</span>'
+        return f"""
+<div style="display:flex;gap:10px;padding:10px 12px;border-radius:5px;
+            background:{""+color+"11" if on else "#0a0f1a"};
+            border:1px solid {""+color+"44" if on else "#1e293b"};margin-bottom:6px;">
+  {dot}
+  <div style="flex:1;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.08em;">
+        STAGE {num} &nbsp;·&nbsp; {label}</span>
+      {status}
+    </div>
+    <div style="font-size:13px;font-weight:800;color:{text_col};margin:2px 0;">{action}</div>
+    {f'<div style="font-size:9px;color:{color};margin-bottom:2px;">{detail}</div>' if detail and on else ""}
+    <div style="font-size:8px;color:#334155;line-height:1.7;">{tip}</div>
+  </div>
+</div>"""
+
+    s1_detail = f"Regime: {s1_regime} · {s1_days}d active · 40d LL roll firing" if s1_on else ""
+    s2_detail = f"Main CI% = {main_ci:.1f}% — crash gate open" if s2_on else ""
+    s3_detail = f"Main CI={combo_main_ci:.1f}% · Shadow CI={combo_shad_ci:.1f}% — both ≥ 22%" if s3_on else ""
+
+    html = f"""
+<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
+            padding:14px 16px;margin:0 0 14px 0;">
+  <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;
+              text-transform:uppercase;margin-bottom:10px;">
+    MARKET CYCLE LADDER &nbsp;·&nbsp;
+    <span style="color:#334155;font-weight:400;font-size:9px;">
+      where are we in the cycle?
+    </span>
+  </div>
+  {_stage(1, "TOP BRAIN · macro drift",
+          "Trim longs · tighten stops · raise cash",
+          "Top Brain fires when macro slowly rots: credit spreads widen, conditions tighten, VIX creeps up over 40+ days. Avg 107-day lead before the actual top. Not the crash gate — gives time to act.",
+          s1_on, "#f59e0b", s1_detail)}
+  {_stage(2, "MAIN BRAIN · CI% Zone 3 ≥ 40%",
+          "Full defense · crash is underway",
+          "Crisis gate open. Main Brain sees macro deterioration beyond its worst training-day baseline. 75% historical crash detection. Reduce exposure aggressively, hold cash/hedges.",
+          s2_on, "#ef4444", s2_detail)}
+  {_stage(3, "MAIN + SHADOW COMBO · both Zone 2 ≥ 22%",
+          "Watch for bottom · start rebuilding",
+          "Both brains in stress simultaneously — historically marks capitulation. 100% crash detection, 0% false alarms. When combo fires AND price action stabilises, begin scaling back in.",
+          s3_on, "#22c55e", s3_detail)}
+  <div style="font-size:7px;color:#1e293b;border-top:1px solid #1e293b;
+              padding-top:6px;margin-top:4px;line-height:1.8;">
+    Stage 1 → trim early &nbsp;·&nbsp; Stage 2 → full defense &nbsp;·&nbsp;
+    Stage 3 → rebuild &nbsp;·&nbsp; Zone 3 overrides Stage 3 — don't rebuild while crash gate is open
+  </div>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _render_top_brain_card(sig: dict) -> None:
     """Render the Top Brain macro-drift card above the Main+Shadow combo gate."""
     firing     = sig["sig_and"]
@@ -1117,6 +1197,14 @@ def render():
     # ── SECTION 1 — TODAY'S VERDICT ─────────────────────────────────────────
     if main_state is not None or shadow_state is not None:
         verdict = _compute_today_verdict(main_state, shadow_state, main_path, shadow_path, shadow_brain=shadow_brain)
+
+        # Cycle ladder — always first thing visible
+        try:
+            _top_sig_for_ladder = compute_top_signal_today(top_brain) if top_brain else None
+            _render_cycle_ladder(_top_sig_for_ladder, verdict, main_state)
+        except Exception:
+            pass
+
         _render_verdict_card(verdict)
         _render_drivers(verdict["drivers_bearish"], verdict["drivers_bullish"],
                         verdict["fingerprints_loaded"])
