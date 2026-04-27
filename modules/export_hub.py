@@ -816,6 +816,23 @@ def _build_pipeline_export() -> str:
         hmm_state_str = "unavailable"
         hmm_brain_str = "unavailable"
 
+    # Top Brain signal
+    top_brain_str = "unavailable"
+    try:
+        from services.hmm_top import get_top_signal_cached, load_top_brain as _ltb
+        _top_b = _ltb()
+        _top_sig = get_top_signal_cached() if _top_b else None
+        if _top_sig:
+            top_brain_str = (
+                f"regime={_top_sig['regime_label']}, "
+                f"sig_and={'FIRING' if _top_sig['sig_and'] else 'QUIET'}, "
+                f"40d_ll_roll={_top_sig['ll_z_roll']:.3f} (thresh -0.20), "
+                f"days_active={_top_sig['days_in_stress']}, "
+                f"trained={_top_b.training_end}"
+            )
+    except Exception:
+        pass
+
     data_sources = [
         "yfinance - prices, OHLCV, options chain snapshots",
         "FRED - 9 series: HY spreads, IG spreads, yield curve (10y2y, 10y3m), DGS10, DGS2, DFII10, NFCI, ICSA",
@@ -830,6 +847,7 @@ def _build_pipeline_export() -> str:
     service_layer = [
         "services/market_data.py - batch fetch, FRED wrappers, AssetSnapshot dataclass, z-scores",
         "services/hmm_regime.py - GaussianHMM (6-state) trained on FRED+VIX. Brain in data/hmm_brain.json. lookback_years stored in brain and must match live scoring exactly",
+        "services/hmm_top.py - Top Brain GaussianHMM (VIX+NFCI+BAA10Y+T10Y3M). Optimised for early market TOP detection. sig_and = regime ∈ {Late Cycle, Stress, Crisis} AND 40-day rolling ll_z mean < -0.20. Validated 5/8 peaks, 4 FA, 107d avg lead. Brain in data/hmm_top_brain.json. NOT a crash gate — fires 107d early, use for trimming/raising cash before CI% Z3 fires.",
         "services/sec_client.py - EDGAR requests, CIK/ticker mapping, rate limiting (10 req/s)",
         "services/claude_client.py - 3-tier LLM router: Groq LLaMA 3.3 70B (⚡ Freeloader), xAI Grok 4.1 Reasoning (🧠 Regard), Claude Haiku 4.5 (👑 Highly Regarded) — all synthesis, debates, valuation, plays, nth-order theses",
         "services/backtest_engine.py - backtest orchestration",
@@ -957,6 +975,7 @@ def _build_pipeline_export() -> str:
         "### Current Live State",
         f"- HMM state: {hmm_state_str}",
         f"- Brain: {hmm_brain_str}",
+        f"- Top Brain (macro drift / top detector): {top_brain_str}",
         "",
         "---",
         "## 3) ORCHESTRATION FLOWS",

@@ -727,12 +727,11 @@ def _render_top_brain_card(sig: dict) -> None:
     """Render the Top Brain macro-drift card above the Main+Shadow combo gate."""
     firing     = sig["sig_and"]
     roll       = sig["ll_z_roll"]
-    fill       = sig["roll_fill_pct"]          # 0-150%, progress toward threshold
+    fill       = sig["roll_fill_pct"]
     regime     = sig["regime_label"]
     days_on    = sig["days_in_stress"]
     ci_anchor  = sig["ci_anchor"]
     ll_z       = sig["ll_z"]
-    ci_pct     = sig["ci_pct"]
 
     # Colors
     gate_color   = "#ef4444" if firing else "#22c55e"
@@ -747,19 +746,7 @@ def _render_top_brain_card(sig: dict) -> None:
     else:
         meter_color = "#ef4444"
 
-    meter_pct = min(fill, 100.0)  # cap bar width at 100%
-
-    # CI% bar
-    ci_capped = min(ci_pct, 120.0)
-    if ci_pct >= 40:
-        ci_color = "#ef4444"
-        ci_zone  = "Z3 CRISIS"
-    elif ci_pct >= 22:
-        ci_color = "#f59e0b"
-        ci_zone  = "Z2 STRESS"
-    else:
-        ci_color = "#22c55e"
-        ci_zone  = "Z1 NORMAL"
+    meter_pct = min(fill, 100.0)
 
     days_html = (
         f'<div style="font-size:9px;color:#f59e0b;margin-top:3px;">'
@@ -779,25 +766,6 @@ def _render_top_brain_card(sig: dict) -> None:
                 border-radius:4px;padding:2px 10px;">
       <span style="font-size:11px;font-weight:800;color:{gate_color};
                    letter-spacing:0.08em;">{gate_label}</span>
-    </div>
-  </div>
-
-  <!-- CI% bar -->
-  <div style="margin-bottom:10px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
-      <span style="font-size:9px;color:#64748b;letter-spacing:0.08em;">CRISIS INTENSITY (CI%)</span>
-      <span style="font-size:10px;font-weight:700;color:{ci_color};">{ci_pct:.1f}% &nbsp; {ci_zone}</span>
-    </div>
-    <div style="background:#1e293b;border-radius:3px;height:6px;position:relative;overflow:hidden;">
-      <div style="height:6px;border-radius:3px;width:{ci_capped:.1f}%;background:{ci_color};"></div>
-      <!-- Z2 marker at 22% -->
-      <div style="position:absolute;top:0;left:22%;width:1px;height:6px;background:#f59e0b66;"></div>
-      <!-- Z3 marker at 40% -->
-      <div style="position:absolute;top:0;left:40%;width:1px;height:6px;background:#ef444466;"></div>
-    </div>
-    <div style="display:flex;justify-content:space-between;font-size:7px;color:#334155;margin-top:2px;">
-      <span>0%</span><span style="margin-left:22%;">Z2·22%</span>
-      <span style="margin-left:18%;">Z3·40%</span><span>100%+</span>
     </div>
   </div>
 
@@ -865,8 +833,7 @@ def _render_top_brain_card(sig: dict) -> None:
     Features: VIX &middot; NFCI &middot; BAA10Y &middot; T10Y3M
     &nbsp;&middot;&nbsp;
     Gate: regime &isin; &#123;Late Cycle, Stress&#125; AND {_LL_ROLL_WINDOW}-day ll_z roll &lt; {_LL_ROLL_THRESH}
-    &nbsp;&middot;&nbsp;
-    ci_anchor = {ci_anchor:.3f}
+    &nbsp;&middot;&nbsp; ci_anchor = {ci_anchor:.3f}
   </div>
 
   <!-- Greyed tip -->

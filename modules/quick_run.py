@@ -4069,7 +4069,6 @@ def _render_qir_dashboard() -> None:
                 _top_regime   = _top_sig["regime_label"]
                 _top_days_on  = _top_sig["days_in_stress"]
                 _top_fill     = min(_top_sig["roll_fill_pct"], 100.0)
-                _top_ci       = _top_sig["ci_pct"]
                 _top_anchor   = _top_sig["ci_anchor"]
 
                 _top_gate_col  = "#ef4444" if _top_firing else "#22c55e"
@@ -4136,7 +4135,7 @@ def _render_qir_dashboard() -> None:
                     f'padding-top:5px;line-height:1.7;">'
                     f'Gate: regime ∈ {{Late Cycle, Stress}} AND '
                     f'{_top_roll_window}-day ll_z roll &lt; {_top_roll_thresh}'
-                    f' &nbsp;·&nbsp; ci_anchor={_top_anchor:.3f} · CI%={_top_ci:.1f}%'
+                    f' &nbsp;·&nbsp; ci_anchor={_top_anchor:.3f}'
                     f'</div>'
                     f'<div style="margin-top:6px;padding:5px 8px;background:#0a0f1a;'
                     f'border-radius:4px;border:1px solid #1e293b;">'
