@@ -5315,27 +5315,45 @@ def _render_qir_dashboard() -> None:
             with _bc2: st.markdown(_card_main,  unsafe_allow_html=True)
             with _bc3: st.markdown(_card_shad,  unsafe_allow_html=True)
             with _bc4: st.markdown(_card_combo, unsafe_allow_html=True)
-            # ── Simple narrative summary ───────────────────────────────────────
-            _sum_parts = []
+            # ── Actionable summary + action queue ────────────────────────────
+            _aq = []  # action queue: (priority_color, label, detail)
             if _bp_top_fire:
-                _sum_parts.append(f"Top Brain <b style='color:#f59e0b;'>FIRING</b> ({_bp_top_days}d) — macro drift toward stress, avg 107-day lead on peaks.")
+                _aq.append(("#f59e0b", "TRIM / RAISE CASH",
+                    f"Top Brain firing {_bp_top_days}d — macro drift active, avg 107d lead on peaks. Start reducing winners now."))
             if _bp_main_ci >= 40:
-                _sum_parts.append(f"Main Brain gate <b style='color:#ef4444;'>OPEN</b> (CI {_bp_main_ci:.0f}%) — crisis conditions confirmed by 10-feature FRED model.")
+                _aq.append(("#ef4444", "FULL DEFENSE",
+                    f"Main Brain Z3 (CI {_bp_main_ci:.0f}%) — crisis gate open. Cut gross exposure, hedge with puts or inverse ETFs."))
             elif _bp_main_ci >= 22:
-                _sum_parts.append(f"Main Brain in <b style='color:#f59e0b;'>Z2</b> ({_bp_main_ci:.0f}%) — elevated stress, gate not yet open.")
+                _aq.append(("#f59e0b", "TIGHTEN STOPS",
+                    f"Main Brain Z2 (CI {_bp_main_ci:.0f}%) — elevated. No new longs. Wait for Z3 confirmation or all-clear below 22%."))
             if _bp_shad_ci >= 22:
-                _sum_parts.append(f"Shadow Brain <b style='color:#f59e0b;'>stressed</b> ({_bp_shad_ci:.0f}%) — price-action confirming pressure.")
+                _aq.append(("#f59e0b", "HOLD — WATCH BOTTOM WATCH",
+                    f"Shadow Brain stressed (CI {_bp_shad_ci:.0f}%) — price-action under pressure. Wait for 3–4/4 Bottom Watch signals before re-entry."))
             if _bp_combo_on:
-                _sum_parts.append("Combo gate <b style='color:#22c55e;'>ACTIVE</b> — both Main + Shadow in stress, watch for capitulation bottom.")
-            if not _sum_parts:
-                _sum_parts.append("All brains <b style='color:#22c55e;'>quiet</b> — no stress signals active across macro, price-action, or drift models.")
-            _sum_html = "  &nbsp;·&nbsp;  ".join(_sum_parts)
+                _aq.append(("#22c55e", "SCAN FOR CAPITULATION ENTRY",
+                    "Combo active — Main + Shadow both stressed. This is the pre-entry zone. Watch Bottom Watch for 4/4 green."))
+            if not _aq:
+                _aq.append(("#22c55e", "HOLD / RUN NORMAL SIZING",
+                    "All brains quiet. No stress signals. Use standard conviction + Kelly. Re-check after next QIR run."))
+
+            _aq_rows = "".join(
+                f'<div style="display:flex;align-items:flex-start;gap:10px;padding:5px 0;'
+                f'border-bottom:1px solid #0f172a;">'
+                f'<div style="min-width:6px;height:6px;border-radius:50%;background:{c};margin-top:4px;flex-shrink:0;"></div>'
+                f'<div>'
+                f'<span style="font-size:9px;font-weight:800;color:{c};letter-spacing:0.08em;">{lbl}</span>'
+                f'<span style="font-size:9px;color:#64748b;margin-left:8px;">{det}</span>'
+                f'</div></div>'
+                for c, lbl, det in _aq
+            )
             st.markdown(
                 f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:5px;'
-                f'padding:8px 12px;margin:4px 0 10px 0;font-size:10px;color:#94a3b8;line-height:1.6;">'
-                f'{_sum_html}</div>'
-                f'<div style="font-size:8px;color:#334155;margin-bottom:10px;">'
-                f'★ = zero false alarms · backtest 2012–2026 · CI% anchors differ per brain</div>',
+                f'padding:10px 12px;margin:4px 0 4px 0;">'
+                f'<div style="font-size:8px;color:#475569;font-weight:700;letter-spacing:0.1em;'
+                f'text-transform:uppercase;margin-bottom:6px;">BRAIN ACTION QUEUE</div>'
+                f'{_aq_rows}</div>'
+                f'<div style="font-size:8px;color:#334155;margin:3px 0 10px 0;">'
+                f'★ = zero false alarms · backtest 2012–2026 · CI% anchors differ per brain · priority top to bottom</div>',
                 unsafe_allow_html=True,
             )
         except Exception:

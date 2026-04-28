@@ -816,12 +816,22 @@ def _build_pipeline_export() -> str:
         hmm_state_str = "unavailable"
         hmm_brain_str = "unavailable"
 
-    # Top Brain signal
+    # Top Brain + Shadow Brain + Combo + actionable summary
     top_brain_str = "unavailable"
+    shadow_brain_str = "unavailable"
+    combo_str = "unavailable"
+    brain_action_queue = []
     try:
         from services.hmm_top import get_top_signal_cached, load_top_brain as _ltb
-        _top_b = _ltb()
+        from services.hmm_shadow import load_shadow_brain as _lsb_exp
+        from services.hmm_regime import get_ci_anchor as _gca_exp
+        _top_b   = _ltb()
         _top_sig = get_top_signal_cached() if _top_b else None
+        _shad_b  = _lsb_exp()
+        _shad_anch = getattr(_shad_b, "ci_anchor", 5.0) if _shad_b else 5.0
+        _main_anch = _gca_exp()
+
+        # Top Brain
         if _top_sig:
             top_brain_str = (
                 f"regime={_top_sig['regime_label']}, "
@@ -830,6 +840,39 @@ def _build_pipeline_export() -> str:
                 f"days_active={_top_sig['days_in_stress']}, "
                 f"trained={_top_b.training_end}"
             )
+
+        # Shadow Brain CI%
+        try:
+            _shad_state = st.session_state.get("_shadow_state_obj")
+            _shad_llz = getattr(_shad_state, "ll_zscore", None)
+            _shad_ci = abs(_shad_llz) / max(_shad_anch, 1e-6) * 100 if _shad_llz else 0.0
+            shadow_brain_str = f"CI={_shad_ci:.1f}% ({'Z3-crisis' if _shad_ci>=40 else 'Z2-stress' if _shad_ci>=22 else 'Z1-normal'}), ll_z={_shad_llz:.4f}"
+        except Exception:
+            pass
+
+        # Combo
+        try:
+            _main_state = st.session_state.get("_hmm_state_obj")
+            _main_llz = getattr(_main_state, "ll_zscore", None)
+            _main_ci = abs(_main_llz) / max(_main_anch, 1e-6) * 100 if _main_llz else 0.0
+            _combo_on = _main_ci >= 22 and _shad_ci >= 22
+            combo_str = f"{'ACTIVE' if _combo_on else 'QUIET'} (Main CI={_main_ci:.1f}%, Shadow CI={_shad_ci:.1f}%)"
+        except Exception:
+            pass
+
+        # Actionable priority queue
+        if _top_sig and _top_sig.get("sig_and"):
+            brain_action_queue.append(f"[TOP BRAIN FIRING] Start trimming winners / raising cash now — avg 107-day lead before peak. Days active: {_top_sig['days_in_stress']}.")
+        if _main_ci >= 40:
+            brain_action_queue.append(f"[MAIN BRAIN Z3 OPEN] Crisis gate open (CI={_main_ci:.1f}%). Maximum defense posture: reduce gross exposure, hedge with SPY puts or inverse ETFs.")
+        elif _main_ci >= 22:
+            brain_action_queue.append(f"[MAIN BRAIN Z2] Elevated stress (CI={_main_ci:.1f}%). Tighten stops, reduce new longs. Wait for Z3 or all-clear below 22%.")
+        if _shad_ci >= 22:
+            brain_action_queue.append(f"[SHADOW BRAIN STRESSED] Price-action confirming pressure (CI={_shad_ci:.1f}%). Do not add risk here — shadow watches for capitulation bottom, not entry yet.")
+        if combo_str.startswith("ACTIVE"):
+            brain_action_queue.append("[COMBO ACTIVE] Both Main + Shadow stressed. Watch Bottom Watch card for 3–4/4 signals — that is your re-entry trigger.")
+        if not brain_action_queue:
+            brain_action_queue.append("[ALL CLEAR] No brains signalling stress. Stay in regime, run normal conviction/Kelly sizing.")
     except Exception:
         pass
 
@@ -974,8 +1017,13 @@ def _build_pipeline_export() -> str:
         "",
         "### Current Live State",
         f"- HMM state: {hmm_state_str}",
-        f"- Brain: {hmm_brain_str}",
-        f"- Top Brain (macro drift / top detector): {top_brain_str}",
+        f"- Main Brain: {hmm_brain_str}",
+        f"- Top Brain (macro drift / early top): {top_brain_str}",
+        f"- Shadow Brain (price-action / bottom): {shadow_brain_str}",
+        f"- Combo Gate (Main + Shadow): {combo_str}",
+        "",
+        "### Brain Action Queue (priority order)",
+        *[f"{i+1}. {a}" for i, a in enumerate(brain_action_queue)],
         "",
         "---",
         "## 3) ORCHESTRATION FLOWS",
