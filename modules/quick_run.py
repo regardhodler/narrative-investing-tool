@@ -1935,6 +1935,7 @@ def _render_qir_dashboard() -> None:
         _hmm_block        = ""
         _shadow_block     = ""
         _top_block        = ""
+        _combo_block      = ""
         _gex_block        = ""
         _lean_card        = ""
         _fast_setups_html = ""
@@ -4329,9 +4330,9 @@ def _render_qir_dashboard() -> None:
     slow Fed rate hikes don't create LL spikes in either model.
   </div>
 </div>"""
-            st.markdown(_combo_html, unsafe_allow_html=True)
+            _combo_block = _combo_html
         except Exception:
-            pass
+            _combo_block = ""
 
         # ── Velocity Cascade V2 (continuous conviction scores) ─────────────────
         _cascade_block = ""
@@ -5208,6 +5209,121 @@ def _render_qir_dashboard() -> None:
         )
 
     with _tab_brain:
+        # ── Brain Performance Summary (4-column cards) ────────────────────────
+        try:
+            from services.hmm_top import get_top_signal_cached as _gts_cached
+            from services.hmm_regime import get_ci_anchor as _gca_brain
+            from services.hmm_shadow import load_shadow_brain as _lsb_brain
+
+            _bp_top_sig   = _gts_cached()
+            _bp_main_llz  = getattr(st.session_state.get("_hmm_state_obj"), "ll_zscore", None)
+            _bp_shad_obj  = st.session_state.get("_shadow_state_obj")
+            _bp_shad_llz  = getattr(_bp_shad_obj, "ll_zscore", None)
+            _bp_main_anch = _gca_brain()
+            _bp_shad_b    = _lsb_brain()
+            _bp_shad_anch = getattr(_bp_shad_b, "ci_anchor", 5.0) if _bp_shad_b else 5.0
+
+            _bp_main_ci   = abs(_bp_main_llz) / max(_bp_main_anch, 1e-6) * 100 if _bp_main_llz is not None else 0.0
+            _bp_shad_ci   = abs(_bp_shad_llz) / max(_bp_shad_anch, 1e-6) * 100 if _bp_shad_llz is not None else 0.0
+            _bp_top_fire  = bool(_bp_top_sig and _bp_top_sig.get("sig_and"))
+            _bp_top_roll  = (_bp_top_sig or {}).get("ll_z_roll", 0.0)
+            _bp_top_days  = (_bp_top_sig or {}).get("days_in_stress", 0)
+            _bp_top_reg   = (_bp_top_sig or {}).get("regime_label", "—")
+            _bp_combo_on  = _bp_main_ci >= 22.0 and _bp_shad_ci >= 22.0
+
+            def _bp_ci_col(ci):
+                return "#ef4444" if ci >= 40 else "#f59e0b" if ci >= 22 else "#22c55e"
+
+            def _bp_zone(ci):
+                return "Z3" if ci >= 40 else "Z2" if ci >= 22 else "Z1"
+
+            def _bp_card(title, purpose, hit, fa, lead, gate, status_html, rows, border):
+                rows_html = "".join(
+                    f'<div style="display:flex;justify-content:space-between;padding:3px 0;'
+                    f'border-bottom:1px solid #0f172a;">'
+                    f'<span style="font-size:9px;color:#475569;">{k}</span>'
+                    f'<span style="font-size:9px;font-weight:700;color:{vc};">{v}</span>'
+                    f'</div>'
+                    for k, v, vc in rows
+                )
+                return (
+                    f'<div style="background:#0a0f1a;border:1px solid #1e293b;'
+                    f'border-top:3px solid {border};border-radius:6px;padding:10px 12px;">'
+                    f'<div style="font-size:10px;color:#94a3b8;font-weight:800;'
+                    f'letter-spacing:0.1em;margin-bottom:2px;">{title}</div>'
+                    f'<div style="font-size:8px;color:#475569;margin-bottom:8px;">{purpose}</div>'
+                    f'<div style="margin-bottom:8px;">{status_html}</div>'
+                    f'{rows_html}'
+                    f'<div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.7;">'
+                    f'Gate: {gate}</div></div>'
+                )
+
+            _top_col   = "#f59e0b" if _bp_top_fire else "#334155"
+            _top_stat  = (
+                f'<span style="font-size:18px;font-weight:900;color:#f59e0b;">FIRING</span>'
+                f'<span style="font-size:9px;color:#f59e0b;margin-left:6px;">{_bp_top_days}d</span>'
+                if _bp_top_fire else
+                f'<span style="font-size:18px;font-weight:900;color:#334155;">QUIET</span>'
+            )
+            _main_cc   = _bp_ci_col(_bp_main_ci)
+            _shad_cc   = _bp_ci_col(_bp_shad_ci)
+            _combo_cc  = "#22c55e" if _bp_combo_on else "#334155"
+
+            _card_top  = _bp_card("TOP BRAIN", "Early top · VIX·NFCI·BAA10Y·T10Y3M",
+                "5/8 (62%)", "4 FA", "107d",
+                "regime ∈ Stress/Crisis AND 40d ll_z roll < −0.20", _top_stat,
+                [("Hit rate","5/8 (62%)","#64748b"),("False alarms","4","#64748b"),
+                 ("Avg lead","107 days","#64748b"),
+                 ("40d roll",f"{_bp_top_roll:.3f}","#f59e0b" if _bp_top_fire else "#64748b"),
+                 ("Regime",_bp_top_reg,"#ef4444" if _bp_top_reg in {"Stress","Crisis","Late Cycle","Early Stress"} else "#22c55e")],
+                _top_col)
+            _card_main = _bp_card("MAIN BRAIN", "Regime + crisis gate (10 FRED features)",
+                "7/8 (88%)", "0 FA ★", "coincident",
+                f"CI% ≥ 40%  (ll_z < {-0.40*_bp_main_anch:.2f})",
+                f'<span style="font-size:18px;font-weight:900;color:{_main_cc};">{_bp_zone(_bp_main_ci)} {_bp_main_ci:.1f}%</span>',
+                [("Hit rate","7/8 (88%)","#64748b"),("False alarms","0 ★","#22c55e"),
+                 ("CI%",f"{_bp_main_ci:.1f}%",_main_cc),
+                 ("ll_z",f"{_bp_main_llz:+.4f}" if _bp_main_llz is not None else "—","#64748b"),
+                 ("Gate opens",f"ll_z < {-0.40*_bp_main_anch:.2f}","#ef4444")],
+                _main_cc)
+            _card_shad = _bp_card("SHADOW BRAIN", "Price-action / bottom detector",
+                "7/8 (88%)", "0 FA ★", "coincident",
+                f"CI% ≥ 22%  (ll_z < {-0.40*_bp_shad_anch:.2f})",
+                f'<span style="font-size:18px;font-weight:900;color:{_shad_cc};">{_bp_zone(_bp_shad_ci)} {_bp_shad_ci:.1f}%</span>',
+                [("Hit rate","7/8 (88%)","#64748b"),("False alarms","0 ★","#22c55e"),
+                 ("CI%",f"{_bp_shad_ci:.1f}%",_shad_cc),
+                 ("ll_z",f"{_bp_shad_llz:+.4f}" if _bp_shad_llz is not None else "—","#64748b"),
+                 ("Gate opens",f"ll_z < {-0.40*_bp_shad_anch:.2f}","#ef4444")],
+                _shad_cc)
+            _card_combo = _bp_card("COMBO (M+S)", "Confirmed capitulation · bottom signal",
+                "7/8 (88%)", "0 FA ★", "coincident",
+                "Main CI% ≥ 22% AND Shadow CI% ≥ 22%",
+                f'<span style="font-size:18px;font-weight:900;color:{_combo_cc};">{"ACTIVE" if _bp_combo_on else "QUIET"}</span>',
+                [("Hit rate","7/8 (88%)","#64748b"),("False alarms","0 ★","#22c55e"),
+                 ("Main CI%",f"{_bp_main_ci:.1f}%",_main_cc),
+                 ("Shadow CI%",f"{_bp_shad_ci:.1f}%",_shad_cc),
+                 ("Both ≥ 22%","YES" if _bp_combo_on else "NO","#22c55e" if _bp_combo_on else "#334155")],
+                _combo_cc)
+
+            st.markdown(
+                '<div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;'
+                'text-transform:uppercase;margin:8px 0;">BRAIN PERFORMANCE SUMMARY</div>',
+                unsafe_allow_html=True,
+            )
+            _bc1, _bc2, _bc3, _bc4 = st.columns(4)
+            with _bc1: st.markdown(_card_top,   unsafe_allow_html=True)
+            with _bc2: st.markdown(_card_main,  unsafe_allow_html=True)
+            with _bc3: st.markdown(_card_shad,  unsafe_allow_html=True)
+            with _bc4: st.markdown(_card_combo, unsafe_allow_html=True)
+            st.markdown(
+                '<div style="font-size:8px;color:#334155;margin:4px 0 10px 0;">'
+                '★ = zero false alarms · backtest 2012–2026 · CI% anchors differ per brain</div>',
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            pass
+
+        # ── Brain blocks HTML ─────────────────────────────────────────────────
         st.markdown(
             f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
             f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
@@ -5219,6 +5335,7 @@ def _render_qir_dashboard() -> None:
             f'{_ll_anchored_block if _populated else ""}'
             f'{_shadow_block if _populated else ""}'
             f'{_top_block if _populated else ""}'
+            f'{_combo_block if _populated else ""}'
             f'{_bw_block if _populated else ""}'
             f'</div>',
             unsafe_allow_html=True,
