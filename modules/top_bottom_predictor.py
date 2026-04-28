@@ -723,6 +723,144 @@ def _render_prob_time_series(brain_path: pd.DataFrame, spx: pd.Series, brain_lab
     return fig
 
 
+def _render_decision_card(main_state, shadow_state, top_sig: Optional[dict], verdict: Optional[dict]) -> None:
+    """Single actionable decision card — what to do right now and why."""
+    from services.hmm_regime import get_ci_anchor
+    from services.hmm_shadow import load_shadow_brain as _lsb
+
+    _main_ll_z   = getattr(main_state,   "ll_zscore", None) if main_state   else None
+    _shad_ll_z   = getattr(shadow_state, "ll_zscore", None) if shadow_state else None
+    _main_anchor = get_ci_anchor()
+    _shad_brain  = _lsb()
+    _shad_anchor = getattr(_shad_brain, "ci_anchor", 5.0) if _shad_brain else 5.0
+
+    main_ci    = abs(_main_ll_z)  / max(_main_anchor, 1e-6) * 100 if _main_ll_z  is not None else 0.0
+    shad_ci    = abs(_shad_ll_z)  / max(_shad_anchor, 1e-6) * 100 if _shad_ll_z  is not None else 0.0
+    top_firing = bool(top_sig and top_sig.get("sig_and"))
+    top_roll   = (top_sig or {}).get("ll_z_roll", 0.0)
+    top_days   = (top_sig or {}).get("days_in_stress", 0)
+    top_regime = (top_sig or {}).get("regime_label", "—")
+    combo_main = (verdict or {}).get("combo_main_ci", 0.0)
+    combo_shad = (verdict or {}).get("combo_shad_ci", 0.0)
+    combo_on   = combo_main >= 22.0 and combo_shad >= 22.0
+    main_z3    = main_ci >= 40.0
+    main_z2    = main_ci >= 22.0
+
+    # ── Determine overall action ──────────────────────────────────────────
+    if main_z3:
+        action       = "FULL DEFENSE"
+        action_color = "#ef4444"
+        action_tip   = "Crash gate open. Reduce exposure aggressively. Hold cash and hedges. Do not buy."
+    elif combo_on:
+        action       = "WATCH TO REBUILD"
+        action_color = "#22c55e"
+        action_tip   = "Both brains in stress — capitulation zone. Start scaling back in cautiously when price stabilises."
+    elif top_firing and main_z2:
+        action       = "REDUCE & HEDGE"
+        action_color = "#ef4444"
+        action_tip   = "Top signal firing AND macro stress building. Trim longs, add hedges, raise cash."
+    elif top_firing:
+        action       = "TRIM & TIGHTEN"
+        action_color = "#f59e0b"
+        action_tip   = "Top Brain firing — macro is slowly deteriorating. Trim longs, tighten stops, raise some cash. No new longs."
+    elif main_z2:
+        action       = "REDUCE SIZE"
+        action_color = "#f59e0b"
+        action_tip   = "Main Brain in stress zone. Reduce position size, watch for Z3 confirmation."
+    else:
+        action       = "HOLD / NEUTRAL"
+        action_color = "#22c55e"
+        action_tip   = "No active signals. Hold current positions. Re-check when Top Brain fires or CI% rises."
+
+    def _row(step, signal, reading, hit, fa, ll_z_str, status, status_color):
+        return f"""
+<tr style="border-bottom:1px solid #0f172a;">
+  <td style="padding:6px 8px;font-size:9px;color:#475569;white-space:nowrap;">
+    <span style="color:#334155;font-weight:700;">STEP {step}</span>
+  </td>
+  <td style="padding:6px 8px;font-size:9px;color:#64748b;">{signal}</td>
+  <td style="padding:6px 8px;font-size:10px;font-weight:700;color:{status_color};">{status}</td>
+  <td style="padding:6px 8px;font-size:9px;color:#64748b;">{reading}</td>
+  <td style="padding:6px 8px;font-size:9px;color:#94a3b8;">{hit}</td>
+  <td style="padding:6px 8px;font-size:9px;color:#22c55e;">{fa}</td>
+  <td style="padding:6px 8px;font-size:9px;color:#475569;font-family:monospace;">{ll_z_str}</td>
+</tr>"""
+
+    top_status     = f"FIRING · {top_days}d" if top_firing else "QUIET"
+    top_status_col = "#f59e0b" if top_firing else "#334155"
+    main_status_col = "#ef4444" if main_z3 else "#f59e0b" if main_z2 else "#22c55e"
+    shad_status_col = "#ef4444" if shad_ci >= 40 else "#f59e0b" if shad_ci >= 22 else "#22c55e"
+    combo_status_col = "#22c55e" if combo_on else "#334155"
+
+    rows_html = (
+        _row(1, "Top Brain  (trim early)",
+             f"40d roll {top_roll:.3f} · regime {top_regime}",
+             "5/8 (62%)", "4 FA", f"roll thresh −0.20",
+             top_status, top_status_col)
+        + _row(2, "Main Brain  (crash gate)",
+               f"CI% {main_ci:.1f}%  ·  ll_z {_main_ll_z:+.3f}" if _main_ll_z is not None else "—",
+               "7/8 (88%)", "0 FA ★", f"gate ll_z < {-0.40*_main_anchor:.2f}",
+               f"Z3" if main_z3 else f"Z2 {main_ci:.1f}%" if main_z2 else f"Z1 {main_ci:.1f}%",
+               main_status_col)
+        + _row(3, "Shadow Brain  (bottom watch)",
+               f"CI% {shad_ci:.1f}%  ·  ll_z {_shad_ll_z:+.3f}" if _shad_ll_z is not None else "—",
+               "7/8 (88%)", "0 FA ★", f"gate ll_z < {-0.40*_shad_anchor:.2f}",
+               f"Z3 {shad_ci:.1f}%" if shad_ci >= 40 else f"Z2 {shad_ci:.1f}%" if shad_ci >= 22 else f"Z1 {shad_ci:.1f}%",
+               shad_status_col)
+        + _row(4, "Combo M+S  (confirmed bottom)",
+               f"Main {combo_main:.1f}%  ·  Shadow {combo_shad:.1f}%",
+               "7/8 (88%)", "0 FA ★", "both ≥ 22%",
+               "ACTIVE" if combo_on else "QUIET",
+               combo_status_col)
+    )
+
+    html = f"""
+<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
+            border-top:3px solid {action_color};padding:14px 16px;margin:0 0 14px 0;">
+
+  <!-- Action header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div>
+      <div style="font-size:9px;color:#475569;font-weight:700;letter-spacing:0.12em;
+                  text-transform:uppercase;margin-bottom:2px;">DECISION NOW</div>
+      <div style="font-size:22px;font-weight:900;color:{action_color};letter-spacing:0.05em;">
+        {action}
+      </div>
+    </div>
+    <div style="text-align:right;font-size:8px;color:#334155;max-width:280px;line-height:1.7;">
+      {action_tip}
+    </div>
+  </div>
+
+  <!-- Signal table -->
+  <table style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid #1e293b;">
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;"></th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">SIGNAL</th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">STATUS</th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">READING</th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">HIT RATE</th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">FALSE ALARMS</th>
+        <th style="padding:4px 8px;text-align:left;font-size:8px;color:#334155;letter-spacing:0.08em;">GATE</th>
+      </tr>
+    </thead>
+    <tbody>{rows_html}</tbody>
+  </table>
+
+  <!-- Tip -->
+  <div style="margin-top:10px;padding:6px 10px;background:#0a0f1a;border-radius:4px;
+              border:1px solid #1e293b;font-size:8px;color:#334155;line-height:1.8;">
+    <span style="color:#1e3a5f;font-weight:700;">HOW TO READ: </span>
+    Step 1 fires <span style="color:#3d5a80;">107 days early</span> — trim, don&apos;t panic. &nbsp;
+    Step 2 Z3 = crash live — go defensive. &nbsp;
+    Step 3+4 stress = watch for bottom entry. &nbsp;
+    <span style="color:#1e3a5f;">★ = zero false alarms in 2012–2026 backtest (8 crashes, 1,098 normal days).</span>
+  </div>
+</div>"""
+    st.markdown(html, unsafe_allow_html=True)
+
+
 def _render_brain_performance(main_state, shadow_state, top_sig: Optional[dict], verdict: Optional[dict]) -> None:
     """Compact brain performance summary — one card per brain."""
     from services.hmm_regime import get_ci_anchor
@@ -1358,9 +1496,10 @@ def render():
     if main_state is not None or shadow_state is not None:
         verdict = _compute_today_verdict(main_state, shadow_state, main_path, shadow_path, shadow_brain=shadow_brain)
 
-        # Cycle ladder + brain performance — always first things visible
+        # Decision card + brain performance + cycle ladder
         try:
             _top_sig_for_ladder = compute_top_signal_today(top_brain) if top_brain else None
+            _render_decision_card(main_state, shadow_state, _top_sig_for_ladder, verdict)
             _render_brain_performance(main_state, shadow_state, _top_sig_for_ladder, verdict)
             _render_cycle_ladder(_top_sig_for_ladder, verdict, main_state)
         except Exception as _e:
