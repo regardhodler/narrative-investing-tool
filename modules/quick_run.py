@@ -5315,9 +5315,27 @@ def _render_qir_dashboard() -> None:
             with _bc2: st.markdown(_card_main,  unsafe_allow_html=True)
             with _bc3: st.markdown(_card_shad,  unsafe_allow_html=True)
             with _bc4: st.markdown(_card_combo, unsafe_allow_html=True)
+            # ── Simple narrative summary ───────────────────────────────────────
+            _sum_parts = []
+            if _bp_top_fire:
+                _sum_parts.append(f"Top Brain <b style='color:#f59e0b;'>FIRING</b> ({_bp_top_days}d) — macro drift toward stress, avg 107-day lead on peaks.")
+            if _bp_main_ci >= 40:
+                _sum_parts.append(f"Main Brain gate <b style='color:#ef4444;'>OPEN</b> (CI {_bp_main_ci:.0f}%) — crisis conditions confirmed by 10-feature FRED model.")
+            elif _bp_main_ci >= 22:
+                _sum_parts.append(f"Main Brain in <b style='color:#f59e0b;'>Z2</b> ({_bp_main_ci:.0f}%) — elevated stress, gate not yet open.")
+            if _bp_shad_ci >= 22:
+                _sum_parts.append(f"Shadow Brain <b style='color:#f59e0b;'>stressed</b> ({_bp_shad_ci:.0f}%) — price-action confirming pressure.")
+            if _bp_combo_on:
+                _sum_parts.append("Combo gate <b style='color:#22c55e;'>ACTIVE</b> — both Main + Shadow in stress, watch for capitulation bottom.")
+            if not _sum_parts:
+                _sum_parts.append("All brains <b style='color:#22c55e;'>quiet</b> — no stress signals active across macro, price-action, or drift models.")
+            _sum_html = "  &nbsp;·&nbsp;  ".join(_sum_parts)
             st.markdown(
-                '<div style="font-size:8px;color:#334155;margin:4px 0 10px 0;">'
-                '★ = zero false alarms · backtest 2012–2026 · CI% anchors differ per brain</div>',
+                f'<div style="background:#0a0f1a;border:1px solid #1e293b;border-radius:5px;'
+                f'padding:8px 12px;margin:4px 0 10px 0;font-size:10px;color:#94a3b8;line-height:1.6;">'
+                f'{_sum_html}</div>'
+                f'<div style="font-size:8px;color:#334155;margin-bottom:10px;">'
+                f'★ = zero false alarms · backtest 2012–2026 · CI% anchors differ per brain</div>',
                 unsafe_allow_html=True,
             )
         except Exception:
