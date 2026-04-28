@@ -1,16 +1,16 @@
 {
   "source": "Regard Terminals — Morning QIR Run",
-  "generated_at": "2026-04-27T15:37:11",
+  "generated_at": "2026-04-28T16:12:03",
   "regime": {
     "label": "Risk-On",
-    "score": 0.24,
+    "score": 0.26,
     "quadrant": "Reflation",
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.93 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Global Manufacturing (EWG+FXI): z=+0.84 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 47/100 — Neutral (contrarian)"
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+0.94 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Yield Curve (3M-10Y): z=+0.90 ()\n- Global Manufacturing (EWG+FXI): z=+0.89 ()\n- Consumer Sentiment (Michigan): z=-0.85 ()\n- Commodity Trend (Oil + Copper): z=+0.74 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.67 ()\n- Fear & Greed Index: 33/100 — Fear (contrarian)"
   },
   "tactical": {
-    "score": 53,
-    "label": "Caution / Reduce",
-    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs."
+    "score": 54,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup."
   },
   "qir_pattern": {
     "name": "REGIME_ONLY_BULLISH",
@@ -23,7 +23,7 @@
     "top_prob": 0.666,
     "source": "yfinance"
   },
-  "current_events_digest": "The current risk-on macro regime, with a score of +0.24, is supported by recent developments in the AI sector, including significant funding rounds and strategic partnerships, such as the $1.1 billion seed funding for a former Google DeepMind researcher's AI startup. However, the unraveling of Iran peace talks and subsequent surge in Brent oil prices to over $108 per barrel introduces a note of caution, contradicting the reflation narrative. The dominance of AI-related news, including the launch of ChatGPT-powered apps by Starbucks and Little Caesars, confirms the ongoing technological shift, while the prediction markets' low probability of a Fed rate cut to 0% or lower before 2027 suggests a relatively stable monetary policy outlook. The loosening of ties between OpenAI and Microsoft also highlights the evolving landscape of AI partnerships.",
+  "current_events_digest": "The current risk-on macro regime, characterized by a score of +0.26 and a reflation quadrant, is supported by recent news confirming the ongoing economic expansion. However, potential risks are emerging, including Jamie Dimon's warning of a possible bond crisis and the impact of rising oil prices, which have climbed above $110 for the first time in three weeks. The U.A.E.'s decision to quit OPEC may also contribute to increased uncertainty in the oil market, potentially affecting inflation and economic growth. Meanwhile, the Polymarket Prediction Markets indicate a low probability of the Fed's lower bound reaching 0% or lower before 2027, but a higher probability of inflation reaching more than 5% in 2026.",
   "open_positions": [
     {
       "ticker": "XTLH.TO",
