@@ -5170,7 +5170,7 @@ def _render_qir_dashboard() -> None:
                 f'</div>'
             )
 
-    # ── Render the full dashboard — ordered SLOW → MEDIUM → FAST ─────────────
+    # ── Render the full dashboard — two tabs ─────────────────────────────────
     def _tf_divider(label: str, color: str = "#1e293b") -> str:
         return (
             f'<div style="display:flex;align-items:center;gap:8px;margin:10px 0 6px;">'
@@ -5180,36 +5180,49 @@ def _render_qir_dashboard() -> None:
             f'<div style="flex:1;height:1px;background:{color};"></div>'
             f'</div>'
         )
-    st.markdown(
-        f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
-        f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
-        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-        f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
-        f'text-transform:uppercase;">QIR Intelligence Dashboard</div>'
-        f'</div>'
-        f'{_freshness_html}'
-        f'{_crash_alert_html}'
-        f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
-        f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
-        f'</div>'
-        f'{_velocity_block if _populated else ""}'
-        # ── SLOW: Entry Signal (macro+leading+options aggregator) then HMM brain ─
-        f'{_tf_divider("⏱  SLOW — REGIME BRAIN · WEEKS / MONTHS")}'
-        f'{_entry_rec_html}'
-        f'{_slow_html}'
-        # ── MEDIUM: structural Kelly sizing + contextual signals ───────────────
-        f'{_tf_divider("⏑  MEDIUM — STRUCTURAL SIZING · DAYS / WEEKS")}'
-        f'{_medium_html}'
-        f'{_hmm_block if _populated else ""}'
-        f'{_ll_anchored_block if _populated else ""}'
-        f'{_shadow_block if _populated else ""}'
-        f'{_top_block if _populated else ""}'
-        f'{_cascade_block if _populated else ""}'
-        f'{_bw_block if _populated else ""}'
-        # ── FAST: empty when GU triple-kelly has been moved to MEDIUM ─────────
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+
+    _tab_macro, _tab_brain = st.tabs(["⚡  MACRO & TACTICAL", "🧠  BRAIN SIGNALS"])
+
+    with _tab_macro:
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
+            f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+            f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
+            f'text-transform:uppercase;">QIR · Macro &amp; Tactical</div>'
+            f'</div>'
+            f'{_freshness_html}'
+            f'{_crash_alert_html}'
+            f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;">'
+            f'<div>{_t1}</div><div>{_t2}</div><div>{_t3}</div>'
+            f'</div>'
+            f'{_velocity_block if _populated else ""}'
+            f'{_tf_divider("⏱  SLOW — REGIME · WEEKS / MONTHS")}'
+            f'{_entry_rec_html}'
+            f'{_slow_html}'
+            f'{_tf_divider("⏑  MEDIUM — SIZING · DAYS / WEEKS")}'
+            f'{_medium_html}'
+            f'{_cascade_block if _populated else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+    with _tab_brain:
+        st.markdown(
+            f'<div style="background:#0d1117;border:1px solid {_border_color};border-radius:8px;'
+            f'box-shadow:{_border_glow};padding:14px 16px;margin:8px 0 12px;">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+            f'<div style="font-size:9px;font-weight:700;letter-spacing:0.12em;color:#475569;'
+            f'text-transform:uppercase;">QIR · Brain Signals</div>'
+            f'</div>'
+            f'{_hmm_block if _populated else ""}'
+            f'{_ll_anchored_block if _populated else ""}'
+            f'{_shadow_block if _populated else ""}'
+            f'{_top_block if _populated else ""}'
+            f'{_bw_block if _populated else ""}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Genuine Uncertainty expansion panel ───────────────────────────────
     if _populated and _cls["pattern"] == "GENUINE_UNCERTAINTY" and _gu_profile:
