@@ -1,180 +1,731 @@
 {
   "_regime_context": {
     "regime": "Risk-On",
-    "score": 0.24,
-    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.93 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Global Manufacturing (EWG+FXI): z=+0.84 ()\n- Term Premium: z=+0.83 ()\n- Consumer Sentiment (Michigan): z=-0.80 ()\n- JPY Carry Risk (FXY): z=+0.72 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.65 ()\n- Fear & Greed Index: 47/100 \u2014 Neutral (contrarian)",
+    "score": 0.28,
+    "signal_summary": "- Equity Trend (S&P, Nasdaq, Dow): z=+1.00 ()\n- Commodity Trend (Oil + Copper): z=+0.93 ()\n- Sector Breadth (% above 200DMA): z=+0.92 ()\n- Yield Curve (3M-10Y): z=+0.90 ()\n- Consumer Sentiment (Michigan): z=-0.85 ()\n- Global Manufacturing (EWG+FXI): z=+0.83 ()\n- JPY Carry Risk (FXY): z=+0.73 ()\n- Global Dollar Liquidity (Broad DXY): z=+0.67 ()\n- Fear & Greed Index: 33/100 \u2014 Fear (contrarian)",
     "quadrant": "Reflation",
-    "macro_score": 62,
-    "leading_score": 61,
-    "leading_divergence": -1,
+    "macro_score": 64,
+    "leading_score": 66,
+    "leading_divergence": 2,
     "leading_label": "Aligned",
     "score_5d_trend": -1,
     "leading_5d_trend": -2,
-    "pts_to_risk_on": -2,
-    "pts_to_risk_off": 22,
-    "velocity_label": "\u2192 Stable (+0 pts vs 2026-04-26)"
+    "pts_to_risk_on": -4,
+    "pts_to_risk_off": 24,
+    "velocity_label": "\u2192 Stable (+2 pts vs 2026-04-26)"
   },
   "_regime_context_ts": {
-    "__datetime__": "2026-04-27T15:36:51.595324"
+    "__datetime__": "2026-04-27T20:47:19.183028"
   },
   "_rp_plays_result": {
     "sectors": [
       {
-        "name": "Technology",
-        "conviction": 3
-      },
-      {
         "name": "Energy",
-        "conviction": 2
+        "conviction": 3
       },
       {
         "name": "Materials",
         "conviction": 2
       },
       {
+        "name": "Financials",
+        "conviction": 2
+      },
+      {
         "name": "Industrials",
+        "conviction": 2
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "Energy leader riding strong oil and commodity trend (z=+0.83).",
+        "conviction": 3
+      },
+      {
+        "ticker": "FCX",
+        "reason": "Copper miner benefiting from robust commodity momentum.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JPM",
+        "reason": "Banks supported by elevated term premium (z=+0.66) and risk-on liquidity.",
+        "conviction": 2
+      },
+      {
+        "ticker": "CAT",
+        "reason": "Industrial cyclical aligned with strong equity breadth (z=+0.92).",
+        "conviction": 2
+      },
+      {
+        "ticker": "GS",
+        "reason": "Investment bank poised for risk-on trading volumes.",
         "conviction": 1
       },
       {
+        "ticker": "UNP",
+        "reason": "Railroad operator gaining from industrial strength and global liquidity.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "HYG",
+        "reason": "High-yield spreads likely to tighten amid risk-on regime and liquidity support.",
+        "conviction": 2
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade corporates offer stability with moderate risk-on upside.",
+        "conviction": 1
+      },
+      {
+        "ticker": "SHY",
+        "reason": "Short-duration treasuries as defensive play pre-FOMC.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "Risk-On regime (+0.24) driven by exceptional equity trends (z=+1.00) and sector breadth (z=+0.92) favors cyclicals like Energy and Industrials. Commodity strength (z=+0.83) and term premium (z=+0.66) bolster Materials and Financials despite soft consumer sentiment. Global liquidity (z=+0.82) and JPY carry (z=+0.73) support credit over duration ahead of imminent FOMC."
+  },
+  "_rp_plays_last_tier": "\ud83e\udde0 Regard Mode",
+  "_fed_funds_rate": 3.64,
+  "_dominant_rate_path": {
+    "scenario": "hold",
+    "prob_pct": 66.7
+  },
+  "_rate_path_probs": [
+    {
+      "scenario": "hold",
+      "prob": 0.6673183618768777,
+      "implied_rate": 3.6399993896484375,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "cut_25",
+      "prob": 0.1519697711494535,
+      "implied_rate": 3.6399993896484375,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "cut_50",
+      "prob": 0.0021653981637225718,
+      "implied_rate": 3.6399993896484375,
+      "source": "yfinance",
+      "delta": 0.0
+    },
+    {
+      "scenario": "hike_25",
+      "prob": 0.17854646880994632,
+      "implied_rate": 3.6399993896484375,
+      "source": "yfinance",
+      "delta": 0.0
+    }
+  ],
+  "_rate_path_probs_ts": {
+    "__datetime__": "2026-04-27T20:48:05.204473"
+  },
+  "_fed_plays_result": {
+    "sectors": [
+      {
+        "name": "Energy",
+        "conviction": 3
+      },
+      {
+        "name": "Materials",
+        "conviction": 2
+      },
+      {
         "name": "Financials",
+        "conviction": 2
+      },
+      {
+        "name": "Industrials",
+        "conviction": 2
+      }
+    ],
+    "stocks": [
+      {
+        "ticker": "XOM",
+        "reason": "Energy leader riding strong oil and commodity trend (z=+0.83).",
+        "conviction": 3
+      },
+      {
+        "ticker": "FCX",
+        "reason": "Copper miner benefiting from robust commodity momentum.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JPM",
+        "reason": "Banks supported by elevated term premium (z=+0.66) and risk-on liquidity.",
+        "conviction": 2
+      },
+      {
+        "ticker": "CAT",
+        "reason": "Industrial cyclical aligned with strong equity breadth (z=+0.92).",
+        "conviction": 2
+      },
+      {
+        "ticker": "GS",
+        "reason": "Investment bank poised for risk-on trading volumes.",
+        "conviction": 1
+      },
+      {
+        "ticker": "UNP",
+        "reason": "Railroad operator gaining from industrial strength and global liquidity.",
+        "conviction": 1
+      }
+    ],
+    "bonds": [
+      {
+        "ticker": "HYG",
+        "reason": "High-yield spreads likely to tighten amid risk-on regime and liquidity support.",
+        "conviction": 2
+      },
+      {
+        "ticker": "LQD",
+        "reason": "Investment-grade corporates offer stability with moderate risk-on upside.",
+        "conviction": 1
+      },
+      {
+        "ticker": "SHY",
+        "reason": "Short-duration treasuries as defensive play pre-FOMC.",
+        "conviction": 1
+      }
+    ],
+    "rationale": "Risk-On regime (+0.24) driven by exceptional equity trends (z=+1.00) and sector breadth (z=+0.92) favors cyclicals like Energy and Industrials. Commodity strength (z=+0.83) and term premium (z=+0.66) bolster Materials and Financials despite soft consumer sentiment. Global liquidity (z=+0.82) and JPY carry (z=+0.73) support credit over duration ahead of imminent FOMC."
+  },
+  "_fed_plays_result_ts": {
+    "__datetime__": "2026-04-27T20:48:05.204477"
+  },
+  "_fed_plays_engine": "\ud83e\udde0 Regard Mode",
+  "_fed_plays_tier": "\ud83e\udde0 Regard Mode",
+  "_chain_narration": "The most likely Fed rate path as of 2026-04-27 is holding rates steady, with a 66.7% probability. This transmits through stable short rates keeping credit spreads contained to support corporate borrowing, a flat mortgage market limiting housing activity to modest levels, and steady conditions in the reflation risk-on regime sustaining employment without disinflationary pressures. Benefiting asset classes include high-yield credit (HYG, JNK) from contained spreads and cyclicals like financials (XLF) and industrials (XLI) in risk-on reflation, while long-duration Treasuries (TLT) and growth tech (QQQ) face headwinds from absent rate-cut rallies.",
+  "_chain_narration_engine": "\ud83e\udde0 Regard Mode",
+  "_doom_briefing": "**STRESS LEVEL: 2/10**\n\n- Composite Stress Score stands at 17.6/100, indicating low overall system stress.\n- HY Credit Spread (OAS) at 2.86 and IG Credit Spread at 0.80 reflect narrow credit spreads.\n- Yield Curve 10Y-2Y spread measures 0.57, showing a modestly flat profile.\n- Canary sectors exhibit strong average 1M returns, including Regional Banks +15.0%, Commercial Real Estate +10.0%, Private Equity Exposure +11.1%, and Subprime/Consumer Credit +15.6%.\n- Volatility/Fear index shows average 1M decline of -20.4%, signaling reduced market fear.\n- Private Equity Exposure drawdown at -32.2% and Subprime/Consumer Credit drawdown at -23.1% represent elevated prior losses among canaries, though recent returns mitigate.\n\nRecent 1M gains across canary sectors suggest stabilizing risk appetite, with narrow credit spreads supporting low stress persistence. Drawdowns in private equity and consumer credit warrant monitoring for potential interconnected pressures if returns reverse. Absent broader context on historical norms, systemic contagion risks remain unassessable from available data.",
+  "_doom_briefing_ts": {
+    "__datetime__": "2026-04-27T20:48:21.436211"
+  },
+  "_doom_briefing_engine": "\ud83e\udde0 Regard Mode",
+  "_whale_summary": "**Major Position Increases Signal Strong Conviction in AI and Big Tech Leaders**\n\nThe largest institutional investors\u2014BlackRock, Vanguard Group, and State Street\u2014are piling into key technology names, with BlackRock leading the charge on NVIDIA Corporation, boosting its position by +$62.2 billion (+37.6%). Apple Inc. saw robust buying from both BlackRock (+$43.7 billion, +24.5%) and Vanguard (+$31.4 billion, +8.8%). Alphabet Inc. drew the most cross-institutional interest, with Vanguard adding +$40.0 billion (+31.9%) and another +$31.6 billion (+31.4%), State Street increasing by +$16.6 billion (+29.8%), and BlackRock layering on +$13.9 billion (+22.2%) plus +$11.0 billion (+20.2%). Eli Lilly & Co. also attracted heavy buying, led by Vanguard's +$26.3 billion (+42.6%) and State Street's +$9.2 billion (+49.9%). Other notable adds include BlackRock's Microsoft Corp. position (+$17.8 billion, +7.8%), Vanguard's Micron Technology Inc. (+$12.9 billion, +73.8%) and Broadcom Inc. (+$9.1 billion, +5.8%), and BlackRock's Amazon.com Inc. (+$9.7 billion, +8.4%).\n\n**Convergence on AI, Semiconductors, and Healthcare Themes**\n\nInstitutions are converging heavily on AI-enabling technologies and semiconductors, exemplified by massive bets on NVIDIA, Alphabet (Google's AI initiatives), Micron (memory chips critical for AI), and Broadcom (AI infrastructure). Big Tech stalwarts like Apple and Amazon reflect enduring conviction in consumer and cloud ecosystems. Healthcare stands out with Eli Lilly's outsized gains, likely tied to ongoing demand for its weight-loss drugs like Mounjaro and Zepbound. These moves suggest a sectoral rotation toward high-growth AI and biotech plays amid economic uncertainty.\n\n**Highest Conviction Names: Alphabet, Apple, Eli Lilly, and NVIDIA**\n\nAlphabet shows the strongest multi-whale conviction, with five separate increases across Vanguard, State Street, and BlackRock totaling over $113 billion in new exposure. Apple follows closely with BlackRock and Vanguard adding ~$75 billion combined. Eli Lilly has dual commitments from Vanguard and State Street (~$35.6 billion total), while NVIDIA's BlackRock surge underscores singular but massive AI enthusiasm. These overlapping buys indicate deep institutional alignment on these mega-caps as core portfolio anchors.\n\n**Notable Exits and Reductions Point to Selective Trimming**\n\nSignificant trims signal caution in select areas: State Street slashed Meta Platforms Inc. by -$14.7 billion (-15.4%) and Vanguard by -$9.5 billion (-6.7%), totaling ~$24 billion in META reductions, potentially reflecting valuation concerns post-AI hype. Vanguard aggressively cut Oracle Corp. (-$13.4 billion, -28.3%) and Netflix Inc. (-$9.6 billion, -20.8%), hinting at reduced faith in enterprise software and streaming. Microsoft saw mixed signals, with BlackRock adding but Vanguard (-$16.4 billion, -4.5%) and State Street (-$11.8 billion, -10.9%) trimming ~$28 billion combined, suggesting profit-taking in mature cloud leaders.\n\n**Overall Flow Pattern Indicates Bullish yet Selective Sentiment**\n\nNet flows skew decisively positive on AI-driven tech (~$250+ billion in adds across NVIDIA, Alphabet, etc.) and healthcare, outweighing ~$60 billion in reductions elsewhere, pointing to optimistic institutional sentiment on growth themes into 2026. Trims in META, Oracle, Netflix, and parts of Microsoft reflect a shift away from 2023-2025 outperformers toward fresher AI catalysts, with no full closures but clear portfolio rebalancing toward higher-conviction names. This pattern implies sustained risk-on positioning amid expected rate cuts and AI capex boom.",
+  "_whale_summary_ts": {
+    "__datetime__": "2026-04-27T20:47:55.887028"
+  },
+  "_whale_summary_engine": "\ud83e\udde0 Regard Mode",
+  "_plays_result": {
+    "sectors": [
+      {
+        "name": "Industrials",
+        "conviction": 3
+      },
+      {
+        "name": "Materials",
+        "conviction": 3
+      },
+      {
+        "name": "Financials",
+        "conviction": 2
+      },
+      {
+        "name": "Technology",
+        "conviction": 2
+      },
+      {
+        "name": "Energy",
         "conviction": 1
       }
     ],
     "stocks": [
       {
-        "ticker": "AAPL",
-        "reason": "AAPL is a leader in the Technology sector, which is poised for growth in a Risk-On regime",
+        "ticker": "CAT",
+        "reason": "Top global manufacturing signal (z=+1.00) and reflation quadrant strongly favor heavy machinery leaders like Caterpillar.",
         "conviction": 3
       },
       {
-        "ticker": "XOM",
-        "reason": "XOM is a major player in the Energy sector, which is benefiting from the current commodity trend",
+        "ticker": "DE",
+        "reason": "Strong equity trends and corporate capex signals support agricultural/industrial equipment in risk-on reflation.",
         "conviction": 2
       },
       {
-        "ticker": "BHP",
-        "reason": "BHP is a diversified mining company that should benefit from the positive trend in Materials",
+        "ticker": "NVDA",
+        "reason": "Whale accumulation and AI supply chain boom align with tech momentum despite partial sector divergence.",
         "conviction": 2
-      },
-      {
-        "ticker": "UNH",
-        "reason": "UNH is a leader in the Healthcare sector, which is a defensive play in a Risk-On regime",
-        "conviction": 1
       },
       {
         "ticker": "JPM",
-        "reason": "JPM is a major bank that should benefit from the positive trend in Financials",
+        "reason": "Tight credit spreads and financials favored in stable Fed hold path with reflationary cyclicals.",
+        "conviction": 2
+      },
+      {
+        "ticker": "FCX",
+        "reason": "Materials sector benefits from term premium rise and commodity prioritization in reflation.",
         "conviction": 1
       },
       {
-        "ticker": "CSCO",
-        "reason": "CSCO is a leader in the Technology sector, which is poised for growth in a Risk-On regime",
-        "conviction": 2
+        "ticker": "XOM",
+        "reason": "Reflation calls for energy despite recent plunge, supported by JPY carry and dollar liquidity.",
+        "conviction": 1
       }
     ],
     "bonds": [
       {
-        "ticker": "TLT",
-        "reason": "TLT is a long-term Treasury bond that can provide a safe haven in a Risk-On regime",
-        "conviction": 1
-      },
-      {
-        "ticker": "JNK",
-        "reason": "JNK is a high-yield bond that can benefit from the positive trend in credit markets",
-        "conviction": 2
+        "ticker": "HYG",
+        "reason": "Tight HY spreads (2.9bps) and low system stress make high-yield attractive in risk-on with contained credit risk.",
+        "conviction": 3
       },
       {
         "ticker": "LQD",
-        "reason": "LQD is an investment-grade corporate bond that can provide a stable return in a Risk-On regime",
-        "conviction": 1
+        "reason": "Investment grade benefits from stable rates and corporate borrowing in reflationary environment.",
+        "conviction": 2
+      },
+      {
+        "ticker": "JNK",
+        "reason": "Junk bonds align with cyclicals and equity breadth in current regime.",
+        "conviction": 2
       }
     ],
-    "rationale": "The current Risk-On regime, with an aggregate score of +0.24, suggests that investors are taking on more risk and seeking growth opportunities. The positive trends in Technology, Energy, and Materials sectors, as well as the strong performance of commodity-related stocks, support this view. As such, we recommend investing in sectors and stocks that are well-positioned to benefit from this regime, while maintaining a defensive posture through selective bond investments."
+    "rationale": "The Risk-On Reflation regime (+0.20 score) with leading signals in global manufacturing, sector breadth, and equity trends prioritizes cyclicals like Industrials and Materials amid rising growth/inflation dynamics. Contrarian Fear & Greed at 33/100 signals dip-buying opportunities ahead of FOMC, bolstered by JPY carry, dollar liquidity, and tight credit spreads favoring HY bonds. Stable Fed hold (67% prob) supports risk assets over duration-sensitive ones."
   },
-  "_rp_plays_last_tier": "\u26a1 Freeloader Mode",
-  "_rate_path_probs": [
+  "_plays_engine": "\ud83e\udde0 Regard Mode",
+  "_calibrated_rate_probs": [
     {
       "scenario": "hold",
-      "prob": 0.665526225301367,
-      "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "label": "Fed Holds",
+      "market_pct": 66.6,
+      "structural_pct": 67.0,
+      "posterior_pct": 66.7,
+      "posterior": 0.6673183618768777,
+      "band_pct": 3.0,
+      "rationale": "PCE sticky at 128.9% with contained unemployment limits Fed's ability to cut."
     },
     {
       "scenario": "cut_25",
-      "prob": 0.1659515597053382,
-      "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "label": "Cut 25bp",
+      "market_pct": 16.6,
+      "structural_pct": 13.1,
+      "posterior_pct": 15.2,
+      "posterior": 0.1519697711494535,
+      "band_pct": 5.0,
+      "rationale": "Softening growth indicators provide basis for a 25bp cut if inflation cooperates."
     },
     {
       "scenario": "cut_50",
-      "prob": 0.002572906134776094,
-      "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "label": "Cut 50bp",
+      "market_pct": 0.3,
+      "structural_pct": 0.2,
+      "posterior_pct": 0.2,
+      "posterior": 0.0021653981637225718,
+      "band_pct": 3.0,
+      "rationale": "Softening growth indicators provide basis for a 50bp emergency cut if inflation cooperates."
     },
     {
       "scenario": "hike_25",
-      "prob": 0.16594930885851863,
-      "implied_rate": 3.6399993896484375,
-      "source": "yfinance"
+      "label": "Hike 25bp",
+      "market_pct": 16.6,
+      "structural_pct": 19.7,
+      "posterior_pct": 17.9,
+      "posterior": 0.17854646880994632,
+      "band_pct": 5.0,
+      "rationale": "Core PCE at 128.9% \u2014 well above target \u2014 keeps re-acceleration risk on the table."
     }
   ],
-  "_current_events_digest": "The current risk-on macro regime, with a score of +0.24, is supported by recent developments in the AI sector, including significant funding rounds and strategic partnerships, such as the $1.1 billion seed funding for a former Google DeepMind researcher's AI startup. However, the unraveling of Iran peace talks and subsequent surge in Brent oil prices to over $108 per barrel introduces a note of caution, contradicting the reflation narrative. The dominance of AI-related news, including the launch of ChatGPT-powered apps by Starbucks and Little Caesars, confirms the ongoing technological shift, while the prediction markets' low probability of a Fed rate cut to 0% or lower before 2027 suggests a relatively stable monetary policy outlook. The loosening of ties between OpenAI and Microsoft also highlights the evolving landscape of AI partnerships.",
-  "_current_events_digest_ts": {
-    "__datetime__": "2026-04-27T15:36:55.354508"
+  "_portfolio_analysis": {
+    "verdict": "REDUCE_RISK",
+    "risk_score": 6,
+    "narrative": "Portfolio stagflation-aligned via commodities and defensives, but extreme fear, imminent CPI, and correlation spikes signal stress. High PHYS.TO concentration and zero sector diversification amplify vulnerabilities. Trim correlated pairs to de-risk ahead of events.",
+    "positions": [
+      {
+        "ticker": "XTLH.TO",
+        "action": "HOLD",
+        "alignment": "neutral",
+        "rationale": "Yen carry hedge fits risk-off lean despite neutral regime.",
+        "risk_factors": [
+          "Geopolitical USDJPY risks",
+          "Rate hold sensitivity"
+        ]
+      },
+      {
+        "ticker": "FCX",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Copper benefits from commodity trend in stagflation; cross-signal favorite.",
+        "risk_factors": [
+          "CHEV negative corr divergence",
+          "Supply shock upside"
+        ]
+      },
+      {
+        "ticker": "PSLV.TO",
+        "action": "REDUCE",
+        "alignment": "neutral",
+        "rationale": "Silver hedge ok for inflation, but 0.82 corr with PHYS.TO limits diversification.",
+        "risk_factors": [
+          "High corr to PHYS.TO",
+          "ZUT.TO spike"
+        ]
+      },
+      {
+        "ticker": "FMKT",
+        "action": "HOLD",
+        "alignment": "neutral",
+        "rationale": "Deregulation thesis neutral in hold-rate path.",
+        "risk_factors": [
+          "UNH.TO corr spike",
+          "Event uncertainty"
+        ]
+      },
+      {
+        "ticker": "UNH.TO",
+        "action": "REDUCE",
+        "alignment": "aligned",
+        "rationale": "Defensive healthcare strong in fear, but SPY/FMKT corr spikes signal stress.",
+        "risk_factors": [
+          "SPY corr +0.48",
+          "FMKT corr +0.42"
+        ]
+      },
+      {
+        "ticker": "PHYS.TO",
+        "action": "REDUCE",
+        "alignment": "aligned",
+        "rationale": "Gold inflation/debt hedge fits stagflation, but largest position at 20.8% with PSLV corr.",
+        "risk_factors": [
+          "PSLV corr 0.82",
+          "Concentration risk"
+        ]
+      },
+      {
+        "ticker": "CHEV.TO",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Value/energy play with high RegimeFit; negative corrs to others aid diversification.",
+        "risk_factors": [
+          "Venezuela geopolitics",
+          "Oil shock sensitivity"
+        ]
+      },
+      {
+        "ticker": "ZUT.TO",
+        "action": "HOLD",
+        "alignment": "aligned",
+        "rationale": "Defensive utilities suit caution regime despite PSLV corr spike.",
+        "risk_factors": [
+          "PSLV corr spike",
+          "High weight 16%"
+        ]
+      }
+    ],
+    "priority_actions": [
+      "Reduce PHYS.TO/PSLV.TO due to 0.82 correlation",
+      "Trim UNH.TO on SPY/FMKT spikes",
+      "Hold FCX/CHEV amid energy shocks"
+    ]
   },
-  "_current_events_engine": "\u26a1 Freeloader Mode",
+  "_portfolio_analysis_ts": {
+    "__datetime__": "2026-04-07T03:52:42.068415"
+  },
+  "_portfolio_analysis_engine": "\ud83e\udde0 Regard Mode",
+  "_current_events_digest": "US equities surged to all-time highs with S&P 500 and Nasdaq adding $9T in value amid remarkable liquidity-driven resilience, overshadowing earnings pressures from energy/logistics costs tied to Iran-Hormuz tensions (37 vessels redirected, oil spikes). Inflation reacceleration (CPI 3.3%, PCE 3.5%, ISM prices at 2022 peaks) stems from tariffs, +7.9% YoY food/beverage, and Middle East shocks, likely delaying Fed cuts to late 2026 despite Trump pressure and $7.5B liquidity injections. Risks include prolonged Hormuz disruptions amplifying $100T derivatives vulnerabilities and core goods inflation; opportunities favor AI/big tech leaders and defensive dollar/Treasury flows.",
+  "_current_events_digest_ts": {
+    "__datetime__": "2026-04-27T20:47:31.936398"
+  },
+  "_current_events_engine": "\ud83e\udde0 Regard Mode",
+  "_factor_analysis": {
+    "headline": "Growth overweight risks in stagflation; inflation mildly aligned.",
+    "factor_verdicts": [
+      {
+        "factor": "growth",
+        "exposure": 0.25,
+        "verdict": "Overweight",
+        "regime_fit": "avoid",
+        "comment": "Weak growth environment penalizes positive beta."
+      },
+      {
+        "factor": "inflation",
+        "exposure": 0.08,
+        "verdict": "Neutral",
+        "regime_fit": "aligned",
+        "comment": "Supports stagflation's high inflation."
+      },
+      {
+        "factor": "liquidity",
+        "exposure": 0.17,
+        "verdict": "Moderate",
+        "regime_fit": "caution",
+        "comment": "Tightening liquidity threatens in stagflation."
+      },
+      {
+        "factor": "credit",
+        "exposure": -0.08,
+        "verdict": "Underweight",
+        "regime_fit": "aligned",
+        "comment": "Defensive amid credit spreads widening."
+      }
+    ],
+    "top_risk": "Growth overweight vulnerable in low-growth stagflation regime.",
+    "suggestions": [
+      "Trim FCX and FMKT to cut growth exposure.",
+      "Reduce duplicate PHYS.TO holdings for concentration relief.",
+      "Bolster ZUT.TO for neutral factor diversification."
+    ]
+  },
+  "_factor_analysis_ts": {
+    "__datetime__": "2026-04-05T18:35:39.690961"
+  },
+  "_factor_analysis_engine": "\ud83e\udde0 Regard Mode",
+  "_trending_narratives": [
+    {
+      "narrative": "AI Stock Rally",
+      "evidence": "Cramer mentions money flowing to AI stocks is a problem, indicating a recent surge in interest and investment in AI-related stocks.",
+      "tickers": [
+        "NVDA",
+        "GOOGL",
+        "MSFT"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "tech"
+    },
+    {
+      "narrative": "Fed Chair Confirmation",
+      "evidence": "Multiple news headlines mention the confirmation of Kevin Warsh as Fed chair, including Sen. Thom Tillis dropping his opposition, indicating a significant development in monetary policy.",
+      "tickers": [
+        "SPY",
+        "QQQ",
+        "TSLA"
+      ],
+      "conviction": "HIGH",
+      "timeframe": "medium",
+      "category": "macro"
+    },
+    {
+      "narrative": "Big Tech Earnings",
+      "evidence": "MarketWatch reports on Wall Street's Super Bowl Wednesday, where Alphabet, Amazon, Microsoft, and Meta are set to report earnings, which could impact the market.",
+      "tickers": [
+        "AAPL",
+        "AMZN",
+        "GOOGL"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "sector"
+    },
+    {
+      "narrative": "Retirement Planning",
+      "evidence": "Multiple MarketWatch headlines focus on retirement planning, such as inheriting a $1.5 million estate, retiring with $3.4 million, and making retirement savings last, indicating a growing interest in retirement planning.",
+      "tickers": [
+        "VGSIX",
+        "VTI",
+        "VFIAX"
+      ],
+      "conviction": "LOW",
+      "timeframe": "medium",
+      "category": "sector"
+    },
+    {
+      "narrative": "Geopolitical Uncertainty",
+      "evidence": "News headlines mention the White House press dinner shooting, Trump's comments on the incident, and the alleged shooter targeting US officials, indicating increased geopolitical uncertainty.",
+      "tickers": [
+        "SPY",
+        "GLD",
+        "TLT"
+      ],
+      "conviction": "MEDIUM",
+      "timeframe": "short",
+      "category": "geopolitical"
+    }
+  ],
+  "_trending_narratives_ts": {
+    "__datetime__": "2026-04-26T15:36:48.364216"
+  },
+  "_trending_narratives_tf": "1W",
+  "_auto_trending_groups": [
+    {
+      "narrative": "AI Chip Surge",
+      "description": "Semiconductor leaders and leveraged ETFs capitalizing on explosive AI hardware demand.",
+      "tickers": [
+        "INTC",
+        "AMD",
+        "MRVL",
+        "SMCI",
+        "SOXL",
+        "SNPS",
+        "MXL"
+      ],
+      "conviction": "HIGH",
+      "regime_alignment": "aligned",
+      "rationale": "Risk-on reflation favors growth-oriented tech sectors like AI semiconductors amid economic expansion."
+    },
+    {
+      "narrative": "AI Software & Infra Boom",
+      "description": "AI analytics, healthcare AI, and data center providers fueling the AI ecosystem.",
+      "tickers": [
+        "PLTR",
+        "TEM",
+        "APLD"
+      ],
+      "conviction": "HIGH",
+      "regime_alignment": "aligned",
+      "rationale": "AI innovation drives in risk-on environments with reflation supporting capex-heavy infrastructure."
+    },
+    {
+      "narrative": "Crypto Momentum",
+      "description": "Major cryptocurrencies and miners rallying on speculative risk appetite.",
+      "tickers": [
+        "ETH-USD",
+        "XRP-USD",
+        "IREN"
+      ],
+      "conviction": "MEDIUM",
+      "regime_alignment": "aligned",
+      "rationale": "Crypto thrives in risk-on regimes but remains volatile even in reflationary conditions."
+    },
+    {
+      "narrative": "Reflation Cyclicals",
+      "description": "Financials, travel, construction, and rail stocks benefiting from economic reopening and growth.",
+      "tickers": [
+        "AXP",
+        "EXPE",
+        "FIX",
+        "UNP"
+      ],
+      "conviction": "MEDIUM",
+      "regime_alignment": "aligned",
+      "rationale": "Cyclical sectors gain directly from reflationary pressures and risk-on sentiment."
+    },
+    {
+      "narrative": "Speculative Mobility Plays",
+      "description": "EV and eVTOL innovators capturing future transport hype.",
+      "tickers": [
+        "LCID",
+        "JOBY",
+        "SKLZ"
+      ],
+      "conviction": "LOW",
+      "regime_alignment": "neutral",
+      "rationale": "High-beta speculative names perform in risk-on but lack clear reflation ties."
+    }
+  ],
+  "_auto_trending_groups_ts": {
+    "__datetime__": "2026-04-23T19:23:36.526646"
+  },
+  "_auto_trending_groups_engine": "\ud83e\udde0 Regard Mode",
+  "_price_momentum": {
+    "ticker": "AXTI",
+    "rsi": 83.3,
+    "rsi_label": "OVERBOUGHT",
+    "ma_trend": "UPTREND",
+    "ma_signals": {
+      "sma_20": {
+        "value": 33.25,
+        "above": true
+      },
+      "sma_50": {
+        "value": 15.65,
+        "above": true
+      }
+    },
+    "vol_ratio": 5.49,
+    "price": 81.78
+  },
+  "_options_sentiment": {
+    "ticker": "NVDA",
+    "sentiment": "BULLISH",
+    "pc_ratio": 0.714,
+    "call_vol": 664270,
+    "put_vol": 474015
+  },
+  "_unusual_activity_sentiment": {
+    "ticker": "NVDA",
+    "sentiment": "MIXED",
+    "call_pct": 37.5,
+    "put_pct": 62.5,
+    "flagged_contracts": 16
+  },
+  "_insider_net_flow": {
+    "ticker": "GOOG",
+    "bias": "BEARISH",
+    "buy_pct": 0.0,
+    "buy_value": 0,
+    "sell_value": 12834150,
+    "n_trades": 88
+  },
+  "_congress_bias": {
+    "ticker": "GOOG",
+    "bias": "BULLISH",
+    "buy_pct": 69.8
+  },
+  "_macro_synopsis": {
+    "conviction": "BULLISH",
+    "summary": "Macro regime firmly Risk-On in Reflation quadrant with +0.28 score, driven by 9/10 positive z-scores including Equity Trend +1.000, Commodity Trend +0.930, and Sector Breadth +0.920. Tactical signals neutral at 57/100 but supported by VIX term structure contango (0.868) and whale accumulation like BlackRock +$62.2B in NVIDIA. Short-term trends falling (-1/-2 pts) but leading sub-score 66/100 and HMM Risk-On confirm upside bias ahead of FOMC.",
+    "key_points": [
+      "Macro z-scores: Equity Trend +1.000, Commodity Trend +0.930, Yield Curve +0.900",
+      "Sector leaders: XLY +9% 4W, XLI +5.3% 4W confirming cyclicals",
+      "VIX term structure: 9D 16.7 < VIX 18.0 < 3M 20.8 < 6M 23.0 (Risk-On contango 0.868)"
+    ],
+    "contradictions": [
+      "Tactical regime Neutral 57/100 with 5-session trends -1/-2 pts",
+      "Options Flow Bearish 37/100 (P/C 1.34, negative Gamma -0.86)",
+      "Consumer Sentiment z-score -0.850"
+    ]
+  },
+  "_macro_synopsis_ts": {
+    "__datetime__": "2026-04-27T20:48:44.541707"
+  },
+  "_macro_synopsis_engine": "\ud83e\udde0 Regard Mode",
   "_tactical_context": {
-    "tactical_score": 53,
-    "label": "Caution / Reduce",
-    "action_bias": "Deteriorating short-term backdrop. Reduce size, tighten stops, avoid new longs.",
+    "tactical_score": 57,
+    "label": "Neutral / Hold",
+    "action_bias": "Mixed short-term signals. Hold existing positions; await a clearer setup.",
     "signals": [
       {
         "Signal": "VIX Level + 5d Trend",
-        "Value": "18.7 (-0.1 5d)",
-        "Score": -0.013,
-        "Direction": "True Neutral"
+        "Value": "18.0 (-0.8 5d)",
+        "Score": 0.166,
+        "Direction": "Neutral \u2014 Leaning Risk-On"
       },
       {
         "Signal": "VIX Term Structure (VIX/VIX3M)",
-        "Value": "0.883",
-        "Score": 0.78,
+        "Value": "0.868",
+        "Score": 0.88,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY vs 20d/50d MA",
-        "Value": "+4.1%/20d  +5.4%/50d",
+        "Value": "+4.4%/20d  +5.7%/50d",
         "Score": 0.4,
         "Direction": "Risk-On"
       },
       {
         "Signal": "SPY Momentum (5d vs 20d ROC)",
-        "Value": "5d +0.6%  20d +12.4%",
-        "Score": -0.28,
+        "Value": "5d +0.9%  20d +12.8%",
+        "Score": -0.218,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Breadth Trend (RSP/SPY 5d)",
-        "Value": "-1.52% 5d",
+        "Value": "-1.88% 5d",
         "Score": -1.0,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "VIX Curve (9D/VIX/3M/6M)",
-        "Value": "9D:17.9 VIX:18.7 3M:21.2 6M:23.3",
-        "Score": 0.554,
+        "Value": "9D:16.7 VIX:18.0 3M:20.8 6M:23.0",
+        "Score": 0.676,
         "Direction": "Risk-On"
       },
       {
         "Signal": "CBOE SKEW (Tail Risk)",
-        "Value": "139.1 (-2.8 5d)",
-        "Score": -0.954,
+        "Value": "139.6 (-1.3 5d)",
+        "Score": -0.982,
         "Direction": "Risk-Off"
       },
       {
         "Signal": "Fear & Greed (Contrarian)",
-        "Value": "47 \u2014 Neutral (+18 7d)",
-        "Score": 0.06,
-        "Direction": "Neutral \u2014 Leaning Risk-On"
+        "Value": "33 \u2014 Fear",
+        "Score": 0.34,
+        "Direction": "Risk-On"
       },
       {
         "Signal": "AAII Sentiment (Contrarian)",
@@ -185,29 +736,858 @@
     ]
   },
   "_tactical_context_ts": {
-    "__datetime__": "2026-04-27T15:36:51.595328"
+    "__datetime__": "2026-04-27T20:47:19.183464"
   },
-  "_tactical_analysis": "The combined signal picture suggests a cautious stance, with a Tactical Regime score of 53/100, indicating a moderate level of risk appetite. The MACRO BACKDROP is Risk-On / Reflation, but the short-term signals are mixed. The VIX Term Structure (VIX/VIX3M) score of +0.780 and the VIX Curve (9D/VIX/3M/6M) score of +0.554 indicate a Risk-On tone, with the VIX Term Structure suggesting a relatively flat volatility curve (0.883). However, the SPY Momentum (5d vs 20d ROC) score of -0.280 and the Breadth Trend (RSP/SPY 5d) score of -1.000 suggest some weakness in the market's momentum and breadth.\n\nThe most dominant signals right now are the VIX Term Structure and the Breadth Trend. The VIX Term Structure score of +0.780 is a strong Risk-On signal, indicating that the market is pricing in relatively low volatility in the short term. In contrast, the Breadth Trend score of -1.000 is a strong Risk-Off signal, indicating that the market's breadth is weakening, with the RSP/SPY 5d ratio at -1.52%. The CBOE SKEW (Tail Risk) score of -0.954 is also noteworthy, as it suggests that the market is pricing in relatively high tail risk, with a SKEW value of 139.1. These signals suggest that while the market is still in a Risk-On mode, there are some warning signs that need to be monitored.\n\nGiven this setup, a trader should consider reducing their exposure to the market. The cautious Tactical Regime score and the mixed signal picture suggest that the market is due for a pullback. The weak Breadth Trend and high tail risk (as indicated by the CBOE SKEW) suggest that the market's momentum is weakening, and a reduction in exposure can help mitigate potential losses. A trader could consider reducing their long positions or hedging their portfolio with a short-term volatility hedge, such as a VIX call option or a put option on the SPY. With the VIX Level at 18.7 and the VIX Term Structure indicating a relatively flat volatility curve, a short-term volatility hedge may be an attractive way to manage risk in this environment.",
+  "_tactical_analysis": "**Tactical signals paint a Neutral short-term risk appetite (aggregate 57/100 Hold regime), with Risk-On macro reflation supporting but entry conditions cautious due to mixed internals.** VIX structures dominate positively\u2014VIX/VIX3M at 0.868 (+0.880 score) and full curve (9D:16.7 < VIX:18.0 < 3M:20.8 < 6M:23.0, +0.676 score)\u2014signaling near-term vol suppression and term premium intact. SPY +4.4%/20d MA and +5.7%/50d (+0.400), plus Fear & Greed at 33 (+0.340 contrarian), reinforce upside bias, but Risk-Off drags from breadth (RSP/SPY -1.88% 5d, -1.000 score) and SKEW 139.6 (-0.982) flag narrow participation and tail risks, curbing aggressive entries.\n\n**Breadth deterioration (-1.88% RSP/SPY 5d lag) and SKEW elevation (139.6, down just -1.3 5d) are most dominant, as they pinpoint leadership fragility and crash pricing amid VIX 18.0 stability (-0.8 5d trend).** These outweigh milder momentum weakness (5d +0.9% vs 20d +12.8% ROC, -0.218), mattering most for tactical fragility\u2014historical breadth gaps >1.5% often precede 2-5% SPY drawdowns within 5-10 days.\n\n**Hold core positions; do not add, but trail stops to SPY 20d MA (+4.4% cushion) and reduce if RSP/SPY 5d breaches -2.5% or SKEW >142.** Hedge lightly with VIX calls if curve flattens (9D/VIX spread < -2 pts).",
   "_tactical_analysis_ts": {
-    "__datetime__": "2026-04-27T15:36:51.595328"
+    "__datetime__": "2026-04-27T20:47:19.183617"
+  },
+  "_options_flow_context": {
+    "options_score": 37,
+    "label": "Bearish Hedging",
+    "action_bias": "Significant defensive positioning in options. Consider reducing risk exposure.",
+    "signals": [
+      {
+        "Signal": "P/C Ratio",
+        "Value": "1.34 (bearish) [z=+0.9, n=30]",
+        "Score": -0.465,
+        "Direction": "Bearish"
+      },
+      {
+        "Signal": "Gamma Zone",
+        "Value": "Negative (amplifying \u00b7 -0.86) \u00b7 flip $715 \u00b7 \u0394 -0.265 \u00b7 GEX adj -1.1pts",
+        "Score": -0.513,
+        "Direction": "Bearish"
+      },
+      {
+        "Signal": "IV Skew (put/call)",
+        "Value": "1.26 (moderate) [z=+0.2, n=30]",
+        "Score": -0.114,
+        "Direction": "Neutral"
+      },
+      {
+        "Signal": "Unusual Activity",
+        "Value": "calls 508,046 vs puts 679,388 (mixed)",
+        "Score": -0.144,
+        "Direction": "Neutral"
+      },
+      {
+        "Signal": "VIX Slope (9D/VIX)",
+        "Value": "0.926 (Contango) \u00b7 VIX9D 16.7 / VIX 18.0",
+        "Score": 0.492,
+        "Direction": "Bullish"
+      }
+    ],
+    "pc_ratio": 1.342,
+    "raw_score": -0.258,
+    "raw_score_base": -0.235,
+    "gex_overlay_points": -1.12,
+    "vix_level": 18.0,
+    "vix_regime": "Normal (15-25)",
+    "n_pc_hist": 30,
+    "n_skew_hist": 30,
+    "scoring_mode": "z-score adaptive + dynamic gex overlay"
+  },
+  "_options_flow_context_ts": {
+    "__datetime__": "2026-04-27T20:47:55.888401"
   },
   "_data_quality": {
-    "score": 40,
-    "label": "Low \u2014 AI reasoning may be unreliable",
+    "score": 70,
+    "label": "Moderate \u2014 some signals stale",
     "stale_market": [
       "DXY"
     ],
     "stale_fred": [
-      "dgs10",
-      "credit_spread",
-      "yield_curve",
       "sahm",
       "core_pce"
     ],
     "total_signals": 10,
-    "fresh_signals": 4
+    "fresh_signals": 7
   },
   "_data_quality_ts": {
-    "__datetime__": "2026-04-27T15:36:51.595329"
+    "__datetime__": "2026-04-27T20:47:19.183756"
+  },
+  "_portfolio_risk_snapshot": {
+    "beta": 0.52,
+    "var_95_pct": -2.24,
+    "var_99_pct": -3.47,
+    "cvar_95_pct": -3.16,
+    "var_95_dollar": -1392,
+    "total_value": 62033,
+    "position_count": 9,
+    "sector_weights": {
+      "Unknown": 93.6,
+      "Basic Materials": 6.4
+    },
+    "max_position_weight": 16.9,
+    "top_position": "PHYS.TO",
+    "risk_flags": [
+      "\u26a0 High correlation: PHYS.TO / PSLV.TO (0.83) \u2014 limited diversification benefit"
+    ],
+    "stress_scenarios": [
+      {
+        "scenario": "2008 GFC",
+        "spy_shock_pct": -57,
+        "port_impact_pct": -65.1,
+        "port_impact_dollar": -40378
+      },
+      {
+        "scenario": "COVID Crash",
+        "spy_shock_pct": -34,
+        "port_impact_pct": -38.8,
+        "port_impact_dollar": -24085
+      },
+      {
+        "scenario": "2022 Rate Shock",
+        "spy_shock_pct": -25,
+        "port_impact_pct": -28.5,
+        "port_impact_dollar": -17710
+      },
+      {
+        "scenario": "Flash Crash",
+        "spy_shock_pct": -10,
+        "port_impact_pct": -11.4,
+        "port_impact_dollar": -7084
+      },
+      {
+        "scenario": "VIX Spike +200%",
+        "spy_shock_pct": -15,
+        "port_impact_pct": -17.1,
+        "port_impact_dollar": -10626
+      }
+    ],
+    "worst_stress_pct": -65.1
+  },
+  "_portfolio_risk_snapshot_ts": {
+    "__datetime__": "2026-04-27T20:48:56.673814"
+  },
+  "_risk_matrix_interpretation": {
+    "alert_level": "MODERATE",
+    "summary": "In Risk-On Reflation, the low-beta (0.52) gold-heavy portfolio provides downside protection via low VaR (-2.24%) but misses equity upside, leading to opportunity cost. High concentration in PHYS.TO (16.9%) and correlation with PSLV.TO (0.83) undermine diversification amid neutral tactical hold. Stress tests highlight vulnerability to sudden risk-off shifts.",
+    "action_items": [
+      "Trim PHYS.TO exposure to <10% to reduce concentration risk",
+      "Allocate 20-30% to reflation cyclicals (e.g., energy ETFs) to boost beta toward 0.7-0.8",
+      "Set stop-loss at -10% portfolio drawdown or monitor VIX >30 for 2022 Rate Shock-like exit"
+    ]
+  },
+  "_qir_earnings_risk": [
+    {
+      "ticker": "FCX",
+      "days_away": 0,
+      "date": "Apr 23, 2026",
+      "expected_move_pct": 3.5,
+      "expected_move_dollar": 2.15
+    }
+  ],
+  "_qir_earnings_risk_ts": {
+    "__datetime__": "2026-04-23T21:42:23.301847"
+  },
+  "_qir_debate_signals_text": "DATA QUALITY: 70/100 \u2014 Moderate \u2014 some signals stale\n\nTACTICAL REGIME: 57/100 (Neutral / Hold) \u2014 Mixed short-term signals. Hold existing positions; await a clearer setup.\n  Signals: VIX Level + 5d Trend: 18.0 (-0.8 5d) (Neutral \u2014 Leaning Risk-On)  |  VIX Term Structure: 0.868 (Risk-On)  |  SPY vs 20d/50d MA: +4.4%/20d  +5.7%/50d (Risk-On)  |  SPY Momentum: 5d +0.9%  20d +12.8% (Risk-Off)  |  Breadth Trend: -1.88% 5d (Risk-Off)  |  VIX Curve: 9D:16.7 VIX:18.0 3M:20.8 6M:23.0 (Risk-On)  |  CBOE SKEW: 139.6 (-1.3 5d) (Risk-Off)  |  Fear & Greed: 33 \u2014 Fear (Risk-On)  |  AAII Sentiment: N/A (True Neutral)\n  AI Analysis: **Tactical signals paint a Neutral short-term risk appetite (aggregate 57/100 Hold regime), with Risk-On macro reflation supporting but entry conditions cautious due to mixed internals.** VIX structures dominate positively\u2014VIX/VIX3M at 0.868 (+0.880 score) and full curve (9D:16.7 < VIX:18.0 < 3M:20.8 < 6M:23.0, +0.676 score)\u2014signaling near-term vol suppression and term premium intact. SPY +4.4%/20d MA and +5.7%/50d (+0.400), plus Fear & Greed at 33 (+0.340 contrarian), reinforce upside bias, but\n\nOPTIONS FLOW: 37/100 (Bearish Hedging) \u2014 Significant defensive positioning in options. Consider reducing risk exposure.\n  Signals: P/C Ratio: 1.34 (bearish) [z=+0.9, n=30] (Bearish)  |  Gamma Zone: Negative (amplifying \u00b7 -0.86) \u00b7 flip $715 \u00b7 \u0394 -0.265 \u00b7 GEX adj -1.1pts (Bearish)  |  IV Skew (put/call): 1.26 (moderate) [z=+0.2, n=30] (Neutral)  |  Unusual Activity: calls 508,046 vs puts 679,388 (mixed) (Neutral)  |  VIX Slope (9D/VIX): 0.926 (Contango) \u00b7 VIX9D 16.7 / VIX 18.0 (Bullish)\n\nMACRO REGIME: Risk-On (score +0.28) | Quadrant: Reflation\n\nFED RATE PATH: Hold (67% probability)\n\nDOOM BRIEFING: **STRESS LEVEL: 2/10**\n\n- Composite Stress Score stands at 17.6/100, indicating low overall system stress.\n- HY Credit Spread (OAS) at 2.86 and IG Credit Spread at 0.80 reflect narrow credit spreads.\n- Yield Curve 10Y-2Y spread measures 0.57, showing a modestly flat profile.\n- Canary sectors exhibit strong average 1M returns, including Regional Banks +15.0%, Commercial Real Estate +10.0%, Private \n\nNEWS DIGEST: US equities surged to all-time highs with S&P 500 and Nasdaq adding $9T in value amid remarkable liquidity-driven resilience, overshadowing earnings pressures from energy/logistics costs tied to Iran-Hormuz tensions (37 vessels redirected, oil spikes). Inflation reacceleration (CPI 3.3%, PCE 3.5%, ISM prices at 2022 peaks) stems from tariffs, +7.9% YoY food/beverage, and Middle East shocks, likely\n\nPOLICY TRANSMISSION: The most likely Fed rate path as of 2026-04-27 is holding rates steady, with a 66.7% probability. This transmits through stable short rates keeping credit spreads contained to support corporate borrowing, a flat mortgage market limiting housing activity to modest levels, and steady conditions in the\n\nWHALE ACTIVITY: **Major Position Increases Signal Strong Conviction in AI and Big Tech Leaders**\n\nThe largest institutional investors\u2014BlackRock, Vanguard Group, and State Street\u2014are piling into key technology names, with BlackRock leading the charge on NVIDIA Corporation, boosting its position by +$62.2 billion (+3\n\nACTIVISM CAMPAIGNS: ### Significant SC 13D Analyses\n\n**Cerberus Capital Management II on Eos Energy Enterprises (EOSE)**: Cerberus, a distressed debt specialist, likely aims for operational restructuring or asset sale of EOSE's zinc-battery tech amid bankruptcy risks and $500M+ debt load. Target vulnerable due to depre\n\nSECTOR\u00d7REGIME: Sector momentum CONFIRMS the Risk-On Reflation regime, with 2 of 3 four-week leaders (XLY and XLI) aligned to cyclicals. Highest-conviction plays are XLY (Consumer Discretionary) for its +9% 4W outperformance confirming consumer strength, and XLI (Industrials) with +5.3% 4W gains signaling infrastru\n\nHMM LEARN BRAIN: Risk-On\n\nMACRO CALENDAR: FOMC in 2d (Apr 29, 2026) | CPI in 16d (May 13, 2026) | NFP in 11d (May 08, 2026)\n\nEARNINGS RISK: FCX in 0d (\u00b13.5%)\n\nPORTFOLIO RISK SNAPSHOT: beta 0.52 | delta ? | open positions ?\n\nRISK MATRIX INTERPRETATION: alert MODERATE | In Risk-On Reflation, the low-beta (0.52) gold-heavy portfolio provides downside protection via low VaR (-2.24%) but misses equity upside, leading to opportunity cost. High concentration in PHYS.TO (16.9%) and correlation with PSLV.TO (0.83\n\nEARNINGS RISK (live): FCX in 0d (\u00b13.5%)\n\nCRISIS ENGINES: HMM=? (ll_z=+0.00, CI=0.0%) | Shadow=? (ll_z=+0.00, CI=0.0%, crash>{10%}=0%)",
+  "_forecast_log": [
+    {
+      "id": "0413ca42",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "MACRO VS FLOW",
+      "confidence": 47,
+      "summary": "Regime: Risk-On (+0.28) | Tactical: Neutral / Hold (57/100) | Opt Flow: Bearish Hedging (37/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 715.1699829101562,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-27T21:00:14.064502"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": null,
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": null,
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Reflation",
+        "regime_score": 0.28,
+        "fear_greed_score": 33,
+        "fear_greed_label": "Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.7
+      }
+    },
+    {
+      "id": "a6880d8a",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "REGIME ONLY BULLISH",
+      "confidence": 46,
+      "summary": "Regime: Risk-On (+0.24) | Tactical: Neutral / Hold (54/100) | Opt Flow: Put-Skewed Flow (39/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 713.0999755859375,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-24T17:18:32.572979"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-26T06:37:34.367407"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Reflation",
+        "regime_score": 0.24,
+        "fear_greed_score": 39,
+        "fear_greed_label": "Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.7
+      }
+    },
+    {
+      "id": "ef42892d",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "MACRO VS FLOW",
+      "confidence": 40,
+      "summary": "Regime: Risk-On (+0.26) | Tactical: Neutral / Hold (58/100) | Opt Flow: Bearish Hedging (21/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 708.4500122070312,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-23T19:10:57.225318"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-23T19:16:02.212554"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Reflation",
+        "regime_score": 0.26,
+        "fear_greed_score": 39,
+        "fear_greed_label": "Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.7
+      }
+    },
+    {
+      "id": "354afaab",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "MACRO VS FLOW",
+      "confidence": 43,
+      "summary": "Regime: Risk-On (+0.26) | Tactical: Neutral / Hold (59/100) | Opt Flow: Bearish Hedging (27/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 711.2100219726562,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-22T18:08:59.703685"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-22T18:10:27.559555"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Reflation",
+        "regime_score": 0.26,
+        "fear_greed_score": 46,
+        "fear_greed_label": "Neutral",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.5
+      }
+    },
+    {
+      "id": "f19f5e5d",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "MOMENTUM BUILDING",
+      "confidence": 54,
+      "summary": "Regime: Risk-On (+0.22) | Tactical: Favorable Entry (69/100) | Opt Flow: Put-Skewed Flow (40/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 710.1400146484375,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-18T22:20:36.817073"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-20T18:16:25.183446"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "incorrect",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Transition",
+        "regime_score": 0.22,
+        "fear_greed_score": 27,
+        "fear_greed_label": "Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 65.2
+      },
+      "postmortem": "The most likely reason this call failed is that the regime assessment was incorrect, specifically the \"Risk-On\" designation with a regime score of 0.22, which may have overstated the market's risk appetite. The fear-greed score of 27 and label of \"Fear\" suggest that market participants were actually more cautious than the call implied, indicating a potential mismatch between the predicted regime and the actual market sentiment. This discrepancy likely led to the call's failure, as the momentum building prediction relied on a favorable risk-on environment that did not materialize. The call's overreliance on a specific regime assessment, with a relatively low confidence level of 54%, further exacerbated the error."
+    },
+    {
+      "id": "c965a2b3",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "OPTIONS FLOW DIVERGENCE",
+      "confidence": 47,
+      "summary": "Regime: Risk-On (+0.22) | Tactical: Favorable Entry (67/100) | Opt Flow: Bearish Hedging (28/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 710.1400146484375,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-17T19:13:59.310172"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-17T22:18:00.006078"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Transition",
+        "regime_score": 0.22,
+        "fear_greed_score": 26,
+        "fear_greed_label": "Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.8
+      }
+    },
+    {
+      "id": "cce0d701",
+      "signal_type": "valuation",
+      "ticker": "CEG",
+      "prediction": "Buy",
+      "confidence": 72,
+      "summary": "CEG trades at a premium fwd P/E of 21.8x with strong analyst upside to $373.30 (+24.8%) amid neutral options and bullish news sentiment, supported by technicals above SMA20/50 and Wyckoff accumulation signaling $362 target. Risk-On reflation macro favors cyclicals but utilities lag rotation; bearish insiders/institutions countered by low short interest and recent EPS beats. Clean energy positioning aligns with growth narratives despite negative earnings growth.",
+      "price_at_forecast": 299.1400146484375,
+      "spy_price_at_forecast": 701.6599731445312,
+      "target_price": 327.29,
+      "atr_at_log": 12.118,
+      "stop_at_log": 274.904,
+      "target_at_log": 335.494,
+      "horizon_days": 60,
+      "timestamp": {
+        "__datetime__": "2026-04-16T20:38:23.025420"
+      },
+      "model": "xAI Grok",
+      "evaluated_at": {
+        "__datetime__": "2026-04-21T19:28:55.645103"
+      },
+      "price_at_eval": 281.52401297433033,
+      "spy_price_at_eval": 707.7150268554688,
+      "outcome": "incorrect",
+      "return_pct": -5.89,
+      "spy_return_pct": 0.86,
+      "alpha_pct": -6.75,
+      "exit_reason": "trailing_stop",
+      "exit_date": "2026-04-21",
+      "notes": "",
+      "market_context": {
+        "regime": "Risk-On",
+        "quadrant": "Reflation",
+        "regime_score": 0.24,
+        "fear_greed_score": 21,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 66.6
+      }
+    },
+    {
+      "id": "08bd389e",
+      "signal_type": "valuation",
+      "ticker": "SPY",
+      "prediction": "Sell",
+      "confidence": 51,
+      "summary": "QIR verdict: GENUINE UNCERTAINTY @ R2 (pivot) ($685.67) | Regime: Neutral \u2014 Leaning Risk-On (+0.10) | Tactical: Favorable Entry (66/100) | Opt Flow: Put-Skewed Flow (40/100) | Uncertainty lean: BEARISH 51% | 30% SIZE",
+      "price_at_forecast": 679.4600219726562,
+      "spy_price_at_forecast": 679.4600219726562,
+      "target_price": null,
+      "atr_at_log": 19.9231,
+      "stop_at_log": 719.3062,
+      "target_at_log": 619.6907,
+      "horizon_days": 60,
+      "timestamp": {
+        "__datetime__": "2026-04-11T20:56:35.260131"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-15T17:27:39.028877"
+      },
+      "price_at_eval": 697.4943062918527,
+      "spy_price_at_eval": 697.5103759765625,
+      "outcome": "incorrect",
+      "return_pct": -2.65,
+      "spy_return_pct": 2.66,
+      "alpha_pct": -0.01,
+      "exit_reason": "trailing_stop",
+      "exit_date": "2026-04-15",
+      "notes": "",
+      "market_context": {
+        "regime": "Neutral \u2014 Leaning Risk-On",
+        "quadrant": "Transition",
+        "regime_score": 0.1,
+        "macro_score": 55,
+        "leading_score": 58,
+        "leading_divergence": 3,
+        "fear_greed_score": 16,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Contango",
+        "fed_path": "hold",
+        "fed_path_prob": 66.7,
+        "tactical_score": 66,
+        "options_score": 40,
+        "whale_bull_pct": 78.3,
+        "whale_leading": "NONE",
+        "whale_conviction": 0.25,
+        "fear_composite_score": 44.0,
+        "fear_composite_label": "Moderate",
+        "stress_z": 0.09,
+        "stress_z_pct": 53,
+        "hmm_state": "Bull",
+        "hmm_confidence": 1.0,
+        "hmm_persistence": 392
+      }
+    },
+    {
+      "id": "2817101a",
+      "signal_type": "valuation",
+      "ticker": "SPY",
+      "prediction": "Sell",
+      "confidence": 55,
+      "summary": "QIR verdict: GENUINE UNCERTAINTY | Regime: Neutral \u2014 Leaning Risk-Off (-0.08) | Tactical: Caution / Reduce (50/100) | Opt Flow: Put-Skewed Flow (49/100) | Uncertainty lean: BEARISH 55% | 30% SIZE",
+      "price_at_forecast": 659.219970703125,
+      "spy_price_at_forecast": 659.219970703125,
+      "target_price": null,
+      "atr_at_log": 10.5854,
+      "stop_at_log": 680.3908,
+      "target_at_log": 627.4638,
+      "horizon_days": 30,
+      "timestamp": {
+        "__datetime__": "2026-04-07T20:21:53.499762"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-09T10:20:13.770852"
+      },
+      "price_at_eval": 680.3936225970284,
+      "spy_price_at_eval": 680.330078125,
+      "outcome": "incorrect",
+      "return_pct": -3.21,
+      "spy_return_pct": 3.2,
+      "alpha_pct": 0.01,
+      "exit_reason": "trailing_stop",
+      "exit_date": "2026-04-09",
+      "notes": "",
+      "market_context": {
+        "regime": "Neutral \u2014 Leaning Risk-Off",
+        "quadrant": "Transition",
+        "regime_score": -0.08,
+        "fear_greed_score": 17,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 67.2
+      }
+    },
+    {
+      "id": "dfb90338",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "GENUINE UNCERTAINTY",
+      "confidence": 55,
+      "summary": "Regime: Neutral \u2014 Leaning Risk-Off (-0.08) | Tactical: Caution / Reduce (50/100) | Opt Flow: Put-Skewed Flow (49/100) | Uncertainty lean: BEARISH 55% | 30% SIZE",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 659.219970703125,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-07T20:21:41.346617"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-07T20:21:59.809606"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Neutral \u2014 Leaning Risk-Off",
+        "quadrant": "Transition",
+        "regime_score": -0.08,
+        "fear_greed_score": 17,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 67.2
+      }
+    },
+    {
+      "id": "d2dcead2",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "GENUINE UNCERTAINTY",
+      "confidence": 55,
+      "summary": "Regime: True Neutral (+0.02) | Tactical: Neutral / Hold (54/100) | Opt Flow: Bearish Hedging (36/100) | Uncertainty lean: BEARISH 55% | 30% SIZE",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 655.8300170898438,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-04-04T19:20:13.739186"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-04-05T13:29:53.862972"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "True Neutral",
+        "quadrant": "Stagflation",
+        "regime_score": 0.02,
+        "fear_greed_score": 12,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.0
+      }
+    },
+    {
+      "id": "534184b7",
+      "signal_type": "squeeze",
+      "ticker": "LCID",
+      "prediction": "Squeeze candidate: LCID",
+      "confidence": 65,
+      "summary": "LCID boasts an elite short squeeze setup with 41.8% short float and 6.4 days-to-cover, a rare combination that poses extreme danger to bears\u2014high institutional ownership at 73% amplifies buy pressure on any upside, earning a perfect 100/100 squeeze score.\n\nCatalysts to watch include earnings beats leveraging 122.9% revenue growth, positive EV sector rotation or LCID-specific news (e.g., production ramps or partnerships), or a gamma squeeze from elevated options activity.\n\nSupporting signals: per",
+      "price_at_forecast": 9.960000038146973,
+      "spy_price_at_forecast": 655.8300170898438,
+      "target_price": null,
+      "atr_at_log": 0.534,
+      "stop_at_log": 8.892,
+      "target_at_log": 11.562,
+      "horizon_days": 14,
+      "timestamp": {
+        "__datetime__": "2026-04-03T12:20:40.288573"
+      },
+      "model": "Groq Llama 3.3",
+      "evaluated_at": {
+        "__datetime__": "2026-04-07T20:21:59.809606"
+      },
+      "price_at_eval": 8.892000334603447,
+      "spy_price_at_eval": 659.219970703125,
+      "outcome": "incorrect",
+      "return_pct": -10.72,
+      "spy_return_pct": 0.52,
+      "alpha_pct": -11.24,
+      "exit_reason": "trailing_stop",
+      "exit_date": "2026-04-07",
+      "notes": "",
+      "market_context": {
+        "regime": "True Neutral",
+        "quadrant": "Stagflation",
+        "regime_score": 0.0,
+        "fear_greed_score": 9,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.5
+      },
+      "postmortem": "The most likely reason this call failed is overconfidence in the squeeze setup, as the 100/100 squeeze score may have oversimplified the complexities of the market. The high confidence level of 65% and perfect squeeze score indicate that the model may have been too reliant on historical data and failed to account for other factors that could impact the stock's performance. The extreme fear sentiment in the market, as indicated by the fear_greed_score of 9, may have also contributed to the call's failure, as it can lead to unpredictable price movements. Ultimately, the model's overreliance on a specific setup and failure to consider broader market dynamics led to the incorrect call."
+    },
+    {
+      "id": "6fbe107b",
+      "signal_type": "valuation",
+      "ticker": "GOOG",
+      "prediction": "Buy",
+      "confidence": 70,
+      "summary": "Alphabet benefits from strong institutional 13F bullish flow (+2.42%), bullish options sentiment (P/C 0.69), consistent 4/4 EPS beats, and analyst consensus target of $359.53 (+21.9% upside) amid AI momentum. Near-term headwinds from stagflation risk-off regime, Communication sector lag (-5.0% 4W), and insider net sells ($12.8M) pressure price below SMAs. Long-term growth compounder with Wyckoff accumulation signaling upside to $374.",
+      "price_at_forecast": 294.8999938964844,
+      "spy_price_at_forecast": 655.239990234375,
+      "target_price": 310.71,
+      "atr_at_log": 7.6793,
+      "stop_at_log": 279.5414,
+      "target_at_log": 317.9379,
+      "horizon_days": 60,
+      "timestamp": {
+        "__datetime__": "2026-04-01T19:43:44.395790"
+      },
+      "model": "xAI Grok",
+      "evaluated_at": {
+        "__datetime__": "2026-04-08T17:48:37.210396"
+      },
+      "price_at_eval": 317.9378400530134,
+      "spy_price_at_eval": 676.010009765625,
+      "outcome": "correct",
+      "return_pct": 7.81,
+      "spy_return_pct": 3.17,
+      "alpha_pct": 4.64,
+      "exit_reason": "profit_target",
+      "exit_date": "2026-04-08",
+      "notes": "",
+      "market_context": {
+        "regime": "Neutral \u2014 Leaning Risk-Off",
+        "quadrant": "Stagflation",
+        "regime_score": -0.06,
+        "fear_greed_score": 12,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.5
+      }
+    },
+    {
+      "id": "0e169d5a",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "GENUINE UNCERTAINTY",
+      "confidence": 40,
+      "summary": "Regime: Neutral \u2014 Leaning Risk-Off (-0.08) | Tactical: Caution / Reduce (50/100) | Opt Flow: Bearish Hedging (20/100)",
+      "price_at_forecast": null,
+      "spy_price_at_forecast": 650.3400268554688,
+      "target_price": null,
+      "atr_at_log": null,
+      "stop_at_log": null,
+      "target_at_log": null,
+      "horizon_days": 21,
+      "timestamp": {
+        "__datetime__": "2026-03-31T20:33:05.644048"
+      },
+      "model": "QIR Composite",
+      "evaluated_at": {
+        "__datetime__": "2026-03-31T20:33:11.295881"
+      },
+      "price_at_eval": null,
+      "spy_price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "spy_return_pct": null,
+      "alpha_pct": null,
+      "exit_reason": null,
+      "exit_date": null,
+      "notes": "",
+      "market_context": {
+        "regime": "Neutral \u2014 Leaning Risk-Off",
+        "quadrant": "Stagflation",
+        "regime_score": -0.08,
+        "fear_greed_score": 8,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.6
+      }
+    },
+    {
+      "id": "74b457d5",
+      "signal_type": "fed",
+      "ticker": "",
+      "prediction": "Hold",
+      "confidence": 68,
+      "summary": "Fed dominant rate path: Hold",
+      "price_at_forecast": null,
+      "target_price": null,
+      "horizon_days": 30,
+      "timestamp": {
+        "__datetime__": "2026-03-31T19:49:15.377465"
+      },
+      "model": "Groq Llama 3.3",
+      "evaluated_at": {
+        "__datetime__": "2026-03-31T20:26:44.659467"
+      },
+      "price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "notes": "",
+      "market_context": {
+        "regime": "True Neutral",
+        "quadrant": "Stagflation",
+        "regime_score": -0.02,
+        "fear_greed_score": 8,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.1
+      }
+    },
+    {
+      "id": "bc648069",
+      "signal_type": "regime",
+      "ticker": "",
+      "prediction": "Stagflation",
+      "confidence": 60,
+      "summary": "- Commodity Trend (Oil + Copper): z=+1.00 ()\n- Term Premium: z=+1.00 ()\n- Consumer Sentiment (Michigan): z=-0.82 ()\n- Equity Trend (S&P, Nasdaq, Dow): z=-0.80 ()\n- Credit Spreads (HY vs Treasuries): z",
+      "price_at_forecast": null,
+      "target_price": null,
+      "horizon_days": 30,
+      "timestamp": {
+        "__datetime__": "2026-03-31T19:49:14.065447"
+      },
+      "model": "Groq Llama 3.3",
+      "evaluated_at": {
+        "__datetime__": "2026-03-31T20:26:44.659467"
+      },
+      "price_at_eval": null,
+      "outcome": "correct",
+      "return_pct": null,
+      "notes": "",
+      "market_context": {
+        "regime": "True Neutral",
+        "quadrant": "Stagflation",
+        "regime_score": -0.02,
+        "fear_greed_score": 8,
+        "fear_greed_label": "Extreme Fear",
+        "vix_spot": null,
+        "vix_structure": "Unknown",
+        "fed_path": "hold",
+        "fed_path_prob": 68.1
+      }
+    }
+  ],
+  "_forecast_log_ts": {
+    "__datetime__": "2026-04-27T21:00:14.064910"
+  },
+  "_activism_digest": "### Significant SC 13D Analyses\n\n**Cerberus Capital Management II on Eos Energy Enterprises (EOSE)**: Cerberus, a distressed debt specialist, likely aims for operational restructuring or asset sale of EOSE's zinc-battery tech amid bankruptcy risks and $500M+ debt load. Target vulnerable due to depressed 0.2x sales valuation, cash burn, and governance lapses in execution. Historical pattern for debt-led campaigns in energy storage: 65% success via DIP financing or buyouts (e.g., similar to Lordstown Motors). 70% probability of partial win (debt conversion/board seat) within 6-9 months; buy EOSE calls if stock holds $2 support.\n\n**Centerbridge Credit Partners on Garrett Motion (GTX)**: Objective is creditor-led takeover or spinoff of GTX's turbocharger assets post-Chapter 11 emergence. Vulnerability from insider entrenchment, 0.8x book value, and cyclical auto weakness. Distressed credit activism succeeds 55% historically (e.g., Hertz), often via merger. 60% success odds in 4-6 months; position long GTX on volume spike above 10-day MA.\n\n**Baker Bros. Advisors on Bicycle Therapeutics (BCYC)**: Biotech-focused Baker Bros seeks board seats or CEO change to accelerate BT1718 ADC pipeline monetization. BCYC vulnerable at 1.5x cash valuation, trial delays, and weak governance (high CEO pay). Baker Bros wins 75% of biotech campaigns via settlements (e.g., Incyte). 80% probability of proxy win or licensing deal in 3-6 months; accumulate BCYC pre-earnings for 50% upside.\n\n**Madryn Asset Management on Neuronetics (STIM)**: Madryn, a healthcare lender, targets buyback or asset sale of STIM's TMS depression devices amid 0.3x sales multiple and $50M debt. Vulnerabilities include insider sales and stagnant revenue. Madryn-style debt activism yields 50% success (e.g., HTBX restructuring). 55% chance of recap in 6 months; trade STIM volatility, long if Madryn nominates directors.\n\n**Frazier Life Sciences on NewAmsterdam Pharma (NAMS)**: Frazier pushes for M&A or spinoff of obicetrapib CVD drug assets. NAMS trades at 2x peak cash, vulnerable to trial risks and dilute governance. Life sciences VC activism settles 70% (e.g., Beam Therapeutics). 65% success in 9-12 months; buy NAMS dips to $15 for pipeline readout catalyst.\n\n**Joseph S. Steinberg on Vitesse Energy (VTS)**: Steinberg group seeks board control or dividend hike from VTS's Bakken assets. Undervalued at 4x EBITDA amid oil volatility, weak payout policy. Energy insider activism wins 60% (e.g., PE-backed producers). 50% odds of settlement in 4 months; overweight VTS for 20% yield boost.\n\n### Cross-Filing Synthesis\nBiotech/healthcare (BCYC, NAMS, STIM, RCUS) and energy transition (EOSE, VTS, NC mining) dominate this 13D wave, with finance/tech microcaps (LRFC, NEGG, BETR) secondary. Common themes: debt restructurings in distressed energy/battery plays and governance fixes in biotech pipelines, signaling hunt for unlockable assets in post-2024 bear market laggards. Avoid cannabis (FLGC) or claims (MSP) noise.\n\nThis activism surge indicates broader market stabilization\u2014value investors deploying dry powder into beaten-down sectors (avg target EV/EBITDA <5x), anticipating Fed cuts and energy demand rebound. Actionable: Long a basket of biotech/energy targets (40% EOSE/BCYC/EOSE/VTS weights) for 30-50% returns in 12 months; hedge with SPY puts if 10Y yield >4.5%. Monitor for proxy statements by Q1 2025.",
+  "_activism_digest_ts": {
+    "__datetime__": "2026-04-27T20:47:15.201397"
+  },
+  "_activism_digest_engine": "\ud83e\udde0 Regard Mode",
+  "_sector_regime_digest": "Sector momentum CONFIRMS the Risk-On Reflation regime, with 2 of 3 four-week leaders (XLY and XLI) aligned to cyclicals. Highest-conviction plays are XLY (Consumer Discretionary) for its +9% 4W outperformance confirming consumer strength, and XLI (Industrials) with +5.3% 4W gains signaling infrastructure reflation momentum. Notable rotation signal: non-aligned XLK (Technology) dominating at +18.1% 4W hints at growth overstretching, while aligned XLE lags at -4.2% amid oil volatility. Trading implication: Overweight XLY/XLI tactically through May, trim XLK and defensives like XLU/XLV.",
+  "_sector_regime_digest_ts": {
+    "__datetime__": "2026-04-27T20:48:03.515823"
+  },
+  "_sector_regime_digest_engine": "\ud83e\udde0 Regard Mode",
+  "_fear_greed": {
+    "score": 33,
+    "label": "Fear",
+    "change_7d": 0,
+    "source": "alternative.me",
+    "fetched_at": "2026-04-28T02:46:45.197397+00:00"
+  },
+  "_fear_greed_ts": {
+    "__datetime__": "2026-04-27T20:47:55.888485"
+  },
+  "_vix_curve": {
+    "vix9d": 16.69,
+    "vix": null,
+    "vix3m": null,
+    "vix6m": null,
+    "contango_9d_3m": null,
+    "contango_spot_3m": null,
+    "structure": "Unknown",
+    "fetched_at": "2026-04-28T02:46:43.568491+00:00"
+  },
+  "_vix_curve_ts": {
+    "__datetime__": "2026-04-27T20:47:55.888485"
   }
 }

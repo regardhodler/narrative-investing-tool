@@ -89,7 +89,8 @@ def _build_regime_ctx() -> dict:
             ctx["hmm_state"] = hmm.state_label
             ctx["hmm_confidence"] = round(getattr(hmm, "confidence", 0) * 100)
             ll_z = getattr(hmm, "ll_zscore", 0)
-            ci_pct = abs(ll_z) / 0.467 * 100 if ll_z else 0
+            from services.hmm_regime import get_ci_anchor as _gca
+            ci_pct = abs(ll_z) / max(_gca(), 1e-6) * 100 if ll_z else 0
             ctx["ci_pct"] = round(ci_pct, 1)
             ctx["_hmm_stale"] = getattr(hmm, "_is_stale", False)
     except Exception:

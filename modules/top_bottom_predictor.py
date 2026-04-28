@@ -724,95 +724,163 @@ def _render_prob_time_series(brain_path: pd.DataFrame, spx: pd.Series, brain_lab
 
 
 def _render_brain_performance(main_state, shadow_state, top_sig: Optional[dict], verdict: Optional[dict]) -> None:
-    """Compact brain performance summary — hit rate, FA, CI%, current status."""
+    """Compact brain performance summary — one card per brain."""
     from services.hmm_regime import get_ci_anchor
     from services.hmm_shadow import load_shadow_brain as _lsb
 
-    # ── Main Brain live CI% ────────────────────────────────────────────────
-    _main_ll_z  = getattr(main_state,   "ll_zscore", None) if main_state   else None
-    _shad_ll_z  = getattr(shadow_state, "ll_zscore", None) if shadow_state else None
+    _main_ll_z   = getattr(main_state,   "ll_zscore", None) if main_state   else None
+    _shad_ll_z   = getattr(shadow_state, "ll_zscore", None) if shadow_state else None
     _main_anchor = get_ci_anchor()
     _shad_brain  = _lsb()
     _shad_anchor = getattr(_shad_brain, "ci_anchor", 5.0) if _shad_brain else 5.0
 
-    main_ci  = abs(_main_ll_z)  / max(_main_anchor,  1e-6) * 100 if _main_ll_z  is not None else 0.0
-    shad_ci  = abs(_shad_ll_z)  / max(_shad_anchor,  1e-6) * 100 if _shad_ll_z  is not None else 0.0
+    main_ci    = abs(_main_ll_z)  / max(_main_anchor, 1e-6) * 100 if _main_ll_z  is not None else 0.0
+    shad_ci    = abs(_shad_ll_z)  / max(_shad_anchor, 1e-6) * 100 if _shad_ll_z  is not None else 0.0
     top_firing = bool(top_sig and top_sig.get("sig_and"))
     top_roll   = (top_sig or {}).get("ll_z_roll", 0.0)
     top_days   = (top_sig or {}).get("days_in_stress", 0)
-
+    top_regime = (top_sig or {}).get("regime_label", "—")
     combo_main = (verdict or {}).get("combo_main_ci", 0.0)
     combo_shad = (verdict or {}).get("combo_shad_ci", 0.0)
     combo_on   = combo_main >= 22.0 and combo_shad >= 22.0
 
-    def _zone_pill(ci):
-        if ci >= 40:
-            return f'<span style="color:#ef4444;font-weight:700;">Z3 {ci:.1f}%</span>'
-        elif ci >= 22:
-            return f'<span style="color:#f59e0b;font-weight:700;">Z2 {ci:.1f}%</span>'
-        return f'<span style="color:#22c55e;font-weight:700;">Z1 {ci:.1f}%</span>'
+    # Gate thresholds
+    main_gate_z  = -0.40 * _main_anchor   # ll_z needed to open Z3
+    shad_gate_z  = -0.40 * _shad_anchor
 
-    def _status(on, label):
-        c = "#ef4444" if on else "#22c55e"
-        return f'<span style="color:{c};font-weight:800;">{label if on else "QUIET"}</span>'
+    def _ci_color(ci):
+        return "#ef4444" if ci >= 40 else "#f59e0b" if ci >= 22 else "#22c55e"
 
-    rows = [
-        ("TOP BRAIN",        "Top detection",    "5/8 (62%)", "4",  "107d",  "macro drift",
-         _status(top_firing, "FIRING"),
-         f'<span style="color:#f59e0b;">roll={top_roll:.3f}{"  ·  "+str(top_days)+"d active" if top_firing else ""}</span>'),
-        ("MAIN BRAIN",       "Regime + crisis",  "7/8 (88%)", "0",  "0d",    "CI% Zone 3",
-         _zone_pill(main_ci),
-         f'<span style="color:#64748b;">ll_z={_main_ll_z:+.3f}</span>' if _main_ll_z is not None else "—"),
-        ("SHADOW BRAIN",     "Bottom / crash",   "7/8 (88%)", "0",  "0d",    "CI% Zone 2",
-         _zone_pill(shad_ci),
-         f'<span style="color:#64748b;">ll_z={_shad_ll_z:+.3f}</span>' if _shad_ll_z is not None else "—"),
-        ("COMBO (M+S)",      "Confirmed bottom", "7/8 (88%)", "0★", "—",     "both Zone 2",
-         _status(combo_on, "ACTIVE"),
-         f'<span style="color:#64748b;">M={combo_main:.1f}%  S={combo_shad:.1f}%</span>'),
-    ]
+    def _ci_zone(ci):
+        return "Z3" if ci >= 40 else "Z2" if ci >= 22 else "Z1"
 
-    header = (
-        f'<div style="display:grid;grid-template-columns:110px 110px 90px 40px 55px 90px 100px 1fr;'
-        f'gap:6px;padding:4px 8px;border-bottom:1px solid #1e293b;margin-bottom:4px;">'
-        + "".join(
-            f'<div style="font-size:7px;color:#334155;font-weight:700;letter-spacing:0.08em;">{h}</div>'
-            for h in ["BRAIN", "PURPOSE", "HIT RATE", "FA", "AVG LEAD", "SIGNAL", "STATUS", "LIVE"]
-        )
-        + "</div>"
-    )
-
-    body = ""
-    for brain, purpose, hit, fa, lead, signal, status, live in rows:
-        body += (
-            f'<div style="display:grid;grid-template-columns:110px 110px 90px 40px 55px 90px 100px 1fr;'
-            f'gap:6px;padding:5px 8px;border-bottom:1px solid #0f172a;align-items:center;">'
-            f'<div style="font-size:9px;color:#94a3b8;font-weight:700;">{brain}</div>'
-            f'<div style="font-size:8px;color:#475569;">{purpose}</div>'
-            f'<div style="font-size:9px;color:#64748b;">{hit}</div>'
-            f'<div style="font-size:9px;color:#64748b;">{fa}</div>'
-            f'<div style="font-size:9px;color:#64748b;">{lead}</div>'
-            f'<div style="font-size:8px;color:#475569;">{signal}</div>'
-            f'<div style="font-size:9px;">{status}</div>'
-            f'<div style="font-size:8px;">{live}</div>'
+    def _card(title, purpose, hit, fa, lead, gate_label, status_html, detail_rows, border_color):
+        rows_html = "".join(
+            f'<div style="display:flex;justify-content:space-between;'
+            f'padding:3px 0;border-bottom:1px solid #0f172a;">'
+            f'<span style="font-size:9px;color:#475569;">{k}</span>'
+            f'<span style="font-size:9px;font-weight:700;color:{vc};">{v}</span>'
             f'</div>'
+            for k, v, vc in detail_rows
         )
-
-    html = f"""
-<div style="background:#0d1117;border:1px solid #1e293b;border-radius:8px;
-            padding:12px 14px;margin:0 0 12px 0;">
-  <div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;
-              text-transform:uppercase;margin-bottom:8px;">
-    BRAIN PERFORMANCE SUMMARY
-  </div>
-  {header}
-  {body}
-  <div style="font-size:7px;color:#1e293b;margin-top:6px;line-height:1.8;">
-    ★ = zero false alarms &nbsp;·&nbsp;
-    Hit rate / FA from validated backtest 2012–2026 &nbsp;·&nbsp;
-    Main + Shadow CI% use their own anchors — not comparable to each other
+        return f"""
+<div style="background:#0a0f1a;border:1px solid #1e293b;border-top:3px solid {border_color};
+            border-radius:6px;padding:10px 12px;">
+  <div style="font-size:10px;color:#94a3b8;font-weight:800;letter-spacing:0.1em;
+              margin-bottom:2px;">{title}</div>
+  <div style="font-size:8px;color:#475569;margin-bottom:8px;">{purpose}</div>
+  <div style="margin-bottom:8px;">{status_html}</div>
+  {rows_html}
+  <div style="font-size:7px;color:#334155;margin-top:6px;line-height:1.7;">
+    Gate: {gate_label}
   </div>
 </div>"""
-    st.markdown(html, unsafe_allow_html=True)
+
+    # ── Top Brain card ────────────────────────────────────────────────────
+    top_color  = "#f59e0b" if top_firing else "#334155"
+    top_status = (
+        f'<span style="font-size:18px;font-weight:900;color:#f59e0b;">FIRING</span>'
+        f'<span style="font-size:9px;color:#f59e0b;margin-left:6px;">{top_days}d active</span>'
+        if top_firing else
+        f'<span style="font-size:18px;font-weight:900;color:#334155;">QUIET</span>'
+    )
+    top_card = _card(
+        "TOP BRAIN", "Early top detection (VIX · NFCI · BAA10Y · T10Y3M)",
+        "5/8 (62%)", "4", "107d avg",
+        "regime ∈ {Late Cycle, Stress} AND 40d ll_z roll < -0.20",
+        top_status,
+        [
+            ("Hit rate",    "5/8 (62%)",          "#64748b"),
+            ("False alarms","4",                   "#64748b"),
+            ("Avg lead",    "107 days",            "#64748b"),
+            ("40d LL roll", f"{top_roll:.3f}",     "#f59e0b" if top_firing else "#64748b"),
+            ("Regime",      top_regime,            "#ef4444" if top_regime in {"Stress","Crisis","Late Cycle","Early Stress"} else "#22c55e"),
+        ],
+        top_color,
+    )
+
+    # ── Main Brain card ───────────────────────────────────────────────────
+    main_cc    = _ci_color(main_ci)
+    main_zone  = _ci_zone(main_ci)
+    main_status = (
+        f'<span style="font-size:18px;font-weight:900;color:{main_cc};">'
+        f'{main_zone} &nbsp; {main_ci:.1f}%</span>'
+    )
+    main_card = _card(
+        "MAIN BRAIN", "Regime classification + crisis gate (10 FRED features)",
+        "7/8 (88%)", "0 ★", "coincident",
+        f"CI% ≥ 40% (ll_z < {main_gate_z:.2f})",
+        main_status,
+        [
+            ("Hit rate",    "7/8 (88%)",                    "#64748b"),
+            ("False alarms","0 ★",                          "#22c55e"),
+            ("CI%",         f"{main_ci:.1f}%",              main_cc),
+            ("ll_z today",  f"{_main_ll_z:+.4f}" if _main_ll_z is not None else "—", "#64748b"),
+            ("Gate opens",  f"ll_z < {main_gate_z:.2f}",   "#ef4444"),
+        ],
+        main_cc,
+    )
+
+    # ── Shadow Brain card ─────────────────────────────────────────────────
+    shad_cc    = _ci_color(shad_ci)
+    shad_zone  = _ci_zone(shad_ci)
+    shad_status = (
+        f'<span style="font-size:18px;font-weight:900;color:{shad_cc};">'
+        f'{shad_zone} &nbsp; {shad_ci:.1f}%</span>'
+    )
+    shad_card = _card(
+        "SHADOW BRAIN", "Price-action stress / bottom detector (SPX returns + VIX)",
+        "7/8 (88%)", "0 ★", "coincident",
+        f"CI% ≥ 22% (ll_z < {shad_gate_z:.2f})",
+        shad_status,
+        [
+            ("Hit rate",    "7/8 (88%)",                    "#64748b"),
+            ("False alarms","0 ★",                          "#22c55e"),
+            ("CI%",         f"{shad_ci:.1f}%",              shad_cc),
+            ("ll_z today",  f"{_shad_ll_z:+.4f}" if _shad_ll_z is not None else "—", "#64748b"),
+            ("Gate opens",  f"ll_z < {shad_gate_z:.2f}",   "#ef4444"),
+        ],
+        shad_cc,
+    )
+
+    # ── Combo card ────────────────────────────────────────────────────────
+    combo_color  = "#22c55e" if combo_on else "#334155"
+    combo_status = (
+        f'<span style="font-size:18px;font-weight:900;color:#22c55e;">ACTIVE</span>'
+        if combo_on else
+        f'<span style="font-size:18px;font-weight:900;color:#334155;">QUIET</span>'
+    )
+    combo_card = _card(
+        "COMBO (M + S)", "Confirmed capitulation — bottom signal",
+        "7/8 (88%)", "0 ★", "coincident",
+        "Main CI% ≥ 22% AND Shadow CI% ≥ 22% simultaneously",
+        combo_status,
+        [
+            ("Hit rate",      "7/8 (88%)",            "#64748b"),
+            ("False alarms",  "0 ★",                  "#22c55e"),
+            ("Main CI%",      f"{combo_main:.1f}%",   _ci_color(combo_main)),
+            ("Shadow CI%",    f"{combo_shad:.1f}%",   _ci_color(combo_shad)),
+            ("Both ≥ 22%?",   "YES" if combo_on else "NO", "#22c55e" if combo_on else "#334155"),
+        ],
+        combo_color,
+    )
+
+    st.markdown(
+        '<div style="font-size:11px;color:#64748b;font-weight:700;letter-spacing:0.12em;'
+        'text-transform:uppercase;margin:0 0 8px 0;">BRAIN PERFORMANCE SUMMARY</div>',
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(top_card,   unsafe_allow_html=True)
+    with c2: st.markdown(main_card,  unsafe_allow_html=True)
+    with c3: st.markdown(shad_card,  unsafe_allow_html=True)
+    with c4: st.markdown(combo_card, unsafe_allow_html=True)
+    st.markdown(
+        '<div style="font-size:8px;color:#334155;margin:4px 0 12px 0;">'
+        '★ = zero false alarms &nbsp;·&nbsp; backtest validated 2012–2026 &nbsp;·&nbsp;'
+        ' CI% anchors differ per brain — numbers not cross-comparable</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def _render_cycle_ladder(top_sig: Optional[dict], verdict: Optional[dict], main_state) -> None:

@@ -17,5 +17,55 @@
         "base": 0.38
       }
     ]
+  },
+  {
+    "date": "2026-04-20",
+    "contagion_score": 73.7,
+    "zone": "CONTAGION RISK",
+    "top_shifts": [
+      {
+        "pair": "GLD/HYG",
+        "delta": 0.32,
+        "cur": 0.54,
+        "base": 0.21
+      },
+      {
+        "pair": "GLD/USO",
+        "delta": -0.43,
+        "cur": -0.38,
+        "base": 0.05
+      },
+      {
+        "pair": "TLT/UUP",
+        "delta": 0.35,
+        "cur": 0.06,
+        "base": -0.29
+      },
+      {
+        "pair": "USO/UUP",
+        "delta": 0.32,
+        "cur": 0.69,
+        "base": 0.37
+      }
+    ]
+  },
+  {
+    "date": "2026-04-22",
+    "contagion_score": 75.7,
+    "zone": "CONTAGION RISK",
+    "top_shifts": [
+      {
+        "pair": "GLD/HYG",
+        "delta": 0.34,
+        "cur": 0.57,
+        "base": 0.23
+      },
+      {
+        "pair": "GLD/USO",
+        "delta": -0.46,
+        "cur": -0.43,
+        "base": 0.03
+      }
+    ]
   }
 ]

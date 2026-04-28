@@ -14528,5 +14528,227 @@
     "meta": {
       "event": "Closure of the straight of hormuz"
     }
+  },
+  {
+    "id": "20260420_182359_64",
+    "timestamp": "2026-04-20T18:23:59.641182",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.6598050001388367,
+          "implied_rate": 3.6100006103515625,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.20941944329112383,
+          "implied_rate": 3.6100006103515625,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.004158769213209529,
+          "implied_rate": 3.6100006103515625,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.12661678735683,
+          "implied_rate": 3.6100006103515625,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.0
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260422_181732_74",
+    "timestamp": "2026-04-22T18:17:32.747229",
+    "feature": "Fed Forecaster",
+    "engine": "\u26a1 Freeloader Mode",
+    "data": {
+      "rate_path_probs": [
+        {
+          "scenario": "hold",
+          "prob": 0.665079294387653,
+          "implied_rate": 3.6200027465820312,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_25",
+          "prob": 0.18897648145046972,
+          "implied_rate": 3.6200027465820312,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "cut_50",
+          "prob": 0.0033596350033520232,
+          "implied_rate": 3.6200027465820312,
+          "source": "yfinance",
+          "delta": 0.0
+        },
+        {
+          "scenario": "hike_25",
+          "prob": 0.14258458915852523,
+          "implied_rate": 3.6200027465820312,
+          "source": "yfinance",
+          "delta": 0.0
+        }
+      ],
+      "dominant": {
+        "scenario": "hold",
+        "prob_pct": 66.5
+      }
+    },
+    "meta": {
+      "fed_funds_rate": 3.64
+    }
+  },
+  {
+    "id": "20260422_190847_27",
+    "timestamp": "2026-04-22T19:08:47.276108",
+    "feature": "Portfolio Analysis",
+    "engine": "\ud83d\udc51 Highly Regarded Mode",
+    "data": {
+      "verdict": "REDUCE_RISK",
+      "risk_score": 6,
+      "narrative": "Portfolio is heavily concentrated in precious metals (16.9% PHYS.TO) and utilities (12.5% ZUT.TO) with significant correlation spikes in VST/PHYS/PSLV (0.28-0.31\u0394), limiting diversification. Risk-On regime (+0.26) supports equity/commodity exposure, but Iran oil volatility, consumer sentiment weakness (-0.800 z), and FOMC this week create near-term headwinds; SPY triple-stacking and yen carry hedge (XTLH.TO) conflict with reflation thesis.",
+      "positions": [
+        {
+          "ticker": "PHYS.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "16.9% portfolio weight is excessive; three separate entries inflate concentration. Correlation spike with VST (+0.31\u0394) signals crowding. Inflation hedge redundant in Risk-On reflation regime.",
+          "risk_factors": [
+            "concentration risk",
+            "correlation spike with VST"
+          ]
+        },
+        {
+          "ticker": "PSLV.TO",
+          "action": "REDUCE",
+          "alignment": "neutral",
+          "rationale": "5.0% weight with 0.83 correlation to PHYS.TO adds no diversification. Correlation spike with VST (+0.28\u0394) confirms crowding in precious metals complex.",
+          "risk_factors": [
+            "high correlation to PHYS.TO",
+            "VST correlation spike"
+          ]
+        },
+        {
+          "ticker": "XTLH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Yen carry hedge (4.6%) is valid tail risk protection but conflicts with Risk-On reflation thesis. Maintain as insurance, not core conviction.",
+          "risk_factors": [
+            "regime misalignment",
+            "carry unwind risk if JPY strengthens"
+          ]
+        },
+        {
+          "ticker": "FCX",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Copper shortage play (7.4%) aligns with Commodity Trend z-score +0.960 and reflation. Sector breadth +0.970 supports materials.",
+          "risk_factors": [
+            "Iran oil shock could trigger demand destruction",
+            "China growth uncertainty"
+          ]
+        },
+        {
+          "ticker": "FMKT",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Deregulation thesis (3.1% dual entry) fits Risk-On regime. Consolidate duplicate position to single entry.",
+          "risk_factors": [
+            "regulatory reversal risk",
+            "execution risk on deregulation"
+          ]
+        },
+        {
+          "ticker": "UNH.TO",
+          "action": "HOLD",
+          "alignment": "neutral",
+          "rationale": "Healthcare defensive (2.9% dual entry) provides ballast but underweights AI/industrial tailwinds. Consolidate duplicate.",
+          "risk_factors": [
+            "underexposed to regime growth drivers",
+            "regulatory pricing pressure"
+          ]
+        },
+        {
+          "ticker": "CHEV.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "7.6% energy exposure conflicts with Iran ceasefire fragility and $100+/bbl oil spike risk. Correlation flip with 6268.T (-0.60\u2192-0.15\u0394) signals stress. Venezuela play adds geopolitical tail risk.",
+          "risk_factors": [
+            "Iran oil volatility",
+            "geopolitical concentration"
+          ]
+        },
+        {
+          "ticker": "ZUT.TO",
+          "action": "REDUCE",
+          "alignment": "misaligned",
+          "rationale": "12.5% utilities weight is defensive overweight in Risk-On regime. Correlation flip with VST (-0.33\u2192+0.40\u0394) indicates stress. Trim to 6-8%.",
+          "risk_factors": [
+            "regime underweight",
+            "correlation stress spike"
+          ]
+        },
+        {
+          "ticker": "SPY",
+          "action": "CONSOLIDATE",
+          "alignment": "aligned",
+          "rationale": "Three identical SPY entries (31.2% aggregate) at $686/$701/$710 create redundancy and execution drag. Consolidate to single 10-11% position; Risk-On regime supports equity beta.",
+          "risk_factors": [
+            "FOMC this week (Apr 29)",
+            "consumer sentiment weakness -0.800z"
+          ]
+        },
+        {
+          "ticker": "VST",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "AI Infrastructure Boom thesis (0.0% weight, Score 68) aligns with Equity Trend +1.000z and institutional NVIDIA inflows. Minimal position; consider scaling if correlation normalizes.",
+          "risk_factors": [
+            "AI valuation bubble risk",
+            "crowded trade"
+          ]
+        },
+        {
+          "ticker": "6268.T",
+          "action": "HOLD",
+          "alignment": "aligned",
+          "rationale": "Robotics/AI play (0.0% weight, Score 68) fits reflation + industrial renaissance. Correlation spike with PHYS.TO (+0.37\u0394) suggests tactical stress; monitor.",
+          "risk_factors": [
+            "JPY carry unwind if rates rise",
+            "correlation spike with precious metals"
+          ]
+        }
+      ],
+      "priority_actions": [
+        "Consolidate PHYS.TO triple-entry and PSLV.TO into single 8-10% precious metals position; reduce aggregate from 16.9% to 10% to cut correlation drag.",
+        "Trim CHEV.TO (7.6%) to 4% and ZUT.TO (12.5%) to 7% ahead of FOMC (Apr 29) and Iran oil volatility; redeploy to SPY consolidation and VST/6268.T AI/industrial themes.",
+        "Merge three SPY entries into single 10.4% position; eliminate execution drag and clarify regime conviction vs. defensive hedging intent."
+      ]
+    },
+    "meta": {
+      "n_positions": 19,
+      "verdict": "REDUCE_RISK"
+    }
   }
 ]
